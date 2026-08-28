@@ -9,26 +9,26 @@ import (
 
 func TestAppError(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      *apperrors.AppError
-		wantMsg  string
-		wantCat  apperrors.Category
+		name    string
+		err     *apperrors.AppError
+		wantMsg string
+		wantCat apperrors.Category
 	}{
 		{
-			name: "NotFound error",
-			err:  apperrors.ErrOrderNotFound,
+			name:    "NotFound error",
+			err:     apperrors.ErrOrderNotFound,
 			wantMsg: "order not found",
 			wantCat: apperrors.NotFound,
 		},
 		{
-			name: "Validation error",
-			err:  apperrors.ErrInvalidRequest,
+			name:    "Validation error",
+			err:     apperrors.ErrInvalidRequest,
 			wantMsg: "invalid request",
 			wantCat: apperrors.Validation,
 		},
 		{
-			name: "Conflict error",
-			err:  apperrors.ErrConcurrentUpdate,
+			name:    "Conflict error",
+			err:     apperrors.ErrConcurrentUpdate,
 			wantMsg: "concurrent update",
 			wantCat: apperrors.Conflict,
 		},
@@ -82,8 +82,8 @@ func TestFromError(t *testing.T) {
 
 func TestHTTPStatusForCategory(t *testing.T) {
 	tests := []struct {
-		cat    apperrors.Category
-		want   int
+		cat  apperrors.Category
+		want int
 	}{
 		{apperrors.Validation, 400},
 		{apperrors.NotFound, 404},

@@ -9,9 +9,9 @@ import (
 type PerClientLimiter struct {
 	mu          sync.RWMutex
 	buckets     map[string]*TokenBucket
-	globalLimit float64       // Global rate limit across all clients
+	globalLimit float64 // Global rate limit across all clients
 	globalMu    sync.Mutex
-	globalCount float64       // Tokens used recently
+	globalCount float64 // Tokens used recently
 }
 
 // PerClientConfig holds configuration for per-client rate limiting.
@@ -25,7 +25,7 @@ type PerClientConfig struct {
 // NewPerClientLimiter creates a new per-client rate limiter.
 func NewPerClientLimiter(cfg PerClientConfig) *PerClientLimiter {
 	return &PerClientLimiter{
-		buckets: make(map[string]*TokenBucket),
+		buckets:     make(map[string]*TokenBucket),
 		globalLimit: cfg.GlobalRate,
 		globalCount: 0,
 	}
@@ -124,14 +124,14 @@ RISIKO DAN KOMPONEN KEAMANAN (Prompt 053)
    - Rate limit pada level gateway sebelum masuk rate limiter
 
    Contoh implementasi:
-   */
+*/
 
 type SafePerClientLimiter struct {
-	mu       sync.RWMutex
-	buckets  map[string]*TokenBucket
-	maxClients int
+	mu              sync.RWMutex
+	buckets         map[string]*TokenBucket
+	maxClients      int
 	cleanupInterval time.Duration
-	lastCleanup time.Time
+	lastCleanup     time.Time
 }
 
 /*
@@ -165,7 +165,7 @@ type SafePerClientLimiter struct {
    - Adaptive rate limiting based on user tier
 
    Contoh implementasi hybrid:
-   */
+*/
 
 type HybridClientIdentifier struct {
 	// Priority:
@@ -174,19 +174,19 @@ type HybridClientIdentifier struct {
 	// 3. Client IP (from remote_addr)
 	// 4. Fingerprint (User-Agent + Accept-Language)
 
-	SessionID   string
-	UserID      string
-	RemoteIP    string
-	UserAgent   string
+	SessionID string
+	UserID    string
+	RemoteIP  string
+	UserAgent string
 }
 
 // SafePerClientLimiterWithSts implements safer client identification.
 type SafePerClientLimiterWithSts struct {
-	mu       sync.RWMutex
-	buckets  map[string]*TokenBucket
+	mu         sync.RWMutex
+	buckets    map[string]*TokenBucket
 	maxClients int
-	sts      *time.Ticker
-	stopCh   chan struct{}
+	sts        *time.Ticker
+	stopCh     chan struct{}
 }
 
 // NewSafePerClientLimiterWithSts creates a limiter with safety protections.

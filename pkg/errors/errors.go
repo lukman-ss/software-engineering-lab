@@ -7,23 +7,23 @@ import "errors"
 type Category string
 
 const (
-	Validation       Category = "validation"
-	NotFound         Category = "not_found"
-	Conflict         Category = "conflict"
-	Unauthorized     Category = "unauthorized"
-	Forbidden        Category = "forbidden"
-	RateLimited      Category = "rate_limited"
-	Internal         Category = "internal"
+	Validation        Category = "validation"
+	NotFound          Category = "not_found"
+	Conflict          Category = "conflict"
+	Unauthorized      Category = "unauthorized"
+	Forbidden         Category = "forbidden"
+	RateLimited       Category = "rate_limited"
+	Internal          Category = "internal"
 	DependencyFailure Category = "dependency_failure"
-	Timeout          Category = "timeout"
+	Timeout           Category = "timeout"
 )
 
 // AppError is the structured error returned to clients.
 // Internal details stay in logs, not in the response.
 type AppError struct {
-	Code    string
-	Message string
-	Category Category
+	Code      string
+	Message   string
+	Category  Category
 	RequestID string
 	// Cause is the wrapped error (logged server-side only)
 	cause error
@@ -91,21 +91,21 @@ func HTTPStatus(c Category) int {
 
 // Sentinel errors for domain use
 var (
-	ErrOrderNotFound   = New("ORDER_NOT_FOUND", "order not found", NotFound)
-	ErrPaymentNotFound = New("PAYMENT_NOT_FOUND", "payment not found", NotFound)
+	ErrOrderNotFound     = New("ORDER_NOT_FOUND", "order not found", NotFound)
+	ErrPaymentNotFound   = New("PAYMENT_NOT_FOUND", "payment not found", NotFound)
 	ErrInventoryNotFound = New("INVENTORY_NOT_FOUND", "inventory not found", NotFound)
-	ErrWalletNotFound  = New("WALLET_NOT_FOUND", "wallet not found", NotFound)
+	ErrWalletNotFound    = New("WALLET_NOT_FOUND", "wallet not found", NotFound)
 
-	ErrInvalidStatus     = New("INVALID_STATUS", "invalid status transition", Conflict)
+	ErrInvalidStatus       = New("INVALID_STATUS", "invalid status transition", Conflict)
 	ErrIdempotencyConflict = New("IDEMPOTENCY_CONFLICT", "idempotency key conflict", Conflict)
-	ErrInsufficientStock = New("INSUFFICIENT_STOCK", "insufficient stock", Conflict)
+	ErrInsufficientStock   = New("INSUFFICIENT_STOCK", "insufficient stock", Conflict)
 	ErrInsufficientBalance = New("INSUFFICIENT_BALANCE", "insufficient balance", Conflict)
-	ErrConcurrentUpdate  = New("CONCURRENT_UPDATE", "resource updated by another request", Conflict)
+	ErrConcurrentUpdate    = New("CONCURRENT_UPDATE", "resource updated by another request", Conflict)
 
-	ErrInvalidRequest   = New("INVALID_REQUEST", "invalid request", Validation)
-	ErrPaymentFailed    = New("PAYMENT_FAILED", "payment processing failed", DependencyFailure)
+	ErrInvalidRequest = New("INVALID_REQUEST", "invalid request", Validation)
+	ErrPaymentFailed  = New("PAYMENT_FAILED", "payment processing failed", DependencyFailure)
 
-	ErrRateLimited      = New("RATE_LIMITED", "too many requests", RateLimited)
-	ErrUnauthorized     = New("UNAUTHORIZED", "unauthorized", Unauthorized)
-	ErrForbidden        = New("FORBIDDEN", "forbidden", Forbidden)
+	ErrRateLimited  = New("RATE_LIMITED", "too many requests", RateLimited)
+	ErrUnauthorized = New("UNAUTHORIZED", "unauthorized", Unauthorized)
+	ErrForbidden    = New("FORBIDDEN", "forbidden", Forbidden)
 )

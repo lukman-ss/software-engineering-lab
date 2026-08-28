@@ -116,6 +116,7 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | Lab | Problem |
 |-----|---------|
 | 01 | Duplicate requests creating duplicate payments |
+| 02 | Database index query optimization |
 | 11 | Race conditions corrupting inventory counts |
 | 03 | Partial failures leaving inconsistent state |
 | 04 | Lost updates under concurrent access |
@@ -185,6 +186,7 @@ make lint          # go vet
 
 ### Phase 1: Core Labs
 - [x] 01 Idempotency
+- [x] 02 Database Index
 - [x] 11 Race Condition
 - [ ] 03 Database Transaction
 - [ ] 04 Optimistic Locking

@@ -48,13 +48,13 @@ func (s *appService) CreateOrder(ctx context.Context, userID string, items []Ord
 	now := time.Now()
 
 	order := &Order{
-		ID:         orderID,
-		UserID:     userID,
-		Status:     StatusPending,
+		ID:          orderID,
+		UserID:      userID,
+		Status:      StatusPending,
 		TotalAmount: total,
-		Items:      items,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		Items:       items,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	// Set order ID on items

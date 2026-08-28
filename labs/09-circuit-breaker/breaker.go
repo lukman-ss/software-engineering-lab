@@ -63,12 +63,12 @@ type CircuitBreaker struct {
 
 	cfg Config
 
-	state         State
+	state          State
 	consecFailures int
-	openedAt      time.Time
+	openedAt       time.Time
 
 	// activeProbes tracks concurrent requests allowed during Half-Open state (Prompt 051)
-	activeProbes  int
+	activeProbes int
 }
 
 // New returns a new CircuitBreaker.

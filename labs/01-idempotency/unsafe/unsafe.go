@@ -73,8 +73,8 @@ type Service struct {
 
 // store holds payment results (simulating database rows).
 type store struct {
-	mu         sync.RWMutex
-	payments   map[string]PaymentResult // key: payment ID
+	mu       sync.RWMutex
+	payments map[string]PaymentResult // key: payment ID
 }
 
 func newStore() *store {

@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrWalletNotFound = errors.New("wallet not found")
+	ErrWalletNotFound      = errors.New("wallet not found")
 	ErrInsufficientBalance = errors.New("insufficient balance")
 )
 

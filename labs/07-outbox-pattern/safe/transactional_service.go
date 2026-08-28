@@ -30,15 +30,15 @@ type OrderCreatedEvent struct {
 
 // OutboxEvent represents an entry in the outbox table.
 type OutboxEvent struct {
-	ID            string         `json:"id"`
-	AggregateType string         `json:"aggregate_type"`
-	AggregateID   string         `json:"aggregate_id"`
-	EventType     string         `json:"event_type"`
+	ID            string          `json:"id"`
+	AggregateType string          `json:"aggregate_type"`
+	AggregateID   string          `json:"aggregate_id"`
+	EventType     string          `json:"event_type"`
 	Payload       json.RawMessage `json:"payload"`
-	CreatedAt     time.Time      `json:"created_at"`
-	PublishedAt   *time.Time     `json:"published_at"`
-	Attempts      int            `json:"attempts"`
-	NextAttemptAt time.Time      `json:"next_attempt_at"`
+	CreatedAt     time.Time       `json:"created_at"`
+	PublishedAt   *time.Time      `json:"published_at"`
+	Attempts      int             `json:"attempts"`
+	NextAttemptAt time.Time       `json:"next_attempt_at"`
 }
 
 // SafeOrderService implements the transactional outbox pattern.

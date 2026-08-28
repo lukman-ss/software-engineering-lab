@@ -333,8 +333,8 @@ func (w *OutboxWorker) processEvent(ctx context.Context, event OutboxEvent) erro
 
 // MockEventBroker simulates a message queue broker.
 type MockEventBroker struct {
-	published []OutboxEvent
-	mu        sync.Mutex
+	published  []OutboxEvent
+	mu         sync.Mutex
 	shouldFail bool
 }
 

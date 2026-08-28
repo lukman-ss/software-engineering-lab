@@ -17,20 +17,20 @@ import (
 	"github.com/lukman/software-engineer-lab/internal/order"
 	"github.com/lukman/software-engineer-lab/internal/payment"
 	"github.com/lukman/software-engineer-lab/internal/wallet"
-	apperrors "github.com/lukman/software-engineer-lab/pkg/errors"
 	"github.com/lukman/software-engineer-lab/pkg/database"
+	apperrors "github.com/lukman/software-engineer-lab/pkg/errors"
 	"github.com/lukman/software-engineer-lab/pkg/middleware"
 	"github.com/lukman/software-engineer-lab/pkg/validation"
 )
 
 type app struct {
-	orderSvc      order.Service
-	paymentSvc    payment.Service
-	inventorySvc  inventory.Service
-	walletSvc     wallet.Service
-	notifySvc     notification.Service
-	db            *sql.DB
-	logger        *slog.Logger
+	orderSvc     order.Service
+	paymentSvc   payment.Service
+	inventorySvc inventory.Service
+	walletSvc    wallet.Service
+	notifySvc    notification.Service
+	db           *sql.DB
+	logger       *slog.Logger
 }
 
 func main() {
@@ -66,13 +66,13 @@ func main() {
 	// HTTP server
 	mux := http.NewServeMux()
 	handler := &app{
-		orderSvc:      orderSvc,
-		paymentSvc:    paymentSvc,
-		inventorySvc:  inventorySvc,
-		walletSvc:     walletSvc,
-		notifySvc:     notifySvc,
-		db:            db,
-		logger:        logger,
+		orderSvc:     orderSvc,
+		paymentSvc:   paymentSvc,
+		inventorySvc: inventorySvc,
+		walletSvc:    walletSvc,
+		notifySvc:    notifySvc,
+		db:           db,
+		logger:       logger,
 	}
 
 	mux.HandleFunc("GET /health", handler.health)

@@ -16,10 +16,10 @@ import (
 
 // Order represents an order entity.
 type Order struct {
-	ID        string    `json:"id"`
-	CustomerID string   `json:"customer_id"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	CustomerID string    `json:"customer_id"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // OrderCreatedEvent is the event published when order is created.
@@ -79,17 +79,17 @@ type OrderRepository interface {
 // - DB commit succeeds, event publish fails -> INCONSISTENT STATE
 // - Event publish succeeds, DB commit fails -> ORDER LOST
 type UnsafeOrderService struct {
-	repo     OrderRepository
+	repo      OrderRepository
 	publisher EventPublisher
-	db       *sql.DB
+	db        *sql.DB
 }
 
 // NewUnsafeOrderService creates a service with dual write bug.
 func NewUnsafeOrderService(repo OrderRepository, publisher EventPublisher, db *sql.DB) *UnsafeOrderService {
 	return &UnsafeOrderService{
-		repo:     repo,
+		repo:      repo,
 		publisher: publisher,
-		db:       db,
+		db:        db,
 	}
 }
 

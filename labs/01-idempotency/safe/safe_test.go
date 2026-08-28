@@ -112,3 +112,68 @@ func TestDifferentIdempotencyKeysTreatedAsNewOperations(t *testing.T) {
 		t.Fatalf("expected gateway called 2 times, got %d", safe.GatewayChargeCount(gw))
 	}
 }
+
+type blockingGateway struct {
+	started chan struct{}
+	release chan struct{}
+	calls   int64
+}
+
+func (g *blockingGateway) Charge(ctx context.Context, req safe.PaymentRequest) (safe.PaymentResult, error) {
+	g.calls++
+	close(g.started)
+	<-g.release
+	return safe.PaymentResult{
+		PaymentID:  "pay_blocked",
+		Status:     "succeeded",
+		Amount:     req.Amount,
+		ExternalID: "ext_blocked",
+	}, nil
+}
+
+func TestSameKeyWhileProcessingDoesNotExecuteSecondPayment(t *testing.T) {
+	bg := &blockingGateway{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	svc := safe.NewService(bg)
+	ctx := context.Background()
+
+	req := safe.PaymentRequest{Amount: 15000}
+
+	errChan := make(chan error, 1)
+	statusChan := make(chan int, 1)
+
+	// Start Request A asynchronously
+	go func() {
+		_, status, err := svc.ProcessPayment(ctx, "POST", "/payments", "key-processing", req)
+		statusChan <- status
+		errChan <- err
+	}()
+
+	// Wait for Request A to reach gateway (making it PROCESSING)
+	<-bg.started
+
+	// Request B arrives while Request A is still processing
+	_, statusB, errB := svc.ProcessPayment(ctx, "POST", "/payments", "key-processing", req)
+	if !errors.Is(errB, safe.ErrRequestInProgress) {
+		t.Fatalf("expected ErrRequestInProgress for concurrent duplicate, got %v", errB)
+	}
+	if statusB != 409 {
+		t.Fatalf("expected status 409, got %d", statusB)
+	}
+
+	// Release Request A
+	close(bg.release)
+
+	// Wait for Request A to finish
+	statusA := <-statusChan
+	errA := <-errChan
+	if errA != nil || statusA != 200 {
+		t.Fatalf("request A failed: %v (status %d)", errA, statusA)
+	}
+
+	if bg.calls != 1 {
+		t.Fatalf("expected gateway called exactly once, got %d", bg.calls)
+	}
+}

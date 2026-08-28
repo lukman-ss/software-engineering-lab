@@ -14,10 +14,10 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 	now := time.Now()
 
 	cfg := breaker.Config{
-		FailureThreshold: 3,
-		ResetTimeout:     100 * time.Millisecond,
+		FailureThreshold:  3,
+		ResetTimeout:      100 * time.Millisecond,
 		MaxHalfOpenProbes: 1,
-		Now:              func() time.Time { return now },
+		Now:               func() time.Time { return now },
 	}
 
 	cb := breaker.New(cfg)
@@ -60,7 +60,7 @@ func TestCircuitBreakerHalfOpenTransition(t *testing.T) {
 		FailureThreshold:  2,
 		ResetTimeout:      50 * time.Millisecond,
 		MaxHalfOpenProbes: 1,
-		Now: func() time.Time { return now },
+		Now:               func() time.Time { return now },
 	}
 
 	cb := breaker.New(cfg)
@@ -98,7 +98,7 @@ func TestCircuitBreakerHalfOpenProbeLimiting(t *testing.T) {
 		FailureThreshold:  1,
 		ResetTimeout:      10 * time.Millisecond,
 		MaxHalfOpenProbes: 1,
-		Now: func() time.Time { return now },
+		Now:               func() time.Time { return now },
 	}
 
 	cb := breaker.New(cfg)

@@ -45,7 +45,6 @@ type IdempotencyStatus string
 const (
 	StatusProcessing IdempotencyStatus = "processing"
 	StatusCompleted  IdempotencyStatus = "completed"
-	StatusFailed     IdempotencyStatus = "failed"
 )
 
 // DefaultTTL is the default time-to-live for idempotency keys after completion.
@@ -166,7 +165,6 @@ func (s *dbStore) UpdateCompleted(ctx context.Context, key string, result Paymen
 
 	record.Status = StatusCompleted
 	record.ResponseStatus = responseStatus
-	record.PaymentID = result.PaymentID
 	s.payments[key] = record
 	return nil
 }
@@ -212,7 +210,7 @@ func hashRequest(method, path string, req PaymentRequest) string {
 	return hex.EncodeToString(h[:])
 }
 
-// Service processes payments with full idempotency guarantees.
+// Service demonstrates application-level idempotent payment processing.
 type Service struct {
 	gateway Gateway
 	store   Store
@@ -275,17 +273,6 @@ func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyK
 		// Still processing - do not execute again
 		if existing.Status == StatusProcessing {
 			return PaymentResult{}, 409, ErrRequestInProgress
-		}
-
-		// Failed status - allow retry with fresh record
-		if existing.Status == StatusFailed {
-			// Reset to processing state
-			record.Status = StatusProcessing
-			record.CreatedAt = time.Now()
-			record.ExpiresAt = time.Now().Add(DefaultTTL)
-			if _, err := s.store.TryInsert(ctx, record); err == nil {
-				inserted = true
-			}
 		}
 	}
 

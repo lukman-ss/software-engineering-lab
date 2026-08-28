@@ -109,7 +109,7 @@ func (m *MockRedisClient) Allow(ctx context.Context, clientID string, limit int,
 	key := fmt.Sprintf("rl:%s", clientID)
 	if m.store[key] == nil {
 		m.store[key] = map[string]string{
-			"tokens":     fmt.Sprintf("%d", limit),
+			"tokens":      fmt.Sprintf("%d", limit),
 			"last_update": "0",
 		}
 	}

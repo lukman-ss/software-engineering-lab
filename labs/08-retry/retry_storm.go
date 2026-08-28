@@ -20,18 +20,18 @@ type RetryStormSimulator struct {
 
 // CreateStormConfig holds configuration for a retry storm experiment.
 type StormConfig struct {
-	WorkerCount int
-	MaxRetries  int
-	BaseDelay   time.Duration
+	WorkerCount  int
+	MaxRetries   int
+	BaseDelay    time.Duration
 	ShouldJitter bool
 }
 
 // Result holds the simulation results.
 type StormResult struct {
-	TotalRequests  int
-	MaxRequests    int // Peak concurrent requests at any point
-	RequestByTime  []int // Request rate over time
-	Distribution   map[int]int
+	TotalRequests        int
+	MaxRequests          int   // Peak concurrent requests at any point
+	RequestByTime        []int // Request rate over time
+	Distribution         map[int]int
 	AvgRequestsPerWorker float64
 }
 
@@ -87,10 +87,10 @@ func RunStormExperiment(ctx context.Context, provider *MockProvider, cfg StormCo
 
 	total := int(totalReqs.Load())
 	return StormResult{
-		TotalRequests: total,
-		MaxRequests:   total, // Since sequential in test
-		RequestByTime:   requestByTime,
-		Distribution:  sim.requestCounts,
+		TotalRequests:        total,
+		MaxRequests:          total, // Since sequential in test
+		RequestByTime:        requestByTime,
+		Distribution:         sim.requestCounts,
 		AvgRequestsPerWorker: float64(total) / float64(cfg.WorkerCount),
 	}
 }
@@ -116,12 +116,12 @@ func AnalyzeRetryStorm(reqsByWorker map[int]int, totalWorkers int) map[string]in
 	variance /= float64(totalWorkers)
 
 	return map[string]interface{}{
-		"total_requests":    totalReqs,
-		"max_per_worker":    maxReqs,
-		"avg_per_worker":    avgReqs,
-		"variance":          variance,
-		"storm_severity":    variance / avgReqs, // Coefficient of variation
-		"is_storm":          variance/avgReqs > 0.1 && avgReqs > 1,
+		"total_requests": totalReqs,
+		"max_per_worker": maxReqs,
+		"avg_per_worker": avgReqs,
+		"variance":       variance,
+		"storm_severity": variance / avgReqs, // Coefficient of variation
+		"is_storm":       variance/avgReqs > 0.1 && avgReqs > 1,
 	}
 }
 
@@ -161,7 +161,7 @@ func DemonstrateRetryStorm() {
 
 // JitterConfig defines jitter calculation strategies.
 type JitterConfig struct {
-	Mode string // "full", "equal", "decorrelated"
+	Mode   string  // "full", "equal", "decorrelated"
 	Factor float64 // 0.0 to 1.0
 }
 
@@ -174,7 +174,7 @@ func FullJitter(baseDelay time.Duration, attempt int) time.Duration {
 // EqualJitter returns baseDelay + random backoff up to baseDelay * 2^attempt.
 func EqualJitter(baseDelay time.Duration, attempt int) time.Duration {
 	maxJitter := baseDelay * time.Duration(1<<uint(attempt))
-	return baseDelay + time.Duration(rand.Float64() * float64(maxJitter))
+	return baseDelay + time.Duration(rand.Float64()*float64(maxJitter))
 }
 
 // DecorrelatedJitter uses previous delay to calculate next (Amazon style).

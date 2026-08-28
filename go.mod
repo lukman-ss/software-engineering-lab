@@ -11,7 +11,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/jackc/pgio v3.2.0 // indirect
+	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/xformat v0.0.0-20191126062851-47019b4208fe // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

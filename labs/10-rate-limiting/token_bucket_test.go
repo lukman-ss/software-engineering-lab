@@ -28,7 +28,7 @@ func TestTokenBucketAllowsWhenFull(t *testing.T) {
 func TestTokenBucketRejectsWhenEmpty(t *testing.T) {
 	start := time.Now()
 	tb := ratelimit.NewTestableTokenBucket(5, 100, start) // 5 tokens capacity
-	tb.SetTokens(0) // Start empty
+	tb.SetTokens(0)                                       // Start empty
 
 	allowed, err := tb.Use(1)
 	if allowed {

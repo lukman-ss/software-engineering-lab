@@ -23,14 +23,14 @@ import (
 type HTTPStatus int
 
 const (
-	StatusOK                   HTTPStatus = 200
-	StatusBadRequest           HTTPStatus = 400
-	StatusUnauthorized         HTTPStatus = 401
-	StatusForbidden            HTTPStatus = 403
-	StatusNotFound             HTTPStatus = 404
-	StatusTooManyRequests      HTTPStatus = 429
-	StatusInternalServerError  HTTPStatus = 500
-	StatusServiceUnavailable   HTTPStatus = 503
+	StatusOK                  HTTPStatus = 200
+	StatusBadRequest          HTTPStatus = 400
+	StatusUnauthorized        HTTPStatus = 401
+	StatusForbidden           HTTPStatus = 403
+	StatusNotFound            HTTPStatus = 404
+	StatusTooManyRequests     HTTPStatus = 429
+	StatusInternalServerError HTTPStatus = 500
+	StatusServiceUnavailable  HTTPStatus = 503
 )
 
 // MockProvider simulates an external API provider with controllable failure modes.
@@ -212,10 +212,10 @@ type Provider interface {
 
 // RetryableClient implements exponential backoff with jitter.
 type RetryableClient struct {
-	client       Provider
-	maxRetry     int
-	baseDelay    time.Duration
-	jitterFactor float64
+	client        Provider
+	maxRetry      int
+	baseDelay     time.Duration
+	jitterFactor  float64
 	totalAttempts atomic.Int32
 }
 

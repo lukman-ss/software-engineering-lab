@@ -13,7 +13,7 @@ var (
 type Type string
 
 const (
-	TypeOrderCreated  Type = "order_created"
+	TypeOrderCreated   Type = "order_created"
 	TypePaymentSuccess Type = "payment_success"
 	TypePaymentFailed  Type = "payment_failed"
 )

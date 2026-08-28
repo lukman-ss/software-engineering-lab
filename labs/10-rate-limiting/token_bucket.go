@@ -27,11 +27,11 @@ func (SystemClock) Now() time.Time { return time.Now() }
 type TokenBucket struct {
 	mu sync.Mutex
 
-	capacity    float64
-	tokens      float64
-	ratePerSec  float64
-	lastRefill  time.Time
-	closer      chan struct{}
+	capacity   float64
+	tokens     float64
+	ratePerSec float64
+	lastRefill time.Time
+	closer     chan struct{}
 
 	// Clock for testability (Prompt 052)
 	clock Clock
@@ -39,9 +39,9 @@ type TokenBucket struct {
 
 // TokenBucketConfig holds configuration for a token bucket.
 type TokenBucketConfig struct {
-	Capacity   float64       // Maximum tokens (burst size)
-	Rate       float64       // Tokens added per second
-	Now        func() time.Time // Time source for testing
+	Capacity float64          // Maximum tokens (burst size)
+	Rate     float64          // Tokens added per second
+	Now      func() time.Time // Time source for testing
 }
 
 // NewTokenBucket creates a new token bucket limiters.
@@ -96,8 +96,8 @@ func (tb *TokenBucket) Tokens() float64 {
 
 // MockClock provides controllable time for testing without flaky time.Sleep.
 type MockClock struct {
-	mu   sync.Mutex
-	now  time.Time
+	mu  sync.Mutex
+	now time.Time
 }
 
 // NewMockClock creates a mock clock starting at t.

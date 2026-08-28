@@ -74,9 +74,9 @@ func TestBudgetedClient(t *testing.T) {
 
 func TestAmplificationFactor(t *testing.T) {
 	tests := []struct {
-		layers         int
+		layers          int
 		retriesPerLayer int
-		expected       int
+		expected        int
 	}{
 		{1, 3, 4},
 		{2, 3, 16},
