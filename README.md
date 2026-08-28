@@ -1,0 +1,202 @@
+# software-engineer-lab
+
+> **A hands-on laboratory for software engineering beyond CRUD.**
+
+## What This Repository Is
+
+This is a **mini production system** used to explore real-world failure modes in distributed systems. It is not a framework, not a tutorial collection for basic Go syntax, and not a collection of examples to copy.
+
+It is an **engineering lab** where you:
+
+1. Reproduce a failure scenario
+2. Understand the root cause
+3. Implement a correct solution
+4. Verify with tests and benchmarks
+
+## Why Beyond CRUD
+
+CRUD applications assume sequential single-user access with perfect networks. Production systems must handle:
+
+- **Concurrent users** → race conditions, lost updates
+- **Unreliable networks** → timeouts, partial failures, retries
+- **Partial outages** → circuit breakers, rate limiting
+- **Data consistency** → transactions, distributed coordination
+
+## Learning Philosophy
+
+### No Hand-Waving
+
+Every lab solves a real problem with production-grade patterns:
+
+- Timeouts are explicit, never "instant"
+- Errors are wrapped, never ignored
+- Context propagates through every I/O call
+- Resources clean up via `defer`
+
+### Code Is Documentation
+
+- Function names describe the **why**, not just the what
+- Error messages guide operators to root causes
+- Comments explain trade-offs and limitations
+
+### Test What Matters
+
+- Unit tests verify pure logic
+- Integration tests verify system boundaries
+- Concurrent tests expose race conditions
+- Benchmarks measure solution overhead
+
+## Architecture
+
+```
+software-engineer-lab/
+├── cmd/              # Entry points (api, worker, mock-provider)
+├── internal/         # Business domains (order, payment, etc.)
+├── pkg/              # Shared utilities (database, observability, resilience)
+├── labs/             # Isolated failure labs
+├── migrations/       # Database schema evolution
+├── docs/             # Architecture and engineering notes
+└── Makefile
+```
+
+## Domain
+
+The mini production system models a simple e-commerce flow:
+
+```
+Customer creates order
+        ↓
+Inventory is reserved
+        ↓
+Payment is processed
+        ↓
+Order becomes paid
+        ↓
+Notification is emitted
+```
+
+### Domain Entities
+
+| Entity | Purpose |
+|--------|---------|
+| Order | Aggregate root for an order |
+| OrderItem | Line item in an order |
+| Payment | Payment record (idempotent) |
+| InventoryItem | Stock for a product |
+| Wallet | User balance |
+| WalletTransaction | Audit log for wallet operations |
+| Notification | Outgoing notification record |
+
+### Layer Separation
+
+```
+domain/        # Entity definitions and interfaces
+application/   # Service orchestration
+repository/    # Database access (PostgreSQL)
+transport/     # HTTP handlers (future)
+infrastructure/ # Cross-cutting (db, observability, resilience)
+```
+
+## Labs
+
+| Lab | Problem |
+|-----|---------|
+| 01 | Duplicate requests creating duplicate payments |
+| 02 | Race conditions corrupting inventory counts |
+| 03 | Partial failures leaving inconsistent state |
+| 04 | Lost updates under concurrent access |
+| 05 | Lock contention causing delays |
+| 06 | Deadlocks hanging the system |
+| 07 | Events lost when database fails |
+| 08 | Retry storms amplifying failures |
+| 09 | Cascading failures from downstream |
+| 10 | Unbounded load causing outages |
+
+## How to Run
+
+### Prerequisites
+
+- Go 1.22+
+- Docker and Docker Compose
+- `make`
+
+### Setup
+
+```bash
+make infra-up        # Start PostgreSQL, Redis, Prometheus, Grafana
+make migrate-up      # Run database migrations
+make run             # Start API on :8080
+```
+
+### Run a Specific Lab
+
+```bash
+cd labs/01-idempotency
+go test -v ./...
+```
+
+## Testing
+
+```bash
+make test          # Unit tests
+make test-race     # Tests with race detector
+make lint          # go vet
+```
+
+## Production Engineering Topics
+
+### Concurrency
+- Race conditions, locking (optimistic vs pessimistic)
+- Deadlock prevention
+- Goroutine leaks
+
+### Reliability
+- Idempotency, retries with backoff
+- Circuit breakers, timeouts, cancellations
+
+### Distributed Systems
+- Two-phase commit alternatives
+- Event ordering and duplication
+- Consistency models, distributed locks
+
+### Performance
+- Connection pool sizing, query optimization
+- Result caching, backpressure
+
+### Observability
+- Structured logging, metrics and tracing
+- Error correlation, health checks
+
+## Roadmap
+
+### Phase 1: Core Labs
+- [x] 01 Idempotency
+- [x] 02 Race Condition
+- [ ] 03 Database Transaction
+- [ ] 04 Optimistic Locking
+- [ ] 05 Pessimistic Locking
+- [ ] 06 Deadlock
+- [ ] 07 Outbox Pattern
+- [ ] 08 Retry
+- [ ] 09 Circuit Breaker
+- [ ] 10 Rate Limiting
+
+### Phase 2: Extended Topics
+- Bulkhead pattern
+- Saga pattern
+- Leader election
+- Feature flags
+- Graceful shutdown
+
+## What This Is Not
+
+- ❌ A Go tutorial (you need basic Go knowledge)
+- ❌ A framework (no magic, explicit code)
+- ❌ Production-ready as-is (educational focus)
+- ❌ Claiming to solve everything (what's left to fail is documented)
+
+## References
+
+- [Go Proverbs](https://go-proverbs.github.io/)
+- [Effective Go](https://go.dev/doc/effective_go)
+- [Martin Fowler's Patterns](https://martinfowler.com/categories.html)

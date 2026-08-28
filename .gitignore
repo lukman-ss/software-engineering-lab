@@ -1,0 +1,79 @@
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.dll~
+*.so
+*.so~
+*.dylib
+*.out
+*.test
+*.cover
+*.profile
+*.prof
+*.heapprof
+*.trace
+
+# Go binary output
+bin/
+out/
+/dist
+/build
+
+# Vendor
+vendor/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.test
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test / coverage
+*.coverprofile
+coverage.out
+coverage.html
+coverage/
+
+# Docker volumes / local runtime data
+infra/data/
+postgres-data/
+redis-data/
+prometheus-data/
+grafana-data/
+
+# Temporary files
+tmp/
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Makefile artifacts
+.make/
+.maker/
