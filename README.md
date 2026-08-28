@@ -32,7 +32,7 @@ Setiap lab berfokus pada **satu failure mode spesifik** dan **satu mental model 
 
 Batasan kepemilikan konsep antar lab:
 - **Lab 01 Idempotency** → berfokus pada *repeated logical operation* & *retry safety* (tidak mengajarkan locking mendalam).
-- **Lab 02 Race Condition** → berfokus pada *concurrent access*.
+- **Lab 11 Race Condition** → berfokus pada *concurrent access*.
 - **Lab 03 Database Transaction** → berfokus pada *atomic multi-step database changes*.
 - **Lab 04 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
 
@@ -116,7 +116,7 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | Lab | Problem |
 |-----|---------|
 | 01 | Duplicate requests creating duplicate payments |
-| 02 | Race conditions corrupting inventory counts |
+| 11 | Race conditions corrupting inventory counts |
 | 03 | Partial failures leaving inconsistent state |
 | 04 | Lost updates under concurrent access |
 | 05 | Lock contention causing delays |
@@ -185,7 +185,7 @@ make lint          # go vet
 
 ### Phase 1: Core Labs
 - [x] 01 Idempotency
-- [x] 02 Race Condition
+- [x] 11 Race Condition
 - [ ] 03 Database Transaction
 - [ ] 04 Optimistic Locking
 - [ ] 05 Pessimistic Locking

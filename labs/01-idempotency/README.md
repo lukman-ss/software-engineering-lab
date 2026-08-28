@@ -15,10 +15,13 @@ Hasil tanpa proteksi: **Dua kali charge untuk satu pesanan.**
 ## 2. Mengapa duplicate request terjadi
 
 Penyebab umum:
-- **Network Timeout**: Server proses request, response gagal sampai ke client.
-- **Client Retry**: Client mengira request gagal, mengirim ulang payload yang sama.
-- **Frontend Double-Click**: User menekan tombol berkali-kali dengan cepat.
-- **Queue Redelivery**: Message broker mengirim ulang pesan karena acknowledgement gagal.
+- Koneksi lambat / timeout
+- User double-click
+- Frontend retry
+- HTTP client retry
+- Queue redelivery (message broker)
+- Payment gateway mengirim webhook berulang
+- Server berhasil memproses tetapi response hilang
 
 **Akar Masalah**: Server secara default melihat tiap request sebagai request baru yang independen.
 
@@ -49,7 +52,7 @@ T3: Client retry request yang sama (pay_2 dibuat, total 1.000.000 ter-charge)
 
 ## 5. Idempotency-Key
 
-Header HTTP wajib untuk transaksi kritikal:
+Salah satu pola umum untuk membuat mutation API aman terhadap retry adalah menggunakan `Idempotency-Key`:
 ```http
 Idempotency-Key: 01JXYZabc123def456ghi789
 ```
@@ -58,24 +61,19 @@ atau:
 Idempotency-Key: vendor-payment-opl-1029-01JXYZabc123
 ```
 
-**Idempotency Key ≠ Business ID**
-
-`Idempotency-Key` berbeda dengan business identifier seperti `order-123`, `invoice-123`, atau `vendor-payment-opl-1029`:
-
 | Business ID | Idempotency Key |
 |-------------|-----------------|
 | Mengidentifikasi resource (order, invoice) | Mengidentifikasi satu logical operation |
-| Sifatnya **statis** | Sifatnya **dinamis per request** |
+| Sifatnya **statis** | Unik per logical operation |
 | Tidak ada batas waktu | Bisa memiliki TTL |
-| Dapat diubah/rekonsiliasi | Harus immutable untuk duration operasi |
+| Dapat diubah/rekonsiliasi | Harus immutable selama operation |
+
+> Idempotency key harus unik untuk satu logical operation dan tetap sama selama seluruh retry operation tersebut.
 
 ### Mengapa Business ID tidak cukup?
 - Resource dapat memiliki operation baru di masa depan (refund, correction, adjustment)
 - Payment dapat dikoreksi atau direfund
 - Workflow operasional dapat berubah
-- Partial payment mungkin ditambahkan kemudian
-
-Gunakan format yang mencakup UUID sebagai operation identifier, bukan hanya resource identifier.
 
 ---
 
@@ -92,29 +90,18 @@ Retry (harus menggunakan key yang sama persis):
 Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
 ```
 
-### ❌ Kesalahan Fatal yang Sering Terjadi:
+### Rule:
 ```text
-Request pertama:
-Idempotency-Key: abc
-
-Retry (SALAH - mengganti key saat retry):
-Idempotency-Key: xyz
+same logical operation → same idempotency key
+new logical operation → new idempotency key
 ```
-Walaupun payload dan tujuannya sama persis, backend akan menganggap `xyz` sebagai operasi baru yang berbeda dari `abc`, sehingga **double charge tetap terjadi**.
-
-### Rule Inti:
-```text
-Same logical operation  → Same idempotency key
-New logical operation   → New idempotency key
-```
-*Catatan: Gunakan UUIDv4 atau ULID yang di-generate di client sebagai key yang sehat. Tidak perlu membuat subsystem kompleks untuk key generation.*
 
 ---
 
 ## 7. Retry harus reuse key
 
 ```go
-// Benar saat retry: gunakan key yang sama dari state sebelumnya
+// Benar saat retry: gunakan key yang sama
 key := cachedKeyOrGenerate()
 client.Post("/pay", WithHeader("Idempotency-Key", key))
 ```
@@ -123,78 +110,72 @@ client.Post("/pay", WithHeader("Idempotency-Key", key))
 
 ## 8. Unsafe implementation
 
-Implementasi tanpa idempotency key:
 ```go
 func ProcessPayment(req PaymentRequest) (PaymentResult, error) {
-    // Langsung tembak gateway tanpa cek duplikasi
-    return gateway.Charge(req) 
+    return gateway.Charge(req) // tidak ada proteksi duplikat
 }
 ```
+
 Setiap request diproses sebagai transaksi baru.
 
 ---
 
 ## 9. Safe implementation
 
-Flow lengkap pemrosesan dengan idempotency key:
+Flow pemrosesan dengan idempotency key:
 
 ```
 Request masuk
       ↓
-Cek Idempotency-Key
+Validasi Idempotency-Key
+      ↓
+Hitung request fingerprint
       ↓
 ┌──────────────────────────────┐
 │ key belum ada                │
 │ → proses request             │
+│ → simpan hasil               │
 ├──────────────────────────────┤
 │ key ada + completed          │
 │ → replay response            │
 ├──────────────────────────────┤
-│ key ada + masih processing   │
-│ → return 409/503 (tunggu)  │
+│ key ada + processing         │
+│ → return 409 Conflict        │
 ├──────────────────────────────┤
 │ key sama + payload berbeda   │
 │ → 409 Conflict               │
 └──────────────────────────────┘
 ```
 
-**Catatan**: Request duplikat dapat datang sebelum request pertama selesai (*race condition*). Mekanisme "still processing" mencegah proses ganda namun tidak perlu membuat lease, worker ownership, atau distributed lock untuk Lab dasar.
-
 ---
 
 ## 10. Race condition sederhana
-
-Dua request identik datang secara bersamaan (hampir paralel):
 
 ```
 Request A → cek key → tidak ada
 Request B → cek key → tidak ada
 
-Request A → create payment
-Request B → create payment
+Request A → create payment → success
+Request B → create payment → ??? (race condition)
 ```
 
-**Hasil: Duplicate payment**
+Application-level check saja tidak cukup. Database harus memiliki **unique constraint**.
 
-Application-level check saja tidak cukup. Database harus memiliki **unique constraint** untuk race condition ini.
-
-> **Catatan**: Topik concurrency mendalam (mutex, pessimistic/optimistic locking, distributed lock, isolation level, deadlock) dibahas lebih dalam pada **Lab 02**.
+> **Catatan**: Topik concurrency mendalam dibahas lebih dalam pada **Lab 02**.
 
 ---
 
 ## 11. Unique constraint
 
-Solusi database untuk race condition:
 ```sql
 CREATE UNIQUE INDEX idx_idempotency_key ON payments(idempotency_key);
 ```
-Hanya satu request yang berhasil melakukan *insert* pertama, sisanya mendeteksi duplikat atau *conflict*.
+
+Hanya satu request yang berhasil melakukan *insert* pertama.
 
 ---
 
 ## 12. Payload fingerprint
-
-`Idempotency-Key` yang sama **tidak boleh** digunakan untuk request dengan intent berbeda:
 
 ```json
 // Request pertama
@@ -202,7 +183,6 @@ Hanya satu request yang berhasil melakukan *insert* pertama, sisanya mendeteksi 
 ```
 
 kemudian:
-
 ```json
 // Request kedua dengan key yang sama → HARUS ditolak!
 { "amount": 800000 }
@@ -211,10 +191,15 @@ kemudian:
 **Implementasi sederhana:**
 
 ```go
+import (
+    "crypto/sha256"
+    "encoding/hex"
+)
+
 // HTTP method + normalized payload → SHA-256
-func hashRequest(method, path string, body []byte) string {
-    normalized := fmt.Sprintf("%s %s %s", method, path, string(body))
-    return sha256.Sum256([]byte(normalized))
+func hashRequest(data []byte) string {
+    sum := sha256.Sum256(data)
+    return hex.EncodeToString(sum[:])
 }
 ```
 
@@ -222,21 +207,17 @@ func hashRequest(method, path string, body []byte) string {
 - `same key + same payload` → accepted/replayed
 - `same key + different payload` → 409 Conflict
 
-**Penting**: Side effect (gateway charge) **tidak boleh dijalankan** untuk request yang konflik payload.
-
 ---
 
 ## 13. Request masih processing
 
-Jika request pertama masih berjalan di gateway dan request second masuk dengan key yang sama:
-- Jangan jalankan ulang.
-- Kembalikan status bahwa request sedang diproses atau tunggu hasilnya.
+Jika request ada status `processing`, request kedua harus return 409 Conflict.
 
 ---
 
 ## 14. Response replay
 
-Jika request dengan key tersebut sudah sukses sebelumnya:
+Jika key ada status `completed`:
 - Ambil response tersimpan dari database.
 - Kirim kembali response asli ke client tanpa memanggil gateway lagi.
 
@@ -244,30 +225,11 @@ Jika request dengan key tersebut sudah sukses sebelumnya:
 
 ## 15. Idempotency vs database transaction vs unique constraint
 
-| Konkrepansi | Tujuan | Contoh |
+| Keterkaitan | Tujuan | Contoh |
 |-------------|--------|--------|
 | **Idempotency** | Mencegah logical request yang sama dieksekusi berulang | Request `POST /pay` dengan key yang sama hanya diproses sekali |
-| **Database Transaction** | Memastikan beberapa perubahan database commit atau rollback bersama | `BEGIN → create payment + update OPL + create cash out → COMMIT` |
-| **Unique Constraint** | Database invariant menjadi protection terakhir terhadap duplicate identifier | `UNIQUE(idempotency_key)` mencegah duplikasi key |
-
-### Perbedaan kunci
-
-**Transaction tanpa idempotency** masih memungkinkan:
-```text
-Transaction A (create payment #1) — commit
-Transaction B (create payment #2) — commit  ← duplicate request yang dianggap valid
-```
-
-**Transaction + Idempotency**:
-```text
-Request retry → key ada di cache → return replay response (tidak buat transaksi baru)
-```
-
-**Transaction + Unique Constraint**:
-```text
-Request A → insert → success
-Request B → insert → UNIQUE violation → error 409
-```
+| **Database Transaction** | Memastikan beberapa perubahan database commit atau rollback bersama | `BEGIN → create payment → COMMIT` |
+| **Unique Constraint** | Database invariant menjadi protection terakhir | `UNIQUE(idempotency_key)` mencegah duplikasi |
 
 ---
 
@@ -275,122 +237,82 @@ Request B → insert → UNIQUE violation → error 409
 
 `scope + key` menjadi identity dari idempotent operation.
 
-Contoh scope:
 ```text
-tenant_id          → multi-tenant isolation
-user_id            → per-user operation
-API operation      → vendor-payment:create, vendor-payment:refund
-endpoint           → /payments, /refunds
+UNIQUE(scope, idempotency_key)
 ```
-
-Contoh:
-```text
-scope = vendor-payment:create
-key   = abc123
-→ identity: "Pembayaran vendor dengan key abc123"
-```
-
-Contoh SQL scope + key:
-```sql
-CREATE UNIQUE INDEX idx_idempotency_scoped 
-ON payments(scope, idempotency_key);
-```
-
-**Basic example** untuk satu-tenant sederhana:
-```sql
-UNIQUE(idempotency_key)
-```
-
-> Produksi membutuhkan scope untuk isolation yang lebih baik.
 
 ---
 
 ## 17. TTL (Time To Live)
 
-Idempotency key tidak perlu disimpan selamanya. Nilai TTL merupakan **keputusan bisnis dan operasional**:
-
-- **Payment**: Sesuai kebutuhan audit (umumnya 72+ jam)
-- **Create invoice**: 24–72 jam
-- **Upload**: Beberapa jam
-- **Generic request**: Sesuai window retry klien (misal 1 jam)
+Idempotency key tidak perlu disimpan selamanya.
 
 **Trade-off TTL:**
-- **Terlalu pendek**: Retry dari klien setelah TTL lewat akan dianggap sebagai operasi baru (*duplicate operation*).
-- **Terlalu panjang**: Kapasitas penyimpanan database membengkak seiring waktu.
+- **Terlalu pendek**: Retry lama dapat dianggap operasi baru.
+- **Terlalu panjang**: Kapasitas penyimpanan membengkak.
 
 ---
 
 ## 18. HTTP Method dan Idempotency
 
-| Method | Idempotent? | Keterangan |
-|--------|-------------|------------|
-| **GET** | ✅ | Mengembalikan state server tanpa mengubahnya |
-| **PUT** | ✅ | `PUT /users/123` dengan body yang sama hasilnya tetap |
-| **DELETE** | ✅ | `DELETE /files/123` kali pertama → dihapus, kali berikutnya → 404 |
-| **POST** | ❌ | Non-idempotent secara default, tiap pemanggilan berpotensi menghasilkan state baru |
+| Method | Idempotent? |
+|--------|-------------|
+| **GET** | ✅ |
+| **PUT** | ✅ |
+| **DELETE** | ✅ |
+| **POST** | ❌ |
 
-**POST /payments** biasanya memiliki side effect (charge gateway). Untuk membuatnya idempotent, application menambahkan:
-```http
-Idempotency-Key: 01JXYZabc123
-```
-
-**Idempotency** dalam HTTP berarti: efek akhir terhadap intended server state sama ketika request yang sama dijalankan berulang kali.
-
-Contoh:
-```http
-POST /payments
-Idempotency-Key: pay-2024-01-15-abc123
-Content-Type: application/json
-{ "amount": 500000 }
-```
-Request dengan key yang sama → hasil selalu sama (replay response), tidak ada charge ganda.
+`POST /payments` membutuhkan Idempotency-Key untuk mencegah duplicate charge.
 
 ---
 
-## 19. Batas Idempotency di Sistem Eksternal
+## 19. Batas idempotency di sistem eksternal
 
-Perhatikan skenario berikut:
+Idempotency record di database aplikasi **tidak otomatis** menjamin external side effect hanya terjadi satu kali jika kegagalan terjadi di antara pemanggilan pihak ketiga dan commit lokal.
 
-```text
-Backend menerima payment request
-        ↓
-Backend memanggil payment gateway
-        ↓
-Gateway berhasil
-        ↓
-Backend crash sebelum menyimpan hasil idempotency
-        ↓
-Client melakukan retry
-```
-
-> **Warning**: Idempotency record di database aplikasi tidak otomatis menjamin external side effect hanya terjadi satu kali jika kegagalan terjadi di celah antara pemanggilan pihak ketiga dan commit lokal.
-
-Sistem production biasanya menggunakan idempotency mechanism atau reconciliation yang juga disediakan pada boundary sistem eksternal.
+Jika payment provider mendukung provider-side idempotency, gunakan stable idempotency key pada request ke provider. Jika tidak, sistem biasanya membutuhkan mekanisme duplicate prevention atau reconciliation lain.
 
 ---
 
-## 20. Kesalahan umum
+## 20. Deduplication vs Idempotency
 
-1. **Hanya disable button frontend**: `button.disabled = true;` mencegah user double-click, tapi ini **UX protection, bukan server correctness**.
-2. **Generate key baru setiap retry**: Mengubah key saat retry membuat server melihatnya sebagai operasi baru. **Retry harus menggunakan key logical operation yang sama.**
-3. **Timestamp sederhana sebagai key**: Waktu tidak cukup unik. Potensi collision besar dan tidak konsisten saat retry.
-4. **Hanya melakukan application check**: `if !exists(key) { insert() }` rentan terhadap race condition. Database uniqueness wajib.
-5. **Key sama untuk payload berbeda**: Diterima sebagai update? **Salah, harus 409 Conflict**.
-6. **Tidak menentukan scope**: Menyebabkan collision lintas operasi/user/tenant.
-7. **TTL terlalu pendek**: Request lambat atau retry lama setelah TTL lewat dapat dieksekusi lagi sebagai operasi baru.
+| Konsep | Definisi | Kapan Digunakan |
+|--------|----------|-----------------|
+| **Idempotency** | Request yang diulang hasilnya sama | Request HTTP retry, payment API |
+| **Deduplication** | Mengenali dan mengabaikan message yang sudah pernah diproses | Message queue, streaming |
 
----
-
-## 21. Kapan menggunakan idempotency?
-
-- Pembayaran / penagihan (Payment Gateway).
-- Pengiriman email/notifikasi penting.
-- Pembuatan resource berharga (Order, Invoice).
-- Webhook processing.
+> **Catatan**: Deduplication pada messaging dapat menjadi materi lab tersendiri.
 
 ---
 
-## 22. Senior engineer mindset
+## 21. Kesalahan umum
+
+1. **Hanya disable button frontend**: UX protection, bukan server correctness.
+2. **Generate key baru setiap retry**: Harus gunakan key logical operation yang sama.
+3. **Timestamp sederhana sebagai key**: Tidak unik, berisiko collision.
+4. **Hanya application check**: Rentan race condition. Database uniqueness wajib.
+5. **Key sama untuk payload berbeda**: Harus 409 Conflict.
+6. **Tidak menentukan scope**: Bisa collision lintas user/tenant.
+7. **TTL terlalu pendek**: Retry lama dianggap operasi baru.
+
+---
+
+## 22. Kapan menggunakan idempotency?
+
+- Pembayaran / pembayaran vendor
+- Top-up saldo
+- Pembuatan invoice / purchase order
+- Pencairan komisi
+- Pengurangan stok
+- Pembuatan booking
+- Webhook payment gateway
+- Pengiriman email/WhatsApp
+
+Idempotency sangat penting ketika **duplicate execution dapat menghasilkan side effect yang merugikan, mahal, atau sulit dibatalkan**.
+
+---
+
+## 23. Senior engineer mindset
 
 Junior:
 > "Endpoint berhasil ketika saya test sekali."
@@ -399,20 +321,23 @@ Senior:
 > "Apa yang terjadi jika request dikirim ulang, timeout, atau dua request yang sama masuk hampir bersamaan?"
 
 Senior engineer mempertimbangkan:
-- Duplicate request
-- Retry
-- Timeout
-- Concurrent duplicate
-- Payload mismatch
+- Duplicate request, Retry, Timeout
+- Concurrent duplicate, Payload mismatch
 - Partial database failure
 
-**Mental habit:** Selalu tanyakan apakah sebuah side effect aman ketika operation diulang.
+**Mental habit**: Selalu tanyakan apakah side effect aman ketika operation diulang.
 
 ---
 
-## 23. Latihan Teknis
+## 24. Implementasi In-Memory (Simulasi)
 
-Jalankan test yang tersedia:
+Implementasi safe pada lab menggunakan in-memory store (`map` + `sync.RWMutex`) agar fokus tetap pada konsep. Atomic uniqueness pada contoh ini mensimulasikan protection yang pada sistem production biasanya diberikan oleh database unique constraint.
+
+---
+
+## 25. Latihan Teknis
+
+Jalankan test:
 ```bash
 # Uji kode unsafe (membuktikan terjadinya double charge)
 go test ./labs/01-idempotency/unsafe/... -v -count=1
@@ -423,38 +348,20 @@ go test ./labs/01-idempotency/safe/... -v -count=1
 
 ---
 
-## 24. Latihan OPL Pembayaran
+## 26. Latihan OPL Pembayaran
 
-Bayangkan skenario perpembayaran OPL:
-
-```text
-1. Admin memilih pekerjaan OPL
-2. Admin memasukkan pembayaran
-3. Sistem membuat bukti bayar
-4. Sistem mengubah OPL menjadi paid
-5. Sistem membuat cash out
-```
-
-**Pertanyaan:**
+Bayangkan skenario pembayaran OPL:
 
 1. Apa yang terjadi jika tombol bayar ditekan dua kali?
-
-2. Apa yang terjadi jika request pertama berhasil tetapi response timeout dan frontend retry?
-
+2. Apa yang terjadi jika request timeout dan client retry?
 3. Mengapa transaction saja tidak cukup?
-
 4. Idempotency key mana yang harus digunakan?
-
 5. Apa yang terjadi jika key sama digunakan dengan amount berbeda?
-
 6. Constraint database apa yang membantu?
-
 7. Jika request kedua masuk ketika request pertama masih processing, apakah payment boleh dijalankan lagi?
-
 8. Jika payment gateway merupakan sistem eksternal, apakah local idempotency otomatis menjamin gateway tidak memproses dua kali?
 
-**Jawaban singkat:**
-
+**Jawaban:**
 1. Tanpa idempotency: dua bukti bayar, dua OPL menjadi paid, dua cash out.
 2. Dengan idempotency: retry mengembalikan hasil pertama (replay response).
 3. Transaction tidak cegah client mengirim dua request POST secara bersamaan.
@@ -462,28 +369,10 @@ Bayangkan skenario perpembayaran OPL:
 5. 409 Conflict – payload fingerprint harus konsisten.
 6. `UNIQUE(idempotency_key)` pada tabel payments.
 7. Tidak boleh – return 409 "request in progress" atau tunggu hasil.
-8. Tidak otomatis. Backend harus callback idempotency key ke gateway.
+8. Tidak otomatis. Backend harus memakai provider-side idempotency atau reconciliation engine.
 
 ---
 
-## 25. Inti Pelajaran
+## 27. Inti Pelajaran
 
-> Jangan pernah percaya bahwa satu aksi UI menghasilkan tepat satu request ke server. Rancang API yang aman terhadap *retry storm*.
-
----
-
-## 26. Deduplication vs Idempotency
-
-| Konsep | Definisi | Kapan Digunakan |
-|--------|----------|-----------------|
-| **Idempotency** | Request yang diulang hasilnya sama | Request HTTP retry, payment API |
-| **Deduplication** | Mengenali dan mengabaikan message/request yang sudah pernah diproses | Message queue, streaming data, batch processing |
-
-Contoh deduplication di sistem messaging:
-```text
-event_id sudah pernah diproses?
-→ ignore / return already processed
-→ bukan → proses lagi
-```
-
-> **Catatan**: Deduplication pada messaging dapat menjadi materi lab tersendiri mencakup inbox pattern, Kafka transaction, atau exactly-once processing semantics.
+> Jangan pernah percaya bahwa satu aksi UI menghasilkan tepat satu request ke server. Rancang API yang aman terhadap duplicate request dan retry.
