@@ -1,6 +1,47 @@
 # Lab 02 — Database Index
 
-> **Mental Model**: A well-structured index can reduce query time from seconds to milliseconds. But blindly adding indexes can hurt write performance and storage. Always investigate what the database is actually doing.
+## Junior Thinking vs Senior Thinking
+
+**Junior**:
+
+```text
+Query slow
+→ add RAM
+→ add CPU
+→ create random index
+```
+
+**Senior**:
+
+```text
+identify slow query
+→ reproduce
+→ inspect EXPLAIN ANALYZE
+→ inspect rows and buffers
+→ inspect data distribution
+→ form hypothesis
+→ change index/query
+→ measure again
+→ inspect write/storage impact
+→ monitor production workload
+```
+
+> **Do not optimize based on guesses. Optimize based on evidence.**
+
+A senior engineer cares about:
+
+- **latency** — actual query execution time
+- **throughput** — queries per second the system can sustain
+- **rows scanned** — how many rows the planner actually examined
+- **buffers** — shared hits vs shared reads (cache effectiveness)
+- **selectivity** — what fraction of rows each predicate filters
+- **planner estimates** — how close `rows=` matches `Actual Rows`
+- **write amplification** — cost of maintaining indexes on INSERT/UPDATE/DELETE
+- **storage** — disk footprint of indexes
+- **production locking** — whether index creation blocks writes
+- **actual workload** — not just one query, but the full query mix
+
+Not merely: **"Does an index exist?"**
 
 ---
 
@@ -363,28 +404,50 @@ Always use `CREATE INDEX CONCURRENTLY` on large production tables to avoid acqui
 
 ## Running the Lab
 
-```bash
-# Setup
-./scripts/setup_lab.sh
+Requires a running PostgreSQL instance. Start infrastructure:
 
-# Run all experiments
-psql -d software_engineer_lab -f queries/01-baseline.sql
-psql -d software_engineer_lab -f queries/02-single-column-index.sql
-psql -d software_engineer_lab -f queries/03-composite-index.sql
-psql -d software_engineer_lab -f queries/04-column-order-experiment.sql
-psql -d software_engineer_lab -f queries/05-low-cardinality-selectivity.sql
-psql -d software_engineer_lab -f queries/06-order-by-limit.sql
-psql -d software_engineer_lab -f queries/07-covering-index.sql
-psql -d software_engineer_lab -f queries/08-write-cost.sql
-psql -d software_engineer_lab -f queries/09-storage-cost.sql
-psql -d software_engineer_lab -f queries/10-index-audit.sql
-psql -d software_engineer_lab -f queries/11-redundant-indexes.sql
-psql -d software_engineer_lab -f queries/12-partial-index.sql
-psql -d software_engineer_lab -f queries/13-functions-on-indexes.sql
-psql -d software_engineer_lab -f queries/14-statistics-and-analyze.sql
-psql -d software_engineer_lab -f queries/15-seqscan-is-correct.sql
-psql -d software_engineer_lab -f queries/16-production-safe-index.sql
-psql -d software_engineer_lab -f queries/17-benchmark.sql
+```bash
+make infra-up
+```
+
+Then use Makefile targets:
+
+```bash
+# Setup: drops existing table, creates schema, seeds ~500k rows
+make lab-02-setup
+
+# Re-run seed only (preserves schema and indexes)
+make lab-02-seed
+
+# Run individual experiments
+make lab-02-baseline    # Experiment 1: baseline query
+make lab-02-indexes     # Create indexes
+make lab-02-explain     # EXPLAIN ANALYZE experiments
+make lab-02-benchmark   # Experiment 17: benchmark harness
+
+# Or run SQL files directly via psql
+psql -d se_lab -f labs/02-database-index/queries/03-composite-index.sql
+psql -d se_lab -f labs/02-database-index/queries/17-benchmark.sql
+
+# Automated structural verification
+make lab-02-verify
+
+# Cleanup: drops table and all indexes
+make lab-02-clean
+```
+
+Configuration via environment variables (defaults shown):
+
+```bash
+DB_NAME=se_lab
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+```bash
+make lab-02-setup DB_HOST=your-host DB_USER=your-user
 ```
 
 ---

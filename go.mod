@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/lib/pq v1.10.7
-	github.com/jackc/pgerrcode v0.4.1
+	github.com/jackc/pgerrcode v0.0.0-20220416144505-46eac46af71c
 	github.com/joho/godotenv v1.4.0
 )
 

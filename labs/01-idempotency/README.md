@@ -335,6 +335,12 @@ Implementasi safe pada lab menggunakan in-memory store (`map` + `sync.RWMutex`) 
 
 ---
 
+## 24. Limitation: Recovery PROCESSING yang Tertinggal
+
+Implementasi lab ini sengaja tidak membahas recovery dari record `PROCESSING` yang tertinggal akibat crash atau kegagalan eksternal. Pada sistem production, kondisi tersebut membutuhkan recovery strategy tersendiri dan termasuk topik reliability/distributed systems lanjutan.
+
+---
+
 ## 25. Latihan Teknis
 
 Jalankan test:

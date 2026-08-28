@@ -1,6 +1,6 @@
-# Go Memory Race Lab
+# Lab 11 — Race Condition
 
-Sub-lab for investigating Go memory data races, improper shared state access, and concurrency primitives.
+Lab for investigating Go memory data races, improper shared state access, and concurrency primitives.
 
 ## Files
 - `datarace.go`: Contains `UnsafeCounter`, `MutexCounter`, `AtomicCounter`, and `ChannelCounter`.
