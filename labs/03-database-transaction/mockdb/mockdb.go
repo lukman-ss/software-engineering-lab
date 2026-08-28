@@ -37,6 +37,7 @@ func newDB() *DB {
 			"wallet_transactions": {},
 			"invoices":            {},
 			"outbox_events":       {},
+			"processed_events":    {},
 		},
 	}
 }
