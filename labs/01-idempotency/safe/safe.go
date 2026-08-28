@@ -1,6 +1,6 @@
 // Package safe implements idempotent payment processing.
-// Demonstrates: idempotency keys, payload hashing, unique constraints,
-// response caching, and conflict detection.
+// Demonstrates core idempotency concepts: idempotency keys, payload hashing,
+// unique constraints, response caching, and conflict detection.
 package safe
 
 import (
@@ -18,8 +18,11 @@ var (
 	// ErrIdempotencyKeyConflict is returned when the same idempotency key
 	// is used with a different payload.
 	ErrIdempotencyKeyConflict = errors.New("idempotency key used with different payload")
-	// ErrDuplicateOrder is returned when order has already been paid.
-	ErrDuplicateOrder = errors.New("order already paid")
+	// ErrMissingIdempotencyKey is returned when no key is provided.
+	ErrMissingIdempotencyKey = errors.New("idempotency key is required")
+	// ErrRequestInProgress is returned when a concurrent request with the same
+	// idempotency key is currently being processed.
+	ErrRequestInProgress = errors.New("request already in progress")
 )
 
 // PaymentRequest represents a payment request from a client.
@@ -46,11 +49,10 @@ const (
 )
 
 // DefaultTTL is the default time-to-live for idempotency keys after completion.
-const DefaultTTL = 72 * time.Hour // 3 days covers most client retry windows
+const DefaultTTL = 72 * time.Hour
 
 // PaymentRecord is the full database record including idempotency metadata.
 type PaymentRecord struct {
-	ID             string            `json:"id"`
 	IdempotencyKey string            `json:"idempotency_key"`
 	RequestHash    string            `json:"request_hash"`
 	OrderID        string            `json:"order_id"`
@@ -107,26 +109,22 @@ func GatewayChargeCount(g Gateway) int64 {
 }
 
 // Store is the persistence layer interface for idempotency and payments.
+// Implementation uses in-memory map to simulate database unique constraint.
 type Store interface {
 	TryInsert(ctx context.Context, record PaymentRecord) (bool, error)
+	GetByIdempotencyKey(ctx context.Context, key string) (*PaymentRecord, error)
 	UpdateCompleted(ctx context.Context, key string, result PaymentResult, responseStatus int) error
 	UpdateCompletedResponse(ctx context.Context, key string, responseJSON string) error
-	UpdateFailed(ctx context.Context, key string) error
-	GetByIdempotencyKey(ctx context.Context, key string) (*PaymentRecord, error)
-	IsOrderPaid(ctx context.Context, orderID string) (string, error)
-	UpsertOrder(ctx context.Context, orderID, paymentID string) error
 }
 
 type dbStore struct {
 	mu       sync.RWMutex
 	payments map[string]PaymentRecord
-	orders   map[string]string // order_id -> payment_id (business constraint)
 }
 
 func newDBStore() *dbStore {
 	return &dbStore{
 		payments: make(map[string]PaymentRecord),
-		orders:   make(map[string]string),
 	}
 }
 
@@ -139,11 +137,22 @@ func (s *dbStore) TryInsert(ctx context.Context, record PaymentRecord) (bool, er
 		if existing.RequestHash != record.RequestHash {
 			return false, ErrIdempotencyKeyConflict
 		}
-		return false, nil // already exists, not a conflict
+		return false, nil // already exists with same hash, not a conflict
 	}
 
 	s.payments[record.IdempotencyKey] = record
 	return true, nil
+}
+
+func (s *dbStore) GetByIdempotencyKey(ctx context.Context, key string) (*PaymentRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	record, exists := s.payments[key]
+	if !exists {
+		return nil, nil
+	}
+	return &record, nil
 }
 
 func (s *dbStore) UpdateCompleted(ctx context.Context, key string, result PaymentResult, responseStatus int) error {
@@ -157,7 +166,7 @@ func (s *dbStore) UpdateCompleted(ctx context.Context, key string, result Paymen
 
 	record.Status = StatusCompleted
 	record.ResponseStatus = responseStatus
-	record.ID = result.PaymentID
+	record.PaymentID = result.PaymentID
 	s.payments[key] = record
 	return nil
 }
@@ -173,56 +182,6 @@ func (s *dbStore) UpdateCompletedResponse(ctx context.Context, key string, respo
 
 	record.ResponseJSON = responseJSON
 	s.payments[key] = record
-	return nil
-}
-
-func (s *dbStore) UpdateFailed(ctx context.Context, key string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	record, exists := s.payments[key]
-	if !exists {
-		return fmt.Errorf("record not found for key: %s", key)
-	}
-
-	record.Status = StatusFailed
-	s.payments[key] = record
-	return nil
-}
-
-func (s *dbStore) GetByIdempotencyKey(ctx context.Context, key string) (*PaymentRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	record, exists := s.payments[key]
-	if !exists {
-		return nil, nil
-	}
-	return &record, nil
-}
-
-func (s *dbStore) IsOrderPaid(ctx context.Context, orderID string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	paymentID, exists := s.orders[orderID]
-	if !exists {
-		return "", nil
-	}
-	return paymentID, nil
-}
-
-func (s *dbStore) UpsertOrder(ctx context.Context, orderID, paymentID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if existingPaymentID, exists := s.orders[orderID]; exists {
-		if existingPaymentID != paymentID {
-			return ErrDuplicateOrder
-		}
-		return nil
-	}
-	s.orders[orderID] = paymentID
 	return nil
 }
 
@@ -253,7 +212,7 @@ func hashRequest(method, path string, req PaymentRequest) string {
 	return hex.EncodeToString(h[:])
 }
 
-// Service processes payments with idempotency guarantees.
+// Service processes payments with full idempotency guarantees.
 type Service struct {
 	gateway Gateway
 	store   Store
@@ -269,8 +228,14 @@ func NewService(g Gateway) *Service {
 
 // ProcessPayment charges the gateway idempotently.
 func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyKey string, req PaymentRequest) (PaymentResult, int, error) {
+	// Validate idempotency key is provided
+	if idempotencyKey == "" {
+		return PaymentResult{}, 400, ErrMissingIdempotencyKey
+	}
+
 	hash := hashRequest(method, path, req)
 
+	// Try to insert new record atomically
 	record := PaymentRecord{
 		IdempotencyKey: idempotencyKey,
 		RequestHash:    hash,
@@ -283,10 +248,7 @@ func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyK
 
 	inserted, err := s.store.TryInsert(ctx, record)
 	if err != nil {
-		if errors.Is(err, ErrIdempotencyKeyConflict) {
-			return PaymentResult{}, 409, ErrIdempotencyKeyConflict
-		}
-		return PaymentResult{}, 500, fmt.Errorf("try insert: %w", err)
+		return PaymentResult{}, 409, err
 	}
 
 	// If not inserted, check existing record
@@ -296,7 +258,7 @@ func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyK
 			return PaymentResult{}, 500, fmt.Errorf("get existing key: %w", err)
 		}
 
-		// Payload hash mismatch - client reusing key for different request
+		// Payload hash mismatch - reject with 409 Conflict
 		if existing.RequestHash != hash {
 			return PaymentResult{}, 409, ErrIdempotencyKeyConflict
 		}
@@ -310,39 +272,35 @@ func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyK
 			return res, existing.ResponseStatus, nil
 		}
 
-		// StatusFailed - allow retry
+		// Still processing - do not execute again
+		if existing.Status == StatusProcessing {
+			return PaymentResult{}, 409, ErrRequestInProgress
+		}
+
+		// Failed status - allow retry with fresh record
 		if existing.Status == StatusFailed {
+			// Reset to processing state
 			record.Status = StatusProcessing
-			record.RequestHash = hash
-			_, _ = s.store.TryInsert(ctx, record) // best effort reset
-		} else {
-			// Still processing - return conflict
-			return PaymentResult{}, 409, fmt.Errorf("request already in progress")
+			record.CreatedAt = time.Now()
+			record.ExpiresAt = time.Now().Add(DefaultTTL)
+			if _, err := s.store.TryInsert(ctx, record); err == nil {
+				inserted = true
+			}
 		}
 	}
 
-	// Business constraint check (unique order_id) - check for duplicate payment to same order
-	if req.OrderID != "" {
-		paidPaymentID, err := s.store.IsOrderPaid(ctx, req.OrderID)
-		if err != nil {
-			return PaymentResult{}, 500, fmt.Errorf("order check failed: %w", err)
-		}
-		if paidPaymentID != "" {
-			_ = s.store.UpdateFailed(ctx, idempotencyKey)
-			return PaymentResult{}, 409, ErrDuplicateOrder
-		}
+	if !inserted {
+		return PaymentResult{}, 409, ErrRequestInProgress
 	}
 
 	// Charge gateway
 	gatewayResult, chargeErr := s.gateway.Charge(ctx, req)
 	if chargeErr != nil {
-		_ = s.store.UpdateFailed(ctx, idempotencyKey)
 		return PaymentResult{}, 500, fmt.Errorf("gateway charge failed: %w", chargeErr)
 	}
 
 	responseJSON, err := json.Marshal(gatewayResult)
 	if err != nil {
-		_ = s.store.UpdateFailed(ctx, idempotencyKey)
 		return PaymentResult{}, 500, fmt.Errorf("marshal response: %w", err)
 	}
 
@@ -355,26 +313,11 @@ func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyK
 		return PaymentResult{}, 500, fmt.Errorf("store response: %w", err)
 	}
 
-	// Enforce business uniqueness (unique order_id)
-	if req.OrderID != "" {
-		if err := s.store.UpsertOrder(ctx, req.OrderID, gatewayResult.PaymentID); err != nil {
-			if errors.Is(err, ErrDuplicateOrder) {
-				return PaymentResult{}, 409, ErrDuplicateOrder
-			}
-			return PaymentResult{}, 500, fmt.Errorf("enforce order uniqueness: %w", err)
-		}
-	}
-
 	return gatewayResult, 200, nil
 }
 
 func (s *Service) CountPayments() int {
-	s.store.(*dbStore).mu.RLock()
-	defer s.store.(*dbStore).mu.RUnlock()
+	s.store.(*dbStore).mu.Lock()
+	defer s.store.(*dbStore).mu.Unlock()
 	return len(s.store.(*dbStore).payments)
-}
-
-// IsOrderPaidError checks if error is due to duplicate order payment.
-func IsOrderPaidError(err error) bool {
-	return errors.Is(err, ErrDuplicateOrder)
 }
