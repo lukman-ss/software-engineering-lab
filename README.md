@@ -24,6 +24,20 @@ CRUD applications assume sequential single-user access with perfect networks. Pr
 
 ## Learning Philosophy
 
+### Satu Lab, Satu Mental Model
+
+Setiap lab berfokus pada **satu failure mode spesifik** dan **satu mental model utama**. 
+
+> A lab may mention related failure modes, but should not fully implement topics owned by later labs.
+
+Batasan kepemilikan konsep antar lab:
+- **Lab 01 Idempotency** → berfokus pada *repeated logical operation* & *retry safety* (tidak mengajarkan locking mendalam).
+- **Lab 02 Race Condition** → berfokus pada *concurrent access*.
+- **Lab 03 Database Transaction** → berfokus pada *atomic multi-step database changes*.
+- **Lab 04 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
+
+Tujuan repository adalah *progressive learning*, bukan menyelesaikan semua masalah dalam satu lab.
+
 ### No Hand-Waving
 
 Every lab solves a real problem with production-grade patterns:
