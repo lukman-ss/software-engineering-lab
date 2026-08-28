@@ -47,7 +47,7 @@ const (
 	StatusCompleted  IdempotencyStatus = "completed"
 )
 
-// DefaultTTL is the default time-to-live for idempotency keys after completion.
+// DefaultTTL is the retention window used by this educational example.
 const DefaultTTL = 72 * time.Hour
 
 // PaymentRecord is the full database record including idempotency metadata.
@@ -112,8 +112,7 @@ func GatewayChargeCount(g Gateway) int64 {
 type Store interface {
 	TryInsert(ctx context.Context, record PaymentRecord) (bool, error)
 	GetByIdempotencyKey(ctx context.Context, key string) (*PaymentRecord, error)
-	UpdateCompleted(ctx context.Context, key string, result PaymentResult, responseStatus int) error
-	UpdateCompletedResponse(ctx context.Context, key string, responseJSON string) error
+	Complete(ctx context.Context, key string, responseStatus int, responseJSON []byte) error
 }
 
 type dbStore struct {
@@ -154,7 +153,7 @@ func (s *dbStore) GetByIdempotencyKey(ctx context.Context, key string) (*Payment
 	return &record, nil
 }
 
-func (s *dbStore) UpdateCompleted(ctx context.Context, key string, result PaymentResult, responseStatus int) error {
+func (s *dbStore) Complete(ctx context.Context, key string, responseStatus int, responseJSON []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -165,20 +164,7 @@ func (s *dbStore) UpdateCompleted(ctx context.Context, key string, result Paymen
 
 	record.Status = StatusCompleted
 	record.ResponseStatus = responseStatus
-	s.payments[key] = record
-	return nil
-}
-
-func (s *dbStore) UpdateCompletedResponse(ctx context.Context, key string, responseJSON string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	record, exists := s.payments[key]
-	if !exists {
-		return fmt.Errorf("record not found for key: %s", key)
-	}
-
-	record.ResponseJSON = responseJSON
+	record.ResponseJSON = string(responseJSON)
 	s.payments[key] = record
 	return nil
 }
@@ -291,13 +277,9 @@ func (s *Service) ProcessPayment(ctx context.Context, method, path, idempotencyK
 		return PaymentResult{}, 500, fmt.Errorf("marshal response: %w", err)
 	}
 
-	// Update completed response
-	if err := s.store.UpdateCompleted(ctx, idempotencyKey, gatewayResult, 200); err != nil {
-		return PaymentResult{}, 500, fmt.Errorf("update completed: %w", err)
-	}
-
-	if err := s.store.UpdateCompletedResponse(ctx, idempotencyKey, string(responseJSON)); err != nil {
-		return PaymentResult{}, 500, fmt.Errorf("store response: %w", err)
+	// Save COMPLETED status and response atomically
+	if err := s.store.Complete(ctx, idempotencyKey, 200, responseJSON); err != nil {
+		return PaymentResult{}, 500, fmt.Errorf("complete record: %w", err)
 	}
 
 	return gatewayResult, 200, nil

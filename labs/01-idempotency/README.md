@@ -262,7 +262,7 @@ Idempotency key tidak perlu disimpan selamanya.
 | **DELETE** | ✅ |
 | **POST** | ❌ |
 
-`POST /payments` membutuhkan Idempotency-Key untuk mencegah duplicate charge.
+Endpoint seperti `POST /payments` yang berisiko menghasilkan duplicate charge sering menggunakan application-level idempotency seperti `Idempotency-Key`.
 
 ---
 

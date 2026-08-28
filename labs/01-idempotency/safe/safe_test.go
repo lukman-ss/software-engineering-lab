@@ -177,3 +177,31 @@ func TestSameKeyWhileProcessingDoesNotExecuteSecondPayment(t *testing.T) {
 		t.Fatalf("expected gateway called exactly once, got %d", bg.calls)
 	}
 }
+
+func TestCompletedRecordHasResponseAvailableForReplay(t *testing.T) {
+	gw := safe.MockGateway()
+	svc := safe.NewService(gw)
+	ctx := context.Background()
+
+	req := safe.PaymentRequest{Amount: 7500}
+
+	_, status, err := svc.ProcessPayment(ctx, "POST", "/payments", "key-atomic", req)
+	if err != nil || status != 200 {
+		t.Fatalf("first payment failed: %v (status %d)", err, status)
+	}
+
+	// Replay should succeed using cached response
+	res, statusReplay, errReplay := svc.ProcessPayment(ctx, "POST", "/payments", "key-atomic", req)
+	if errReplay != nil {
+		t.Fatalf("expected replay to succeed, got error: %v", errReplay)
+	}
+	if statusReplay != 200 {
+		t.Fatalf("expected replay status 200, got %d", statusReplay)
+	}
+	if res.PaymentID == "" {
+		t.Fatalf("expected replayed response to have PaymentID, got empty")
+	}
+	if res.ExternalID == "" {
+		t.Fatalf("expected replayed response to have ExternalID, got empty")
+	}
+}
