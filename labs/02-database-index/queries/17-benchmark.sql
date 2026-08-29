@@ -186,11 +186,20 @@ DROP INDEX idx_bench_composite_correct;
 -- Always trust the actual observed plan over the prediction.
 --
 -- KEY THINGS TO COMPARE:
--- 1. Shared buffers read: fewer = better index range bounding
+-- 1. Compare total buffer activity (shared hit + shared read) together with
+--    the plan shape. A lower shared-read count alone does not prove less
+--    database work because warm-cache runs can convert reads into hits.
 -- 2. "Rows Removed by Filter" in Index Scan nodes: non-zero = predicate
 --    was not an Index Cond (index did not fully bound that predicate)
 -- 3. Sort node: present = index did not supply ORDER BY order
--- 4. Actual rows vs estimated rows: large gap = stale statistics
+-- 4. A large estimate-vs-actual gap is a signal to investigate.
+--    Possible causes include:
+--    - stale statistics
+--    - skewed data
+--    - correlated columns
+--    - histogram/statistics resolution
+--    - expression predicates
+--    - planner independence assumptions
 
 -- ============================================
 -- NOTE: Covering indexes

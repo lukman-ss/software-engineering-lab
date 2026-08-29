@@ -212,7 +212,8 @@ WHERE status = 'PENDING_REFUND'
 -- ORDER BY service_date DESC with WHERE branch_id = 2 AND status = 'FINISHED':
 -- Index A stores (branch_id, status, service_date ASC).
 -- Within branch_id=2 and status='FINISHED', entries are ordered by service_date.
--- PostgreSQL can satisfy DESC by scanning the index backward — no Sort node needed.
+-- If PostgreSQL chooses this compatible index path, a backward B-tree scan
+-- can provide service_date DESC order without an explicit Sort.
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT id, service_date, invoice_no

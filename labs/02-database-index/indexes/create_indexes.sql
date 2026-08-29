@@ -51,7 +51,7 @@ CREATE INDEX idx_service_branch_status_date
 -- ============================================
 -- Partial index example (for specific use case)
 -- ============================================
--- IN_PROGRESS is approximately 5% of the canonical dataset (50,000 rows).
+-- IN_PROGRESS is approximately 5% of the canonical dataset (~25,000 of 500,000 rows).
 -- A partial index on this subset demonstrates the storage/maintenance
 -- benefits of indexing a small, stable predicate.
 

@@ -6,7 +6,7 @@
 TRUNCATE TABLE service RESTART IDENTITY CASCADE;
 
 -- Insert exactly 500,000 rows
--- Deterministic distribution using two independent modulo-based permutations:
+-- Deterministic distribution using two separate deterministic modulo-based permutations:
 --
 -- Branch distribution (per 10,000-row cycle, gs % 10000):
 --   mod 0-1499   = branch 1   15.00%
@@ -105,17 +105,28 @@ GROUP BY branch_id, status
 ORDER BY branch_id, status;
 
 -- Verify: branch 2 contains multiple statuses, and FINISHED is not 100% of branch 2.
-SELECT
-    'branch 2 statuses' AS check_name,
-    count(DISTINCT status) AS distinct_statuses
-FROM service
-WHERE branch_id = 2;
+-- This ensures the primary composite-index experiment has meaningful data.
+DO $$
+DECLARE
+    distinct_statuses INTEGER;
+    finished_pct      NUMERIC;
+BEGIN
+    SELECT COUNT(DISTINCT status)
+    INTO distinct_statuses
+    FROM service
+    WHERE branch_id = 2;
 
-SELECT
-    'branch 2 FINISHED pct' AS check_name,
-    round(COUNT(*) FILTER (WHERE status = 'FINISHED') * 100.0 / COUNT(*), 2) AS finished_pct
-FROM service
-WHERE branch_id = 2;
+    ASSERT distinct_statuses > 1,
+        'Branch 2 should contain multiple statuses (got ' || distinct_statuses || ')';
+
+    SELECT COUNT(*) FILTER (WHERE status = 'FINISHED') * 100.0 / COUNT(*)
+    INTO finished_pct
+    FROM service
+    WHERE branch_id = 2;
+
+    ASSERT finished_pct < 100,
+        'branch_id=2 must not imply status=FINISHED (got ' || ROUND(finished_pct, 2) || '% FINISHED)';
+END $$;
 
 -- ============================================================
 -- ASSERTIONS (fail if marginal distributions deviate from spec)
