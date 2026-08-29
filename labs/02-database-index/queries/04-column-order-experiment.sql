@@ -33,7 +33,8 @@
 -- Equality + equality + range on leading three columns:
 --   WHERE branch_id = 2 AND status = 'FINISHED'
 --     AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
---   → tight bounded scan; very few index pages read.
+--   → bounded scan on the tightly constrained B-tree range; measure
+--   actual buffer usage to assess the page count.
 
 -- Non-leading predicates:
 --   WHERE status = 'FINISHED'

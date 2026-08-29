@@ -14,6 +14,19 @@ DB_PASSWORD="${DB_PASSWORD:-postgres}"
 # PQ: wrapper so every psql call uses the correct connection params
 PQ() { PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"; }
 
+# run_sql: helper to execute a SQL file, preserving stderr for visibility but hiding normal output
+run_sql() {
+    local file="$1"
+    echo "[RUN] $file"
+
+    if ! PQ -f "$file" >/dev/null; then
+        echo "[FAIL] $file"
+        return 1
+    fi
+
+    echo "[PASS] $file"
+}
+
 echo "=== Verifying Lab 02 ==="
 
 # ============================================
@@ -21,7 +34,7 @@ echo "=== Verifying Lab 02 ==="
 # ============================================
 reset_dataset() {
     echo "[RESET] Restoring canonical 500,000-row dataset..."
-    PQ -f labs/02-database-index/cleanup.sql >/dev/null 2>&1 || true
+    PQ -f labs/02-database-index/cleanup.sql >/dev/null 2>&1
     PQ -f labs/02-database-index/schema.sql >/dev/null 2>&1
     PQ -f labs/02-database-index/seed.sql >/dev/null 2>&1
 
@@ -68,8 +81,8 @@ echo "  PENDING_REFUND: $PR_PCT% (expected 0.1%)"
 [ "$FINISHED_PCT" = "70.0" ]   || { echo "[FAIL] FINISHED percentage mismatch"; exit 1; }
 [ "$CANCELLED_PCT" = "20.0" ]  || { echo "[FAIL] CANCELLED percentage mismatch"; exit 1; }
 [ "$IN_PROGRESS_PCT" = "5.0" ] || { echo "[FAIL] IN_PROGRESS percentage mismatch"; exit 1; }
-[ "$WAITING_PCT" = "4.9" ]    || { echo "[FAIL] WAITING percentage mismatch"; exit 1; }
-[ "$PR_PCT" = "0.1" ]        || { echo "[FAIL] PENDING_REFUND percentage mismatch"; exit 1; }
+[ "$WAITING_PCT" = "4.9" ]     || { echo "[FAIL] WAITING percentage mismatch"; exit 1; }
+[ "$PR_PCT" = "0.1" ]          || { echo "[FAIL] PENDING_REFUND percentage mismatch"; exit 1; }
 echo "[PASS] Status distribution correct"
 
 # ============================================
@@ -136,50 +149,34 @@ echo "[PASS] No experiment indexes in baseline"
 # 7. Execute All Experiments
 # ============================================
 
-echo "[RUN] queries/01-baseline.sql"
-PQ -f labs/02-database-index/queries/01-baseline.sql >/dev/null 2>&1
-echo "[PASS] 01-baseline.sql"
+run_sql labs/02-database-index/queries/01-baseline.sql
 
 echo "[CLEANUP] Dropping stray experiment indexes..."
 PQ -c "DROP INDEX IF EXISTS idx_service_branch_id, idx_service_status, idx_service_service_date;" >/dev/null 2>&1
 
-echo "[RUN] queries/02-single-column-index.sql"
-PQ -f labs/02-database-index/queries/02-single-column-index.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/02-single-column-index.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_branch_id, idx_service_status, idx_service_service_date;" >/dev/null 2>&1
-echo "[PASS] 02-single-column-index.sql"
 
-echo "[RUN] queries/03-composite-index.sql"
-PQ -f labs/02-database-index/queries/03-composite-index.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/03-composite-index.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date;" >/dev/null 2>&1
-echo "[PASS] 03-composite-index.sql"
 
-echo "[RUN] queries/04-column-order-experiment.sql"
-PQ -f labs/02-database-index/queries/04-column-order-experiment.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/04-column-order-experiment.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_a_branch_status_date, idx_service_b_date_branch_status, idx_service_c_status_date_branch;" >/dev/null 2>&1
-echo "[PASS] 04-column-order-experiment.sql"
 
-echo "[RUN] queries/05-low-cardinality-selectivity.sql"
-PQ -f labs/02-database-index/queries/05-low-cardinality-selectivity.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/05-low-cardinality-selectivity.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_status;" >/dev/null 2>&1
-echo "[PASS] 05-low-cardinality-selectivity.sql"
 
-echo "[RUN] queries/06-order-by-limit.sql"
-PQ -f labs/02-database-index/queries/06-order-by-limit.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/06-order-by-limit.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date_desc;" >/dev/null 2>&1
-echo "[PASS] 06-order-by-limit.sql"
 
-echo "[RUN] queries/07-covering-index.sql"
-PQ -f labs/02-database-index/queries/07-covering-index.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/07-covering-index.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_covering, idx_service_dashboard;" >/dev/null 2>&1
-echo "[PASS] 07-covering-index.sql"
 
-echo "[RUN] queries/08-write-cost.sql"
 # 08-write-cost.sql truncates and mutates the service table.
 # Experiments 09-13 require the canonical 500k dataset.
 # We MUST reset_dataset before running them.
-PQ -f labs/02-database-index/queries/08-write-cost.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/08-write-cost.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date, idx_service_status_single, idx_service_service_date, idx_service_customer;" >/dev/null 2>&1
-echo "[PASS] 08-write-cost.sql"
 
 # Mandatory reset: 08-write-cost left the table in an altered state
 reset_dataset
@@ -188,53 +185,35 @@ reset_dataset
 ROW_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service;")
 [ "$ROW_COUNT" -eq 500000 ] || { echo "[FAIL] Dataset not restored before experiment 09 (got $ROW_COUNT rows)"; exit 1; }
 
-echo "[RUN] queries/09-storage-cost.sql"
-PQ -f labs/02-database-index/queries/09-storage-cost.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/09-storage-cost.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_branch_id, idx_service_branch_status_date, idx_service_status, idx_service_service_date, idx_service_date, idx_service_dashboard, idx_service_branch_status_date_desc;" >/dev/null 2>&1
-echo "[PASS] 09-storage-cost.sql"
 
-echo "[RUN] queries/10-index-audit.sql"
-PQ -f labs/02-database-index/queries/10-index-audit.sql >/dev/null 2>&1
-echo "[PASS] 10-index-audit.sql"
+run_sql labs/02-database-index/queries/10-index-audit.sql
 
-echo "[RUN] queries/11-redundant-indexes.sql"
-PQ -f labs/02-database-index/queries/11-redundant-indexes.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/11-redundant-indexes.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_red_1, idx_service_red_2, idx_service_red_3;" >/dev/null 2>&1
-echo "[PASS] 11-redundant-indexes.sql"
 
-echo "[RUN] queries/12-partial-index.sql"
-PQ -f labs/02-database-index/queries/12-partial-index.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/12-partial-index.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_in_progress_branch_date, idx_service_full_status_branch_date;" >/dev/null 2>&1
-echo "[PASS] 12-partial-index.sql"
 
-echo "[RUN] queries/13-functions-on-indexes.sql"
-PQ -f labs/02-database-index/queries/13-functions-on-indexes.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/13-functions-on-indexes.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_service_date, idx_service_year_expr;" >/dev/null 2>&1
-echo "[PASS] 13-functions-on-indexes.sql"
 
 # 14-statistics-and-analyze inserts 50k rows; reset before and clean up after
 reset_dataset
-echo "[RUN] queries/14-statistics-and-analyze.sql"
-PQ -f labs/02-database-index/queries/14-statistics-and-analyze.sql >/dev/null 2>&1
-echo "[PASS] 14-statistics-and-analyze.sql"
+run_sql labs/02-database-index/queries/14-statistics-and-analyze.sql
 reset_dataset
 
-echo "[RUN] queries/15-seqscan-is-correct.sql"
 PQ -c "DROP INDEX IF EXISTS idx_service_status;" >/dev/null 2>&1
-PQ -f labs/02-database-index/queries/15-seqscan-is-correct.sql >/dev/null 2>&1
+run_sql labs/02-database-index/queries/15-seqscan-is-correct.sql
 PQ -c "DROP INDEX IF EXISTS idx_service_status;" >/dev/null 2>&1
-echo "[PASS] 15-seqscan-is-correct.sql"
 
-echo "[RUN] queries/16-production-safe-index.sql"
 # CREATE INDEX CONCURRENTLY cannot run inside a transaction block;
 # the -v ON_ERROR_STOP=1 flag combined with no implicit transaction here is fine.
 PQ -c "DROP INDEX IF EXISTS idx_service_concurrent_branch;" >/dev/null 2>&1
-PQ -f labs/02-database-index/queries/16-production-safe-index.sql >/dev/null 2>&1
-echo "[PASS] 16-production-safe-index.sql"
+run_sql labs/02-database-index/queries/16-production-safe-index.sql
 
-echo "[RUN] queries/17-benchmark.sql"
-PQ -f labs/02-database-index/queries/17-benchmark.sql >/dev/null 2>&1
-echo "[PASS] 17-benchmark.sql"
+run_sql labs/02-database-index/queries/17-benchmark.sql
 
 # ============================================
 # 8. Final cleanup
