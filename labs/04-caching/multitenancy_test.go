@@ -38,8 +38,9 @@ func TestBusinessTimezone(t *testing.T) {
 	locJakarta, _ := time.LoadLocation("Asia/Jakarta")
 	locNY, _ := time.LoadLocation("America/New_York")
 
-	dateJakarta := caching.TodayInLocation(locJakarta)
-	dateNY := caching.TodayInLocation(locNY)
+	now := time.Now()
+	dateJakarta := caching.TodayInLocation(now, locJakarta)
+	dateNY := caching.TodayInLocation(now, locNY)
 
 	t.Logf("Business date in Jakarta: %s", dateJakarta)
 	t.Logf("Business date in New York: %s", dateNY)

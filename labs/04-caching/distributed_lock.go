@@ -11,15 +11,15 @@ import (
 // DistributedLock menggunakan Redis SETNX untuk implementasi lock sederhana.
 // Hanya satu proses yang dapat mengunci pada satu waktu.
 type DistributedLock struct {
-	locker LockInterface
-	ttl    time.Duration
+	locker  LockInterface
+	ttl     time.Duration
 	keyFunc func(lockKey string) string
 }
 
 func NewDistributedLock(locker LockInterface, ttl time.Duration) *DistributedLock {
 	return &DistributedLock{
-		locker:  locker,
-		ttl:   ttl,
+		locker: locker,
+		ttl:    ttl,
 		keyFunc: func(lockKey string) string {
 			return "lock:" + lockKey
 		},

@@ -9,12 +9,15 @@
 -- PostgreSQL can only use a plain B-tree index when the predicate
 -- references the indexed expression directly (same column, no transform).
 -- If the predicate applies a function, the index over the raw column
--- cannot satisfy it — the planner must evaluate the function for every row.
+-- cannot satisfy it with a bounded Index Cond on the raw DATE key.
 --
--- NOT every function on every indexed column automatically forces a Seq Scan.
+-- NOT every expression predicate forces a specific plan type.
+-- The planner may still choose a full index scan, a Bitmap Heap Scan,
+-- or Sequential Scan depending on cost estimates.
+--
 -- The planner inspects whether the indexed expression matches what it needs.
 -- If there is an expression index whose definition matches the predicate
--- expression exactly, PostgreSQL CAN use that expression index.
+-- expression, PostgreSQL CAN use that expression index.
 
 -- ============================================
 -- PART 1: Standard index on service_date
@@ -25,19 +28,24 @@ CREATE INDEX idx_service_service_date ON service(service_date);
 ANALYZE service;
 
 -- ============================================
--- PART 2: Expression predicate (non-SARGable)
+-- PART 2: Expression predicate (non-SARGable against plain index)
 -- ============================================
 
 -- This predicate applies EXTRACT() to service_date.
--- The index stores raw DATE values; it has no entry for year 2026 as
--- a searchable key.  The planner must call EXTRACT for every row.
+-- The plain service_date index cannot use
+-- EXTRACT(YEAR FROM service_date) = 2026
+-- as a bounded Index Cond on the raw DATE key.
+-- The expression must be evaluated for candidate entries/rows because
+-- the raw B-tree key cannot bound the requested year.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT count(*)
 FROM service
 WHERE EXTRACT(YEAR FROM service_date) = 2026;
 
--- Observe: is this a Seq Scan or Bitmap Heap Scan?
--- Note "Rows Removed by Filter" — the index provides no help.
+-- Observe the plan:
+-- - Plain index provides no direct bound on year 2026
+-- - Planner may choose Index Scan, Bitmap Heap Scan, or Seq Scan
+--   based on cost estimates for this 500k-row table
 
 -- ============================================
 -- PART 3: SARGable rewrite using a range predicate
@@ -73,16 +81,16 @@ CREATE INDEX idx_service_year_expr
 ANALYZE service;
 
 -- Re-run the expression predicate.
--- The index definition now matches the predicate exactly.
+-- The index definition now matches the predicate.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT count(*)
 FROM service
 WHERE EXTRACT(YEAR FROM service_date) = 2026;
 
--- Observe: does the plan now show "Index Scan using idx_service_year_expr"?
--- The expression in the CREATE INDEX must match the predicate expression
--- character-for-character as PostgreSQL normalises it.  A mismatch (e.g.
--- EXTRACT(year ...) vs EXTRACT(YEAR ...)) can prevent matching.
+-- Observe: does the plan show "Index Scan using idx_service_year_expr"?
+-- PostgreSQL matches the parsed/normalized query expression against the
+-- indexed expression. The query must contain an expression PostgreSQL
+-- can recognize as matching the expression index definition.
 
 -- ============================================
 -- PART 5: Trade-off comparison

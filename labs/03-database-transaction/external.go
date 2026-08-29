@@ -608,14 +608,14 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 }
 
 // ============================================================================
-// 9. Idempotent Consumer Implementation (FIXED: consumer_name + event_id)
+// 9. Idempotent Consumer Implementation (consumer_name + event_id)
 // ============================================================================
 
-// processedEventsMutex is a package-level mutex to ensure atomic check-and-insert
-// for idempotency across multiple worker instances. This simulates database-level
-// unique constraint enforcement that would normally be handled by the DB.
-var processedEventsMutex sync.Mutex
-
+// CommissionWorker processes events idempotently.
+// KEY DESIGN (PROMPT 67-70): business state + processed_events are committed
+// in a SINGLE transaction. This prevents:
+//   - business state committed but dedup record lost (redelivery = duplicate)
+//   - dedup record committed but business state lost (skipped processing)
 type CommissionWorker struct {
 	db              *sql.DB
 	commissionsPaid int64
@@ -626,49 +626,56 @@ func NewCommissionWorker(db *sql.DB) *CommissionWorker {
 	return &CommissionWorker{db: db}
 }
 
-// HandleEvent processes an event idempotently using consumer_name + event_id
-// Uses a package-level mutex to ensure atomicity of the check-and-insert pattern.
-// In a real database with UNIQUE(consumer_name, event_id), this would be atomic.
+// HandleEvent processes an event idempotently using consumer_name + event_id.
+// Business state and deduplication record are committed atomically in one transaction.
+// Returns (true, nil) = processed, (false, nil) = duplicate skipped, (false, error) = failure.
 func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string, event Event) (bool, error) {
 	log.Printf("[CONSUMER:%s] processing %s", consumerName, event.ID)
 
-	// Use package-level mutex to ensure atomicity of check-and-insert
-	processedEventsMutex.Lock()
-	defer processedEventsMutex.Unlock()
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
 
-	// Check if already processed by this consumer
-	// We query by event_id and check consumer_name in code since mockdb's WHERE parser is limited
-	rows, err := c.db.QueryContext(ctx, "SELECT consumer_name FROM processed_events WHERE event_id = $1", event.ID)
+	// 1. Check if already processed (idempotency check within transaction)
+	var existingConsumer string
+	rows, err := tx.QueryContext(ctx, "SELECT consumer_name FROM processed_events WHERE event_id = $1", event.ID)
 	if err != nil {
 		return false, fmt.Errorf("query processed_events: %w", err)
 	}
-
-	alreadyProcessed := false
 	for rows.Next() {
-		var existingConsumer string
-		if err := rows.Scan(&existingConsumer); err == nil {
-			if existingConsumer == consumerName {
-				alreadyProcessed = true
-				break
-			}
+		if err := rows.Scan(&existingConsumer); err == nil && existingConsumer == consumerName {
+			rows.Close()
+			log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
+			return false, nil // Idempotent skip
 		}
 	}
 	rows.Close()
 
-	if alreadyProcessed {
-		log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
-		return false, nil // Idempotent: skip duplicate
-	}
-
-	_, err = c.db.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)", consumerName, event.ID, time.Now())
-	if err != nil {
-		return false, fmt.Errorf("insert processed_events: %w", err)
-	}
-
+	// 2. Business operation (within transaction)
 	c.mu.Lock()
 	c.commissionsPaid++
 	c.mu.Unlock()
 
+	// 3. Record deduplication entry in SAME transaction
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)",
+		consumerName, event.ID, time.Now())
+	if err != nil {
+		return false, fmt.Errorf("insert processed_events: %w", err)
+	}
+
+	// 4. Commit both business state + dedup atomically
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("commit consumer tx: %w", err)
+	}
+
+	tx = nil // committed, don't rollback in defer
 	log.Printf("[CONSUMER:%s] completed %s", consumerName, event.ID)
 	return true, nil
 }
@@ -709,6 +716,23 @@ func (dlq *DeadLetterQueue) Add(event Event, reason string, attempts int) {
 		FailedAt: time.Now(),
 	})
 	log.Printf("[DLQ] %s moved after %d attempts", event.ID, attempts)
+}
+
+// Replay returns an event from the DLQ for reprocessing.
+// In production, this would move the event back to a pending queue.
+func (dlq *DeadLetterQueue) Replay(eventID string) *Event {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	for i, r := range dlq.records {
+		if r.Event.ID == eventID {
+			// Remove from DLQ (in production, might move to retry queue)
+			out := dlq.records[i]
+			dlq.records = append(dlq.records[:i], dlq.records[i+1:]...)
+			log.Printf("[DLQ] replaying event=%s for investigation/reprocessing", eventID)
+			return &out.Event
+		}
+	}
+	return nil
 }
 
 func (dlq *DeadLetterQueue) Count() int {

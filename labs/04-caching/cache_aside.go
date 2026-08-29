@@ -53,4 +53,3 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, key string) (Product
 
 	return p, nil
 }
-

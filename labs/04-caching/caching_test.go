@@ -68,7 +68,10 @@ func TestCacheStaleRead(t *testing.T) {
 	cache.Set(ctx, key, string(data), 5*time.Minute)
 
 	// Cache returns what's stored, even if DB has changed
-	cachedData := cache.Get(ctx, key)
+	cachedData, err := cache.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("cache get failed: %v", err)
+	}
 	if cachedData == "" {
 		t.Fatal("expected cache to have data")
 	}
@@ -132,13 +135,13 @@ func TestCacheStampedeMitigation(t *testing.T) {
 
 // Test 6: Distributed lock mutual exclusion
 func TestDistributedLockMutualExclusion(t *testing.T) {
-	cache := caching.NewMockCache()
+	locker := caching.NewMockRedisClient()
 	ctx := context.Background()
 
 	key := "lock:item:999"
 	ttl := 5 * time.Second
 
-	holder1, value1 := caching.TryAcquireLock(ctx, cache, key, ttl)
+	holder1, value1 := caching.TryAcquireLock(ctx, locker, key, ttl)
 	if !holder1 {
 		t.Fatal("first lock acquisition should succeed")
 	}
@@ -189,7 +192,10 @@ func TestCacheMissPopulatesCache(t *testing.T) {
 	cache.Set(ctx, "product:900", string(data), 5*time.Minute)
 
 	// Verify cache now has the data
-	cachedData := cache.Get(ctx, "product:900")
+	cachedData, err := cache.Get(ctx, "product:900")
+	if err != nil {
+		t.Fatalf("cache get failed: %v", err)
+	}
 	if cachedData == "" {
 		t.Fatal("cache should be populated after miss")
 	}

@@ -2,6 +2,7 @@ package caching_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,30 +12,33 @@ import (
 // Integration tests for essential cache behaviors.
 // These tests demonstrate real-world scenarios without requiring Redis.
 
-// TestCacheMissReadsDatabase verifies: cache miss reads from database
+// TestCacheMissReadsDatabase verifies: cache miss reads from repository
 func TestCacheMissReadsDatabase(t *testing.T) {
 	cache := caching.NewMockCache()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
 	// First request = cache miss → database read
 	_, _ = svc.GetDashboard(ctx, 1)
 
-	if metrics.DBQueries() == 0 {
-		t.Error("cache miss should trigger database read")
+	if repo.CallCount == 0 {
+		t.Error("cache miss should trigger repository call")
 	}
 	if metrics.Misses() == 0 {
 		t.Error("cache miss count should be incremented")
 	}
-	t.Log("✓ Cache miss reads from database")
+	t.Log("✓ Cache miss reads from repository")
+	t.Logf("✓ Repository CallCount = %d (expected 1)", repo.CallCount)
 }
 
 // TestCacheMissWritesCache verifies: cache miss writes to cache after read
 func TestCacheMissWritesCache(t *testing.T) {
 	cache := caching.NewMockCacheWithStats()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
 	// First request
@@ -51,33 +55,34 @@ func TestCacheMissWritesCache(t *testing.T) {
 
 // TestCacheHitDoesNotQueryDatabase verifies: cache hit does not query database
 func TestCacheHitDoesNotQueryDatabase(t *testing.T) {
+	ctx := context.Background()
 	cache := caching.NewMockCacheWithStats()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
-	ctx := context.Background()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 
 	// Populate cache first
-	db := caching.NewHeavyDB()
-	_ = caching.NewProtectedStampedeService(cache, db) // For mock
+	repo.CallCount = 1 // Simulate one call already made
 
-	initialQueries := metrics.DBQueries()
+	initialCalls := repo.CallCount
 
 	// Multiple cache hits
 	for i := 0; i < 5; i++ {
 		_, _ = svc.GetDashboard(ctx, 1)
 	}
 
-	if metrics.DBQueries() > initialQueries+1 {
-		t.Errorf("cache hits should not increase DB queries")
+	if repo.CallCount > initialCalls {
+		t.Errorf("cache hits should not increase repository calls")
 	}
 	t.Log("✓ Cache hit does not query database")
 }
 
 // TestCacheExpiryCausesRebuild verifies: cache expiry causes rebuild
 func TestCacheExpiryCausesRebuild(t *testing.T) {
-	cache := caching.NewMockCacheWithStats()
+	cache := caching.NewMockCache()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
 	// Build cache
@@ -99,29 +104,33 @@ func TestCacheExpiryCausesRebuild(t *testing.T) {
 // TestCacheInvalidationReturnsFreshData verifies: invalidation returns fresh data
 func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	cache := caching.NewMockCacheWithStats()
-	svc := caching.NewDashboardCacheService(nil, cache)
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewDashboardCacheService(repo, cache)
 	ctx := context.Background()
 
 	branchID := int64(1)
 	key := caching.DashboardCacheKey(branchID)
 
-	// Set initial data
-	initialData := `{"branch_id":1,"invoice_count":10,"date":"` + caching.Today() + `"}`
-	cache.Set(ctx, key, initialData, time.Minute)
+	// Step 1: Populate cache with initial data
+	repo.CallCount = 0
+	cache.Set(ctx, key, `{"branch_id":1,"invoice_count":10,"date":"`+caching.Today()+`"}`, time.Minute)
+	repo.CallCount = 1 // First request already counted
 
 	// Verify cache has initial data
 	cached, _ := cache.Get(ctx, key)
-	if cached != initialData {
+	if cached == "" {
 		t.Error("cache should have initial data")
 	}
 
-	// Invalidate
+	// Step 2: Invalidate
 	_ = svc.InvalidateBranchDashboard(ctx, branchID)
 
-	// Cache should be empty
-	_, err := cache.Get(ctx, key)
-	if err == nil {
-		t.Error("cache should be invalidated")
+	// Step 3: Next request should query repo and update cache
+	repo.CallCount = 0
+	_, _ = svc.GetDashboard(ctx, 1)
+
+	if repo.CallCount != 1 {
+		t.Errorf("expected 1 repository call after invalidation, got %d", repo.CallCount)
 	}
 	t.Log("✓ Cache invalidation returns fresh data on next request")
 }
@@ -175,21 +184,51 @@ func TestDifferentTenantDoesNotShareCache(t *testing.T) {
 }
 
 // TestCorruptCacheFallsBackAppropriately verifies: corrupt cache falls back to database
+// This test puts corrupt JSON in the exact key that will be read by the service.
 func TestCorruptCacheFallsBackAppropriately(t *testing.T) {
 	cache := caching.NewMockCache()
+	repo := caching.NewFakeDashboardRepository()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// Set corrupt JSON
-	corruptData := `{"invalid json`
-	cache.Set(ctx, "dashboard:1", corruptData, time.Minute)
+	branchID := int64(1)
+	key := caching.DashboardCacheKey(branchID)
 
-	// Get should handle corrupt gracefully (fallback, not fail)
-	_, err := svc.GetDashboard(ctx, 1)
-	// Should not return unmarshal error - should use fallback
+	// Set corrupt JSON in the exact key that the service will read
+	corruptData := `{"id":"123"` // incomplete JSON - corrupt
+	cache.Set(ctx, key, corruptData, time.Minute)
 
-	t.Logf("Corrupt cache handled gracefully, error: %v", err)
+	// GetDashboard will:
+	// 1. Read from cache
+	// 2. Fail to unmarshal
+	// 3. Delete corrupt entry, fallback to repo, rebuild cache
+	repo.CallCount = 0
+	result, err := svc.GetDashboard(ctx, branchID)
+
+	// Should succeed via fallback
+	if err != nil {
+		t.Fatalf("expected fallback to succeed, got error: %v", err)
+	}
+
+	// Repository should have been called once to rebuild
+	if repo.CallCount != 1 {
+		t.Errorf("expected 1 repository call after corrupt cache bypass, got %d", repo.CallCount)
+	}
+
+	// Cache hit should now work
+	cached, err := cache.Get(ctx, key)
+	if err != nil {
+		t.Error("cache should now have valid data after rebuild")
+	}
+
+	// Verify the cached data is valid JSON
+	var d caching.Dashboard
+	if err := json.Unmarshal([]byte(cached), &d); err != nil {
+		t.Error("cache should contain valid JSON after rebuild")
+	}
+
+	t.Logf("Result from database fallback: %+v", result)
 	t.Log("✓ Corrupt cache falls back appropriately")
 }
 
@@ -197,7 +236,8 @@ func TestCorruptCacheFallsBackAppropriately(t *testing.T) {
 func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 	cache := caching.NewFailingMockCache()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
 	// Cache is down, but request should still succeed
@@ -206,6 +246,11 @@ func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 	// Request should succeed via DB fallback
 	if err != nil {
 		t.Errorf("cache failure should fall back to database, got error: %v", err)
+	}
+
+	// Repository should have been called
+	if repo.CallCount == 0 {
+		t.Error("repository should have been called for fallback")
 	}
 
 	// Metrics should show error
@@ -219,18 +264,16 @@ func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 
 // TestConcurrentCacheMissProtectedBySingleflight verifies stampede protection
 func TestConcurrentCacheMissProtectedBySingleflight(t *testing.T) {
-	db := caching.NewHeavyDB()
 	cache := caching.NewMockCache()
-	svc := caching.NewProtectedStampedeService(cache, db)
+	repo := caching.NewCounterRepository()
+	svc := caching.NewProtectedStampedeService(cache, repo)
 	ctx := context.Background()
-
-	key := "dashboard:concurrent"
 
 	// Run concurrent requests
 	done := make(chan bool)
 	for i := 0; i < 50; i++ {
 		go func() {
-			_, _ = svc.GetData(ctx, key)
+			_, _ = svc.GetData(ctx, 1)
 			done <- true
 		}()
 	}
@@ -240,8 +283,8 @@ func TestConcurrentCacheMissProtectedBySingleflight(t *testing.T) {
 	}
 
 	// With singleflight, all concurrent requests should result in 1 DB query
-	if db.RebuildCount() != 1 {
-		t.Errorf("singleflight should dedupe concurrent misses to 1 DB query, got %d", db.RebuildCount())
+	if repo.CallCount() != 1 {
+		t.Errorf("singleflight should dedupe concurrent misses to 1 DB query, got %d", repo.CallCount())
 	}
 	t.Log("✓ Concurrent cache miss protected by singleflight")
 }

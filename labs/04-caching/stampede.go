@@ -2,83 +2,113 @@ package caching
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 )
 
+// TTLWithJitter adds random jitter to prevent synchronized expiration (stampede).
+func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
+	if maxJitter <= 0 {
+		return base
+	}
+	jitter := time.Duration(rand.Int63n(int64(maxJitter)))
+	return base + jitter
+}
+
+// CounterRepository counts calls for stampede demonstration.
+type CounterRepository struct {
+	callCount int64
+}
+
+func NewCounterRepository() *CounterRepository {
+	return &CounterRepository{}
+}
+
+func (r *CounterRepository) GetDashboard(ctx context.Context, branchID int64, businessDate time.Time) (Dashboard, error) {
+	r.callCount++
+	return Dashboard{InvoiceCountToday: int(r.callCount)}, nil
+}
+
+func (r *CounterRepository) CallCount() int64 {
+	return r.callCount
+}
+
 // --- VERSI BROKEN (STAMPEDE) ---
 
 type BrokenStampedeService struct {
-	cache CacheInterface
-	db    *HeavyDB
+	cache   CacheInterface
+	repo    *CounterRepository
+	keyFunc func(branchID int64) string
 }
 
-func NewBrokenStampedeService(cache CacheInterface, db *HeavyDB) *BrokenStampedeService {
-	return &BrokenStampedeService{cache: cache, db: db}
+func NewBrokenStampedeService(cache CacheInterface, repo *CounterRepository) *BrokenStampedeService {
+	return &BrokenStampedeService{cache: cache, repo: repo}
 }
 
-func (s *BrokenStampedeService) GetData(ctx context.Context, key string) (string, error) {
+func (s *BrokenStampedeService) GetData(ctx context.Context, branchID int64) (Dashboard, error) {
+	key := fmt.Sprintf("dash:%d", branchID)
+
 	// 1. Cek cache
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
-		return cached, nil
+		var d Dashboard
+		_ = json.Unmarshal([]byte(cached), &d)
+		return d, nil
 	}
 
 	// 2. Cache miss -> Langsung hajar DB (Tidak ada perlindungan)
 	// Jika ada 100 concurrent request, ke-100-nya akan query DB
-	data := s.db.FetchHeavyData()
+	d, _ := s.repo.GetDashboard(ctx, branchID, time.Now())
 
 	// 3. Set cache
-	_ = s.cache.Set(ctx, key, data, 1*time.Minute)
+	data, _ := json.Marshal(d)
+	_ = s.cache.Set(ctx, key, string(data), 1*time.Minute)
 
-	return data, nil
+	return d, nil
 }
 
 // --- VERSI PROTECTED (SINGLEFLIGHT) ---
 
 type ProtectedStampedeService struct {
-	cache  CacheInterface
-	db     *HeavyDB
-	flight singleflight.Group
+	cache   CacheInterface
+	repo    *CounterRepository
+	flight  singleflight.Group
+	keyFunc func(branchID int64) string
 }
 
-func NewProtectedStampedeService(cache CacheInterface, db *HeavyDB) *ProtectedStampedeService {
-	return &ProtectedStampedeService{cache: cache, db: db}
+func NewProtectedStampedeService(cache CacheInterface, repo *CounterRepository) *ProtectedStampedeService {
+	return &ProtectedStampedeService{cache: cache, repo: repo}
 }
 
-func (s *ProtectedStampedeService) GetData(ctx context.Context, key string) (string, error) {
+func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) (Dashboard, error) {
+	key := fmt.Sprintf("dash:%d", branchID)
+
 	// 1. Cek cache
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
-		return cached, nil
+		var d Dashboard
+		_ = json.Unmarshal([]byte(cached), &d)
+		return d, nil
 	}
 
 	// 2. Cache miss -> Gunakan singleflight
 	// Jika ada 100 concurrent request, HANYA SATU yang eksekusi DB.
-	// Yang lain menunggu (block) sampai yang pertama selesai, lalu menggunakan hasilnya.
 	result, err, _ := s.flight.Do(key, func() (interface{}, error) {
-		data := s.db.FetchHeavyData()
-		_ = s.cache.Set(ctx, key, data, 1*time.Minute)
-		return data, nil
+		d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+		if err != nil {
+			return Dashboard{}, err
+		}
+		data, _ := json.Marshal(d)
+		_ = s.cache.Set(ctx, key, string(data), 1*time.Minute)
+		return d, nil
 	})
 
 	if err != nil {
-		return "", err
+		return Dashboard{}, err
 	}
-	return result.(string), nil
-}
-
-// --- TTL JITTER HELPER ---
-
-// TTLWithJitter menambahkan random jitter ke base TTL.
-// Tujuannya agar cache keys tidak expire bersamaan (menghindari stampede massal).
-func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
-	if maxJitter <= 0 {
-		return base
-	}
-	// Random duration between 0 and maxJitter
-	jitter := time.Duration(rand.Int63n(int64(maxJitter)))
-	return base + jitter
+	return result.(Dashboard), nil
 }

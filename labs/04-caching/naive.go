@@ -36,4 +36,3 @@ func (s *NaiveService) GetProduct(ctx context.Context, key string) (Product, err
 
 	return p, nil
 }
-

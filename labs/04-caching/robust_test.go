@@ -2,9 +2,7 @@ package caching_test
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -20,8 +18,6 @@ func TestCacheFailureGracefulDegradation(t *testing.T) {
 	cache := caching.NewFailingMockCache()
 	metrics := caching.NewCacheMetrics()
 	ctx := context.Background()
-
-	key := int64(1)
 
 	// Service dengan failing cache
 	// Service harus fallback ke database bila cache gagal
@@ -105,7 +101,7 @@ func TestCorruptCacheHandling(t *testing.T) {
 	key := "product:corrupt"
 
 	// Set corrupt data (bukan valid JSON produk)
-	corruptJSON := `{"id":"123"`, // incomplete JSON
+	corruptJSON := `{"id":"123"` // incomplete JSON
 	cache.Set(ctx, key, corruptJSON, 5*time.Minute)
 
 	// Try to read
@@ -154,8 +150,6 @@ func TestConcurrentCacheOperations(t *testing.T) {
 	cache := caching.NewMockCache()
 	metrics := caching.NewCacheMetrics()
 	ctx := context.Background()
-
-	branchID := int64(1)
 
 	var wg sync.WaitGroup
 	ops := 100

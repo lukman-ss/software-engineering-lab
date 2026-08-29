@@ -37,14 +37,14 @@ func TodayInLocation(now time.Time, loc *time.Location) string {
 
 // Dashboard menampilkan statistik workshop/bengkel.
 type Dashboard struct {
-	BranchID          int64       `json:"branch_id"`
-	InvoiceCountToday int         `json:"invoice_count_today"`
-	TotalRevenueToday float64     `json:"total_revenue_today"`
-	TopMechanic       MechanicRank `json:"top_mechanic"`
+	BranchID          int64         `json:"branch_id"`
+	InvoiceCountToday int           `json:"invoice_count_today"`
+	TotalRevenueToday float64       `json:"total_revenue_today"`
+	TopMechanic       MechanicRank  `json:"top_mechanic"`
 	TopSparepart      SparepartRank `json:"top_sparepart"`
-	VehicleCountToday int         `json:"vehicle_count_today"`
-	ActiveCustomer    int         `json:"active_customer"`
-	Date              string      `json:"date"` // YYYY-MM-DD
+	VehicleCountToday int           `json:"vehicle_count_today"`
+	ActiveCustomer    int           `json:"active_customer"`
+	Date              string        `json:"date"` // YYYY-MM-DD
 }
 
 // MechanicRank adalah ranking mekanik teratas
@@ -56,8 +56,8 @@ type MechanicRank struct {
 
 // SparepartRank adalah ranking sparepart teratas
 type SparepartRank struct {
-	PartID  int64  `json:"part_id"`
-	Name    string `json:"name"`
-	Count   int    `json:"count"`
+	PartID  int64   `json:"part_id"`
+	Name    string  `json:"name"`
+	Count   int     `json:"count"`
 	Revenue float64 `json:"revenue"`
 }

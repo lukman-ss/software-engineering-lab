@@ -2,7 +2,6 @@ package caching
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,17 +10,17 @@ import (
 
 // RobustDashboardService mengimplementasikan graceful degradation saat Redis down.
 type RobustDashboardService struct {
-	db      *sql.DB
+	repo    DashboardRepository
 	cache   CacheInterface
 	metrics *CacheMetrics
 }
 
-func NewRobustDashboardService(db *sql.DB, cache CacheInterface, metrics *CacheMetrics) *RobustDashboardService {
+func NewRobustDashboardService(repo DashboardRepository, cache CacheInterface, metrics *CacheMetrics) *RobustDashboardService {
 	if metrics == nil {
 		metrics = NewCacheMetrics()
 	}
 	return &RobustDashboardService{
-		db:      db,
+		repo:    repo,
 		cache:   cache,
 		metrics: metrics,
 	}
@@ -68,14 +67,11 @@ func (s *RobustDashboardService) GetDashboard(ctx context.Context, branchID int6
 
 func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, branchID int64, key string) (Dashboard, error) {
 	s.metrics.IncRebuild()
-	s.metrics.IncDBQuery()
 
-	// Source of truth: PostgreSQL database
-	d := Dashboard{
-		BranchID:          branchID,
-		InvoiceCountToday: 42,
-		TotalRevenueToday: 150000.0,
-		Date:              Today(),
+	// Query repository for real data
+	d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+	if err != nil {
+		return Dashboard{}, fmt.Errorf("repo get: %w", err)
 	}
 
 	// Rebuild cache

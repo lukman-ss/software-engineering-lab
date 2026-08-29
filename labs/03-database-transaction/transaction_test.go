@@ -1219,3 +1219,69 @@ func TestCompensationIdempotency(t *testing.T) {
 
 	t.Log("PROVEN: Compensation idempotent — same key executes once regardless of call count")
 }
+
+// ============================================================================
+// PROMPT 64: Queue Publish Failure
+// ============================================================================
+
+// TestOutboxPendingRecovery demonstrates that when broker is unavailable,
+// business transaction still commits, event stays pending, and can retry later
+func TestOutboxPendingRecovery(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	// Step 1: Create outbox event
+	svc := transaction.NewInvoiceServiceOutbox(db)
+	ctx := context.Background()
+
+	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+
+	// Verify invoice is paid (business transaction committed)
+	var invoiceStatus string
+	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if invoiceStatus != "paid" {
+		t.Fatalf("expected invoice 'paid', got '%s'", invoiceStatus)
+	}
+
+	// Step 2: Dispatcher sees broker unavailable (fail on all publishes)
+	broker := transaction.NewInMemoryBroker(100) // fail first 100 attempts (all)
+	dlq := transaction.NewDeadLetterQueue()
+	dispatcher := transaction.NewOutboxDispatcherWithDLQ(db, broker, 3, nil, dlq)
+
+	dispatched, _ := dispatcher.DispatchBatch(ctx)
+	if dispatched != 0 {
+		t.Errorf("expected 0 dispatched when broker down, got %d", dispatched)
+	}
+
+	// Step 3: Outbox event remains pending (durable intent)
+	pending, _ := svc.CountOutboxEvents(ctx)
+	if pending != 1 {
+		t.Errorf("expected 1 pending event, got %d", pending)
+	}
+
+	// Step 4: Business state is persistent despite broker down
+	var status string
+	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status)
+	if status != "paid" {
+		t.Errorf("invoice should remain paid even though broker down")
+	}
+
+	// Step 5: Eventually, when broker comes up, event can be delivered
+	recoveringBroker := transaction.NewInMemoryBroker(0) // succeed on all
+	recoveringDispatcher := transaction.NewOutboxDispatcher(db, recoveringBroker, 3, nil)
+
+	dispatched, _ = recoveringDispatcher.DispatchBatch(ctx)
+	if dispatched != 1 {
+		t.Errorf("expected 1 event after broker recovers, got %d", dispatched)
+	}
+
+	// Now all state is eventually consistent
+	events := recoveringBroker.PublishedEvents()
+	if len(events) != 1 {
+		t.Errorf("expected 1 event delivered after recovery")
+	}
+
+	t.Log("SUCCESS: Business transaction persisted, outbox remained pending, delivery successful after broker recovery")
+	t.Log("This demonstrates durable intent: event stored BEFORE publish, retry-capable")
+}

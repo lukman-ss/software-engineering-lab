@@ -3,28 +3,11 @@ package caching_test
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
 	caching "github.com/lukman/software-engineer-lab/labs/04-caching"
 )
-
-// mockDBForDashboard implements minimal DB interface for dashboard tests
-type mockDBForDashboard struct {
-	mu   sync.RWMutex
-	data map[string]interface{}
-}
-
-func newMockDBForDashboard() *mockDBForDashboard {
-	return &mockDBForDashboard{data: make(map[string]interface{})}
-}
-
-func (m *mockDBForDashboard) Exec(ctx context.Context, query string, args ...interface{}) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.data[query] = args
-}
 
 // Test 1: Cache Miss → Cache Hit
 func TestDashboardCacheMissThenHit(t *testing.T) {
@@ -68,8 +51,6 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 func TestDashboardCacheInvalidation(t *testing.T) {
 	cache := caching.NewMockCache()
 	ctx := context.Background()
-	mockDB := newMockDBForDashboard()
-
 	// Create service with mock DB
 	svc := caching.NewDashboardCacheService(nil, cache)
 
@@ -96,8 +77,8 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 	t.Logf("Before mutation: InvoiceCount=%d, Revenue=%.0f", beforeMutation.InvoiceCountToday, beforeMutation.TotalRevenueToday)
 
 	// Step 2: Simulate invoice creation (mutation)
+	// Because DB is nil, we bypass CreateInvoice and directly simulate what happens AFTER commit:
 	// In real world: BEGIN -> INSERT invoice -> COMMIT -> Invalidate
-	svc.CreateInvoice(ctx, branchID, 5000.0) // mock DB
 
 	// Step 3: Invalidate cache (happens after commit)
 	err = svc.InvalidateBranchDashboard(ctx, branchID)
@@ -223,7 +204,6 @@ func TestStaleDataAcceptableForDashboard(t *testing.T) {
 	ctx := context.Background()
 
 	trueData := caching.Dashboard{InvoiceCountToday: 100, Date: caching.Today()}
-	staleData := caching.Dashboard{InvoiceCountToday: 95, Date: caching.Today()}
 
 	data, _ := json.Marshal(trueData)
 	cache.Set(ctx, "dash", string(data), 30*time.Second)
@@ -233,7 +213,7 @@ func TestStaleDataAcceptableForDashboard(t *testing.T) {
 	json.Unmarshal([]byte(cached), &d)
 
 	staleDifference := trueData.InvoiceCountToday - d.InvoiceCountToday
-	t.Logf("Stale data difference: %d invoices (30s)")
+	t.Logf("Stale data difference: %d invoices (30s)", staleDifference)
 	t.Logf("For dashboard: acceptable for operational metrics")
 
 	// TODO: Bagaimana jika stale > 5% dari value?

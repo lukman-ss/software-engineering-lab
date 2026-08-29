@@ -16,10 +16,10 @@ func main() {
 	flag.Parse()
 
 	if *scenario == "" {
-		fmt.Println("Usage: go run main.go -scenario=[without-cache|cache-aside|stampede-unprotected|stampede-protected]")
+		fmt.Println("Usage: go run ./cmd/demo -scenario=[without-cache|cache-aside|stampede-unprotected|stampede-protected]")
 		fmt.Println("\nAvailable Scenarios:")
-		fmt.Println("  without-cache         : Baseline: 100 requests = 100 DB queries")
-		fmt.Println("  cache-aside           : Standard cache: 100 requests = 1 DB query, 99 cache hits")
+		fmt.Println("  without-cache         : Baseline: 100 requests = 100 repository calls")
+		fmt.Println("  cache-aside           : Standard cache: 100 requests = 1 repo call, 99 cache hits")
 		fmt.Println("  stampede-unprotected  : Cache expire + concurrent requests = DB overloaded")
 		fmt.Println("  stampede-protected    : Cache expire + singleflight = 1 DB rebuild")
 		os.Exit(1)
@@ -41,35 +41,19 @@ func main() {
 	}
 }
 
-// Scenario 1: without-cache (simplified demo - shows baseline behavior)
+// Scenario 1: without-cache (baseline demo)
 func runWithoutCache(ctx context.Context) {
 	fmt.Println("=== SCENARIO: without-cache (baseline demo) ===")
 	fmt.Println("Explanation: This simulation shows the pattern WITHOUT caching.")
 	fmt.Println("In production: every request would query the database.")
 
-	// For demo purposes, we simulate 100 "DB queries" by tracking them
-	heavyDB := caching.NewHeavyDB()
-
-	// Simulate: 100 direct DB queries (no cache protection)
-	const reqCount = 100
-	for i := 0; i < reqCount; i++ {
-		heavyDB.FetchHeavyData() // Each call = 1 DB query
-	}
-
-	fmt.Printf("\nResults:\n")
-	fmt.Printf("Requests: %d\n", reqCount)
-	fmt.Printf("DB Queries: %d (simulated - would be 100 in production)\n", reqCount)
-	fmt.Printf("Cache Hits: 0\n")
-	fmt.Printf("Cache Misses: %d (all requests miss cache)\n", reqCount)
-	fmt.Printf("\nConclusion: Without cache, every request puts full load on database.\n")
-}
-
-// Scenario 2: cache-aside
-func runCacheAside(ctx context.Context) {
-	fmt.Println("=== SCENARIO: cache-aside ===")
-	cache := caching.NewMockCacheWithStats()
+	cache := caching.NewMockCache()
 	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(nil, cache, metrics)
+
+	// Use FakeDashboardRepository which counts invocations
+	repo := caching.NewFakeDashboardRepository()
+
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 
 	const reqCount = 100
 	fmt.Printf("Simulating %d sequential requests to dashboard...\n", reqCount)
@@ -80,7 +64,31 @@ func runCacheAside(ctx context.Context) {
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Requests: %d\n", reqCount)
-	fmt.Printf("DB Queries (Rebuilds): %d\n", metrics.DBQueries())
+	fmt.Printf("Repository Calls: %d (simulated - would be 100 in production)\n", repo.CallCount)
+	fmt.Printf("Cache Hits: 0\n")
+	fmt.Printf("Cache Misses: %d (all requests miss cache)\n", reqCount)
+	fmt.Printf("\nConclusion: Without cache, every request puts full load on database.\n")
+}
+
+// Scenario 2: cache-aside
+func runCacheAside(ctx context.Context) {
+	fmt.Println("=== SCENARIO: cache-aside ===")
+	cache := caching.NewMockCacheWithStats()
+	metrics := caching.NewCacheMetrics()
+
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+
+	const reqCount = 100
+	fmt.Printf("Simulating %d sequential requests to dashboard...\n", reqCount)
+
+	for i := 0; i < reqCount; i++ {
+		_, _ = svc.GetDashboard(ctx, 1)
+	}
+
+	fmt.Printf("\nResults:\n")
+	fmt.Printf("Requests: %d\n", reqCount)
+	fmt.Printf("Repository Calls: %d\n", repo.CallCount)
 	fmt.Printf("Cache Hits: %d\n", metrics.Hits())
 	fmt.Printf("Cache Misses: %d\n", metrics.Misses())
 	fmt.Printf("\nConclusion: Cache Aside absorbs %d%% of the traffic, protecting the DB.\n",
@@ -92,9 +100,9 @@ func runStampedeUnprotected(ctx context.Context) {
 	fmt.Println("=== SCENARIO: stampede-unprotected ===")
 	fmt.Println("Context: Cache key expired. 100 users request dashboard simultaneously.")
 
-	heavyDB := caching.NewHeavyDB()
 	cache := caching.NewMockCache()
-	svc := caching.NewBrokenStampedeService(cache, heavyDB)
+	repo := caching.NewCounterRepository()
+	svc := caching.NewBrokenStampedeService(cache, repo)
 
 	const concurrentReqs = 100
 	var wg sync.WaitGroup
@@ -103,7 +111,7 @@ func runStampedeUnprotected(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = svc.GetData(ctx, "dashboard:1")
+			_, _ = svc.GetData(ctx, 1)
 		}()
 	}
 
@@ -111,7 +119,7 @@ func runStampedeUnprotected(ctx context.Context) {
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Concurrent Requests: %d\n", concurrentReqs)
-	fmt.Printf("DB Rebuilds: %d\n", heavyDB.RebuildCount())
+	fmt.Printf("Repository Calls: %d\n", repo.CallCount())
 	fmt.Printf("\nConclusion: Missing protection during expiration causes DB overload (Stampede/Thundering Herd).\n")
 }
 
@@ -121,9 +129,9 @@ func runStampedeProtected(ctx context.Context) {
 	fmt.Println("Context: Cache key expired. 100 users request dashboard simultaneously.")
 	fmt.Println("Protection: singleflight")
 
-	heavyDB := caching.NewHeavyDB()
 	cache := caching.NewMockCache()
-	svc := caching.NewProtectedStampedeService(cache, heavyDB)
+	repo := caching.NewCounterRepository()
+	svc := caching.NewProtectedStampedeService(cache, repo)
 
 	const concurrentReqs = 100
 	var wg sync.WaitGroup
@@ -132,7 +140,7 @@ func runStampedeProtected(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = svc.GetData(ctx, "dashboard:2")
+			_, _ = svc.GetData(ctx, 2)
 		}()
 	}
 
@@ -140,6 +148,6 @@ func runStampedeProtected(ctx context.Context) {
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Concurrent Requests: %d\n", concurrentReqs)
-	fmt.Printf("DB Rebuilds: %d\n", heavyDB.RebuildCount())
+	fmt.Printf("Repository Calls: %d\n", repo.CallCount())
 	fmt.Printf("\nConclusion: Singleflight deduplicates concurrent requests into a single DB query.\n")
 }

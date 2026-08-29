@@ -4,63 +4,68 @@
 
 ---
 
-## 1. Local Database Transaction
-
-A normal database transaction guarantees atomicity for resources participating in that transaction. External HTTP APIs, email, WhatsApp, object storage, and most external systems do not participate. (XA/2PC can coordinate distributed resources, but that is not the focus.)
+## 1. Local Atomicity
 
 ### Flow yang Benar
 ```
-[Local Transaction]
+[BEGIN TRANSACTION]
      │
-     ├── Payment
-     ├── Cash Ledger
-     └── Outbox Event
+     ├── INSERT payment
+     ├── UPDATE orders SET status = 'paid'
+     └── INSERT wallet_transactions
+     │
+     └── [COMMIT]
 ```
 
-**Aturan utama:**
-> Use DB transaction to protect **local invariants** (resources that must be atomically consistent within the same database).  
-> Use **asynchronous messaging** for cross-boundary side effects (WhatsApp, ERP, email, analytics).
+Jika ada error → **ROLLBACK** → Semua pembatalan bersama.
+
+> Use DB transaction to protect **local invariants** (resources yang harus konsisten secara atomik dalam database yang sama).
 
 ---
 
-## 2. Transaction Boundary
+## 2. Where DB Transaction Stops
 
-```
-[Unsafe Distributed Flow]
-     │
-     ├── [BEGIN]
-     ├── UPDATE invoice
-     ├── [HTTP WhatsApp] ────► External World
-     ├── ERP sync
-     └── [COMMIT/Rollback]
+A normal database transaction guarantees atomicity only for resources participating in that transaction. External HTTP APIs, email, WhatsApp, object storage, dan kebanyakan external systems **tidak ikut berpartisipasi**.
 
-[Result]
-ROLLBACK DB          ← invoice dibatalkan
-WhatsApp Tetap Terkirim  ← TIDAK dapat di-rollback!
-```
+*(XA/2PC dapat koordinasi distributed resource, tapi bukan fokus lab.)*
 
 ---
 
-## 3. Anti-Pattern: HTTP Call Di Dalam Transaction
+## 3. External Side Effects
+
+```
+[BEGIN] → INSERT payment → HTTP WhatsApp → ERP sync → [COMMIT]
+```
+
+**Risiko**: Transaction bertahan lama → Connection pool tertahan → Throughput menurun.
+
+**External call di dalam transaksi**:
+- BEGIN → UPDATE → HTTP → COMMIT (transaction terblokir latency)
+- BEGIN → UPDATE → COMMIT → HTTP (transaction cepat, external tidak terpengaruh)
+
+---
+
+## 4. HTTP Inside DB Transaction
 
 ```
 [BEGIN TRANSACTION]
-     │
      ├── UPDATE invoice SET status = 'paid'
      ├── HTTP call ke payment gateway (50ms–5s)
      └── [COMMIT]
 ```
 
-**Risiko**: Transaction bertahan lama → Connection pool tertahan → Throughput menurun.
+**Perbandingan:**
 
-| Flow | Transaction Lifetime | Risiko |
-|------|---------------------|--------|
+| Flow | Transaction Lifetime | Konsekuensi |
+|------|---------------------|-------------|
 | BEGIN → UPDATE → HTTP → COMMIT | Selama HTTP call | Connection pool tertahan |
 | BEGIN → UPDATE → COMMIT → HTTP | Durasi DB saja | Tidak terpengaruh latency |
 
+Test bukti: `TestHTTPInsideTransactionDuration`, `TestCommitThenExternalCall`.
+
 ---
 
-## 4. Dual-Write Problem
+## 5. Dual-Write Problem
 
 ```
 [DB commit]   →   success
@@ -70,7 +75,7 @@ WhatsApp Tetap Terkirim  ← TIDAK dapat di-rollback!
               [Publish event]  → TIDAK pernah terjadi
 ```
 
-**Hasil**: Invoice = Paid, event tidak sampai ke consumers.
+**Hasil**: Invoice = Paid, **event tidak pernah sampai ke consumers**.
 
 ### Reverse Dual-Write juga bermasalah
 
@@ -82,128 +87,30 @@ WhatsApp Tetap Terkirim  ← TIDAK dapat di-rollback!
                     [DB commit]  → TIDAK pernah terjadi
 ```
 
-**Hasil**: Consumer melihat event, tapi business state belum committed di DB.
-
-> Mengubah urutan (publish-then-commit) **tidak menyelesaikan** atomicity — hanya memindahkan window kegagalan.
+Mengubah urutan **tidak menyelesaikan** atomicity — hanya memindahkan window kegagalan.
 
 ---
 
-## 5. Transactional Outbox Pattern
+## 6. Transactional Outbox
 
 ```
 [BEGIN TRANSACTION]
      ├── UPDATE invoice SET status = 'paid'
-     └── INSERT INTO outbox_events (id, event_type, payload, status='pending')
+     └── INSERT INTO outbox_events (...)
      │
      └── [COMMIT]
-
-[Outbox Dispatcher — terpisah dari main flow]
-     ├── SELECT FROM outbox_events WHERE status='pending'
-     ├── Publish ke broker
-     └── UPDATE status = 'published'
 ```
 
-Transactional Outbox atomically records the business change and the intent to publish an event.
+Transactional Outbox **atomically records the business change and the intent to publish an event.**
 
-**Garanti (finite):**
-- dispatcher can retry on transient failures
-- duplicate delivery is possible (at-least-once)
-- consumer **must be idempotent**
-- **no exactly-once guarantee**
+**Garanti:**
+- Dispatcher dapat retry pada failure transien
+- Duplicate delivery mungkin terjadi (at-least-once)
+- Consumer **harus idempotent**
 
 ---
 
-## 6. Exactly-Once Is Impossible
-
-Exactly-once end-to-end is difficult. A practical system commonly uses:
-
-```
-at-least-once delivery
-+
-idempotent processing
-```
-
-**Failure scenario:**
-```
-worker receives event → business op succeeds → crash before ACK → message redelivered
-```
-
-The Idempotent Consumer pattern (consumer_name + event_id unique key) ensures duplicates are harmless.
-
----
-
-## 7. DLQ Semantics
-
-DLQ is NOT a trash bin. It stores messages that exceeded retry policy for investigation/reprocessing.
-
-**Minimal DLQ record:**
-- `event_id`
-- `reason`
-- `attempts`
-- `failed_at`
-
-Production systems need:
-- monitoring (DLQ growth alerts)
-- alerting
-- manual/replay tooling
-
----
-
-## 8. Retry Policy
-
-| Error Type | Action |
-|------------|--------|
-| Transient (timeout, 503, connection reset) | Retry with backoff |
-| Permanent (invalid payload, validation, unsupported event) | No retry, move to DLQ |
-
-Retrying permanent errors every time wastes resources.
-
----
-
-## 9. Retry Backoff
-
-Tight retry loops are bad in production.
-
-Use **exponential backoff + jitter**:
-- retry after 100ms, 200ms, 400ms, 800ms...
-- add random jitter 0–10% to avoid thundering herd
-
-Tests stay fast with deterministic delays (no sleep loops).
-
----
-
-## 10. Saga Business Semantics
-
-Not every failure requires compensating everything.
-
-**Example scenario:**
-```
-Create payment → Cash out → Generate journal → Sync ERP fails
-```
-
-If payment is already final and ERP is just downstream integration:
-- **do NOT compensate** payment or cash out
-- **retry ERP** instead (event-driven integration)
-
-Saga compensation is for when the **business semantics requires an undo action**, not just technical rollback.
-
----
-
-## 11. Saga Compensation vs DB Rollback
-
-|  | Rollback | Compensation |
-|--|----------|----------------|
-| Scope | Transaction scope only | Business scope |
-| Effect | Undo uncommitted changes | New business action that reverses |
-| Example | `ROLLBACK` | `RefundPayment` (creates refund row) |
-
-**Compensation creates new records** (e.g., RefundPayment), it does NOT delete historical data. This is crucial for audit trails.
-
----
-
-## 12. Dispatcher Concurrency — At-Least-Once Overlap
-
-Tanpa claim/locking, dua dispatcher yang berjalan bersamaan dapat mengambil event yang sama:
+## 7. Dispatcher Concurrency — At-Least-Once Overlap
 
 ```
 Dispatcher A: SELECT pending → [evt-1]
@@ -212,167 +119,380 @@ Dispatcher A: Publish evt-1 ✓
 Dispatcher B: Publish evt-1 ✓   ← DUPLICATE
 ```
 
-**At-least-once memang mengizinkan duplikat ini.** Konsekuensinya: consumer harus idempotent.
-
-**Production alternatives untuk mengurangi duplikat:**
+**Production alternatives:**
 
 | Strategi | Keterangan |
 |----------|-----------|
 | `SELECT ... FOR UPDATE SKIP LOCKED` | Pessimistic lock per row (PostgreSQL) |
 | Claim column (`claimed_by`, `claimed_at`) | Optimistic claim sebelum publish |
-| Lease expiry | Dispatcher yang crash lepas klaim setelah timeout |
-| Partitioning | Setiap dispatcher handle range event_id tertentu |
-| Single dispatcher | Proses tunggal, scale via queue bukan fanout |
-
-Pada lab ini yang menggunakan in-memory fake DB, tidak perlu implementasi `SELECT ... FOR UPDATE`. Yang penting: **consumer harus idempotent terlepas dari strategi dispatcher**.
+| Lease expiry | Dispatcher crash lepas klaim setelah timeout |
+| Partitioning | Setiap dispatcher handle range event_id |
+| Single dispatcher | Scale via queue bukan fanout |
 
 ---
 
-## 13. Event Naming: Fact vs Command
+## 8. At-Least-Once Delivery
 
-| Tipe | Naming | Contoh |
-|------|--------|--------|
-| **Event** (fact already happened) | Past tense | `InvoicePaid`, `PaymentRecorded`, `VendorPaymentCompleted` |
-| **Command** (request to perform action) | Imperative | `PayInvoice`, `SendNotification`, `SyncToERP` |
-
-✅ Gunakan past-tense untuk events:
-- `InvoicePaid`
-- `InventoryUpdated`
-- `CommissionGenerated`
-
-❌ Jangan gunakan command-style untuk events:
-- `SendWhatsapp`
-- `GenerateCommission`
-- `DoInventory`
-
-**Alasan**: Event mencerminkan **state yang sudah ada**. Consumer yang menerima event harus dapat memproses dua kali (duplicate delivery) dan hasilnya tetap konsisten.
-
----
-
-## 14. Event Payload: Explicit Struct, Not fmt.Sprintf
-
-**Jangan:**
-```go
-payload := fmt.Sprintf(`{"invoice_id": %d, "timestamp": "%s"}`, id, t)
+**Failure scenario:**
+```
+worker receives event → business op succeeds → crash before ACK → message redelivered
 ```
 
-**Gunakan explicit struct:**
-```go
-type InvoicePaidPayload struct {
-    EventID    string `json:"event_id"`
-    InvoiceID  int    `json:"invoice_id"`
-    OccurredAt string `json:"occurred_at"` // RFC3339
-}
+Exactly-once end-to-end **sulit**. Sistem yang praktis gunakan:
+
+```
+at-least-once delivery
++
+idempotent processing
 ```
 
-**Required fields untuk InvoicePaid:**
-- `event_id` — untuk idempotent consumer (deduplikasi)
-- `invoice_id` — aggregate identity
-- `occurred_at` — RFC3339, untuk ordering dan audit
+---
+
+## 9. Idempotent Consumer
+
+`(consumer_name, event_id)` sebagai unique key untuk deduplikasi.
+
+Test: `TestIdempotentConsumerDeduplication`.
 
 ---
 
-## 15. Separation of Business Fact vs Downstream Effect
+## 10. Retry Policy
 
-`InvoicePaid` berarti **invoice sudah paid**, bukan berarti semua downstream sudah selesai.
-
-**Bedanya:**
-
-| Jenis | Contoh | Konsistensi |
-|-------|--------|-------------|
-| Business fact | Invoice paid, payment recorded | Strong consistency — satu DB transaction |
-| Downstream projection | ERP sync, analytics | Eventual consistency OK |
-| Integration side effect | WhatsApp, email | Fire-and-forget + retry |
+| Error Type | Action |
+|------------|--------|
+| Transient (timeout, 503, connection reset) | Retry with backoff |
+| Permanent (invalid payload, validation, unsupported event) | No retry, move to DLQ |
 
 ---
 
-## 16. Eventual Consistency
+## 11. DLQ Semantics
+
+DLQ **bukan tempat sampah**. Menyimpan pesan yang melewati retry policy untuk investigation/reprocessing.
+
+**Minimal DLQ record:**
+- `event_id`
+- `reason`
+- `attempts`
+- `failed_at`
+
+Production memerlukan: monitoring, alerting, replay tooling.
+
+---
+
+## 12. Saga Business Semantics
+
+```
+Create payment → Cash out → Generate journal → Sync ERP fails
+```
+
+**Jika payment sudah final**, ERP hanya downstream integration:
+- **JANGAN compensate** payment atau cash out
+- **Retry ERP** (event-driven integration)
+
+Saga compensation untuk **semantic undo**, bukan technical rollback.
+
+---
+
+## 13. Saga Compensation vs DB Rollback
+
+|  | Rollback | Compensation |
+|--|----------|----------------|
+| Scope | Transaction scope | Business scope |
+| Effect | Undo uncommitted | New action yang reverses |
+| Example | `ROLLBACK` | `RefundPayment` (baru, bukan delete) |
+
+Compensation **membuat record baru** (Contoh: RefundPayment), tidak menghapus data historis.
+
+---
+
+## 14. Choreography vs Orchestration
+
+### Choreography (Event-Driven Flow)
+```
+InvoicePaid ↓ Inventory listens ↓ InventoryReserved ↓ Accounting listens
+```
+
+Keuntungan: loose coupling, scaling per consumer, tidak ada SPOF.  
+Kekurangan: flow visibility terhalang, debugging tersebar.
+
+### Orchestration (Explicit Workflow)
+```
+PaymentSaga
+├─ ReserveInventory
+├─ CreateJournal
+├─ NotifyERP
+└─ ...
+```
+
+Keuntungan: explicit workflow, easy to modify, compensation eksplisit.  
+Kekurangan: orchestrator complexity, tight coupling, SPOF (bisa direplikasi).
+
+**Jangan mengatakan salah satu selalu lebih baik. Pilih berdasarkan domain complexity.**
+
+---
+
+## 15. Eventual Consistency
 
 Setelah DB commit, downstream belum tentu up-to-date. Ini **normal**, bukan bug.
 
-### Kapan Eventual Consistency Acceptable?
+### Kapan Acceptable?
 ✅ Notification (WhatsApp, Email)  
 ✅ Analytics / Reporting  
 ✅ Audit logs  
 ✅ Search index updates
 
 ### Kapan Butuh Strong Consistency?
-❌ Payment created + cash ledger updated + OPL marked paid → **satu DB transaction**  
+❌ Payment + ledger + OPL marking → harus satu DB transaction  
 ❌ Inventory stok fisik  
-❌ Balance / akuntansi  
-❌ SLA-critical business invariants
+❌ Balance / akuntansi
 
 ---
 
-## 17. At-Least-Once Delivery
+## 15. Event Naming: Fact vs Command
 
-Worker receives event → business op succeeds → crash before ACK → message redelivered.
-
-Consumer **harus idempotent**. Gunakan `(consumer_name, event_id)` sebagai unique key untuk deduplikasi.
+| Tipe | Naming | Contoh |
+|------|--------|--------|
+| **Event** | Past tense | `InvoicePaid`, `PaymentRecorded`, `VendorPaymentCompleted` |
+| **Command** | Imperative | `PayInvoice`, `SendNotification`, `SyncToERP` |
 
 ---
 
-## 18. Saga & Compensation
+## 16. Event-Driven Trade-offs
+
+### Keuntungan (+)
+- **Resilience**: Proses dapat melanjutkan setelah crash
+- **Loose Coupling**: Consumers tidak harus tahu satu sama lain
+- **Retryable**: Gagal bisa dicoba ulang
+- **Scalable Independently**: Consumer bisa scale terpisah
+
+### Risiko / Kekurangan (-)
+- **Eventual Consistency**: Data tidak konsisten secara serentak
+- **Operational Complexity**: Monitoring harus mencakup multiple services
+- **Duplicate Messages**: At-least-once delivery berarti ada duplikasi
+- **Harder Debugging**: Flow menyebar di banyak service
+- **Ordering Problems**: Event mungkin sampai out-of-order
+- **Observability Requirement**: Diperlukan distributed tracing
+
+Jangan menggambarkan event-driven architecture sebagai solusi universal. Pilih bila membutuhkan retry, compensation, atau loose coupling.
+
+---
+
+## 17. Ordering Problem
+
+Queue/event processing juga memiliki ordering problem.
 
 ```
-Step A: Reserve Budget   → success
-Step B: Process Payment  → FAIL
-         │
-[Compensate A: Release Budget]  ← hanya step yang sudah berhasil dikompensasi
+InvoicePaid
+InvoiceCancelled
 ```
 
-Compensation dijalankan **terbalik** dari urutan eksekusi, hanya untuk step yang **sudah berhasil**.
+Consumer **tidak selalu** dapat mengasumsikan arrival order tanpa mechanism tertentu.
 
-**Compensation bukan Rollback:**
-- ROLLBACK: undo uncommitted DB changes (tidak ada jejak)
-- COMPENSATION: action baru yang membalikkan secara semantik (RefundPayment bukan delete payment row)
+**Production strategies:**
+- **Partition key**: Semua event untuk satu aggregate ke partition yang sama
+- **Aggregate sequence/version**: Consumer validasi urutan secara eksplisit
+- **Consumer validation**: Gagal atau abaikan event out-of-order
 
 ---
 
-## 19. Cara Menjalankan
+## 18. Event Versioning
+
+Event contract dapat berubah.
+
+```json
+{
+  "event_type": "InvoicePaid",
+  "event_version": 1,
+  "invoice_id": 123,
+  "occurred_at": "2024-01-01T00:00:00Z"
+}
+```
+
+**Consumers harus:**
+- Check `event_version` dan handle/ignore versi tidak dikenal
+- Backward compatible (versi baru dapat dibaca oleh consumer lama)
+- Forward compatible (versi lama tidak harus menghancurkan consumer baru)
+
+Tidak perlu implement schema registry di lab ini.
+
+---
+
+## 19. Poison Message
+
+**Permanent failure** biasanya menghasilkan poison message:
+
+- Payload malformed (JSON invalid)
+- Unsupported event version
+- Missing required field (`event_id` kosong)
+
+Ini **tidak membaik** hanya karena retry 100 kali.
+
+**Aksi yang benar:**
+
+1. Event masuk DLQ
+2. Investigation oleh operator
+3. Fix di producer atau consumer
+4. Replay secara manual jika perlu
+
+---
+
+## 20. Replay Safety
+
+Event dari DLQ/outbox dapat di-replay, sehingga **consumer tetap harus idempotent**.
+
+```
+[DLQ] → [Replay] → [Consumer] → [Idempotent check] → SUCCESS
+```
+
+Jika tidak idempotent → double effect (double refund, double deduction, dll).
+
+**DLQ replay di lab:**
+```go
+dlq.Replay(ctx, eventID) // mengambil event dari DLQ dan mengembalikannya ke queue
+```
+
+---
+
+## 21. Local vs External Inventory Clarification
+
+### Local inventory (di dalam DB transaction yang sama)
+
+Jika inventory berada di **local inventory table** yang sama dalam transaksi:
+
+```
+BEGIN → UPDATE invoice → UPDATE inventory → COMMIT
+```
+
+Jika error → **Rollback** → inventory juga berkurang.
+
+### External inventory (service boundary berbeda)
+
+Jika inventory merupakan **inventory microservice** atau API terpisah:
+
+```
+[BEGIN] → UPDATE invoice → [HTTP Inventory Service] → [COMMIT]
+```
+
+Jika transaction rollback → **inventory tidak otomatis dikembalikan**. Diperlukan **compensation** (cancel reservation).
+
+---
+
+## 22. Queue Publish Failure
+
+```
+[OUTBOX]
+     ├── INSERT event_123 (pending)
+     └── COMMIT (business transaction committed ✓)
+
+[PUBLISHER DOWN]
+     └── HTTP 503 — cannot reach broker
+
+[DISPATCHER]
+     └── Publish fails → event remains PENDING
+```
+
+**Expected behavior:**
+- Business transaction **tetap committed**
+- Outbox event **tetap pending**
+- Dispatcher **bisa retry** ketika broker recovery
+- **Jangan rollback** business transaction hanya karena broker down
+
+---
+
+## 23. Outbox Pending Recovery
+
+```
+publisher unavailable → event pending → process restart → publisher recovers → dispatcher retries → success
+```
+
+**Test: `TestOutboxPendingRecovery`**
+- Broker down (failUpTo=100)
+- Dispatcher tidak bisa publish
+- Event tetap di outbox
+- Setelah broker up → event berhasil deliver
+
+Menunjukkan **durable intent**: event disimpan sebelum dipublish, tidak kehilangan.
+
+---
+
+## Cara Menjalankan
 
 ```bash
 cd labs/03-database-transaction
 go test -v -count=1
 ```
 
+### Test Coverage Mapping
+
+| Test | Konsep | File |
+|------|--------|------|
+| `TestUnsafeLocalTransaction` | Partial state corruption | local_transaction.go |
+| `TestSafeLocalTransaction` | ACID rollback | local_transaction.go |
+| `TestExternalSideEffectRollback` | External effect survives DB rollback | external_side_effect.go |
+| `TestHTTPInsideTransactionDuration` | HTTP latency extends transaction | external_side_effect.go |
+| `TestCommitThenExternalCall` | Commit sebelum external | external_side_effect.go |
+| `TestTransactionStaysOpenDuringExternalCall` | IsTxOpen verification | external_side_effect.go |
+| `TestDualWriteCrashWindow` | Invoice paid, event never delivered | dual_write.go |
+| `TestReverseDualWriteFailure` | Publish-then-commit also problematic | dual_write.go |
+| `TestTransactionalOutboxPatternAtomicity` | Business state + outbox atomic | outbox.go |
+| `TestOutboxDispatcherPublishesPending` | Dispatcher publish | dispatcher.go |
+| `TestOutboxDuplicateDeliveryAtLeastOnce` | Crash after publish = duplicate | dispatcher.go |
+| `TestOutboxDispatcherConcurrencyOverlap` | Concurrent dispatchers | dispatcher.go |
+| `TestIdempotentConsumerDeduplication` | Idempotent deduplication | consumer.go |
+| `TestTransientFailureSuccessAfterRetry` | Retry: fail-fail-succeed | retry.go |
+| `TestDeadLetterQueue` | Retry policy exhaust → DLQ | dlq.go |
+| `TestSagaPaymentWithCompensatingAction` | Saga with failure | saga.go |
+| `TestSagaCompensationOrderFourSteps` | Reverse compensation order | saga.go |
+| `TestSagaCompensationFailureHandling` | Continue compensation on failure | saga.go |
+| `TestInvoicePaidPayloadRoundTrip` | JSON serialize/deserialize | outbox.go |
+| `TestEventualConsistencyDemo` |_invoice=paid, worker later | eventual_consistency.go |
+| `TestCompensationIdempotency` | Double compensation = single execution | saga.go |
+| `TestOutboxPendingRecovery` | Broker down → event pending → recovery | outbox.go |
+
 ---
 
-## Test Coverage
+## Failure Matrix
 
-| Test | Konsep |
-|------|--------|
-| `TestUnsafeLocalTransaction` | Partial state corruption tanpa transaksi |
-| `TestSafeLocalTransaction` | ACID rollback: all-or-nothing |
-| `TestDistributedTransactionExternalSideEffectLimitation` | DB rollback ≠ WhatsApp rollback |
-| `TestExternalSideEffectRollback` | payment+invoice rollback, notification tetap terkirim |
-| `TestHTTPInsideTransactionDuration` | HTTP latency memperpanjang transaction lifetime |
-| `TestCommitThenExternalCall` | COMMIT sebelum HTTP → transaction tidak terblokir latency |
-| `TestTransactionStaysOpenDuringExternalCall` | `IsTxOpen()=true` selama external call (deterministic) |
-| `TestTransactionCommitDoesNotBlockConnection` | `IsTxOpen()` transisi: closed→open→closed |
-| `TestDualWriteProblemEventLost` | Invoice paid, event tidak terkirim |
-| `TestDualWriteCrashWindow` | DB commit + crash = broker delivery = 0 |
-| `TestReverseDualWriteFailure` | Publish-then-commit: consumer lihat event, DB belum committed |
-| `TestTransactionalOutboxPatternAtomicity` | Business state + outbox atomic dalam satu tx |
-| `TestOutboxDispatcherPublishesPending` | Dispatcher publish pending event |
-| `TestOutboxDuplicateDeliveryAtLeastOnce` | Duplicate delivery: crash before mark published |
-| `TestOutboxDispatcherConcurrencyOverlap` | Dua dispatcher concurrent publish event yang sama |
-| `TestIdempotentConsumerDeduplication` | Deduplikasi per (consumer_name, event_id) |
-| `TestTransientFailureSuccessAfterRetry` | Retry: fail-fail-succeed |
-| `TestDeadLetterQueue` | Event masuk DLQ setelah max attempts |
-| `TestSagaPaymentWithCompensatingAction` | Compensasi hanya untuk step yang berhasil |
-| `TestSagaCompensationOrderFourSteps` | Reverse order: C, B, A (D tidak dikompensasi) |
-| `TestSagaCompensationFailureHandling` | Saga lanjut kompensasi meski satu compensation gagal |
-| `TestTransactionalOutboxRollback` | Outbox insert gagal → full rollback |
-| `TestOutboxHappyPathAssertions` | Outbox event field: type, aggregate_id, status, attempts |
-| `TestDispatcherPublishedAtSemantics` | published_at=null saat gagal, non-null setelah success |
-| `TestInvoicePaidPayloadRoundTrip` | Serialize→deserialize, required fields, no forbidden fields |
-| `TestEventualConsistencyDemo` | invoice=paid immediately, outbox processed later |
-| `TestCompensationIdempotency` | Double RefundPayment = single refund (idempotent) |
+| Failure Point | Result |
+|---------------|--------|
+| DB update fails | rollback |
+| Outbox insert fails | rollback |
+| Crash after DB commit (before dispatcher runs) | outbox pending survives |
+| Broker unavailable | retry later |
+| Crash after broker publish (before DB update) | duplicate possible |
+| Consumer crashes before ACK | redelivery possible |
+| Consumer gets duplicate | idempotent skip |
+| Retry exhausted | DLQ |
+| Saga later step fails | compensation when business requires |
+| Compensation fails | requires recovery/attention |
+
+---
+
+## Rule of Thumb
+
+### Transaction Design Rules
+
+| Rule | When to Use |
+|------|-------------|
+| Same DB + same business invariant | Local DB transaction |
+| Cross-system side effect | Asynchronous event when appropriate |
+| DB update + publish event | Transactional Outbox |
+| Message redelivery | Idempotent Consumer |
+| Transient failure | Retry + exponential backoff |
+| Repeated permanent failure | DLQ |
+| Cross-service semantic undo | Saga / Compensation |
+
+**Remember**: These are guidelines, not absolute rules. Choose based on business requirements.
 
 ---
 
 ## Navigasi
+
+- **Previous**: [Lab 02 — Database Index](../02-database-index/)
+- **Next**: [Lab 04 — Caching](../04-caching/)
+| `TestOutboxPendingRecovery` | Broker down → event pending → recovery | outbox.go |
+
+### Navigasi
 
 - **Previous**: [Lab 02 — Database Index](../02-database-index/)
 - **Next**: [Lab 04 — Caching](../04-caching/)
