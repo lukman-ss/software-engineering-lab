@@ -9,7 +9,7 @@
 -- ============================================
 -- Single-column indexes (for Experiment 02)
 -- ============================================
--- Individual indexes - PostgreSQL may combine with BitmapAnd
+-- Individual indexes — PostgreSQL may combine them with BitmapAnd
 
 -- CREATE INDEX idx_service_branch_id
 --     ON service(branch_id);
@@ -23,11 +23,15 @@
 -- ============================================
 -- Composite index (for Experiment 03)
 -- ============================================
--- Column order: equality columns first, then range column
--- Note: PostgreSQL 16 B-tree indexes can be scanned in both directions,
--- so explicit DESC is NOT required for ORDER BY service_date DESC.
--- DESC becomes relevant only for mixed-order requirements like
--- ORDER BY x ASC, y DESC.
+-- For this query shape (branch_id + status + date range/order),
+-- equality columns followed by the range/order column are a strong candidate.
+-- Treat this as workload-driven guidance, not a universal indexing rule.
+
+-- Note: PostgreSQL B-tree indexes can be scanned in both forward and backward
+-- directions, so explicit DESC is NOT required solely to satisfy ORDER BY
+-- service_date DESC when the preceding equality columns branch_id and status
+-- are fixed. DESC becomes relevant only for mixed-order requirements like
+-- ORDER BY x ASC, y DESC, or for index key sort order in conflict with queries.
 
 CREATE INDEX idx_service_branch_status_date
     ON service(branch_id, status, service_date);
@@ -45,10 +49,12 @@ CREATE INDEX idx_service_branch_status_date
 --     ON service(branch_id, service_date);
 
 -- ============================================
--- Partial index (for specific use case)
+-- Partial index example (for specific use case)
 -- ============================================
--- Only index FINISHED services for branch 2
+-- IN_PROGRESS is approximately 5% of the canonical dataset (50,000 rows).
+-- A partial index on this subset demonstrates the storage/maintenance
+-- benefits of indexing a small, stable predicate.
 
--- CREATE INDEX idx_service_branch2_finished
+-- CREATE INDEX idx_service_in_progress_branch_date
 --     ON service(branch_id, service_date DESC)
---     WHERE branch_id = 2 AND status = 'FINISHED';
+--     WHERE status = 'IN_PROGRESS';

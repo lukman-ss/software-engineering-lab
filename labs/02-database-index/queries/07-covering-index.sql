@@ -7,7 +7,9 @@
 --   covering index because all referenced columns must be available from the index.
 --   (A theoretical index containing every column could permit it, but such an
 --   index may be impractical and is rarely desirable.)
--- - SELECT * forces fetching from heap (table pages)
+-- - With the covering index defined in this experiment, SELECT * requires
+--   columns (id, created_at) that are not stored in the index, so
+--   PostgreSQL must use heap access for those tuples.
 -- - Increases I/O and network transfer
 --
 -- Contrast with column-specific queries that match the index key columns.
@@ -69,9 +71,10 @@ ORDER BY service_date DESC
 LIMIT 20;
 
 -- What changed?
--- - Degraded from "Index Only Scan" (if it was one) to "Index Scan"
--- - Buffer "shared read/hit" count likely increased
--- - Heap fetches now necessary because column not in index
+-- - May have degraded from "Index Only Scan" to "Index Scan"
+-- - Buffer counts may have increased
+-- - Heap fetches now necessary because the index does not contain all
+--   columns required by SELECT * (it lacks `id` and `created_at`).
 
 -- ============================================
 -- THE VISIBILITY MAP
@@ -89,7 +92,7 @@ LIMIT 20;
 VACUUM service;
 
 -- Try Index Only query again after VACUUM
--- Heap Fetches should drop
+-- Heap Fetches may drop if more relevant heap pages become all-visible
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT branch_id, status, service_date, customer_id, mechanic_id, invoice_no
 FROM service

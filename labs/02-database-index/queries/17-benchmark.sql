@@ -121,9 +121,11 @@ CREATE INDEX idx_bench_composite_wrong
 
 ANALYZE service;
 
--- Expected/likely: the index can bound the service_date range tightly
--- (leading column), but branch_id and status become Filter predicates
--- rather than Index Cond, so more rows are examined before filtering.
+-- Expected/likely: service_date, as the leading range column, determines
+-- the B-tree range that must be scanned. status and branch_id can still be
+-- checked using index entries and may appear in Index Cond, but because they
+-- occur to the right of the first range-constrained key, they generally
+-- do not further reduce the portion of the index that has to be scanned.
 -- A Sort node may still be present depending on the planner's choice.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
@@ -135,7 +137,8 @@ ORDER BY service_date DESC;
 
 -- Record actual observed plan: _____
 -- Buffers: shared read _____ / shared hit _____
--- Index Cond columns: _____   Filter columns: _____
+-- (Whether predicates appear as Index Cond or Filter must be observed
+-- from the actual EXPLAIN output, not predicted.)
 
 DROP INDEX idx_bench_composite_wrong;
 
@@ -175,7 +178,7 @@ DROP INDEX idx_bench_composite_correct;
 -- |-------------------------|--------------------------|----------------------|---------------|-------|
 -- | A: No index             | Seq Scan + Sort          | _____                | _____/_____   | _     |
 -- | B: Single-column x3     | Bitmap Heap Scan         | _____                | _____/_____   | _     |
--- | C: Wrong composite      | Index Scan + Filter/Sort | _____                | _____/_____   | _     |
+-- | C: Wrong composite      | _____ (observed)         | _____                | _____/_____   | _     |
 -- | D: Recommended composite| Index Scan (tight range) | _____                | _____/_____   | _     |
 --
 -- The "expected/likely plan" column is based on cost reasoning and this

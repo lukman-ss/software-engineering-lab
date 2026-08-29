@@ -10,8 +10,17 @@
 -- first by branch_id, then by status within each branch_id value,
 -- then by service_date within each (branch_id, status) pair.
 
--- The planner can navigate this structure efficiently ONLY when it can
--- bound the scan range starting from the leftmost column.
+-- A multicolumn B-tree is generally most efficient when constraints on
+-- leading columns allow PostgreSQL to bound a small portion of the index.
+
+-- PostgreSQL 16 rule:
+-- A multicolumn B-tree can be used with conditions involving any subset
+-- of its columns. Equality constraints on leading columns, plus an
+-- inequality constraint on the first non-equality column, determine
+-- how much of the B-tree scan range can be bounded.
+
+-- Constraints further to the right can still be checked at index level
+-- but generally do not reduce the portion of the index that must be scanned.
 
 -- Leading equality predicate:
 --   WHERE branch_id = 2
@@ -58,7 +67,7 @@ DROP INDEX IF EXISTS idx_service_b_date_branch_status;
 DROP INDEX IF EXISTS idx_service_c_status_date_branch;
 
 -- Index A: leading equality columns, then range column
---   Optimal order for: WHERE branch_id = ? AND status = ? AND service_date BETWEEN ...
+--   Strong candidate for this query shape (branch_id + status + service_date range)
 CREATE INDEX idx_service_a_branch_status_date
     ON service(branch_id, status, service_date);
 
@@ -87,13 +96,13 @@ ANALYZE service;
 --   7. actual rows vs estimated rows (plan quality indicator)
 
 -- ============================================
--- QUERY 1: Optimal for Index A
--- All three columns bounded; tight range
+-- QUERY 1: Strong candidate for Index A
+-- All three columns can be constrained; range is bounded
 -- ============================================
 
 -- Question: which index does the planner select?
 -- Does it use all three Index Cond columns or does one appear as Filter?
--- How many pages (shared hit) does each plan touch?
+-- Record actual buffer usage.
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
@@ -103,11 +112,13 @@ WHERE branch_id = 2
   AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
 ORDER BY service_date DESC;
 
--- Expected: Index A (branch_id, status, service_date) with a tight index range.
+-- Observation:
+-- Index A (branch_id, status, service_date) provides a strong candidate for this query.
 -- branch_id = 2 AND status = 'FINISHED' become Index Cond;
 -- service_date BETWEEN ... also becomes Index Cond (range).
--- With all three columns as Index Cond and DESC in the query matching
--- a backward scan, a Sort node may be absent.
+-- Compare actual shared hit/read pages against baseline.
+-- With all three columns as Index Cond, the scan range is bounded;
+-- check if a backward scan avoids a Sort node.
 
 -- ============================================
 -- QUERY 2: Leading equality only (branch_id)

@@ -6,24 +6,27 @@
 TRUNCATE TABLE service RESTART IDENTITY CASCADE;
 
 -- Insert exactly 500,000 rows
--- Deterministic distribution using mod(gs, 10000):
---   gs 1..500000, mod(gs, 10000) repeats every 10,000 rows
---   50 repetitions × 10,000 = 500,000 rows
+-- Deterministic distribution using two independent modulo-based permutations:
 --
--- Status distribution (per 10,000-row cycle):
---   mod 0-6999    = FINISHED       70.00%  → 350,000 total
---   mod 7000-8999 = CANCELLED      20.00%  → 100,000 total
---   mod 9000-9499 = IN_PROGRESS     5.00%   →  25,000 total
---   mod 9500-9998 = WAITING         4.90%   →  24,500 total
---   mod 9999      = PENDING_REFUND  0.10%   →     500 total
---
--- Branch distribution (per 10,000-row cycle):
+-- Branch distribution (per 10,000-row cycle, gs % 10000):
 --   mod 0-1499   = branch 1   15.00%
 --   mod 1500-3999 = branch 2  25.00%
 --   mod 4000-5999 = branch 3  20.00%
 --   mod 6000-7499 = branch 4  15.00%
 --   mod 7500-8999 = branch 5  15.00%
 --   mod 9000-9999 = branch 6  10.00%
+--
+-- Status distribution (per 10,000-row cycle, (gs * 7) % 10000):
+--   mod 0-6999    = FINISHED       70.00%  → 350,000 total
+--   mod 7000-8999 = CANCELLED      20.00%  → 100,000 total
+--   mod 9000-9499 = IN_PROGRESS     5.00%   →  25,000 total
+--   mod 9500-9998 = WAITING         4.90%   →  24,500 total
+--   mod 9999      = PENDING_REFUND  0.10%   →     500 total
+--
+-- The multiplier 7 is coprime with 10000 (gcd(7, 10000) = 1), ensuring
+-- that (gs * 7) % 10000 produces a permutation of 0-9999 in each
+-- 10,000-row cycle. This preserves exact marginal status percentages
+-- while decoupling status from branch_id (which uses gs % 10000 directly).
 --
 -- created_at is derived from service_date: same base date + gs-derived hours
 -- service_date spans 2025-01-01 to 2026-12-31 (730 days)
@@ -41,10 +44,10 @@ SELECT
     (gs % 500) + 1 AS customer_id,
     (gs % 50) + 1 AS mechanic_id,
     CASE
-        WHEN (gs % 10000) < 7000  THEN 'FINISHED'
-        WHEN (gs % 10000) < 9000  THEN 'CANCELLED'
-        WHEN (gs % 10000) < 9500  THEN 'IN_PROGRESS'
-        WHEN (gs % 10000) < 9999  THEN 'WAITING'
+        WHEN ((gs * 7) % 10000) < 7000  THEN 'FINISHED'
+        WHEN ((gs * 7) % 10000) < 9000  THEN 'CANCELLED'
+        WHEN ((gs * 7) % 10000) < 9500  THEN 'IN_PROGRESS'
+        WHEN ((gs * 7) % 10000) < 9999  THEN 'WAITING'
         ELSE 'PENDING_REFUND'
     END AS status,
     '2025-01-01'::date + (gs % 730) AS service_date,
@@ -83,7 +86,39 @@ SELECT MIN(created_at) AS min_created_at,
 FROM service;
 
 -- ============================================================
--- ASSERTIONS (fail if distribution deviates from spec)
+-- JOINT DISTRIBUTION VALIDATION
+-- ============================================================
+-- Marginal distributions are deterministic.
+-- Joint distributions are measured rather than assumed independent.
+
+SELECT
+    branch_id,
+    status,
+    count(*) AS cnt,
+    round(
+        count(*) * 100.0 /
+        sum(count(*)) OVER (PARTITION BY branch_id),
+        2
+    ) AS pct_within_branch
+FROM service
+GROUP BY branch_id, status
+ORDER BY branch_id, status;
+
+-- Verify: branch 2 contains multiple statuses, and FINISHED is not 100% of branch 2.
+SELECT
+    'branch 2 statuses' AS check_name,
+    count(DISTINCT status) AS distinct_statuses
+FROM service
+WHERE branch_id = 2;
+
+SELECT
+    'branch 2 FINISHED pct' AS check_name,
+    round(COUNT(*) FILTER (WHERE status = 'FINISHED') * 100.0 / COUNT(*), 2) AS finished_pct
+FROM service
+WHERE branch_id = 2;
+
+-- ============================================================
+-- ASSERTIONS (fail if marginal distributions deviate from spec)
 -- ============================================================
 
 DO $$
