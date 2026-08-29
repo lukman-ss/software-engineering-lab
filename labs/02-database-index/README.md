@@ -32,7 +32,7 @@ A senior engineer cares about:
 
 - **latency** — actual query execution time
 - **throughput** — queries per second the system can sustain
-- **rows scanned** — how many rows the planner actually examined
+- **rows examined** — how many rows the executor processed/rejected at relevant plan nodes (the planner estimates; the executor performs the actual scan)
 - **buffers** — shared hits vs shared reads (cache effectiveness)
 - **match fraction** — what fraction of rows each predicate filters
 - **planner estimates** — how close `rows=` matches `Actual Rows`
@@ -91,13 +91,13 @@ The table is seeded with exactly 500,000 rows with realistic, skewed distributio
 Run the setup script to create the schema and seed data:
 
 ```bash
-./scripts/setup_lab.sh
+./labs/02-database-index/scripts/setup_lab.sh
 ```
 
 Or manually:
 ```bash
-psql -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/schema.sql
-psql -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/seed.sql
+psql -h localhost -p 5432 -U postgres -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/schema.sql
+psql -h localhost -p 5432 -U postgres -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/seed.sql
 ```
 
 Verify data volume:
@@ -219,13 +219,16 @@ ORDER BY service_date DESC;
 ## Experiments
 
 ### Experiment 1: Baseline (queries/01-baseline.sql)
-Run before any optimization. Observe Seq Scan, explicit Sort, total rows examined.
+Inspect the actual baseline plan. A sequential scan plus Sort is expected/likely with this dataset and no supporting secondary indexes, but record what PostgreSQL actually chose.
 
 ### Experiment 2: Single-Column Indexes (queries/02-single-column-index.sql)
-Create three separate indexes. See how PostgreSQL combines them with BitmapAnd.
+Create three separate indexes. Observe whether PostgreSQL uses one index or combines multiple indexes with BitmapAnd.
 
 ### Experiment 3: Composite Index (queries/03-composite-index.sql)
-Test the optimal `(branch_id, status, service_date DESC)` index.
+Test a strong candidate for this query shape:
+(branch_id, status, service_date).
+
+Explicit DESC is not mandatory because PostgreSQL B-tree indexes support backward scans, so `service_date DESC` can be satisfied by indexing `service_date` in ascending order.
 
 ### Experiment 4: Column Order Demonstration (queries/04-column-order-experiment.sql)
 Compare three different column orders. Learn why left-to-right ordering matters.
@@ -428,7 +431,7 @@ Both matter! Low cardinality with a highly selective predicate = index useful.
 
 ### SARGable Predicates
 
-Predicates that allow PostgreSQL to use an index are **SARGable** (Search Argument Able). Wrapping indexed columns in functions (e.g., `DATE(col)`) makes them non-SARGable unless an expression index is used.
+Predicates that allow PostgreSQL to use an index are **SARGable** (Search Argument Able). Wrapping indexed columns in functions (e.g., `EXTRACT(YEAR FROM date_col) = 2026`) makes them non-SARGable unless an expression index is used.
 
 ### The Planner Decisions
 
