@@ -9,10 +9,8 @@ import (
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
-// TestStampedeBrokenVersion demonstrasikan versi BROKEN.
-// Setiap concurrent request di cache miss akan query DB secara independen.
-// Catatan: Karena timing race antar goroutine, tidak selalu 100 DB calls.
-// Tetapi dengan ProtectedStampedeService, hasilnya selalu 1 karena singleflight.
+// TestStampedeBrokenVersion demonstrates the BROKEN stampede pattern.
+// Without singleflight protection, concurrent cache misses cause parallel DB queries.
 func TestStampedeBrokenVersion(t *testing.T) {
 	db := caching.NewCounterRepository()
 	cache := caching.NewMockCache()
@@ -20,33 +18,47 @@ func TestStampedeBrokenVersion(t *testing.T) {
 	ctx := context.Background()
 
 	key := int64(1)
+	numRequests := 100
+
+	// Use a barrier to ensure all goroutines start simultaneously
+	// This maximizes the chance of concurrent cache misses
+	var startWG sync.WaitGroup
+	startWG.Add(1)
 
 	var wg sync.WaitGroup
 
 	// Simulate 100 concurrent requests (dashboard di-reload bersamaan)
-	for i := 0; i < 100; i++ {
+	for i := 0; i < numRequests; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// Wait for the signal to start
+			startWG.Wait()
 			_, _ = svc.GetData(ctx, key)
 		}()
 	}
 
+	// Small delay to let all goroutines start and be ready
+	time.Sleep(10 * time.Millisecond)
+
+	// Signal all goroutines to start simultaneously
+	startWG.Done()
 	wg.Wait()
 
-	rebuildCount := db.CallCount()
+	dbCalls := db.CallCount()
 
-	// Dengan mock cache synchronized, semua request mungkin cache hit
-	// atau miss tergantung timing. Yang penting: bukan 1.
-	t.Logf("Broken version - DB calls: %d", rebuildCount)
+	// Invariant: Without singleflight, concurrent requests result in multiple DB calls
+	// Exactly numRequests is not guaranteed due to timing, but it MUST be > 1
+	t.Logf("Broken version - DB calls: %d (expected > 1)", dbCalls)
 
-	// Verifikasi: ini bukan singleflight, jadi lebih dari 1
-	// (atau 0 jika semua hit, tapi itu proof-of-concept)
-	t.Log("PROVEN: Broken version does NOT use singleflight (no guarantee of 1 call)")
+	if dbCalls <= 1 {
+		t.Errorf("Broken version should have > 1 DB calls for stampede, got %d (this may indicate test timing issue)", dbCalls)
+	}
+	t.Log("PROVEN: Broken version causes stampede - multiple concurrent DB queries without protection")
 }
 
-// TestStampedeProtectedVersion demonstrasikan versi PROTECTED.
-// Single flight memastikan hanya 1 goroutine yang query DB.
+// TestStampedeProtectedVersion demonstrates singleflight protection.
+// Only 1 goroutine should execute the DB query for concurrent requests.
 func TestStampedeProtectedVersion(t *testing.T) {
 	db := caching.NewCounterRepository()
 	cache := caching.NewMockCache()
@@ -54,34 +66,40 @@ func TestStampedeProtectedVersion(t *testing.T) {
 	ctx := context.Background()
 
 	key := int64(2)
+	numRequests := 100
 
+	// Use a channel-based coordination for deterministic timing
+	startCh := make(chan struct{})
 	var wg sync.WaitGroup
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < numRequests; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			<-startCh // Wait for signal
 			_, _ = svc.GetData(ctx, key)
 		}()
 	}
 
+	// Small delay to ensure all goroutines are waiting
+	time.Sleep(10 * time.Millisecond)
+
+	// Release all goroutines simultaneously
+	close(startCh)
 	wg.Wait()
 
-	rebuildCount := db.CallCount()
+	dbCalls := db.CallCount()
 
-	// Dengan singleflight: hanya 1 rebuild
-	// Note: With race detector, timing may vary. The key invariant is that
-	// singleflight protects concurrent DB queries - no stampede protection failure.
-	t.Logf("Protected version - DB rebuild count: %d (expected 1)", rebuildCount)
+	// With singleflight: exactly 1 rebuild
+	t.Logf("Protected version - DB rebuild count: %d (expected 1)", dbCalls)
 
-	if rebuildCount < 1 {
-		t.Errorf("expected at least 1 rebuild with singleflight, got %d", rebuildCount)
+	if dbCalls != 1 {
+		t.Errorf("expected 1 rebuild with singleflight, got %d", dbCalls)
 	}
-
-	t.Log("Single-flight deduplication validated")
+	t.Log("✓ Single-flight deduplication validated - only 1 DB query for concurrent requests")
 }
 
-// TestTTLWithJitter mengecek TTLWithJitter() untuk mengurangi synchronized expiration
+// TestTTLWithJitter verifies TTL jitter distribution.
 func TestTTLWithJitter(t *testing.T) {
 	baseTTL := 60 * time.Second
 	maxJitter := 15 * time.Second
@@ -92,7 +110,7 @@ func TestTTLWithJitter(t *testing.T) {
 		samples[jitter]++
 	}
 
-	// Semua TTL harus dalam rentang [60s, 75s]
+	// All TTL harus dalam rentang [60s, 75s]
 	for ttl, count := range samples {
 		if ttl < baseTTL || ttl > baseTTL+maxJitter {
 			t.Errorf("TTL out of range: %v (count: %d)", ttl, count)
@@ -109,10 +127,10 @@ func TestTTLWithJitter(t *testing.T) {
 
 	// Minimum invariant: mean ~ 67.5s (middle of 60-75s)
 	t.Logf("TTL distribution: min=%v, max=%v", baseTTL, baseTTL+maxJitter)
-	t.Log("TTL jitter distribution validated")
+	t.Log("✓ TTL jitter distribution validated")
 }
 
-// TestNegativeCache mengecek bahwa cache menyimpan "not found"
+// TestNegativeCache verifies negative caching for non-existent keys.
 func TestNegativeCache(t *testing.T) {
 	cache := caching.NewMockCache()
 	ctx := context.Background()
@@ -134,6 +152,6 @@ func TestNegativeCache(t *testing.T) {
 
 	// Verify trade-off: jika object baru dibuat selama negative TTL,
 	// user masih melihat not-found sampai TTL habis
-	t.Log("PROVEN: Negative cache prevents repeated DB lookups for non-existent keys")
+	t.Log("✓ Negative cache prevents repeated DB lookups for non-existent keys")
 	t.Log("Trade-off: Object created during negative TTL = stale not-found")
 }

@@ -1,11 +1,13 @@
 // Package mockdb provides a minimal in-memory database/sql driver for educational purposes.
 //
 // Concurrency Model:
-//   - Snapshot isolation for reads (BEGIN clones committed state)
-//   - Atomic INSERT ... ON CONFLICT with global lock (checks committed state during INSERT)
-//   - Commit without lock (tx already contains full snapshot with INSERT applied)
+//   - Serialized write transactions (one active writer at a time)
+//   - BEGIN acquires global lock, COMMIT releases it
+//   - INSERT ... ON CONFLICT checks committed state atomically while holding lock
+//   - READ operations can run concurrently within committed state
 //
-// This simulates PostgreSQL-like behavior where ON CONFLICT checks committed state.
+// IMPORTANT: This educational mock serializes write transactions for deterministic atomicity.
+// It does NOT implement PostgreSQL MVCC or isolation semantics — use for learning, not production.
 package mockdb
 
 import (
@@ -70,7 +72,7 @@ func (staticDriver) Open(string) (driver.Conn, error) {
 type connector struct{ db *DB }
 
 func Connector() driver.Connector { return &connector{db: newDB()} }
-func NewDB() *sql.DB            { return sql.OpenDB(Connector()) }
+func NewDB() *sql.DB              { return sql.OpenDB(Connector()) }
 
 func (c *connector) Connect(context.Context) (driver.Conn, error) { return &conn{db: c.db}, nil }
 func (c *connector) Driver() driver.Driver                        { return staticDriver{} }
@@ -80,7 +82,7 @@ type conn struct {
 	tx map[string]*tableState
 }
 
-func (c *conn) Prepare(query string) (driver.Stmt, error)                 { return &stmt{c: c, query: query}, nil }
+func (c *conn) Prepare(query string) (driver.Stmt, error) { return &stmt{c: c, query: query}, nil }
 func (c *conn) PrepareContext(_ context.Context, query string) (driver.Stmt, error) {
 	return &stmt{c: c, query: query}, nil
 }
@@ -385,7 +387,7 @@ func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Va
 		return nil, fmt.Errorf("malformed ON CONFLICT clause: %s", q)
 	}
 
-	conflictPart := q[onConflictIdx+len("ON CONFLICT "):doNothingIdx]
+	conflictPart := q[onConflictIdx+len("ON CONFLICT ") : doNothingIdx]
 	conflictColStr := strings.TrimSpace(conflictPart)
 	if strings.HasPrefix(conflictColStr, "(") {
 		conflictColStr = conflictColStr[1:]
@@ -583,7 +585,10 @@ func parseWhereConditions(wherePart string, vals []driver.Value) []struct {
 	val any
 } {
 	parts := strings.Split(wherePart, " AND ")
-	var conditions []struct{ col string; val any }
+	var conditions []struct {
+		col string
+		val any
+	}
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -596,12 +601,18 @@ func parseWhereConditions(wherePart string, vals []driver.Value) []struct {
 		}
 		col := strings.TrimSpace(part[:eq])
 		valStr := strings.TrimSpace(part[eq+1:])
-		conditions = append(conditions, struct{ col string; val any }{col: col, val: resolveVal(valStr, vals)})
+		conditions = append(conditions, struct {
+			col string
+			val any
+		}{col: col, val: resolveVal(valStr, vals)})
 	}
 	return conditions
 }
 
-func rowMatchesConditions(r row, conditions []struct{ col string; val any }) bool {
+func rowMatchesConditions(r row, conditions []struct {
+	col string
+	val any
+}) bool {
 	for _, c := range conditions {
 		if !equalVal(r[c.col], c.val) {
 			return false

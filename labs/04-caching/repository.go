@@ -3,6 +3,8 @@ package caching
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,16 +22,37 @@ type DashboardRepository interface {
 
 // FakeDashboardRepository is a test double that counts invocations.
 type FakeDashboardRepository struct {
-	CallCount int64
-	NextValue func() Dashboard // If set, returns increasingly higher invoice counts
+	callCount atomic.Int64
+	mu        sync.RWMutex
+	nextValue func() Dashboard
 }
 
 func NewFakeDashboardRepository() *FakeDashboardRepository {
 	return &FakeDashboardRepository{}
 }
 
+// CallCount returns number of repository calls made.
+func (r *FakeDashboardRepository) CallCount() int64 {
+	return r.callCount.Load()
+}
+
+// SetNextValue configures the next value to return (thread-safe).
+func (r *FakeDashboardRepository) SetNextValue(fn func() Dashboard) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextValue = fn
+}
+
+// Reset resets call count and next value.
+func (r *FakeDashboardRepository) Reset() {
+	r.callCount.Store(0)
+	r.mu.Lock()
+	r.nextValue = nil
+	r.mu.Unlock()
+}
+
 func (r *FakeDashboardRepository) GetDashboard(ctx context.Context, branchID int64, businessDate time.Time) (Dashboard, error) {
-	r.CallCount++
+	r.callCount.Add(1)
 
 	d := Dashboard{
 		BranchID:          branchID,
@@ -38,15 +61,17 @@ func (r *FakeDashboardRepository) GetDashboard(ctx context.Context, branchID int
 		TotalRevenueToday: 150000.0,
 	}
 
-	if r.NextValue != nil {
-		return r.NextValue(), nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.nextValue != nil {
+		return r.nextValue(), nil
 	}
 	return d, nil
 }
 
 // GetDashboardWithTenant implements tenant-aware retrieval.
 func (r *FakeDashboardRepository) GetDashboardWithTenant(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
-	r.CallCount++
+	r.callCount.Add(1)
 
 	d := Dashboard{
 		BranchID:          branchID,
@@ -55,12 +80,10 @@ func (r *FakeDashboardRepository) GetDashboardWithTenant(ctx context.Context, te
 		TotalRevenueToday: 150000.0,
 	}
 
-	if r.NextValue != nil {
-		return r.NextValue(), nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.nextValue != nil {
+		return r.nextValue(), nil
 	}
 	return d, nil
-}
-
-func (r *FakeDashboardRepository) Reset() {
-	r.CallCount = 0
 }

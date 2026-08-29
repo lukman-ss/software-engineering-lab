@@ -6,70 +6,48 @@ import (
 	"testing"
 )
 
-// UnsafeInventory adalah implementasi check-then-act yang TIDAK atomic.
-type UnsafeInventory struct {
-	mu    sync.RWMutex
-	stock int
-}
-
-func (r *UnsafeInventory) GetStock(_ context.Context) (int, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.stock, nil
-}
-
-func (r *UnsafeInventory) SetStock(_ context.Context, stock int) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.stock = stock
-	return nil
-}
-
-func (r *UnsafeInventory) TrySellUnsafe(ctx context.Context) error {
-	stock, err := r.GetStock(ctx)
-	if err != nil {
-		return err
-	}
-	if stock <= 0 {
-		return ErrOutOfStock
-	}
-	newStock := stock - 1
-	return r.SetStock(ctx, newStock)
-}
-
 // TestLostUpdate_Deterministic mereproduksi lost update secara deterministic.
 //
 // Timeline yang direproduksi:
-// T0: Request A membaca stock = 1
-// T1: Request B membaca stock = 1 (stale read)
-// T2: Request A menghitung newStock = 0
-// T3: Request B menghitung newStock = 0
-// T4: Request A menulis stock = 0
-// T5: Request B menulis stock = 0
+// T0: Request A  READ stock = 1
+// T1: Request B  READ stock = 1   (stale read — A belum WRITE)
+// T2: Request A  CHECK > 0? YES, CALCULATE newStock = 0
+// T3: Request B  CHECK > 0? YES, CALCULATE newStock = 0
+// T4: Request A  WRITE stock = 0
+// T5: Request B  WRITE stock = 0   (overwrite, tidak ada delta)
 //
 // Di akhir:
-// - final_stock = 0
-// - successful_sales = 2 (keduanya melewati CHECK)
-// - 1 != 2 + 0 (invariant rusak)
+//   - final_stock = 0
+//   - successful_sales = 2 (keduanya lewat CHECK)
+//   - 1 != 2 + 0  →  invariant rusak
+//
+// Test ini tidak bergantung pada time.Sleep.
+// Menggunakan channel barrier untuk sinkronisasi fase READ → CALCULATE → WRITE.
 func TestLostUpdate_Deterministic(t *testing.T) {
 	const productID = "Oli Mesin"
-	initialStock := 1
+	const initialStock = 1
 
-	repo := &UnsafeInventory{}
+	repo := NewUnsafeInventoryRepository(map[string]int{productID: initialStock})
 	ctx := context.Background()
 
-	// Inisialisasi stock
-	repo.SetStock(ctx, initialStock)
+	// Set stock via SetStock untuk inisialisasi yang eksplisit
+	if err := repo.SetStock(ctx, productID, initialStock); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	// svc demonstrates the service layer — not used in barrier test,
+	// but documents TrySell logic. Test controls timing manually for determinism.
+	svc := NewInventoryService(repo)
+	_ = svc // service layer available for non-deterministic stress tests
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	successfulSales := 0
 
-	// Channel untuk sinkronisasi langkah-langkah
-	// channel[0]: A selesai READ → B boleh READ
-	// channel[1]: B selesai READ → A boleh hitung
-	// channel[2]: A selesai CALCULATE → B boleh hitung
-	// channel[3]: A selesai WRITE → B boleh write
+	// Channel barrier untuk kontrol timing
+	// Fase 1: kedua goroutine selesai READ
+	// Fase 2: kedua goroutine selesai CALCULATE
+	// Fase 3: kedua goroutine selesai WRITE
 	aReadDone := make(chan struct{})
 	bReadDone := make(chan struct{})
 	aCalcDone := make(chan struct{})
@@ -81,24 +59,35 @@ func TestLostUpdate_Deterministic(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		// T0: A reads
-		stock, _ := repo.GetStock(ctx)
+		// Override TrySell dengan step yang sama tapi barrier
+		stock, err := repo.GetStock(ctx, productID)
+		if err != nil {
+			t.Errorf("A GetStock: %v", err)
+			return
+		}
 		t.Logf("Request A: READ stock = %d", stock)
 		close(aReadDone)
 
-		// Tunggu sampai B selesai READ
+		// Tunggu B selesai READ
 		<-bReadDone
 
-		// T2: A calculates
+		// CHECK + CALCULATE
+		if stock <= 0 {
+			t.Error("A: stock should be > 0")
+			return
+		}
 		newStock := stock - 1
-		t.Logf("Request A: CALCULATE new_stock = %d", newStock)
+		t.Logf("Request A: CHECK>0 YES, CALCULATE new_stock = %d", newStock)
 		close(aCalcDone)
 
-		// Tunggu sampai B selesai CALCULATE
+		// Tunggu B selesai CALCULATE
 		<-bCalcDone
 
-		// T4: A writes
-		repo.SetStock(ctx, newStock)
+		// WRITE
+		if err := repo.SetStock(ctx, productID, newStock); err != nil {
+			t.Errorf("A SetStock: %v", err)
+			return
+		}
 		t.Logf("Request A: WRITE stock = %d", newStock)
 		close(aWriteDone)
 
@@ -115,24 +104,34 @@ func TestLostUpdate_Deterministic(t *testing.T) {
 		// Tunggu A selesai READ
 		<-aReadDone
 
-		// T1: B reads (baca yang sama dengan A)
-		stock, _ := repo.GetStock(ctx)
+		stock, err := repo.GetStock(ctx, productID)
+		if err != nil {
+			t.Errorf("B GetStock: %v", err)
+			return
+		}
 		t.Logf("Request B: READ stock = %d", stock)
 		close(bReadDone)
 
 		// Tunggu A selesai CALCULATE
 		<-aCalcDone
 
-		// T3: B calculates
+		// CHECK + CALCULATE (baca stale value yang sama)
+		if stock <= 0 {
+			t.Error("B: stock should be > 0")
+			return
+		}
 		newStock := stock - 1
-		t.Logf("Request B: CALCULATE new_stock = %d", newStock)
+		t.Logf("Request B: CHECK>0 YES, CALCULATE new_stock = %d", newStock)
 		close(bCalcDone)
 
 		// Tunggu A selesai WRITE
 		<-aWriteDone
 
-		// T5: B writes (overwrite hasil A)
-		repo.SetStock(ctx, newStock)
+		// WRITE (overwrite hasil A)
+		if err := repo.SetStock(ctx, productID, newStock); err != nil {
+			t.Errorf("B SetStock: %v", err)
+			return
+		}
 		t.Logf("Request B: WRITE stock = %d", newStock)
 
 		mu.Lock()
@@ -143,13 +142,16 @@ func TestLostUpdate_Deterministic(t *testing.T) {
 	wg.Wait()
 
 	// Verify final state
-	finalStock, _ := repo.GetStock(ctx)
+	finalStock, err := repo.GetStock(ctx, productID)
+	if err != nil {
+		t.Fatalf("final GetStock: %v", err)
+	}
 
 	t.Logf("\n=== FINAL STATE ===")
 	t.Logf("Initial stock:    %d", initialStock)
 	t.Logf("Successful sales: %d", successfulSales)
 	t.Logf("Final stock:      %d", finalStock)
-	t.Logf("Expected:         1 = 2 + 0 → BROKEN")
+	t.Logf("Invariant check:  %d == %d + %d → BROKEN", initialStock, successfulSales, finalStock)
 
 	// Assertions
 	if successfulSales != 2 {
@@ -159,17 +161,16 @@ func TestLostUpdate_Deterministic(t *testing.T) {
 		t.Errorf("expected final_stock = 0, got %d", finalStock)
 	}
 
-	// Verify invariant is broken
+	// Verify invariant is broken — ini adalah expected outcome dari unsafe pattern
 	var expectedStock int
 	mu.Lock()
-	// Re-read final state
-	finalStock, _ = repo.GetStock(ctx)
+	finalStock, _ = repo.GetStock(ctx, productID)
 	expectedStock = successfulSales + finalStock
 	mu.Unlock()
 
 	if initialStock != expectedStock {
 		t.Logf("✅ LOST UPDATE CONFIRMED: invariant %d != %d", initialStock, expectedStock)
 	} else {
-		t.Logf("❌ Invariant holds unexpectedly")
+		t.Logf("❌ Invariant holds unexpectedly — timing might need adjustment")
 	}
 }

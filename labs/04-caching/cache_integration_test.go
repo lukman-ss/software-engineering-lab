@@ -23,14 +23,14 @@ func TestCacheMissReadsDatabase(t *testing.T) {
 	// First request = cache miss → database read
 	_, _ = svc.GetDashboard(ctx, 1)
 
-	if repo.CallCount == 0 {
+	if repo.CallCount() == 0 {
 		t.Error("cache miss should trigger repository call")
 	}
 	if metrics.Misses() == 0 {
 		t.Error("cache miss count should be incremented")
 	}
 	t.Log("✓ Cache miss reads from repository")
-	t.Logf("✓ Repository CallCount = %d (expected 1)", repo.CallCount)
+	t.Logf("✓ Repository CallCount = %d (expected 1)", repo.CallCount())
 }
 
 // TestCacheMissWritesCache verifies: cache miss writes to cache after read
@@ -64,14 +64,14 @@ func TestCacheHitDoesNotQueryDatabase(t *testing.T) {
 	// Populate cache first
 	_, _ = svc.GetDashboard(ctx, 1)
 
-	initialCalls := repo.CallCount
+	initialCalls := repo.CallCount()
 
 	// Multiple cache hits
 	for i := 0; i < 5; i++ {
 		_, _ = svc.GetDashboard(ctx, 1)
 	}
 
-	if repo.CallCount > initialCalls {
+	if repo.CallCount() > initialCalls {
 		t.Errorf("cache hits should not increase repository calls")
 	}
 	t.Log("✓ Cache hit does not query database")
@@ -113,9 +113,8 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	key := caching.DashboardCacheKey(1, branchID, today)
 
 	// Step 1: Populate cache with initial data
-	repo.CallCount = 0
+	repo.Reset()
 	cache.Set(ctx, key, `{"branch_id":1,"invoice_count":10,"date":"`+caching.Today()+`"}`, time.Minute)
-	repo.CallCount = 1 // First request already counted
 
 	// Verify cache has initial data
 	cached, _ := cache.Get(ctx, key)
@@ -127,11 +126,11 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	_ = svc.InvalidateCurrentDashboard(ctx, 1, branchID)
 
 	// Step 3: Next request should query repo and update cache
-	repo.CallCount = 0
+	repo.Reset()
 	_, _ = svc.GetDashboard(ctx, 1)
 
-	if repo.CallCount != 1 {
-		t.Errorf("expected 1 repository call after invalidation, got %d", repo.CallCount)
+	if repo.CallCount() != 1 {
+		t.Errorf("expected 1 repository call after invalidation, got %d", repo.CallCount())
 	}
 	t.Log("✓ Cache invalidation returns fresh data on next request")
 }
@@ -248,7 +247,7 @@ func TestCorruptCacheFallsBackAppropriately(t *testing.T) {
 	// 1. Read from cache
 	// 2. Fail to unmarshal
 	// 3. Delete corrupt entry, fallback to repo, rebuild cache
-	repo.CallCount = 0
+	repo.Reset()
 	result, err := svc.GetDashboard(ctx, branchID)
 
 	// Should succeed via fallback
@@ -257,8 +256,8 @@ func TestCorruptCacheFallsBackAppropriately(t *testing.T) {
 	}
 
 	// Repository should have been called once to rebuild
-	if repo.CallCount != 1 {
-		t.Errorf("expected 1 repository call after corrupt cache bypass, got %d", repo.CallCount)
+	if repo.CallCount() != 1 {
+		t.Errorf("expected 1 repository call after corrupt cache bypass, got %d", repo.CallCount())
 	}
 
 	// Cache hit should now work
@@ -294,7 +293,7 @@ func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 	}
 
 	// Repository should have been called
-	if repo.CallCount == 0 {
+	if repo.CallCount() == 0 {
 		t.Error("repository should have been called for fallback")
 	}
 
@@ -440,8 +439,8 @@ func TestMultiTenantBehavioralIsolation(t *testing.T) {
 	}
 
 	// 2 distinct repository calls
-	if repo.CallCount != 2 {
-		t.Errorf("Expected 2 repo calls, got %d", repo.CallCount)
+	if repo.CallCount() != 2 {
+		t.Errorf("Expected 2 repo calls, got %d", repo.CallCount())
 	}
 
 	// Subsequent requests should hit cache, retaining correct tenant values
@@ -457,9 +456,62 @@ func TestMultiTenantBehavioralIsolation(t *testing.T) {
 	}
 
 	// Still 2 repository calls (cache hit)
-	if repo.CallCount != 2 {
-		t.Errorf("Expected repo calls to remain 2, got %d", repo.CallCount)
+	if repo.CallCount() != 2 {
+		t.Errorf("Expected repo calls to remain 2, got %d", repo.CallCount())
 	}
 
 	t.Log("✓ Multi-tenant behavioral isolation validated")
+}
+
+// TestSingleflightContextCancellation verifies that wait requests can be cancelled
+// while the actual rebuild continues for others.
+func TestSingleflightContextCancellation(t *testing.T) {
+	cache := caching.NewMockCache()
+	repo := caching.NewCounterRepository()
+	svc := caching.NewProtectedStampedeService(cache, repo)
+	
+	// Create two contexts: one will be cancelled, one will complete
+	ctx1 := context.Background()
+	ctx2, cancel := context.WithCancel(context.Background())
+	
+	// Create channels to track results
+	errCh := make(chan error, 2)
+	
+	// Lock the repository so requests block
+	repo.Block()
+	
+	// Launch first request
+	go func() {
+		_, err := svc.GetData(ctx1, 99)
+		errCh <- err
+	}()
+	
+	// Wait a tiny bit to ensure req 1 establishes the singleflight
+	time.Sleep(10 * time.Millisecond)
+	
+	// Launch second request (will wait on singleflight)
+	go func() {
+		_, err := svc.GetData(ctx2, 99)
+		errCh <- err
+	}()
+	
+	// Cancel second request while it's waiting
+	cancel()
+	
+	// Second request should return context cancelled immediately
+	err2 := <-errCh
+	if err2 != context.Canceled {
+		t.Errorf("Expected context.Canceled for second request, got: %v", err2)
+	}
+	
+	// Release repository block
+	repo.Unblock()
+	
+	// First request should complete successfully
+	err1 := <-errCh
+	if err1 != nil {
+		t.Errorf("First request should complete successfully, got error: %v", err1)
+	}
+	
+	t.Log("✓ Context cancellation during singleflight wait validated")
 }

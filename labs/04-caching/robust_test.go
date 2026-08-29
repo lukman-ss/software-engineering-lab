@@ -25,7 +25,7 @@ func TestCacheFailureGracefulDegradation(t *testing.T) {
 	}
 
 	// Repository should have been called for fallback
-	if repo.CallCount == 0 {
+	if repo.CallCount() == 0 {
 		t.Error("repository should have been called for fallback")
 	}
 
@@ -190,11 +190,11 @@ func TestSourceOfTruth(t *testing.T) {
 	branchID := int64(1)
 
 	// Step 1: Initial request - repo returns InvoiceCountToday=42
-	repo.CallCount = 0
+	repo.Reset()
 	_, _ = svc.GetDashboard(ctx, branchID)
 
-	if repo.CallCount != 1 {
-		t.Fatalf("expected 1 repo call, got %d", repo.CallCount)
+	if repo.CallCount() != 1 {
+		t.Fatalf("expected 1 repo call, got %d", repo.CallCount())
 	}
 
 	// Step 2: Verify cache has been populated
@@ -205,22 +205,22 @@ func TestSourceOfTruth(t *testing.T) {
 	}
 
 	// Step 3: Modify repo to return different value (simulate DB update)
-	repo.NextValue = func() caching.Dashboard {
+	repo.Reset()
+	repo.SetNextValue(func() caching.Dashboard {
 		return caching.Dashboard{BranchID: branchID, InvoiceCountToday: 99}
-	}
+	})
 
 	// Step 4: Invalidate cache (simulates commit -> invalidate)
 	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, branchID, today))
 
 	// Step 5: Next request should get fresh data from repo
-	repo.CallCount = 0
 	result, err := svc.GetDashboard(ctx, branchID)
 	if err != nil {
 		t.Fatalf("expected request to succeed after invalidation: %v", err)
 	}
 
-	if repo.CallCount != 1 {
-		t.Errorf("expected 1 repo call after invalidation, got %d", repo.CallCount)
+	if repo.CallCount() != 1 {
+		t.Errorf("expected 1 repo call after invalidation, got %d", repo.CallCount())
 	}
 
 	if result.InvoiceCountToday != 99 {

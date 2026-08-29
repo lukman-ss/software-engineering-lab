@@ -70,6 +70,18 @@ func (r *PostgresAtomicRepository) DecrementStock(ctx context.Context, productID
 	return newStock, nil
 }
 
+// GetStock reads the current stock value (for verification purposes).
+func (r *PostgresAtomicRepository) GetStock(ctx context.Context, productID string) (int, error) {
+	var stock int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT stock FROM inventory_products WHERE id = $1",
+		productID).Scan(&stock)
+	if err != nil {
+		return 0, fmt.Errorf("get stock: %w", err)
+	}
+	return stock, nil
+}
+
 // setupTestInventory membuat data test di database.
 func setupTestInventory(ctx context.Context, db *sql.DB, productID string, initialStock int) error {
 	_, err := db.ExecContext(ctx,

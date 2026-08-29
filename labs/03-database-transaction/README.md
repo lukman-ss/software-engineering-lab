@@ -220,7 +220,7 @@ idempotent consumer
 - `TestConcurrentSameEvent` - concurrent same consumer same event
 - `TestConsumerCrashRedelivery` - consumer restart/redelivery
 - `TestAtomicConsumerFlow` - business mutation failure rollback
-- `TestConsumerCrashAfterCommitBeforeAck` - separation of deliveries vs business rows
+- `TestConsumerCrashAfterCommitBeforeAck` - separation of deliveries vs business rows (worker restart with persistence-backed dedup)
 - `TestMockDBNoLostUpdates` - verify concurrency does not lose updates
 - `TestMockDBRollbackIsolation` - verify rollback isolation
 - `TestConsumerBusinessMutationFailure` - business mutation failure rollback
@@ -283,6 +283,24 @@ Saga compensation untuk **semantic undo**, bukan technical rollback.
 | Example | `ROLLBACK` | `RefundPayment` (baru, bukan delete) |
 
 Compensation **membuat record baru** (Contoh: RefundPayment), tidak menghapus data historis.
+
+### Compensation Failure Handling
+
+**Compensation itself can fail.** Jika compensation gagal:
+
+```
+A → B → C fails
+Compensate C → skipped (C never completed)
+Compensate B → FAILS (e.g. refund gateway timeout)
+Compensate A → STILL ATTEMPTED (don't leave A un-compensated)
+```
+
+**Implementation principle:**
+- Jangan swallow compensation error
+- Continue compensating remaining steps
+- Return `SagaExecutionError` that includes both original error and compensation errors
+
+**Test:** `TestSagaCompensationFailureHandling` — Step B compensation fails, Step A compensation still executes.
 
 ---
 
@@ -470,7 +488,7 @@ Jika tidak idempotent → double effect (double refund, double deduction, dll).
 
 **DLQ replay di lab:**
 ```go
-dlq.Replay(ctx, eventID) // mengambil event dari DLQ dan mengembalikannya ke queue
+dlq.Replay(eventID) // mengambil event dari DLQ dan mengembalikannya ke queue
 ```
 
 ---
@@ -485,7 +503,7 @@ Jika inventory berada di **local inventory table** yang sama dalam transaksi:
 BEGIN → UPDATE invoice → UPDATE inventory → COMMIT
 ```
 
-Jika error → **Rollback** → inventory juga berkurang.
+Jika ada error → **ROLLBACK** → pengurangan inventory ikut dibatalkan. State kembali seperti sebelum transaction.
 
 ### External inventory (service boundary berbeda)
 
@@ -495,7 +513,7 @@ Jika inventory merupakan **inventory microservice** atau API terpisah:
 [BEGIN] → UPDATE invoice → [HTTP Inventory Service] → [COMMIT]
 ```
 
-Jika transaction rollback → **inventory tidak otomatis dikembalikan**. Diperlukan **compensation** (cancel reservation).
+Jika transaction rollback → **inventory microservice tidak otomatis dikembalikan** (berada di luar DB transaction). Diperlukan **compensation** (cancel reservation).
 
 ---
 
@@ -584,23 +602,36 @@ go test -v -count=1
 | `TestInvoicePaidPayloadRoundTrip` | JSON serialize/deserialize | external.go |
 | `TestEventualConsistencyDemo` | invoice=paid, worker later | external.go |
 | `TestDistributedTransactionExternalSideEffectLimitation` | External side effect survives rollback | external.go |
+| `TestConcurrentDifferentConsumersSameEvent` | Different consumers, same event concurrently | external.go |
+| `TestBusinessMutationFailureRollback` | Business mutation fails → full rollback | external.go |
+| `TestRedeliveryAfterBusinessFailure` | Redelivery after rollback succeeds | external.go |
+| `TestProcessedMarkerFailureRollback` | Claim insert fails → no business mutation | external.go |
+| `TestCommitFailureAtomicity` | Both claim+business commit together | external.go |
+| `TestMockDBOnConflictSemantics` | ON CONFLICT DO NOTHING RowsAffected=1,0 | mockdb.go |
+| `TestMockDBDirectConcurrency` | Two TX A+B insert concurrently both persist | mockdb.go |
+| `TestMockDBDuplicateClaimDirect` | Two TX duplicate claim only one succeeds | mockdb.go |
+| `TestMockDBDifferentUniqueKeys` | Same consumer, different events both succeed | mockdb.go |
+| `TestMockDBDifferentConsumersSameEvent` | Different consumers, same event both succeed | mockdb.go |
+| `TestConsumerRestartRedelivery` | Worker restart + redelivery | external.go |
+| `TestEventualConsistencyCorrectness` | Outbox dispatch ≠ consumer processing | external.go |
+| `TestREADMESyncIdempotentConsumer` | README pattern verified | external.go |
 
 ---
 
 ## Failure Matrix
 
-| Failure Point | Result |
-|---------------|--------|
-| DB update fails | rollback |
-| Outbox insert fails | rollback |
-| Crash after DB commit (before dispatcher runs) | outbox pending survives |
-| Broker unavailable | retry later |
-| Crash after broker publish (before DB update) | duplicate possible |
-| Consumer crashes before ACK | redelivery possible |
-| Consumer gets duplicate | idempotent skip |
-| Retry exhausted | DLQ |
-| Saga later step fails | compensation when business requires |
-| Compensation fails | requires recovery/attention |
+| Failure Point | Expected Behavior |
+|---------------|-------------------|
+| Business mutation fails | Full transaction rollback (processed_events=0, commissions=0) |
+| Dedup marker fails | No business mutation committed (processed_events=0, commissions=0) |
+| Consumer crashes before commit | Redelivery can retry (processed_events=0, commissions=0) |
+| Consumer crashes after commit before ACK | Duplicate delivery; idempotent skip (processed_events=1, commissions=1) |
+| Two consumers same event | Both may process independently (different business effects) |
+| Same consumer concurrent duplicate | Only one business mutation (processed_events=1, commissions=1) |
+| Publisher/transient failure | Retry with backoff |
+| Retry exhausted (DLQ) | Moved to Dead Letter Queue |
+| Crash after publish to broker | Event may be published twice (at-least-once) |
+| Saga compensation fails | Continue compensating remaining steps, return error with details |
 
 ---
 

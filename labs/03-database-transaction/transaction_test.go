@@ -1395,60 +1395,92 @@ func TestInvoicePaidPayloadRoundTrip(t *testing.T) {
 // PROMPT 25: Eventual Consistency Demo
 // ============================================================================
 
-// TestEventualConsistencyDemo shows state divergence between DB commit and worker processing
+// TestEventualConsistencyDemo shows state divergence between DB commit and worker processing.
+// Publishing an event to the broker does NOT mean downstream projections are updated.
+// Consumer must separately process the event to achieve full consistency.
 func TestEventualConsistencyDemo(t *testing.T) {
 	db := mockdb.NewDB()
 	defer db.Close()
 	seedTestDB(t, db)
-
-	// Step 1: Create outbox event (simulates invoice paid)
-	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
+
+	// Step 1: Create outbox event (simulates invoice paid business transaction)
+	svc := transaction.NewInvoiceServiceOutbox(db)
 	_ = svc.PayInvoiceWithOutbox(ctx, 101)
 
-	// IMMEDIATELY after commit: invoice is paid, but workers haven't run yet
+	// IMMEDIATE STATE after business commit:
+	// - invoice = paid (committed in DB)
+	// - outbox = 1 pending (event stored atomically with invoice update)
 	var invoiceStatus string
 	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
-
-	// Count pending outbox events (not yet processed by workers)
-	pending, _ := svc.CountOutboxEvents(ctx)
-
-	// At this point:
-	// - invoice = paid (committed)
-	// - outbox events pending (workers not run)
-	// This IS eventual consistency - NOT system corruption
-
 	if invoiceStatus != "paid" {
 		t.Errorf("expected invoice 'paid' immediately after commit")
 	}
+
+	pending, _ := svc.CountOutboxEvents(ctx)
 	if pending != 1 {
-		t.Errorf("expected 1 pending outbox event before workers process")
+		t.Errorf("expected 1 pending outbox event before dispatch, got %d", pending)
 	}
 
-	// Step 2: Run dispatcher (simulates workers processing events)
+	// CRITICAL: commissions table is EMPTY (consumer hasn't processed yet)
+	// This is EXPECTED - eventual consistency gap
+	var commissionCount int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 0 {
+		t.Errorf("expected 0 commissions (not yet processed), got %d", commissionCount)
+	}
+
+	// Step 2: Run outbox dispatcher (publish event to broker)
+	// This does NOT mean downstream business effect is complete
+	// Dispatcher PUBLISHES event - it does NOT process it as a consumer
 	broker := transaction.NewInMemoryBroker(0)
 	dispatcher := transaction.NewOutboxDispatcher(db, broker, 3, nil)
-	dispatched, _ := dispatcher.DispatchBatch(ctx)
-	if dispatched != 1 {
-		t.Errorf("expected 1 event dispatched")
+	dispatched, err := dispatcher.DispatchBatch(ctx)
+	if err != nil || dispatched != 1 {
+		t.Fatalf("expected 1 event dispatched, got %d (err: %v)", dispatched, err)
 	}
 
-	// Now workers have processed the event
+	// AFTER DISPATCH (but before consumer):
+	// - invoice = paid
+	// - commissions = 0 (event reached broker, but no consumer processed it)
+	// - outbox = 0 pending (events dispatched and marked published)
 	events := broker.PublishedEvents()
 	if len(events) != 1 {
-		t.Errorf("expected 1 event published to workers")
+		t.Fatalf("expected 1 event published to broker, got %d", len(events))
 	}
 
-	// State is now fully consistent across all projections
+	// Verify commissions still 0 after dispatch - dispatch ≠ processing
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 0 {
+		t.Error("expected 0 commissions immediately after dispatch (dispatch ≠ consumer)")
+	}
+
+	// Step 3: Consumer processes the published event
+	// CommissionWorker consumes the InvoicePaid event from broker
+	worker := transaction.NewCommissionWorker(db)
+	processed, err := worker.HandleEvent(ctx, "CommissionConsumer", events[0])
+	if err != nil || !processed {
+		t.Fatalf("consumer failed to process: processed=%v, err=%v", processed, err)
+	}
+
+	// FINAL STATE: fully consistent
+	// - invoice = paid
+	// - commissions = 1 (consumer processed the event)
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 1 {
+		t.Errorf("expected 1 commission after consumer processing, got %d", commissionCount)
+	}
+
 	pendingAfter, _ := svc.CountOutboxEvents(ctx)
 	if pendingAfter != 0 {
-		t.Errorf("expected 0 pending events after workers process")
+		t.Errorf("expected 0 pending events after dispatch, got %d", pendingAfter)
 	}
 
-	t.Log("DEMO: Eventual consistency — invoice=paid immediately, workers catch up later")
-	t.Log("  t=0ms:    invoice=paid, outbox=1 pending")
-	t.Log("  t=dispatch: event delivered to broker")
-	t.Log("  t=end:    invoice=paid, outbox=0 pending, all projections updated")
+	t.Log("DEMO: Eventual consistency — invoice=paid immediately, commissions eventually =1")
+	t.Log("  t=0 (business commit): invoice=paid, commissions=0, outbox=1pending")
+	t.Log("  t=1 (dispatched):     invoice=paid, commissions=0, outbox=0pending (event in broker)")
+	t.Log("  t=2 (consumer):       invoice=paid, commissions=1, all consistent")
+	t.Log("  Key insight: dispatch (publish) ≠ consumer processing (business effect)")
 }
 
 // ============================================================================
@@ -1783,16 +1815,16 @@ func TestConcurrentDifferentConsumersSameEvent(t *testing.T) {
 
 // TestConsumerCrashAfterCommitBeforeAck verifies that a crash after commit but before ACK
 // results in redelivery but idempotent processing prevents duplicate business effect.
+// Uses separate worker instances to simulate consumer restart.
 func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 	db := mockdb.NewDB()
 	defer db.Close()
-
-	worker := transaction.NewCommissionWorker(db)
 	ctx := context.Background()
 	event := transaction.Event{ID: "evt-ack-crash", EventType: "InvoicePaid", AggregateID: "400", Payload: `{"invoice_id": 400}`}
 
-	// First delivery: process and commit successfully
-	processed1, err := worker.HandleEvent(ctx, "CommissionWorker", event)
+	// Delivery #1: worker1 processes and commits successfully
+	worker1 := transaction.NewCommissionWorker(db)
+	processed1, err := worker1.HandleEvent(ctx, "CommissionWorker", event)
 	if err != nil {
 		t.Fatalf("first delivery error: %v", err)
 	}
@@ -1807,9 +1839,14 @@ func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 		t.Fatalf("expected 1 commission after first delivery, got %d", commissionCount)
 	}
 
-	// Simulate crash-after-commit-before-ACK scenario:
-	// Message broker redelivers because ACK was never sent
-	processed2, err := worker.HandleEvent(ctx, "CommissionWorker", event)
+	// Simulate crash after commit but before ACK:
+	// worker1 process is gone (restarted).
+	// Message broker redelivers to a new worker instance.
+	// Dedup state must come from persistence DB, not worker1's in-memory state.
+	worker2 := transaction.NewCommissionWorker(db)
+
+	// Delivery #2: new worker processes same event - should be deduplicated
+	processed2, err := worker2.HandleEvent(ctx, "CommissionWorker", event)
 	if err != nil {
 		t.Fatalf("redelivery error: %v", err)
 	}
@@ -1819,7 +1856,6 @@ func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 
 	// CRITICAL: deliveries = 2 (message delivered twice due to at-least-once)
 	//          business rows = 1 (only 1 actual commission due to idempotency)
-	// Note: mock DB only supports single WHERE condition
 	var dedupCount int64
 	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&dedupCount)
 	if dedupCount != 1 {
@@ -1831,7 +1867,17 @@ func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 		t.Errorf("expected 1 commission business row, got %d", commissionCount)
 	}
 
+	// Verify dedup state is durable (not in-memory on worker1)
+	// worker2 has its own fresh in-memory state, yet dedup still works
+	if worker2.ObservedBusinessExecutions() != 0 {
+		t.Errorf("expected worker2 to have 0 observed executions (not processed), got %d", worker2.ObservedBusinessExecutions())
+	}
+	if worker1.ObservedBusinessExecutions() != 1 {
+		t.Errorf("expected worker1 to have 1 observed execution, got %d", worker1.ObservedBusinessExecutions())
+	}
+
 	t.Log("SUCCESS: deliveries=2 (redelivered), business rows=1 (idempotent)")
+	t.Log("  Dedup state is durable - persisted in DB, not in worker in-memory state")
 	t.Log("  At-least-once delivery + idempotent consumer = effectively-once business effect")
 }
 
@@ -2059,13 +2105,13 @@ func TestConsumerRestartRedelivery(t *testing.T) {
 		t.Error("expected redelivered event to be SKIPPED (idempotent)")
 	}
 
-	// Verify state unchanged - exactly-once business effect
+	// Verify state unchanged - effectively-once business effect
 	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
 	if commissionCount != 1 {
 		t.Errorf("expected still 1 commission after restart/redelivery, got %d", commissionCount)
 	}
 
-	t.Log("SUCCESS: Consumer restart/redelivery - exactly-once business effect")
+	t.Log("SUCCESS: Consumer restart/redelivery - effectively-once business effect")
 	t.Log("  Delivery count = 2 (message broker redelivered)")
 	t.Log("  Business state = 1 (idempotent deduplication worked)")
 }
@@ -2105,7 +2151,9 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 		t.Errorf("expected 1 pending outbox event, got %d", pending)
 	}
 
-	// Dispatch events (simulates worker processing)
+	// Dispatch events (outbox dispatcher publishes to broker)
+	// NOTE: Dispatcher PUBLISHES events; it does NOT process business effects.
+	// Consumer must process the published event separately for business projection.
 	broker := transaction.NewInMemoryBroker(0)
 	dispatcher := transaction.NewOutboxDispatcher(db, broker, 3, nil)
 	dispatched, err := dispatcher.DispatchBatch(ctx)
@@ -2116,19 +2164,29 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 		t.Errorf("expected 1 event dispatched, got %d", dispatched)
 	}
 
-	// AFTER DISPATCH: Event is published and marked as published
+	// AFTER DISPATCH (before consumer):
+	// - invoice = paid (business committed)
+	// - commissions = 0 (no consumer processed the event yet)
+	// - broker = 1 event (event published, awaiting consumer)
 	events := broker.PublishedEvents()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event published, got %d", len(events))
 	}
 
-	// Verify outbox event is now published
+	// Verify commissions still 0 after dispatch - dispatch ≠ processing
+	var commissionCount int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 0 {
+		t.Error("expected 0 commissions immediately after dispatch (dispatch ≠ consumer)")
+	}
+
+	// Verify outbox event is now marked as published (not pending)
 	pendingAfter, _ := svc.CountOutboxEvents(ctx)
 	if pendingAfter != 0 {
 		t.Errorf("expected 0 pending events after dispatch, got %d", pendingAfter)
 	}
 
-	// Verify event details
+	// Verify event details (dispatch ≠ consumer processing)
 	if events[0].EventType != "InvoicePaid" {
 		t.Errorf("expected InvoicePaid event type, got %s", events[0].EventType)
 	}
@@ -2136,10 +2194,26 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 		t.Errorf("expected aggregate_id %d, got %s", invoiceID, events[0].AggregateID)
 	}
 
+	// T3: Consumer processes the event
+	worker := transaction.NewCommissionWorker(db)
+	processed, err := worker.HandleEvent(ctx, "CommissionConsumer", events[0])
+	if err != nil || !processed {
+		t.Fatalf("consumer failed to process: processed=%v, err=%v", processed, err)
+	}
+
+	// FINAL STATE: fully consistent
+	// - invoice = paid
+	// - commissions = 1 (consumer processed the event)
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 1 {
+		t.Errorf("expected 1 commission after consumer processing, got %d", commissionCount)
+	}
+
 	t.Log("SUCCESS: Eventual consistency flow verified")
-	t.Log("  t=0:  Business committed, outbox=1pending")
-	t.Log("  t=1:  Dispatcher processes, event published, outbox=0pending")
-	t.Log("  Result: All projections eventually consistent")
+	t.Log("  t=0 (business commit): invoice=paid, outbox=1pending, commissions=0 (downstream absent)")
+	t.Log("  t=1 (event published): outbox=0pending, commissions=0 still (downstream still absent)")
+	t.Log("  t=2 (consumer active): commissions=1 (downstream present)")
+	t.Log("  Result: Dispatch (publish) ≠ Consumer processing (business effect)")
 }
 
 // ============================================================================
@@ -2475,4 +2549,200 @@ func TestCommitFailureAtomicity(t *testing.T) {
 
 	t.Log("SUCCESS: Commit atomicity - both claim and business state committed together")
 	t.Log("  (mockdb does not simulate commit failures; rollback on error is verified in other tests)")
+}
+
+// ============================================================================
+// PROMPT 43: MockDB Direct Concurrency Test (Two TX inserts without conflict)
+// ============================================================================
+
+// TestMockDBDirectConcurrency verifies that MockDB handles multiple transactions
+// properly. Two concurrent inserts for different rows should both persist.
+func TestMockDBDirectConcurrency(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	ctx := context.Background()
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		_, _ = tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)", "C1", "evt-A", time.Now())
+		_ = tx.Commit()
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		_, _ = tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)", "C2", "evt-B", time.Now())
+		_ = tx.Commit()
+	}()
+
+	close(start)
+	wg.Wait()
+
+	var count int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if count != 2 {
+		t.Errorf("expected 2 rows, got %d", count)
+	}
+	t.Log("SUCCESS: MockDB direct concurrency - both A and B exist")
+}
+
+// ============================================================================
+// PROMPT 44: MockDB Duplicate Claim Direct Test (Concurrent ON CONFLICT)
+// ============================================================================
+
+// TestMockDBDuplicateClaimDirect verifies that concurrent INSERT ON CONFLICT
+// correctly enforces the composite uniqueness.
+func TestMockDBDuplicateClaimDirect(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	ctx := context.Background()
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var affected1, affected2 int64
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-123", time.Now())
+		affected1, _ = res.RowsAffected()
+		_ = tx.Commit()
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-123", time.Now())
+		affected2, _ = res.RowsAffected()
+		_ = tx.Commit()
+	}()
+
+	close(start)
+	wg.Wait()
+
+	var count int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if count != 1 {
+		t.Errorf("expected exactly 1 row, got %d", count)
+	}
+
+	if affected1+affected2 != 1 {
+		t.Errorf("expected exactly one RowsAffected=1, got sum=%d (affected1=%d, affected2=%d)", affected1+affected2, affected1, affected2)
+	}
+
+	t.Log("SUCCESS: MockDB duplicate claim direct - exactly one RowsAffected=1, one RowsAffected=0")
+}
+
+// ============================================================================
+// PROMPT 45: MockDB Different Unique Keys (Same consumer, different events)
+// ============================================================================
+
+// TestMockDBDifferentUniqueKeys verifies concurrent inserts with different unique keys
+// both succeed. (Constraint is not too global)
+func TestMockDBDifferentUniqueKeys(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	ctx := context.Background()
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var affected1, affected2 int64
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-1", time.Now())
+		affected1, _ = res.RowsAffected()
+		_ = tx.Commit()
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-2", time.Now())
+		affected2, _ = res.RowsAffected()
+		_ = tx.Commit()
+	}()
+
+	close(start)
+	wg.Wait()
+
+	var count int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if count != 2 {
+		t.Errorf("expected exactly 2 rows, got %d", count)
+	}
+
+	if affected1 != 1 || affected2 != 1 {
+		t.Errorf("expected both RowsAffected=1, got %d, %d", affected1, affected2)
+	}
+
+	t.Log("SUCCESS: MockDB different unique keys - both inserted (RowsAffected=1)")
+}
+
+// ============================================================================
+// PROMPT 46 & 47: MockDB Different Consumers Same Event (Composite Unique Key)
+// ============================================================================
+
+// TestMockDBDifferentConsumersSameEvent verifies concurrent inserts with same event
+// but different consumers both succeed (composite unique key semantics).
+func TestMockDBDifferentConsumersSameEvent(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	ctx := context.Background()
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var affected1, affected2 int64
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "InventoryConsumer", "evt-123", time.Now())
+		affected1, _ = res.RowsAffected()
+		_ = tx.Commit()
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		tx, _ := db.BeginTx(ctx, nil)
+		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-123", time.Now())
+		affected2, _ = res.RowsAffected()
+		_ = tx.Commit()
+	}()
+
+	close(start)
+	wg.Wait()
+
+	var count int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if count != 2 {
+		t.Errorf("expected exactly 2 rows, got %d", count)
+	}
+
+	if affected1 != 1 || affected2 != 1 {
+		t.Errorf("expected both RowsAffected=1, got %d, %d", affected1, affected2)
+	}
+
+	t.Log("SUCCESS: MockDB different consumers same event - composite unique key enforced")
 }

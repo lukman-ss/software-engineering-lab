@@ -61,7 +61,7 @@ func runWithoutCache(ctx context.Context) {
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Requests: %d\n", reqCount)
-	fmt.Printf("Repository Calls: %d\n", repo.CallCount)
+	fmt.Printf("Repository Calls: %d\n", repo.CallCount())
 	fmt.Printf("Cache Hits: 0\n")
 	fmt.Printf("Cache Misses: 0\n")
 	fmt.Printf("\nConclusion: Without cache, every request puts full load on database.\n")
@@ -86,7 +86,7 @@ func runCacheAside(ctx context.Context) {
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Requests: %d\n", reqCount)
-	fmt.Printf("Repository Calls: %d\n", repo.CallCount)
+	fmt.Printf("Repository Calls: %d\n", repo.CallCount())
 	fmt.Printf("Cache Hits: %d\n", metrics.Hits())
 	fmt.Printf("Cache Misses: %d\n", metrics.Misses())
 	fmt.Printf("\nConclusion: Cache Aside absorbs %d%% of the traffic, protecting the DB.\n",

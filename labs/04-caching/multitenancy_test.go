@@ -1,6 +1,7 @@
 package caching_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -31,25 +32,46 @@ func TestMultiTenancyKeyIsolation(t *testing.T) {
 }
 
 // TestBusinessTimezone ensures business day is respected
+// Uses a fixed UTC instant where Jakarta and New York have different calendar dates:
+// 2026-08-29 18:30 UTC = 2026-08-30 01:30 Jakarta, 2026-08-29 14:30 New York
 func TestBusinessTimezone(t *testing.T) {
 	locJakarta, _ := time.LoadLocation("Asia/Jakarta")
 	locNY, _ := time.LoadLocation("America/New_York")
 
-	now := time.Now()
-	dateJakarta := caching.TodayInLocation(now, locJakarta)
-	dateNY := caching.TodayInLocation(now, locNY)
+	// Fixed instant: 2026-08-29 18:30 UTC
+	utcNow := time.Date(2026, 8, 29, 18, 30, 0, 0, time.UTC)
 
-	t.Logf("Business date in Jakarta: %s", dateJakarta)
-	t.Logf("Business date in New York: %s", dateNY)
+	// Jakarta: 2026-08-30 01:30 (next day)
+	// New York: 2026-08-29 14:30 (same day)
+	dateJakarta := caching.TodayInLocation(utcNow, locJakarta)
+	dateNY := caching.TodayInLocation(utcNow, locNY)
 
-	// They might be different depending on when the test runs, which proves timezone handling matters
-	keyJakarta := caching.NewDashboardKey(1).WithTenant(1).WithDate(now.In(locJakarta)).Build()
-	keyNY := caching.NewDashboardKey(1).WithTenant(1).WithDate(now.In(locNY)).Build()
+	// Assert exact expected dates
+	expectedJakarta := "2026-08-30"
+	expectedNY := "2026-08-29"
 
-	t.Logf("Key Jakarta: %s", keyJakarta)
-	t.Logf("Key New York: %s", keyNY)
+	if dateJakarta != expectedJakarta {
+		t.Errorf("Jakarta date: expected %s, got %s", expectedJakarta, dateJakarta)
+	}
+	if dateNY != expectedNY {
+		t.Errorf("New York date: expected %s, got %s", expectedNY, dateNY)
+	}
 
-	t.Log("Business timezone handling validated")
+	// Keys must reflect business timezone
+	keyJakarta := caching.NewDashboardKey(1).WithTenant(1).WithDate(utcNow.In(locJakarta)).Build()
+	keyNY := caching.NewDashboardKey(1).WithTenant(1).WithDate(utcNow.In(locNY)).Build()
+
+	// Assert exact expected key dates
+	if !strings.Contains(keyJakarta, "date:2026-08-30") {
+		t.Errorf("Jakarta key should contain date:2026-08-30, got %s", keyJakarta)
+	}
+	if !strings.Contains(keyNY, "date:2026-08-29") {
+		t.Errorf("New York key should contain date:2026-08-29, got %s", keyNY)
+	}
+
+	t.Logf("Jakarta key: %s", keyJakarta)
+	t.Logf("New York key: %s", keyNY)
+	t.Log("✓ Business timezone: Jakarta = 2026-08-30, New York = 2026-08-29")
 }
 
 // TestTimezoneBoundary verifikasi bahwa time.Time yang diberikan ke key builder
@@ -65,25 +87,11 @@ func TestTimezoneBoundary(t *testing.T) {
 	key := caching.NewDashboardKey(1).WithTenant(1).WithDate(ts).Build()
 
 	// Expected: date:2026-08-30 (NOT 2026-08-29)
-	if !contains(key, "date:2026-08-30") {
+	if !strings.Contains(key, "date:2026-08-30") {
 		t.Errorf("business date should be 2026-08-30, key: %s", key)
 	}
 	t.Logf("Key with Jakarta timezone: %s", key)
 	t.Log("✓ Timezone boundary respected: Jakarta 00:30 = business date 2026-08-30")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > 0 && containsStr(s, substr)))
-}
-
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // TestDashboardKeyBuilderVersatility demonstrates the unified key builder

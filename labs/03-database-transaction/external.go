@@ -29,7 +29,7 @@ type FailureMode struct {
 	// Outbox/Dispatcher related
 	FailAfterDBCommit   bool // Simulate crash after DB commit but before publish
 	FailExternalService bool
-	FailPublishAttempts int // Fail first N publish attempts
+	FailPublishAttempts int  // Fail first N publish attempts
 	CrashAfterPublish   bool // Simulate crash after publish but before marking as published
 }
 
@@ -309,9 +309,9 @@ func (c *BlockingHTTPClient) Release() {
 
 // InvoiceServiceWithBlockingHTTP uses BlockingHTTPClient to simulate long-running external call
 type InvoiceServiceWithBlockingHTTP struct {
-	db          *sql.DB
-	http        *BlockingHTTPClient
-	txOpen      int32 // 1 = transaction is open, 0 = closed; accessed via atomic
+	db     *sql.DB
+	http   *BlockingHTTPClient
+	txOpen int32 // 1 = transaction is open, 0 = closed; accessed via atomic
 }
 
 func NewInvoiceServiceWithBlockingHTTP(db *sql.DB, http *BlockingHTTPClient) *InvoiceServiceWithBlockingHTTP {
@@ -548,7 +548,7 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 
 	type pendingEvent struct {
 		id, eventType, aggregateID, payload string
-		attempts int
+		attempts                            int
 	}
 	var pending []pendingEvent
 
@@ -604,7 +604,7 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 		}
 
 		now := time.Now()
-			_, err = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'published', published_at = $1, attempts = $2 WHERE id = $3", now, attempts, id)
+		_, err = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'published', published_at = $1, attempts = $2 WHERE id = $3", now, attempts, id)
 		if err != nil {
 			return dispatched, fmt.Errorf("mark published: %w", err)
 		}
@@ -626,7 +626,7 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 //   - business state committed but dedup record lost (redelivery = duplicate)
 //   - dedup record committed but business state lost (skipped processing)
 type CommissionWorker struct {
-	db                          *sql.DB
+	db                         *sql.DB
 	observedBusinessExecutions int64 // observability only, NOT source of truth
 	mu                         sync.Mutex
 	failureMode                *ConsumerFailureMode
@@ -671,13 +671,13 @@ func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string,
 	// Inject failure during claim (processed_events insert) BEFORE business mutation
 	if c.failureMode != nil && c.failureMode.FailProcessedInsert {
 		_ = tx.Rollback()
-		return false, errors.New("simulated processed_events insert failure")
+		return false, fmt.Errorf("failed to claim processed_events for event %s: insert failure", event.ID)
 	}
 
 	// Inject failure after dedup marker but before business mutation
 	if c.failureMode != nil && c.failureMode.FailBusinessMutation {
 		_ = tx.Rollback()
-		return false, errors.New("simulated business mutation failure")
+		return false, fmt.Errorf("failed to process commission for event %s: business mutation failure", event.ID)
 	}
 
 	// 2. Business operation - INSERT into commissions table (within same transaction)
@@ -789,8 +789,8 @@ type SagaStep struct {
 }
 
 type SagaExecutionError struct {
-	OriginalError       error
-	CompensationErrors  []error
+	OriginalError      error
+	CompensationErrors []error
 }
 
 func (e *SagaExecutionError) Error() string {
@@ -798,9 +798,9 @@ func (e *SagaExecutionError) Error() string {
 }
 
 type Saga struct {
-	steps          []SagaStep
-	executed       []int
-	compensated    []int
+	steps       []SagaStep
+	executed    []int
+	compensated []int
 }
 
 func NewSaga() *Saga {
