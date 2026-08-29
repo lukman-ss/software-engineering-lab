@@ -126,3 +126,10 @@ go test ./labs/10-rate-limiting/... -v
 3. **Monitoring**: Track bucket deficit, eviction rates, limit violations
 4. **Key Naming**: Use consistent key format: `ratelimit:{client_id}`
 5. **TTL**: Set appropriate expiration to prevent stale data accumulation
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 09 — Circuit Breaker](../09-circuit-breaker/)
+- **Next**: [Lab 11 — Pessimistic Locking](../11-pessimistic-locking/)

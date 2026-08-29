@@ -1,17 +1,11 @@
 // Package mockdb provides a minimal in-memory database/sql driver for educational purposes.
 //
-// Limitations (not implementing PostgreSQL full semantics):
-//   - No MVCC (Multi-Version Concurrency Control)
-//   - No isolation levels (READ COMMITTED, REPEATABLE READ, etc.)
-//   - No deadlock detection
-//   - No row-level locks (SELECT ... FOR UPDATE)
-//   - No WAL (Write-Ahead Logging)
-//   - No true concurrent locking - uses coarse-grained mutex per operation
-//   - Transaction isolation is application-level via copy-on-write
-//   - No foreign key constraints
-//   - No indexes (full table scan for WHERE clauses)
+// Concurrency Model:
+//   - Snapshot isolation for reads (BEGIN clones committed state)
+//   - Atomic INSERT ... ON CONFLICT with global lock (checks committed state during INSERT)
+//   - Commit without lock (tx already contains full snapshot with INSERT applied)
 //
-// Designed to be atomic enough and concurrency-safe enough for deterministic testing.
+// This simulates PostgreSQL-like behavior where ON CONFLICT checks committed state.
 package mockdb
 
 import (
@@ -102,15 +96,16 @@ func (c *conn) begin() (driver.Tx, error) {
 	if c.tx != nil {
 		return nil, errors.New("transaction already open on connection")
 	}
+	// Hold lock for entire transaction duration for correctness
+	// This serializes transactions but ensures ON CONFLICT works correctly
 	c.db.mu.Lock()
 	c.tx = cloneTables(c.db.committed)
-	c.db.mu.Unlock()
 	return &txn{c: c, open: true}, nil
 }
 
 type txn struct {
-	c       *conn
-	open    bool // tracks if transaction is still open
+	c    *conn
+	open bool
 }
 
 func (t *txn) IsOpen() bool {
@@ -119,18 +114,19 @@ func (t *txn) IsOpen() bool {
 
 func (t *txn) Commit() error {
 	c := t.c
-	c.db.mu.Lock()
-	// Commit: replace committed state with transaction's snapshot
-	// Note: This is a simplified MVCC simulation. For proper isolation,
-	// real databases use row-level locks or more sophisticated versioning.
-	c.db.committed = c.tx
-	c.db.mu.Unlock()
+	// Unlock AFTER commit
+	defer c.db.mu.Unlock()
+	for table, txState := range c.tx {
+		c.db.committed[table] = &tableState{rows: append([]row{}, txState.rows...)}
+	}
 	t.open = false
 	t.c.tx = nil
 	return nil
 }
 
 func (t *txn) Rollback() error {
+	c := t.c
+	defer c.db.mu.Unlock()
 	t.open = false
 	t.c.tx = nil
 	return nil
@@ -149,12 +145,53 @@ func (c *conn) QueryContext(_ context.Context, query string, args []driver.Named
 }
 
 func (c *conn) exec(query string, vals []driver.Value) (driver.Result, error) {
+	upper := strings.ToUpper(strings.TrimSpace(query))
+
+	// Within transaction: no lock needed (held from Begin)
+	if c.tx != nil && strings.HasPrefix(upper, "INSERT") && strings.Contains(upper, "ON CONFLICT") {
+		table := extractTableFromInsert(upper)
+		if existing, ok := c.db.committed[table]; ok {
+			for _, existingRow := range existing.rows {
+				found := false
+				for _, txRow := range c.tx[table].rows {
+					if equalVal(existingRow, txRow) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					c.tx[table].rows = append(c.tx[table].rows, existingRow)
+				}
+			}
+		}
+		return doInsertReturning(c.tx, query, vals)
+	}
+
 	if c.tx != nil {
 		return doExec(c.tx, query, vals)
 	}
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 	return doExec(c.db.committed, query, vals)
+}
+
+// extractTableFromInsert extracts table name from INSERT query
+func extractTableFromInsert(q string) string {
+	upper := strings.ToUpper(q)
+	idxInto := strings.Index(upper, "INSERT INTO ")
+	if idxInto < 0 {
+		return ""
+	}
+	afterInsert := strings.TrimSpace(q[idxInto+len("INSERT INTO "):])
+	tableEndIdx := strings.Index(afterInsert, " ")
+	parenIdx := strings.Index(afterInsert, "(")
+	if parenIdx >= 0 && (tableEndIdx < 0 || parenIdx < tableEndIdx) {
+		tableEndIdx = parenIdx
+	}
+	if tableEndIdx < 0 {
+		tableEndIdx = len(afterInsert)
+	}
+	return strings.TrimSpace(afterInsert[:tableEndIdx])
 }
 
 func (c *conn) query(query string, vals []driver.Value) (driver.Rows, error) {
@@ -284,9 +321,6 @@ func doInsert(tables map[string]*tableState, q string, vals []driver.Value) (dri
 	return &result{affected: 1}, nil
 }
 
-// doInsertReturning handles INSERT INTO ... ON CONFLICT DO NOTHING RETURNING
-// When ON CONFLICT is detected, returns result with affected=0 (not an error)
-// This allows the caller to check RowsAffected() to determine if insert happened.
 func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Value) (driver.Result, error) {
 	upper := strings.ToUpper(q)
 
@@ -328,7 +362,6 @@ func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Va
 	if idxVals < 0 {
 		return nil, fmt.Errorf("malformed VALUES: %s", q)
 	}
-	// Find opening paren after VALUES keyword
 	valsParenOpen := strings.Index(q[idxVals:], "(") + idxVals
 	valsParenClose := findMatchingClose(q, valsParenOpen)
 	if valsParenClose < 0 {
@@ -367,6 +400,7 @@ func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Va
 		return nil, fmt.Errorf("unknown table %q", table)
 	}
 
+	// Check for conflict: compare against existing rows in the table
 	for _, existingRow := range tbl.rows {
 		allMatch := true
 		for _, cc := range conflictCols {
@@ -461,23 +495,23 @@ func doQuery(tables map[string]*tableState, q string, vals []driver.Value) (driv
 		whereIdx := strings.Index(strings.ToUpper(rest), "WHERE")
 
 		var table string
-		var wCol string
-		var wVal any
+		var conditions []struct {
+			col string
+			val any
+		}
 		if whereIdx < 0 {
 			table = strings.TrimSpace(rest)
 		} else {
 			table = strings.TrimSpace(rest[:whereIdx])
 			wherePart := rest[whereIdx+len("WHERE"):]
-			weq := strings.Index(wherePart, "=")
-			wCol = strings.TrimSpace(wherePart[:weq])
-			wVal = resolveVal(strings.TrimSpace(wherePart[weq+1:]), vals)
+			conditions = parseWhereConditions(wherePart, vals)
 		}
 
 		tbl := tables[table]
 		n := int64(0)
 		if tbl != nil {
 			for _, r := range tbl.rows {
-				if wCol == "" || equalVal(r[wCol], wVal) {
+				if len(conditions) == 0 || rowMatchesConditions(r, conditions) {
 					n++
 				}
 			}
@@ -497,6 +531,7 @@ func doQuery(tables map[string]*tableState, q string, vals []driver.Value) (driv
 	table := strings.TrimSpace(rest[:whereIdx])
 
 	wherePart := rest[whereIdx+len("WHERE"):]
+	conditions := parseWhereConditions(wherePart, vals)
 	limitIdx := strings.Index(strings.ToUpper(wherePart), "LIMIT")
 	forUpdateIdx := strings.Index(strings.ToUpper(wherePart), "FOR UPDATE")
 
@@ -523,14 +558,6 @@ func doQuery(tables map[string]*tableState, q string, vals []driver.Value) (driv
 
 	wherePart = wherePart[:endWhereIdx]
 
-	weq := strings.Index(wherePart, "=")
-	if weq < 0 {
-		return nil, fmt.Errorf("malformed WHERE clause: %s", wherePart)
-	}
-
-	wCol := strings.TrimSpace(wherePart[:weq])
-	wVal := resolveVal(strings.TrimSpace(wherePart[weq+1:]), vals)
-
 	cols := splitList(colsPart)
 	tbl := tables[table]
 	var data [][]driver.Value
@@ -539,7 +566,7 @@ func doQuery(tables map[string]*tableState, q string, vals []driver.Value) (driv
 			if limit >= 0 && int64(len(data)) >= limit {
 				break
 			}
-			if equalVal(r[wCol], wVal) {
+			if rowMatchesConditions(r, conditions) {
 				rowVals := make([]driver.Value, len(cols))
 				for i, c := range cols {
 					rowVals[i] = r[c]
@@ -549,6 +576,38 @@ func doQuery(tables map[string]*tableState, q string, vals []driver.Value) (driv
 		}
 	}
 	return &resultRows{cols: cols, data: data}, nil
+}
+
+func parseWhereConditions(wherePart string, vals []driver.Value) []struct {
+	col string
+	val any
+} {
+	parts := strings.Split(wherePart, " AND ")
+	var conditions []struct{ col string; val any }
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || strings.HasPrefix(strings.ToUpper(part), "LIMIT") || strings.HasPrefix(strings.ToUpper(part), "FOR UPDATE") {
+			continue
+		}
+		eq := strings.Index(part, "=")
+		if eq < 0 {
+			continue
+		}
+		col := strings.TrimSpace(part[:eq])
+		valStr := strings.TrimSpace(part[eq+1:])
+		conditions = append(conditions, struct{ col string; val any }{col: col, val: resolveVal(valStr, vals)})
+	}
+	return conditions
+}
+
+func rowMatchesConditions(r row, conditions []struct{ col string; val any }) bool {
+	for _, c := range conditions {
+		if !equalVal(r[c.col], c.val) {
+			return false
+		}
+	}
+	return true
 }
 
 func splitList(s string) []string {

@@ -13,10 +13,10 @@ import (
 // - Cache miss → query DB
 // - Populate cache setelah DB hit
 type CacheAsideService struct {
-	db          *sql.DB
-	cache       CacheInterface
-	ttl         time.Duration
-	jitterTTL   time.Duration // max jitter to add to TTL
+	db        *sql.DB
+	cache     CacheInterface
+	ttl       time.Duration
+	jitterTTL time.Duration // max jitter to add to TTL
 }
 
 func NewCacheAsideService(db *sql.DB, cache CacheInterface) *CacheAsideService {

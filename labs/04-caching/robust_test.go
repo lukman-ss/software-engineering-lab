@@ -198,7 +198,8 @@ func TestSourceOfTruth(t *testing.T) {
 	}
 
 	// Step 2: Verify cache has been populated
-	_, err := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	today := time.Now().UTC()
+	_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, today))
 	if err != nil {
 		t.Fatalf("expected cache to be populated: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestSourceOfTruth(t *testing.T) {
 	}
 
 	// Step 4: Invalidate cache (simulates commit -> invalidate)
-	_ = cache.Delete(ctx, caching.DashboardCacheKey(branchID))
+	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, branchID, today))
 
 	// Step 5: Next request should get fresh data from repo
 	repo.CallCount = 0

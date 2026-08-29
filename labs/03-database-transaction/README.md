@@ -215,12 +215,23 @@ idempotent consumer
 - `TestIdempotentConsumerDeduplication` - same consumer duplicate
 - `TestDifferentConsumersSameEvent` - different consumers same event  
 - `TestConcurrentDuplicateConsumer` - concurrent same event dedup
+- `TestConcurrentDifferentConsumersSameEvent` - different consumers, same event, concurrent
+- `TestConcurrentDifferentEvents` - concurrent different events, no lost update
+- `TestConcurrentSameEvent` - concurrent same consumer same event
 - `TestConsumerCrashRedelivery` - consumer restart/redelivery
 - `TestAtomicConsumerFlow` - business mutation failure rollback
 - `TestConsumerCrashAfterCommitBeforeAck` - separation of deliveries vs business rows
 - `TestMockDBNoLostUpdates` - verify concurrency does not lose updates
 - `TestMockDBRollbackIsolation` - verify rollback isolation
 - `TestConsumerBusinessMutationFailure` - business mutation failure rollback
+- `TestBusinessMutationRollbackAtomicity` - rollback atomicity via injected failure
+- `TestRedeliveryAfterBusinessFailure` - redelivery succeeds after rollback clears state
+- `TestProcessedMarkerFailureRollback` - claim failure, no business mutation
+- `TestCommitFailureAtomicity` - commit atomicity (both state committed together)
+- `TestMockDBOnConflictSemantics` - ON CONFLICT DO NOTHING returns correct RowsAffected
+- `TestConsumerRestartRedelivery` - consumer restart, redelivered event deduplicated
+- `TestEventualConsistencyCorrectness` - outbox eventual consistency flow
+- `TestREADMESyncIdempotentConsumer` - README idempotent consumer pattern verified
 
 ---
 
@@ -344,6 +355,47 @@ Setelah DB commit, downstream belum tentu up-to-date. Ini **normal**, bukan bug.
 - **Observability Requirement**: Diperlukan distributed tracing
 
 Jangan menggambarkan event-driven architecture sebagai solusi universal. Pilih bila membutuhkan retry, compensation, atau loose coupling.
+
+---
+
+## 17. MockDB Concurrency Model (Educational)
+
+MockDB implementasi transaction model yang **serialized**:
+
+- `BEGIN` → acquire global transaction mutex
+- `INSERT/UPDATE/DELETE` → operate on transaction snapshot
+- `COMMIT` → merge snapshot to committed, release mutex
+- `ROLLBACK` → discard snapshot, release mutex
+
+### Why Serialized?
+
+Untuk educational purposes, mockdb menggunakan **single write transaction at a time** untuk:
+1. Simplicity (tanpa MVCC/row-level locks)
+2. Deterministic test results
+3. Atomic ON CONFLICT DO NOTHING semantics
+
+### Concurrency Simulation
+
+Karena transaction serialized, "concurrent" test mengeksekusi goroutines yang **tertata secara acak** tetapi operasional DB-serialized. Ini secara otomatis menghasilkan:
+- Race condition detection
+- ON CONFLICT behavior verification
+- Rollback isolation verification
+
+---
+
+## 18. Test Organization
+
+| Category | Tests | Purpose |
+|----------|-------|---------|
+| **Local Transaction** | TestUnsafeLocalTransaction, TestSafeLocalTransaction | ACID verification |
+| **External Side Effects** | TestDistributedTransactionExternalSideEffectLimitation | 2PC limitation demo |
+| **Dual-Write Problems** | TestDualWriteProblemEventLost, TestReverseDualWriteFailure | Atomicity window analysis |
+| **Transactional Outbox** | TestTransactionalOutboxPatternAtomicity, TestOutboxDispatcherPublishesPending | Outbox pattern |
+| **Idempotent Consumer** | TestIdempotentConsumerDeduplication, TestAtomicConsumerFlow | Deduplication key design |
+| **Concurrent Tests** | TestConcurrentDuplicateConsumer, TestConcurrentDifferentEvents, TestConcurrentSameEvent, TestConcurrentDifferentConsumersSameEvent | Race condition verification |
+| **Failure Injection** | TestBusinessMutationFailureRollback, TestProcessedMarkerFailureRollback | Error path rollback |
+| **Redelivery/Reprocibility** | TestConsumerRestartRedelivery, TestRedeliveryAfterBusinessFailure | At-least-once correctness |
+| **Eventual Consistency** | TestEventualConsistencyCorrectness, TestEventualConsistencyDemo | Outbox flow |
 
 ---
 

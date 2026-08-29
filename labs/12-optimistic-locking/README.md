@@ -15,5 +15,5 @@ When a conflict occurs, the operation can be retried with jitter/backoff a limit
 
 ## Navigasi
 
-- **Previous**: [Lab 11 — Race Condition](../11-race-condition/)
+- **Previous**: [Lab 11 — Pessimistic Locking](../11-pessimistic-locking/)
 - **Next**: (End of phase 1)

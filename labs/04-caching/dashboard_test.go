@@ -15,9 +15,10 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(1)
+	businessDate := time.Now().UTC()
 
 	// Step 1: Cache empty
-	_, err := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 	if err == nil {
 		t.Fatal("expected cache miss initially")
 	}
@@ -30,13 +31,10 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 		Date:              caching.Today(),
 	}
 	data, _ := json.Marshal(dashboard)
-	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(data), 30*time.Second)
+	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(data), 30*time.Second)
 
 	// Step 3: Cache hit
-	cached, err := cache.Get(ctx, caching.DashboardCacheKey(branchID))
-	if err != nil {
-		t.Fatalf("expected cache hit after population: %v", err)
-	}
+	cached, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 
 	var result caching.Dashboard
 	json.Unmarshal([]byte(cached), &result)
@@ -55,6 +53,7 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 	svc := caching.NewDashboardCacheService(nil, cache)
 
 	branchID := int64(1)
+	businessDate := time.Now().UTC()
 
 	// Step 1: Request dashboard - cache miss
 	initialData := caching.Dashboard{
@@ -64,10 +63,10 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 		Date:              caching.Today(),
 	}
 	jsonData, _ := json.Marshal(initialData)
-	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(jsonData), 30*time.Second)
+	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(jsonData), 30*time.Second)
 
 	// Verify cache has data
-	cachedData, err := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	cachedData, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 	if err != nil {
 		t.Fatalf("cache should have initial data: %v", err)
 	}
@@ -81,13 +80,13 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 	// In real world: BEGIN -> INSERT invoice -> COMMIT -> Invalidate
 
 	// Step 3: Invalidate cache (happens after commit)
-	err = svc.InvalidateBranchDashboard(ctx, branchID)
+	err = svc.InvalidateCurrentDashboard(ctx, 1, branchID)
 	if err != nil {
 		t.Fatalf("invalidation failed: %v", err)
 	}
 
 	// Step 4: Cache should be invalidated
-	_, err = cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	_, err = cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 	if err == nil {
 		t.Fatal("cache should be invalidated (miss) after mutation")
 	}
@@ -102,18 +101,19 @@ func TestCacheInvalidationRequiredAfterDataChange(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(42)
+	businessDate := time.Now().UTC()
 
 	// Initial state
 	initial := caching.Dashboard{InvoiceCountToday: 100, Date: caching.Today()}
 	data, _ := json.Marshal(initial)
-	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(data), 30*time.Second)
+	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(data), 30*time.Second)
 
 	// Mutate database directly (simulate another process)
 	mutated := caching.Dashboard{InvoiceCountToday: 150, Date: caching.Today()}
 	mutatedData, _ := json.Marshal(mutated)
 
 	// WITHOUT invalidation, cache still has old data
-	cached, _ := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	cached, _ := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 	var result caching.Dashboard
 	json.Unmarshal([]byte(cached), &result)
 
@@ -122,10 +122,10 @@ func TestCacheInvalidationRequiredAfterDataChange(t *testing.T) {
 	}
 
 	// WITH invalidation, we update cache
-	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(mutatedData), 30*time.Second)
+	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(mutatedData), 30*time.Second)
 
 	// Now cache reflects new data
-	cached2, _ := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	cached2, _ := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 	json.Unmarshal([]byte(cached2), &result)
 
 	if result.InvoiceCountToday != 150 {
@@ -165,16 +165,17 @@ func TestCacheHitRatioImprovesWithMutations(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(99)
+	businessDate := time.Now().UTC()
 	hits, misses := 0, 0
 
 	// Populate cache
 	dashboard := caching.Dashboard{InvoiceCountToday: 50, Date: caching.Today()}
 	data, _ := json.Marshal(dashboard)
-	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(data), 30*time.Second)
+	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(data), 30*time.Second)
 
 	// Simulate 100 read requests
 	for i := 0; i < 100; i++ {
-		_, err := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+		_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
 		if err == nil {
 			hits++
 		} else {

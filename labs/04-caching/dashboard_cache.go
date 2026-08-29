@@ -67,16 +67,11 @@ func (s *DashboardCacheService) GetDashboardWithTenant(ctx context.Context, tena
 	return d, nil
 }
 
-// InvalidateBranchDashboard menginvalidasi cache untuk branch tertentu.
-// For multi-tenant: use InvalidateBranchDashboardForTenant instead.
-func (s *DashboardCacheService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
-	return s.InvalidateBranchDashboardForTenant(ctx, 1, branchID)
-}
-
-// InvalidateBranchDashboardForTenant invalidates cache with tenant scoping.
-func (s *DashboardCacheService) InvalidateBranchDashboardForTenant(ctx context.Context, tenantID, branchID int64) error {
+// InvalidateDashboard invalidates cache for a branch and specific business date.
+func (s *DashboardCacheService) InvalidateDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
 	key := NewDashboardKey(branchID).
 		WithTenant(tenantID).
+		WithDate(businessDate).
 		Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
@@ -85,42 +80,47 @@ func (s *DashboardCacheService) InvalidateBranchDashboardForTenant(ctx context.C
 	return nil
 }
 
+// InvalidateCurrentDashboard invalidates cache for today using the injected clock.
+func (s *DashboardCacheService) InvalidateCurrentDashboard(ctx context.Context, tenantID, branchID int64) error {
+	return s.InvalidateDashboard(ctx, tenantID, branchID, defaultClock.Now().UTC())
+}
+
 // --- REPRESENTATIVE MUTATION METHODS (Bagian 8) ---
 
 // CreateInvoice mensimulasikan pembuatan invoice baru (mutasi data).
 func (s *DashboardCacheService) CreateInvoice(ctx context.Context, branchID int64, amount float64) error {
 	_ = amount
-	return s.InvalidateBranchDashboard(ctx, branchID)
+	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
 }
 
 // PayInvoice mensimulasikan pembayaran invoice.
 func (s *DashboardCacheService) PayInvoice(ctx context.Context, branchID int64, invoiceID int64) error {
 	_ = invoiceID
-	return s.InvalidateBranchDashboard(ctx, branchID)
+	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
 }
 
 // FinishService mensimulasikan penyelesaian servis oleh mekanik.
 func (s *DashboardCacheService) FinishService(ctx context.Context, branchID int64, mechanicID int64) error {
 	_ = mechanicID
-	return s.InvalidateBranchDashboard(ctx, branchID)
+	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
 }
 
 // UseSparepart mensimulasikan penggunaan sparepart.
 func (s *DashboardCacheService) UseSparepart(ctx context.Context, branchID int64, partID int64) error {
 	_ = partID
-	return s.InvalidateBranchDashboard(ctx, branchID)
+	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
 }
 
 // SaveCustomer mensimulasikan pembuatan/perubahan customer.
 func (s *DashboardCacheService) SaveCustomer(ctx context.Context, branchID int64, customerName string) error {
 	_ = customerName
-	return s.InvalidateBranchDashboard(ctx, branchID)
+	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
 }
 
 // CreateVehicle mensimulasikan pembuatan kendaraan baru.
 func (s *DashboardCacheService) CreateVehicle(ctx context.Context, branchID int64, plate string) error {
 	_ = plate
-	return s.InvalidateBranchDashboard(ctx, branchID)
+	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
 }
 
 func (s *DashboardCacheService) QueryCount() int64 {

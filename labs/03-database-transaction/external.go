@@ -31,15 +31,12 @@ type FailureMode struct {
 	FailExternalService bool
 	FailPublishAttempts int // Fail first N publish attempts
 	CrashAfterPublish   bool // Simulate crash after publish but before marking as published
-
-	// Consumer related
-	FailBusinessMutation bool // Simulate failure during business DB insert
-	FailProcessedInsert  bool // Simulate failure during processed_events insert
 }
 
 // ConsumerFailureMode provides deterministic controls for consumer testing
 type ConsumerFailureMode struct {
 	FailBusinessMutation bool // Fail after dedup insert, before business commitment
+	FailProcessedInsert  bool // Fail during processed_events insert (claim fails)
 	CrashAfterCommit     bool // Simulate crash after commit, before ACK
 }
 
@@ -632,10 +629,15 @@ type CommissionWorker struct {
 	db                          *sql.DB
 	observedBusinessExecutions int64 // observability only, NOT source of truth
 	mu                         sync.Mutex
+	failureMode                *ConsumerFailureMode
 }
 
 func NewCommissionWorker(db *sql.DB) *CommissionWorker {
 	return &CommissionWorker{db: db}
+}
+
+func NewCommissionWorkerWithFailure(db *sql.DB, mode *ConsumerFailureMode) *CommissionWorker {
+	return &CommissionWorker{db: db, failureMode: mode}
 }
 
 // HandleEvent processes an event idempotently using consumer_name + event_id.
@@ -664,6 +666,18 @@ func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string,
 		_ = tx.Rollback()
 		log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
 		return false, nil // Idempotent skip
+	}
+
+	// Inject failure during claim (processed_events insert) BEFORE business mutation
+	if c.failureMode != nil && c.failureMode.FailProcessedInsert {
+		_ = tx.Rollback()
+		return false, errors.New("simulated processed_events insert failure")
+	}
+
+	// Inject failure after dedup marker but before business mutation
+	if c.failureMode != nil && c.failureMode.FailBusinessMutation {
+		_ = tx.Rollback()
+		return false, errors.New("simulated business mutation failure")
 	}
 
 	// 2. Business operation - INSERT into commissions table (within same transaction)

@@ -9,14 +9,11 @@ import (
 
 // TestMultiTenancyKeyIsolation memastikan tenant/branch berbeda menghasilkan key berbeda.
 func TestMultiTenancyKeyIsolation(t *testing.T) {
-	loc, err := time.LoadLocation("UTC")
-	if err != nil {
-		loc = time.UTC
-	}
+	now := time.Now()
 
-	keyTenant1Branch1 := caching.NewTenantDashboardKey(1, 10, loc)
-	keyTenant1Branch2 := caching.NewTenantDashboardKey(1, 20, loc)
-	keyTenant2Branch1 := caching.NewTenantDashboardKey(2, 10, loc)
+	keyTenant1Branch1 := caching.DashboardCacheKey(1, 10, now)
+	keyTenant1Branch2 := caching.DashboardCacheKey(1, 20, now)
+	keyTenant2Branch1 := caching.DashboardCacheKey(2, 10, now)
 
 	t.Logf("Key T1B1: %s", keyTenant1Branch1)
 	t.Logf("Key T1B2: %s", keyTenant1Branch2)
@@ -46,13 +43,47 @@ func TestBusinessTimezone(t *testing.T) {
 	t.Logf("Business date in New York: %s", dateNY)
 
 	// They might be different depending on when the test runs, which proves timezone handling matters
-	keyJakarta := caching.NewTenantDashboardKey(1, 1, locJakarta)
-	keyNY := caching.NewTenantDashboardKey(1, 1, locNY)
+	keyJakarta := caching.NewDashboardKey(1).WithTenant(1).WithDate(now.In(locJakarta)).Build()
+	keyNY := caching.NewDashboardKey(1).WithTenant(1).WithDate(now.In(locNY)).Build()
 
 	t.Logf("Key Jakarta: %s", keyJakarta)
 	t.Logf("Key New York: %s", keyNY)
 
 	t.Log("Business timezone handling validated")
+}
+
+// TestTimezoneBoundary verifikasi bahwa time.Time yang diberikan ke key builder
+// tidak di-convert lagi ke UTC, sehingga timezone bisnis dihormati.
+func TestTimezoneBoundary(t *testing.T) {
+	locJakarta, _ := time.LoadLocation("Asia/Jakarta")
+
+	// 2026-08-30 00:30 Jakarta time = 2026-08-29 17:30 UTC
+	// Jakarta business date = 2026-08-30
+	ts := time.Date(2026, 8, 30, 0, 30, 0, 0, locJakarta)
+
+	// Key must reflect Jakarta business date, NOT UTC date
+	key := caching.NewDashboardKey(1).WithTenant(1).WithDate(ts).Build()
+
+	// Expected: date:2026-08-30 (NOT 2026-08-29)
+	if !contains(key, "date:2026-08-30") {
+		t.Errorf("business date should be 2026-08-30, key: %s", key)
+	}
+	t.Logf("Key with Jakarta timezone: %s", key)
+	t.Log("✓ Timezone boundary respected: Jakarta 00:30 = business date 2026-08-30")
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > 0 && containsStr(s, substr)))
+}
+
+func containsStr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // TestDashboardKeyBuilderVersatility demonstrates the unified key builder
@@ -65,8 +96,8 @@ func TestDashboardKeyBuilderVersatility(t *testing.T) {
 	multiKey := caching.NewDashboardKey(42).WithTenant(5).Build()
 	t.Logf("Multi-tenant key: %s", multiKey)
 
-	// With explicit date
-	specificDate := time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC)
+	// With explicit date (use a fixed past date to differentiate from today)
+	specificDate := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
 	dateKey := caching.NewDashboardKey(42).WithDate(specificDate).Build()
 	t.Logf("Specific date key: %s", dateKey)
 

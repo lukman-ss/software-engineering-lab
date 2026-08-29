@@ -120,28 +120,56 @@ func TestSingleFlightConcurrentRequests(t *testing.T) {
 
 // Test 5: Probabilistic early refresh mitigates stampede
 func TestCacheStampedeMitigation(t *testing.T) {
-	cache := caching.NewMockCache()
-	ctx := context.Background()
+	now := time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
+	ttl := 5 * time.Minute
+	probability := 0.5
 
-	key := "product:500"
-	product := caching.Product{ID: "500", Name: "Item", Price: 10.0}
-
-	data, err := json.Marshal(product)
-	if err != nil {
-		t.Fatalf("marshal failed: %v", err)
+	tests := []struct {
+		name        string
+		expiry      time.Time
+		randomValue float64
+		wantRefresh bool
+	}{
+		{
+			name:        "Fresh cache (80% TTL not passed)",
+			expiry:      now.Add(4 * time.Minute), // Only 1 min passed, 4 min remaining (> 20% of 5m = 1m)
+			randomValue: 0.1,                      // Even with low random value
+			wantRefresh: false,                    // Shouldn't refresh
+		},
+		{
+			name:        "Near expiry + Random below threshold",
+			expiry:      now.Add(30 * time.Second), // 30s remaining (<= 20% of 5m = 1m)
+			randomValue: 0.1,                       // Random < 0.5
+			wantRefresh: true,                      // Should refresh!
+		},
+		{
+			name:        "Near expiry + Random above threshold",
+			expiry:      now.Add(30 * time.Second), // 30s remaining
+			randomValue: 0.9,                       // Random >= 0.5
+			wantRefresh: false,                     // Shouldn't refresh
+		},
+		{
+			name:        "Already expired",
+			expiry:      now.Add(-10 * time.Second), // Expired 10s ago
+			randomValue: 0.1,                        // Even with low random
+			wantRefresh: false,                      // Shouldn't refresh (handled as normal miss)
+		},
 	}
-	cache.Set(ctx, key, string(data), 5*time.Minute)
 
-	// Simulate early refresh check
-	count := 0
-	for i := 0; i < 100; i++ {
-		if caching.ShouldRefreshEarly(ctx, cache, key) {
-			count++
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRandom := func() float64 {
+				return tt.randomValue
+			}
+
+			got := caching.ShouldRefreshEarly(now, tt.expiry, ttl, probability, mockRandom)
+			if got != tt.wantRefresh {
+				t.Errorf("ShouldRefreshEarly() = %v, want %v", got, tt.wantRefresh)
+			}
+		})
 	}
 
-	t.Logf("Early refresh triggers: %d/100", count)
-	t.Log("Early refresh strategy validated")
+	t.Log("Deterministic early refresh strategy validated")
 }
 
 // Test 6: Distributed lock mutual exclusion

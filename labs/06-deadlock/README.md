@@ -12,3 +12,10 @@ Always acquire locks in a globally consistent order (e.g., ascending order of ac
 - **Detect**: Check error codes (Postgres `40P01` Deadlock Detected, `40001` Serialization Failure).
 - **Retry**: Use bounded retries with exponential backoff and jitter.
 - **Do Not Retry**: Permanent errors like insufficient funds or syntax errors.
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 05 — Race Condition](../05-race-condition/)
+- **Next**: [Lab 07 — Outbox Pattern](../07-outbox-pattern/)

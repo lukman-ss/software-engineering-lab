@@ -5,7 +5,6 @@ package caching
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 )
 
@@ -39,28 +38,35 @@ func CacheKey(entity, id string, version int) string {
 	return fmt.Sprintf("%s:%s:v%d", entity, id, version)
 }
 
-// ShouldRefreshEarly menggunakan probabilitas untuk mencegah stampede.
-// Jika data sudah 80% TTL berlalu, random 50% request akan refresh.
-func ShouldRefreshEarly(ctx context.Context, cache CacheInterface, key string) bool {
-	data, expiry, err := cache.GetWithExpiry(ctx, key)
-	if err != nil || data == "" {
+// ShouldRefreshEarly analyzes whether a cached item should be refreshed early to prevent stampede.
+// It returns whether refresh should happen, the remaining TTL, and whether the entry is expired.
+//
+// The function uses probabilistic early refresh when remaining TTL falls within the refresh window.
+// Refresh window is 20% of the original TTL (configurable via probability).
+func ShouldRefreshEarly(now time.Time, expiry time.Time, originalTTL time.Duration, probability float64, randomFloat func() float64) bool {
+	if expiry.IsZero() {
 		return false
 	}
 
-	ttl := 5 * time.Minute
-	age := time.Since(expiry)
+	rem := expiry.Sub(now)
+	if rem < 0 {
+		// Already expired - handled as cache miss elsewhere
+		return false
+	}
 
-	// Jika sudah 80% TTL berlalu, refresh randomly
-	if age > ttl*8/10 {
-		return rand.Float64() < 0.5
+	// Refresh window is 20% of TTL
+	refreshWindow := originalTTL - (originalTTL * 80 / 100) // = 20% of TTL
+
+	if rem <= refreshWindow {
+		return randomFloat() < probability
 	}
 	return false
 }
 
-// DashboardCacheKey membuat cache key untuk dashboard statistik.
-// Format: cmms:dashboard:v1:branch:{branchID}:date:{YYYY-MM-DD}
-func DashboardCacheKey(branchID int64) string {
-	return fmt.Sprintf("cmms:dashboard:v1:branch:%d:date:%s", branchID, Today())
+// DashboardCacheKey creates canonical cache key for dashboard statistics.
+// Format: cmms:dashboard:v1:tenant:{tenantID}:branch:{branchID}:date:{YYYY-MM-DD}
+func DashboardCacheKey(tenantID, branchID int64, businessDate time.Time) string {
+	return NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 }
 
 // extractID mengambil segment ID dari cache key format "entity:id[:...]".

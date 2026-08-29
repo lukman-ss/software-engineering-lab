@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -21,7 +22,7 @@ func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
 
 // CounterRepository counts calls for stampede demonstration.
 type CounterRepository struct {
-	callCount int64
+	callCount atomic.Int64
 }
 
 func NewCounterRepository() *CounterRepository {
@@ -29,12 +30,12 @@ func NewCounterRepository() *CounterRepository {
 }
 
 func (r *CounterRepository) GetDashboard(ctx context.Context, branchID int64, businessDate time.Time) (Dashboard, error) {
-	r.callCount++
-	return Dashboard{InvoiceCountToday: int(r.callCount)}, nil
+	newCount := r.callCount.Add(1)
+	return Dashboard{InvoiceCountToday: int(newCount)}, nil
 }
 
 func (r *CounterRepository) CallCount() int64 {
-	return r.callCount
+	return r.callCount.Load()
 }
 
 // --- VERSI BROKEN (STAMPEDE) ---

@@ -479,7 +479,7 @@ Permission sering di-cache untuk mengurangi query ke DB authorization. Namun ini
 ## Navigasi
 
 - **Previous**: [Lab 03 — Distributed Transaction](../03-database-transaction/)
-- **Next**: [Lab 05 — Pessimistic Locking](../05-pessimistic-locking/)
+- **Next**: [Lab 05 — Race Condition](../05-race-condition/)
 - **All Labs**: [](../)
 
 ---

@@ -32,7 +32,8 @@ Setiap lab berfokus pada **satu failure mode spesifik** dan **satu mental model 
 
 Batasan kepemilikan konsep antar lab:
 - **Lab 01 Idempotency** → berfokus pada *repeated logical operation* & *retry safety* (tidak mengajarkan locking mendalam).
-- **Lab 11 Race Condition** → berfokus pada *concurrent access*.
+- **Lab 05 Race Condition** → berfokus pada memahami bagaimana concurrent access dapat merusak business invariant.
+- **Lab 11 Pessimistic Locking** → menjaga critical read-modify-write dengan database locking.
 - **Lab 03 Database Transaction** → berfokus pada *atomic multi-step database changes*.
 - **Lab 04 Caching** → berfokus pada *cache stampede, stale reads, and consistency*.
 - **Lab 12 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
@@ -120,13 +121,13 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | 02 | Database index query optimization |
 | 03 | Partial failures leaving inconsistent state |
 | 04 | Cache stampede and stale reads |
-| 05 | Lock contention causing delays |
+| 05 | Race conditions corrupting inventory counts |
 | 06 | Deadlocks hanging the system |
 | 07 | Events lost when database fails |
 | 08 | Retry storms amplifying failures |
 | 09 | Cascading failures from downstream |
 | 10 | Unbounded load causing outages |
-| 11 | Race conditions corrupting inventory counts |
+| 11 | Lock contention causing delays |
 | 12 | Optimistic locking for concurrent updates |
 
 ## How to Run
@@ -191,13 +192,13 @@ make lint          # go vet
 - [x] 02 Database Index
 - [ ] 03 Database Transaction
 - [x] 04 Caching
-- [ ] 05 Pessimistic Locking
+- [x] 05 Race Condition
 - [ ] 06 Deadlock
 - [ ] 07 Outbox Pattern
 - [ ] 08 Retry
 - [ ] 09 Circuit Breaker
 - [ ] 10 Rate Limiting
-- [x] 11 Race Condition
+- [ ] 11 Pessimistic Locking
 - [ ] 12 Optimistic Locking
 
 ### Phase 2: Extended Topics

@@ -90,7 +90,7 @@ func TestCacheExpiryCausesRebuild(t *testing.T) {
 	initialRebuilds := metrics.Rebuilds()
 
 	// Force miss by deleting
-	_ = cache.Delete(ctx, caching.DashboardCacheKey(1))
+	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, 1, time.Now().UTC()))
 
 	// Next request rebuilds
 	_, _ = svc.GetDashboard(ctx, 1)
@@ -109,7 +109,8 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(1)
-	key := caching.DashboardCacheKey(branchID)
+	today := time.Now().UTC()
+	key := caching.DashboardCacheKey(1, branchID, today)
 
 	// Step 1: Populate cache with initial data
 	repo.CallCount = 0
@@ -123,7 +124,7 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	}
 
 	// Step 2: Invalidate
-	_ = svc.InvalidateBranchDashboard(ctx, branchID)
+	_ = svc.InvalidateCurrentDashboard(ctx, 1, branchID)
 
 	// Step 3: Next request should query repo and update cache
 	repo.CallCount = 0
@@ -141,12 +142,12 @@ func TestDifferentBranchDoesNotShareCache(t *testing.T) {
 	ctx := context.Background()
 
 	// Set data for branch 1
-	key1 := caching.DashboardCacheKey(1)
+	key1 := caching.DashboardCacheKey(1, 1, time.Now().UTC())
 	data1 := `{"branch_id":1,"invoice_count":50}`
 	cache.Set(ctx, key1, data1, time.Minute)
 
 	// Set data for branch 2
-	key2 := caching.DashboardCacheKey(2)
+	key2 := caching.DashboardCacheKey(1, 2, time.Now().UTC())
 	data2 := `{"branch_id":2,"invoice_count":75}`
 	cache.Set(ctx, key2, data2, time.Minute)
 
@@ -167,9 +168,9 @@ func TestDifferentBranchDoesNotShareCache(t *testing.T) {
 
 // TestDifferentTenantDoesNotShareCache verifies: different tenant isolation
 func TestDifferentTenantDoesNotShareCache(t *testing.T) {
-	loc := time.UTC
-	keyTenantA := caching.NewTenantDashboardKey(1, 1, loc)
-	keyTenantB := caching.NewTenantDashboardKey(2, 1, loc)
+	now := time.Now()
+	keyTenantA := caching.DashboardCacheKey(1, 1, now)
+	keyTenantB := caching.DashboardCacheKey(2, 1, now)
 
 	if keyTenantA == keyTenantB {
 		t.Error("different tenants should have different cache keys")
@@ -236,7 +237,8 @@ func TestCorruptCacheFallsBackAppropriately(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(1)
-	key := caching.DashboardCacheKey(branchID)
+	today := time.Now().UTC()
+	key := caching.DashboardCacheKey(1, branchID, today)
 
 	// Set corrupt JSON in the exact key that the service will read
 	corruptData := `{"id":"123"` // incomplete JSON - corrupt
@@ -372,4 +374,92 @@ func TestCacheHitRatioCalculatesCorrectly(t *testing.T) {
 
 	t.Logf("Cache hit ratio: %.2f%%", hitRatio)
 	t.Log("✓ Hit ratio calculates correctly")
+}
+
+// TestHistoricalDateInvariant verifies that historical date requests use exact dates
+// throughout the whole pipeline (key, repo, result)
+func TestHistoricalDateInvariant(t *testing.T) {
+	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+	ctx := context.Background()
+
+	// Given a specific historical business date
+	historicalDate := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	tenantID, branchID := int64(1), int64(42)
+
+	// When dashboard is requested
+	result, err := svc.GetDashboardWithTenant(ctx, tenantID, branchID, historicalDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Then the result date must match the requested historical date
+	expectedDateStr := "2026-08-01"
+	if result.Date != expectedDateStr {
+		t.Errorf("Result date is %s, expected %s", result.Date, expectedDateStr)
+	}
+
+	// And cache key must have exactly that date
+	expectedKey := caching.DashboardCacheKey(tenantID, branchID, historicalDate)
+	cached, err := cache.Get(ctx, expectedKey)
+	if err != nil || cached == "" {
+		t.Errorf("Cache missing for historical date key: %s", expectedKey)
+	}
+
+	t.Log("✓ Historical date invariant validated")
+}
+
+// TestMultiTenantBehavioralIsolation verifies exact behavior across tenants
+func TestMultiTenantBehavioralIsolation(t *testing.T) {
+	cache := caching.NewMockCacheWithStats()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+	ctx := context.Background()
+
+	date := time.Now()
+	branchID := int64(10)
+
+	// Tenant 1 request
+	res1, _ := svc.GetDashboardWithTenant(ctx, 1, branchID, date)
+	// Tenant 2 request
+	res2, _ := svc.GetDashboardWithTenant(ctx, 2, branchID, date)
+
+	// In FakeDashboardRepository, InvoiceCountToday = 42 + int(tenantID%10)
+	expectedT1 := 42 + 1 // 43
+	expectedT2 := 42 + 2 // 44
+
+	if res1.InvoiceCountToday != expectedT1 {
+		t.Errorf("Tenant 1 expected %d invoices, got %d", expectedT1, res1.InvoiceCountToday)
+	}
+
+	if res2.InvoiceCountToday != expectedT2 {
+		t.Errorf("Tenant 2 expected %d invoices, got %d", expectedT2, res2.InvoiceCountToday)
+	}
+
+	// 2 distinct repository calls
+	if repo.CallCount != 2 {
+		t.Errorf("Expected 2 repo calls, got %d", repo.CallCount)
+	}
+
+	// Subsequent requests should hit cache, retaining correct tenant values
+	res1Cached, _ := svc.GetDashboardWithTenant(ctx, 1, branchID, date)
+	res2Cached, _ := svc.GetDashboardWithTenant(ctx, 2, branchID, date)
+
+	if res1Cached.InvoiceCountToday != expectedT1 {
+		t.Errorf("Tenant 1 cached expected %d, got %d", expectedT1, res1Cached.InvoiceCountToday)
+	}
+
+	if res2Cached.InvoiceCountToday != expectedT2 {
+		t.Errorf("Tenant 2 cached expected %d, got %d", expectedT2, res2Cached.InvoiceCountToday)
+	}
+
+	// Still 2 repository calls (cache hit)
+	if repo.CallCount != 2 {
+		t.Errorf("Expected repo calls to remain 2, got %d", repo.CallCount)
+	}
+
+	t.Log("✓ Multi-tenant behavioral isolation validated")
 }

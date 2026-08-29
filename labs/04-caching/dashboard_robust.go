@@ -48,13 +48,13 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 			// Cache down/network error - fallback
 			s.metrics.IncError()
 		}
-		return s.fetchAndPopulate(ctx, branchID, key)
+		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key)
 	}
 
 	if cached == "" {
 		// Explicit miss
 		s.metrics.IncMiss()
-		return s.fetchAndPopulate(ctx, branchID, key)
+		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key)
 	}
 
 	// 2. Cache hit - check for corruption
@@ -65,7 +65,7 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 		if delErr := s.cache.Delete(ctx, key); delErr != nil {
 			fmt.Printf("warn: failed to delete corrupt cache key %s: %v\n", key, delErr)
 		}
-		return s.fetchAndPopulate(ctx, branchID, key)
+		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key)
 	}
 
 	// Valid cache hit
@@ -73,11 +73,11 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 	return d, nil
 }
 
-func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, branchID int64, key string) (Dashboard, error) {
+func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID, branchID int64, businessDate time.Time, key string) (Dashboard, error) {
 	s.metrics.IncRebuild()
 
-	// Query repository for real data
-	d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+	// Query repository for real data - use tenant-aware method for proper isolation
+	d, err := s.repo.GetDashboardWithTenant(ctx, tenantID, branchID, businessDate)
 	if err != nil {
 		return Dashboard{}, fmt.Errorf("repo get: %w", err)
 	}
@@ -99,14 +99,9 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, branchID 
 	return d, nil
 }
 
-// InvalidateBranchDashboard invalidates cache for a branch after data mutation.
-func (s *RobustDashboardService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
-	return s.InvalidateBranchDashboardForTenant(ctx, 1, branchID)
-}
-
-// InvalidateBranchDashboardForTenant invalidates cache with tenant scoping.
-func (s *RobustDashboardService) InvalidateBranchDashboardForTenant(ctx context.Context, tenantID, branchID int64) error {
-	key := NewDashboardKey(branchID).WithTenant(tenantID).Build()
+// InvalidateDashboard invalidates cache for a branch and specific business date.
+func (s *RobustDashboardService) InvalidateDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
+	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		// Log errors other than cache miss, but don't fail the operation
@@ -115,6 +110,11 @@ func (s *RobustDashboardService) InvalidateBranchDashboardForTenant(ctx context.
 		return fmt.Errorf("invalidate cache: %w", err)
 	}
 	return nil
+}
+
+// InvalidateCurrentDashboard invalidates cache for today using the injected clock.
+func (s *RobustDashboardService) InvalidateCurrentDashboard(ctx context.Context, tenantID, branchID int64) error {
+	return s.InvalidateDashboard(ctx, tenantID, branchID, defaultClock.Now().UTC())
 }
 
 // QueryCount returns total database queries made

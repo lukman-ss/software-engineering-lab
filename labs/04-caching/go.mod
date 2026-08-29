@@ -1,4 +1,4 @@
-module github.com/lukman/software-engineer-lab/labs/04-caching
+module github.com/lukman-ss/software-engineering-lab/labs/04-caching
 
 go 1.22
 
