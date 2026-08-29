@@ -1,6 +1,6 @@
 -- Lab 02: Database Index Foundation
 -- Experiment: ORDER BY + LIMIT Optimization
--- Critical production pattern for dashboards and paginated results
+-- Critical production pattern for dashboards and pagination
 
 -- PostgreSQL 16 compatibility note:
 -- This repository targets PostgreSQL 16. PostgreSQL 18 introduced B-tree skip-scan
@@ -12,13 +12,22 @@
 -- ============================================
 
 -- Create index that can satisfy ORDER BY
+DROP INDEX IF EXISTS idx_service_branch_status_date_desc;
 CREATE INDEX idx_service_branch_status_date_desc
     ON service(branch_id, status, service_date DESC);
+ANALYZE service;
 
 -- ============================================
 -- QUERY: Dashboard-style - latest 20 finished services for branch 2
 -- ============================================
 
+-- With the appropriate index in place:
+-- PLAN ANALYSIS GUIDANCE:
+-- Look for: "Index Scan" or "Index Only Scan"
+-- Check: Was Sort present or absent?
+-- Look for: "Index Cond" columns = predicates the index resolved directly
+-- Look for: "Filter" columns = predicates still requiring heap checks
+-- Record: Rows Examined, shared hit/read, actual rows returned
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
@@ -26,29 +35,16 @@ WHERE branch_id = 2
   AND status = 'FINISHED'
 ORDER BY service_date DESC
 LIMIT 20;
-
--- Record your observations:
--- - Index Scan or Seq Scan?
--- - Was Sort present or absent?
--- - Rows Examined: _____
--- - Actual Rows Returned: 20
--- - Execution Time: _____ ms
--- - Buffers: read _____, hit _____
-
--- Key insight: With proper index, EXPLAIN shows:
--- - Index Scan (not Seq Scan)
--- - Limit pushed down - stops after 20 rows
--- - No explicit Sort node
--- - Much faster than Seq Scan + Sort + LIMIT
 
 -- ============================================
 -- COMPARE: Without appropriate index
 -- ============================================
 
 -- Drop the index to simulate missing index
-DROP INDEX idx_service_branch_status_date_desc;
+DROP INDEX IF EXISTS idx_service_branch_status_date_desc;
+ANALYZE service;
 
--- Run same query
+-- Run same query without the index
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
@@ -57,10 +53,15 @@ WHERE branch_id = 2
 ORDER BY service_date DESC
 LIMIT 20;
 
--- Record: How many rows were scanned? _____
--- Records showed: _____
--- Sort was: Present/Absent
--- Execution Time: _____ ms
+-- Record:
+-- - Plan type (Seq Scan vs Index Scan)
+-- - Sort present? Yes/No
+-- - Rows examined: _____
+-- - Shared buffers: read _____, hit _____
+-- - Execution time: _____ ms
 
--- This demonstrates the performance difference:
--- With index: ~hundreds of rows scanned
+-- ============================================
+-- CLEANUP
+-- ============================================
+
+DROP INDEX IF EXISTS idx_service_branch_status_date_desc;

@@ -64,7 +64,7 @@ migrate-down:
 
 lab-02-setup:
 	@echo "=== Setting up Lab 02: Database Index ==="
-	@$(PSQL) -f labs/02-database-index/cleanup.sql || true
+	@$(PSQL) -f labs/02-database-index/cleanup.sql
 	@$(PSQL) -f labs/02-database-index/schema.sql
 	@$(PSQL) -f labs/02-database-index/seed.sql
 	@echo "=== Lab 02 Setup Complete ==="

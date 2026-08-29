@@ -143,7 +143,7 @@ These are **NOT** the same thing:
 
 **Key insight**: Low cardinality does NOT mean index is useless.
 - `status = 'FINISHED'` (70% match fraction) = not very selective = Seq Scan may win
-- `status = 'PENDING_REFUND'` (0.1% match fraction) = highly selective = Index wins!
+- `status = 'PENDING_REFUND'` (0.1% match fraction) = highly selective = an index-based plan is expected/likely
 
 Check PostgreSQL statistics:
 ```sql
@@ -242,7 +242,7 @@ Test `status = 'FINISHED'` (70% match) vs `status = 'PENDING_REFUND'` (0.1% matc
 See same index produce different plans based on predicate selectivity.
 
 ### Experiment 6: ORDER BY + LIMIT (queries/06-order-by-limit.sql)
-Dashboard query pattern. See how proper index eliminates Sort and limits rows examined.
+Dashboard query pattern. See how a compatible ordered index can allow PostgreSQL to avoid an explicit Sort and limit rows examined.
 
 ### Experiment 7: Covering Index (queries/07-covering-index.sql)
 Test `INCLUDE` columns for index-only scans. Understand visibility map requirements.
@@ -272,10 +272,10 @@ Inspect `pg_stats` (`n_distinct`, `most_common_vals`, `histogram_bounds`). See h
 Destroy the misconception that Seq Scan = bad. See why reading 70% of the table sequentially beats index traversal + random heap access.
 
 ### Experiment 16: Production-Safe Index Creation (queries/16-production-safe-index.sql)
-Learn how `CREATE INDEX CONCURRENTLY` avoids locking production tables during long builds.
+Learn how `CREATE INDEX CONCURRENTLY` allows ordinary reads and writes to continue during most of the build, while still taking locks and potentially waiting on transactions/snapshots.
 
-### Experiment 17: Benchmark Harness (queries/17-benchmark.sql)
-Repeatable comparison of baseline/no-index, single-column indexes, wrong composite order, recommended composite, and covering index. Runs each query 5× and captures Min/Max/Avg.
+### Experiment 17: Plan Comparison Harness (queries/17-benchmark.sql)
+A controlled execution-plan comparison across four index strategies: no secondary index (baseline), three single-column indexes, a wrong composite order, and the recommended composite index. Run each scenario against the same canonical 500,000-row dataset and record the observed plan, buffers, rows, Sort presence, planning time, and execution time. This harness inspects one EXPLAIN (ANALYZE, BUFFERS) per scenario — it is a plan comparison, not a repeated statistical benchmark.
 
 ---
 

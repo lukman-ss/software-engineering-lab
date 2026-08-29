@@ -1,38 +1,56 @@
 -- Lab 02: Database Index Foundation
--- Experiment 17: Index Strategy Benchmark Harness
+-- Experiment 17: Plan Comparison Harness
 --
--- IMPORTANT: This document explains methodology as much as produces executable SQL.
--- Client-visible timing (printing thousands of rows to terminal) is NOT a reliable
--- measure of server query performance. Use EXPLAIN (ANALYZE, BUFFERS) for comparison.
+-- PURPOSE: Compare execution plans across four index strategies against the
+-- same canonical query and dataset. Record plan type, buffers, rows, Sort
+-- presence, planning time, and execution time for each scenario.
+--
+-- This is a plan comparison, not a repeated statistical benchmark.
+-- One EXPLAIN (ANALYZE, BUFFERS) per scenario is run.
 
 -- ============================================
--- WORKFLOW:
--- 1. Use EXPLAIN (ANALYZE, BUFFERS) to inspect execution plans
---    - Shows row/buffer counts without terminal output overhead
--- 2. Record observations in the comparison table at the end
--- 3. Focus on relative performance between strategies, not absolute timing
+-- INSTRUMENTATION NOTE
 -- ============================================
+-- EXPLAIN ANALYZE executes the query on the PostgreSQL server and reports
+-- planning/execution instrumentation (plan nodes, rows, buffers, timings).
+-- It does not measure terminal rendering of the result set in the same way
+-- as running SELECT and printing all rows to a client.
+-- The instrumentation itself adds overhead — do not treat execution time
+-- figures as identical to production query latency.
+--
+-- TIMING OFF disables per-node timing instrumentation but still executes
+-- the query and reports planning time and total execution time.
+-- Use it when per-node overhead would distort measurements.
+--
+-- WARM-CACHE CAUTION:
+-- Once PostgreSQL has read pages into shared_buffers, re-runs are faster.
+-- We keep the cache warm here for reproducible relative comparisons.
+-- Cold-cache testing requires pg_prewarm or a full server restart — not
+-- done here as results are environment-dependent.
 
 -- ============================================
--- LIMITATIONS NOTE:
+-- HOW TO READ THE PLAN NODES
 -- ============================================
--- WARM-CACHE: Once PostgreSQL has read pages into RAM, queries are faster.
--- We intentionally keep the cache warm for reproducible relative comparisons.
+-- Index Scan:
+--   Navigates the B-tree index, then fetches each matching heap tuple.
 --
--- Other factors affecting measurements:
--- - OS page cache: shared read may be satisfied from kernel cache
--- - Background load: concurrent activity affects timing
--- - Checkpoints: can cause I/O spikes
--- - WAL activity: index maintenance generates WAL
--- - Hardware: CPU, RAM, disk speed vary between systems
--- - PostgreSQL configuration: shared_buffers, work_mem, etc.
+-- Bitmap Heap Scan:
+--   Fetches heap pages/tuples using a bitmap built in a prior step.
+--   The bitmap may come from a single Bitmap Index Scan, BitmapAnd
+--   (intersection of multiple bitmaps), or BitmapOr (union).
+--   It is not exclusively a "multiple index" operation.
 --
--- Cold-cache testing requires pg_prewarm or full server restart.
--- Do NOT auto-flush OS caches - results are environment-dependent.
+-- Seq Scan:
+--   Reads the table sequentially. Often the correct choice when a large
+--   fraction of rows match — not an indicator of a missing index.
 --
--- EXPLAIN (ANALYZE) shows END-TO-END/client timing including network overhead.
--- For pure server timing, consider using EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
--- and measuring system clock time around the query.
+-- Index Only Scan:
+--   All needed columns are in the index; heap access is minimized.
+--   Requires the visibility map to confirm row visibility (check Heap Fetches).
+--
+-- Sort:
+--   Explicit sort step. Absent when the chosen index already supplies the
+--   ORDER BY order (forward or backward scan of the B-tree).
 
 -- ============================================
 -- SETUP: Ensure clean index state for fair comparison
@@ -51,8 +69,8 @@ ANALYZE service;
 -- SCENARIO A: No Secondary Index (Baseline)
 -- ============================================
 
--- Compare execution plans
--- Full table scan with Sort node
+-- Expected/likely: Seq Scan + Sort.
+-- Without an index the planner reads the whole table and then sorts.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
@@ -61,19 +79,23 @@ WHERE branch_id = 2
   AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
 ORDER BY service_date DESC;
 
--- Record: Plan = Seq Scan + Sort, Buffers = read _____ hit _____
+-- Record actual observed plan: _____
+-- Buffers: shared read _____ / shared hit _____
 
 -- ============================================
 -- SCENARIO B: Three Single-Column Indexes
 -- ============================================
 
-CREATE INDEX idx_bench_branch_id ON service(branch_id);
-CREATE INDEX idx_bench_status ON service(status);
+CREATE INDEX idx_bench_branch_id    ON service(branch_id);
+CREATE INDEX idx_bench_status       ON service(status);
 CREATE INDEX idx_bench_service_date ON service(service_date);
 
 ANALYZE service;
 
--- Planner may use Bitmap Heap Scan + BitmapAnd to combine indexes
+-- Expected/likely: Bitmap Heap Scan driven by one or more Bitmap Index Scans.
+-- The planner may combine bitmaps from the three indexes via BitmapAnd, or
+-- may choose just the most selective single index.
+-- Actual plan depends on cost estimates from current statistics.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
@@ -82,7 +104,8 @@ WHERE branch_id = 2
   AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
 ORDER BY service_date DESC;
 
--- Record: Plan may be Bitmap Heap Scan, Buffers = read _____ hit _____
+-- Record actual observed plan: _____
+-- Buffers: shared read _____ / shared hit _____
 
 DROP INDEX idx_bench_branch_id;
 DROP INDEX idx_bench_status;
@@ -90,7 +113,7 @@ DROP INDEX idx_bench_service_date;
 DROP INDEX IF EXISTS idx_service_status;
 
 -- ============================================
--- SCENARIO C: Wrong Composite Index Order
+-- SCENARIO C: Composite Index — range column first (suboptimal order)
 -- ============================================
 
 CREATE INDEX idx_bench_composite_wrong
@@ -98,9 +121,10 @@ CREATE INDEX idx_bench_composite_wrong
 
 ANALYZE service;
 
--- Date is leftmost; equality predicates on branch_id/status cannot be used efficiently
--- PostgreSQL can still use the index for the date range, but must scan
--- a larger portion since leading column doesn't constrain equality
+-- Expected/likely: the index can bound the service_date range tightly
+-- (leading column), but branch_id and status become Filter predicates
+-- rather than Index Cond, so more rows are examined before filtering.
+-- A Sort node may still be present depending on the planner's choice.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
@@ -109,7 +133,9 @@ WHERE branch_id = 2
   AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
 ORDER BY service_date DESC;
 
--- Record: May still use index for date range, but inefficient, Buffers = read _____ hit _____
+-- Record actual observed plan: _____
+-- Buffers: shared read _____ / shared hit _____
+-- Index Cond columns: _____   Filter columns: _____
 
 DROP INDEX idx_bench_composite_wrong;
 
@@ -122,8 +148,11 @@ CREATE INDEX idx_bench_composite_correct
 
 ANALYZE service;
 
--- Equality columns first (branch_id, status), then range column (service_date)
--- This allows tight B-tree range bounding from left to right
+-- Expected/likely: the recommended composite index can tightly bound the
+-- B-tree range on all three columns (branch_id equality → status equality
+-- → service_date range) and may also supply the ORDER BY order, eliminating
+-- an explicit Sort.  The planner may still choose a different plan if cost
+-- estimates favour it.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
@@ -132,41 +161,37 @@ WHERE branch_id = 2
   AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
 ORDER BY service_date DESC;
 
--- Record: Index Scan, Sort eliminated, Buffers = read _____ hit _____
+-- Record actual observed plan: _____
+-- Buffers: shared read _____ / shared hit _____
+-- Sort node present? _____
 
 DROP INDEX idx_bench_composite_correct;
 
 -- ============================================
--- COMPARISON TABLE (fill in your observations)
+-- COMPARISON TABLE (fill in after running all scenarios)
 -- ============================================
 --
--- | Scenario                | Plan                | Buffers (R/H) |
--- |-------------------------|---------------------|-------------|
--- | A: No index             | Seq Scan + Sort     | _____/_____ |
--- | B: Single-column x3     | Bitmap Heap Scan    | _____/_____ |
--- | C: Wrong composite      | Index + Sort        | _____/_____ |
--- | D: Recommended composite| Index Scan (no Sort)| _____/_____ |
+-- | Scenario                | Expected/likely plan     | Actual observed plan | Buffers (R/H) | Sort? |
+-- |-------------------------|--------------------------|----------------------|---------------|-------|
+-- | A: No index             | Seq Scan + Sort          | _____                | _____/_____   | _     |
+-- | B: Single-column x3     | Bitmap Heap Scan         | _____                | _____/_____   | _     |
+-- | C: Wrong composite      | Index Scan + Filter/Sort | _____                | _____/_____   | _     |
+-- | D: Recommended composite| Index Scan (tight range) | _____                | _____/_____   | _     |
 --
--- KEY OBSERVATIONS:
--- 1. Seq Scan + Sort is slow for selective queries
--- 2. Bitmap Heap Scan combines multiple indexes efficiently
--- 3. Composite index eliminates both index access and Sort
--- 4. Covering (INCLUDE) indexes belong in separate experiment
+-- The "expected/likely plan" column is based on cost reasoning and this
+-- dataset's distribution.  The planner's actual choice may differ.
+-- Always trust the actual observed plan over the prediction.
+--
+-- KEY THINGS TO COMPARE:
+-- 1. Shared buffers read: fewer = better index range bounding
+-- 2. "Rows Removed by Filter" in Index Scan nodes: non-zero = predicate
+--    was not an Index Cond (index did not fully bound that predicate)
+-- 3. Sort node: present = index did not supply ORDER BY order
+-- 4. Actual rows vs estimated rows: large gap = stale statistics
 
 -- ============================================
--- NOTES ON PLAN NODES:
+-- NOTE: Covering indexes
 -- ============================================
--- - Index Scan: Single index used for finding rows
--- - Bitmap Heap Scan: Multiple indexes combined into bitmap, then heap fetched
--- - Seq Scan: Sequential table read (often correct for high-match queries)
--- - Index Only Scan: All needed columns from index, no heap access
---   (requires visibility map conditions; check "Heap Fetches" in output)
--- - Sort: Explicit sort operation; eliminated when ORDER BY matches index
-
--- ============================================
--- NOTE: Covering indices comparison
--- ============================================
--- Covering indexes are investigated in 07-covering-index.sql.
--- They enable Index Only Scan but require different query patterns.
--- Comparing SELECT * benchmark against covering-index queries on
--- different columns would not be apples-to-apples.
+-- Covering indexes (INCLUDE columns → Index Only Scan) are covered
+-- in 07-covering-index.sql.  Mixing SELECT * benchmark results with
+-- covering-index queries on different column sets is not apples-to-apples.

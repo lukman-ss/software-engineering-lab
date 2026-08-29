@@ -19,7 +19,8 @@ DROP INDEX IF EXISTS idx_service_date_single;
 DROP INDEX IF EXISTS idx_service_customer;
 TRUNCATE TABLE service RESTART IDENTITY;
 
--- Scenario 1: No secondary indexes (table + primary key only)
+-- Scenario 1: No experiment/query-supporting secondary indexes
+-- (Constraint-backed PK/UNIQUE indexes remain)
 -- Measure INSERT time for 1000 rows without indexes
 \timing on
 INSERT INTO service (branch_id, customer_id, mechanic_id, status, service_date, invoice_no, created_at)
