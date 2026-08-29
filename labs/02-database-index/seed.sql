@@ -1,61 +1,123 @@
 -- Lab 02: Database Index Foundation
--- Realistic ~500,000 row dataset using generate_series
--- Uses VALID PostgreSQL 16 syntax with simple modulo-based distribution
+-- Exactly 500,000 rows using generate_series
+-- Deterministic modulo-based distribution (exact percentages, no random())
 
 -- Clear any existing data
 TRUNCATE TABLE service RESTART IDENTITY CASCADE;
 
--- Insert ~500,000 rows with realistic distributions
--- Using modulo arithmetic for clean percentage-based distribution
+-- Insert exactly 500,000 rows
+-- Deterministic distribution using mod(gs, 10000):
+--   gs 1..500000, mod(gs, 10000) repeats every 10,000 rows
+--   50 repetitions × 10,000 = 500,000 rows
+--
+-- Status distribution (per 10,000-row cycle):
+--   mod 0-6999    = FINISHED       70.00%  → 350,000 total
+--   mod 7000-8999 = CANCELLED      20.00%  → 100,000 total
+--   mod 9000-9499 = IN_PROGRESS     5.00%   →  25,000 total
+--   mod 9500-9998 = WAITING         4.90%   →  24,500 total
+--   mod 9999      = PENDING_REFUND  0.10%   →     500 total
+--
+-- Branch distribution (per 10,000-row cycle):
+--   mod 0-1499   = branch 1   15.00%
+--   mod 1500-3999 = branch 2  25.00%
+--   mod 4000-5999 = branch 3  20.00%
+--   mod 6000-7499 = branch 4  15.00%
+--   mod 7500-8999 = branch 5  15.00%
+--   mod 9000-9999 = branch 6  10.00%
+--
+-- created_at is derived from service_date: same base date + gs-derived hours
+-- service_date spans 2025-01-01 to 2026-12-31 (730 days)
+
 INSERT INTO service (branch_id, customer_id, mechanic_id, status, service_date, invoice_no, created_at)
 SELECT
-    -- branch_id distribution (approximate percentages as documented)
-    -- Branch 1: ~15%, Branch 2: ~25%, Branch 3: ~20%, Branch 4: ~15%, Branch 5: ~15%, Branch 6: ~10%
     CASE
-        WHEN (gs % 20) < 3   THEN 1  -- ~15%
-        WHEN (gs % 20) < 8   THEN 2  -- ~25% (3+5)
-        WHEN (gs % 20) < 12  THEN 3  -- ~20% (8+4)
-        WHEN (gs % 20) < 15  THEN 4  -- ~15% (12+3)
-        WHEN (gs % 20) < 18  THEN 5  -- ~15% (15+3)
-        ELSE                        6  -- ~10% (18+2)
+        WHEN (gs % 10000) < 1500  THEN 1
+        WHEN (gs % 10000) < 4000  THEN 2
+        WHEN (gs % 10000) < 6000  THEN 3
+        WHEN (gs % 10000) < 7500  THEN 4
+        WHEN (gs % 10000) < 9000  THEN 5
+        ELSE 6
     END AS branch_id,
-
-    -- customer_id: 1-500 (realistic range)
     (gs % 500) + 1 AS customer_id,
-
-    -- mechanic_id: 1-50 (small team)
     (gs % 50) + 1 AS mechanic_id,
-
-    -- status distribution matching documented values:
-    -- FINISHED: ~75%, CANCELLED: ~24%, WAITING: ~0.9%, PENDING_REFUND: ~0.1%
     CASE
-        WHEN (gs % 1000) = 0                         THEN 'PENDING_REFUND'  -- 0.1%
-        WHEN (gs % 1000) BETWEEN 1 AND 9              THEN 'WAITING'         -- 0.9%
-        WHEN (gs % 1000) BETWEEN 10 AND 84           THEN 'FINISHED'        -- 75% (10+75=85)
-        ELSE 'CANCELLED'                              -- 15% (85+15=100)
+        WHEN (gs % 10000) < 7000  THEN 'FINISHED'
+        WHEN (gs % 10000) < 9000  THEN 'CANCELLED'
+        WHEN (gs % 10000) < 9500  THEN 'IN_PROGRESS'
+        WHEN (gs % 10000) < 9999  THEN 'WAITING'
+        ELSE 'PENDING_REFUND'
     END AS status,
-
-    -- service_date: spread across 2025-2026 (730 days)
     '2025-01-01'::date + (gs % 730) AS service_date,
-
-    -- invoice_no: unique format
     'INV-' || lpad((gs + 100000)::text, 6, '0') AS invoice_no,
-
-    -- created_at: logically derived from service_date + random hours (0-23)
-    ('2025-01-01'::date + (gs % 730)) + ((gs % 24) * interval '1 hour') AS created_at
-
+    ('2025-01-01'::date + (gs % 730))::timestamp + ((gs % 24) * interval '1 hour') AS created_at
 FROM generate_series(1, 500000) AS gs;
 
 -- Update statistics for accurate query planning
 ANALYZE service;
 
--- Validation output
+-- ============================================================
+-- VALIDATION QUERIES
+-- ============================================================
+
+SELECT '=== Row Count ===' AS section;
 SELECT COUNT(*) AS total_rows FROM service;
 
+SELECT '=== Status Distribution ===' AS section;
 SELECT status, COUNT(*) AS cnt,
-       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM service), 2) AS percentage
+       ROUND(COUNT(*) * 100.0 / 500000, 2) AS percentage
 FROM service GROUP BY status ORDER BY cnt DESC;
 
+SELECT '=== Branch Distribution ===' AS section;
 SELECT branch_id, COUNT(*) AS cnt,
-       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM service), 2) AS percentage
+       ROUND(COUNT(*) * 100.0 / 500000, 2) AS percentage
 FROM service GROUP BY branch_id ORDER BY branch_id;
+
+SELECT '=== Service Date Range ===' AS section;
+SELECT MIN(service_date) AS min_service_date,
+       MAX(service_date) AS max_service_date
+FROM service;
+
+SELECT '=== Created At Range ===' AS section;
+SELECT MIN(created_at) AS min_created_at,
+       MAX(created_at) AS max_created_at
+FROM service;
+
+-- ============================================================
+-- ASSERTIONS (fail if distribution deviates from spec)
+-- ============================================================
+
+DO $$
+BEGIN
+    ASSERT (SELECT COUNT(*) FROM service) = 500000,
+        'Row count mismatch: expected 500000';
+END $$;
+
+DO $$
+DECLARE
+    finished_pct      NUMERIC;
+    pr_pct            NUMERIC;
+    in_progress_pct   NUMERIC;
+    branch2_pct       NUMERIC;
+BEGIN
+    SELECT COUNT(*) FILTER (WHERE status = 'FINISHED') * 100.0 / 500000
+    INTO finished_pct FROM service;
+    ASSERT finished_pct = 70.0,
+        'FINISHED expected 70.0%, got ' || ROUND(finished_pct, 2);
+
+    SELECT COUNT(*) FILTER (WHERE status = 'PENDING_REFUND') * 100.0 / 500000
+    INTO pr_pct FROM service;
+    ASSERT pr_pct = 0.1,
+        'PENDING_REFUND expected 0.1%, got ' || pr_pct;
+
+    SELECT COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') * 100.0 / 500000
+    INTO in_progress_pct FROM service;
+    ASSERT in_progress_pct = 5.0,
+        'IN_PROGRESS expected 5.0%, got ' || ROUND(in_progress_pct, 2);
+
+    SELECT COUNT(*) FILTER (WHERE branch_id = 2) * 100.0 / 500000
+    INTO branch2_pct FROM service;
+    ASSERT branch2_pct = 25.0,
+        'Branch 2 expected 25.0%, got ' || ROUND(branch2_pct, 2);
+END $$;
+
+SELECT '=== All assertions passed ===' AS result;

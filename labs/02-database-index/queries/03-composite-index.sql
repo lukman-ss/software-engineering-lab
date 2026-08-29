@@ -14,11 +14,25 @@ CREATE INDEX idx_service_branch_status_date
     ON service(branch_id, status, service_date DESC);
 
 -- Important PostgreSQL 16 multicolumn B-tree behavior:
--- - Supports queries that constrain leading columns
--- - (branch_id) - yes, constrains index range efficiently
--- - (branch_id, status) - yes, constrains further
--- - (status) - can use index but may scan large portion (planner often prefers Seq Scan)
--- - (service_date) - can use index but may scan large portion (planner often prefers Seq Scan)
+-- ===========================================
+-- For an index on (a, b, c), constraints on leading columns
+-- determine how much of the B-tree scan range can be bounded:
+--
+-- WHERE a = ?                     → constrains index range efficiently
+-- WHERE a = ? AND b = ?           → constrains further
+-- WHERE a = ? AND b = ? AND c > ? → bounds a tight range
+--
+-- WHERE b = ? or WHERE c = ?
+--   PostgreSQL may technically use the index, but without a
+--   constraint on the leftmost column, it may need to scan a
+--   large fraction or all of the index. The planner will
+--   therefore often prefer Seq Scan.
+--
+-- WHERE b = ? AND c = ?
+--   Same reasoning applies.
+--
+-- PostgreSQL 16: no skip-scan optimization (that arrives in PG 18).
+-- ===========================================
 
 -- Run the main query
 EXPLAIN (ANALYZE, BUFFERS)
@@ -37,8 +51,7 @@ ORDER BY service_date DESC;
 -- Execution Time (ms): _____
 -- Buffers: read _____, hit _____
 
------------------------------------
-
+-- ===========================================
 -- Understanding the column order in composite index
 
 -- Why (branch_id, status, service_date DESC) is a good candidate:
@@ -60,8 +73,7 @@ ORDER BY service_date DESC;
 -- BUT remember: this is a heuristic, not absolute law
 -- PostgreSQL may choose differently based on statistics
 
------------------------------------
-
+-- ===========================================
 -- Can PostgreSQL satisfy ORDER BY using backward scan?
 
 -- Look in your plan for:
@@ -73,8 +85,20 @@ ORDER BY service_date DESC;
 -- The index stores (branch_id, status, service_date DESC)
 -- So for branch_id=stable, status=stable, date DESC comes naturally
 
------------------------------------
+-- ===========================================
+-- BACKWARD SCAN FACT (important distinction):
 
+-- PostgreSQL B-tree indexes support both forward and backward scans.
+-- With equality constraints on branch_id and status, an ASC date key
+-- may also satisfy descending date order via backward scan.
+--
+-- Therefore, service_date DESC in the index definition
+-- is not mandatory simply because the query uses ORDER BY ... DESC.
+--
+-- Explicit ASC/DESC definitions become more relevant for
+-- mixed-order multicolumn sort requirements (e.g., ORDER BY a ASC, b DESC).
+
+-- ===========================================
 -- Compare all three testing approaches
 
 -- Baseline (no useful index):
@@ -96,13 +120,13 @@ ORDER BY service_date DESC;
 
 -- Winner: _____
 
------------------------------------
-
--- Key PostgreSQL multicolumn B-tree facts:
+-- ===========================================
+-- Key PostgreSQL multicolumn B-tree facts
 
 -- 1. Index supports queries on leftmost prefix
 --    Index on (a, b, c) supports WHERE a, WHERE a AND b, WHERE a AND b AND c
---    Does NOT support WHERE b, WHERE c, WHERE b AND c
+--    WHERE b, WHERE c, WHERE b AND c may use index but scan large portion
+--    Planner often prefers Seq Scan for these cases
 
 -- 2. Index can help with ORDER BY if:
 --    ORDER BY matches index column order
@@ -114,10 +138,10 @@ ORDER BY service_date DESC;
 
 -- 4. Index-only scan possible:
 --    If all required columns are in index (covering index)
---    No table access needed = faster
+--    Can avoid heap tuple fetches when visibility map conditions allow it.
+--    Check "Heap Fetches" in EXPLAIN ANALYZE output to verify.
 
------------------------------------
-
+-- ===========================================
 -- Cleanup options (comment out if using for homework)
 
 -- Option A: Keep composite index for queries

@@ -12,9 +12,9 @@ DROP INDEX IF EXISTS idx_service_service_date;
 DROP INDEX IF EXISTS idx_service_date_branch;
 DROP INDEX IF EXISTS idx_service_dashboard_covering;
 
-================================
+-- ================================
 -- PART 1: Create table only (no secondary indexes)
-================================
+-- ================================
 
 -- Table size without secondary indexes
 SELECT
@@ -23,9 +23,9 @@ SELECT
     pg_size_pretty(pg_indexes_size('service')) AS indexes_size,
     pg_size_pretty(pg_total_relation_size('service')) AS total_size;
 
-================================
+-- ================================
 -- PART 2: Add single-column indexes
-================================
+-- ================================
 
 CREATE INDEX idx_service_branch_id ON service(branch_id);
 CREATE INDEX idx_service_status ON service(status);
@@ -45,9 +45,9 @@ FROM pg_indexes
 WHERE tablename = 'service'
 ORDER BY pg_relation_size(indexname::regclass) DESC;
 
-================================
+-- ================================
 -- PART 3: Add composite index
-================================
+-- ================================
 
 DROP INDEX idx_service_branch_id;
 DROP INDEX idx_service_status;
@@ -62,9 +62,9 @@ SELECT
     pg_size_pretty(pg_indexes_size('service')) AS indexes_size,
     pg_size_pretty(pg_total_relation_size('service')) AS total_size;
 
-================================
+-- ================================
 -- PART 4: Add covering index with INCLUDE
-================================
+-- ================================
 
 DROP INDEX idx_service_branch_status_date;
 
@@ -87,9 +87,9 @@ FROM pg_indexes
 WHERE tablename = 'service'
 ORDER BY pg_relation_size(indexname::regclass) DESC;
 
-================================
+-- ================================
 -- PART 5: Storage summary
-================================
+-- ================================
 
 -- Comprehensive view of all index storage costs
 SELECT

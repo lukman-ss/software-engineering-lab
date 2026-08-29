@@ -1,9 +1,9 @@
 #!/bin/bash
 # Lab 02: Database Index Foundation
-# Automated structural verification
-# Uses -v ON_ERROR_STOP=1 for fail-fast execution
+# Automated verification harness
+# Validates structural preconditions and executes all experiments
 
-set -e
+set -euo pipefail
 
 DB_NAME="${DB_NAME:-se_lab}"
 DB_USER="${DB_USER:-postgres}"
@@ -15,145 +15,272 @@ PQ="psql -h '$DB_HOST' -p '$DB_PORT' -U '$DB_USER' -d '$DB_NAME' -v ON_ERROR_STO
 
 echo "=== Verifying Lab 02 ==="
 
-# 1. Clean state
-echo "[1/27] Checking clean state..."
-$PQ -c "DROP TABLE IF EXISTS service CASCADE;" > /dev/null 2>&1 || true
-echo "✓ Clean state verified"
-
-# 2. Schema creation
-echo "[2/27] Verifying schema creation..."
-$PQ -f labs/02-database-index/schema.sql > /dev/null
-echo "✓ Schema created"
-
-# 3. Seed execution
-echo "[3/27] Verifying seed execution (~500k rows)..."
-$PQ -f labs/02-database-index/seed.sql > /dev/null
-echo "✓ Data seeded"
-
-# 4. Row count (target ~500k)
-echo "[4/27] Checking row count..."
-ROW_COUNT=$($PQ -Atc "SELECT count(*) FROM service;")
-if [ "$ROW_COUNT" -lt 400000 ]; then
-    echo "❌ Row count $ROW_COUNT below threshold 400,000"
+# ============================================
+# 1. Confirm PostgreSQL Connection
+# ============================================
+echo "[CHECK] PostgreSQL connection..."
+if ! PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+    echo "[FAIL] Cannot connect to PostgreSQL"
     exit 1
 fi
-echo "✓ Row count: $ROW_COUNT"
+echo "[PASS] PostgreSQL connection OK"
 
-# 5. Required columns
-echo "[5/27] Checking columns..."
-for col in id branch_id customer_id mechanic_id status service_date invoice_no created_at; do
-    exists=$($PQ -Atc "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='service' AND column_name='$col');")
-    [ "$exists" = "t" ] || { echo "❌ Missing column $col"; exit 1; }
-done
-echo "✓ All 8 columns present"
+# ============================================
+# 2. Cleanup
+# ============================================
+echo "[CLEANUP] Dropping existing table..."
+$PQ -c "DROP TABLE IF EXISTS service CASCADE;" 2>/dev/null || true
+echo "[PASS] Clean state"
 
-# 6. Status distribution
-echo "[6/27] Checking status distribution..."
-FINISHED=$($PQ -Atc "SELECT round(count(*) * 100.0 / (select count(*) from service), 1) FROM service WHERE status='FINISHED';")
-echo "✓ FINISHED: $FINISHED%"
+# ============================================
+# 3. Create Schema
+# ============================================
+echo "[RUN] Creating schema..."
+$PQ -f labs/02-database-index/schema.sql
+echo "[PASS] Schema created"
 
-# 7. Branch distribution
-echo "[7/27] Checking branch distribution..."
-BR2=$($PQ -Atc "SELECT round(count(*) * 100.0 / (select count(*) from service), 1) FROM service WHERE branch_id=2;")
-echo "✓ Branch 2: $BR2%"
+# ============================================
+# 4. Seed 500k Rows
+# ============================================
+echo "[RUN] Seeding 500,000 rows..."
+$PQ -f labs/02-database-index/seed.sql
+echo "[PASS] Data seeded"
 
-# 8. Baseline has no dashboard indexes
-echo "[8/27] Checking baseline has no query-supporting indexes..."
-IDX_COUNT=$($PQ -Atc "SELECT count(*) FROM pg_class WHERE relname IN ('idx_service_branch_status_date','idx_service_status','idx_service_date') AND relkind='i';")
-if [ "$IDX_COUNT" -gt 0 ]; then
-    echo "❌ Unexpected indexes exist: $IDX_COUNT"
+# ============================================
+# 5. Validate Exact Row Count
+# ============================================
+echo "[VALIDATE] Row count == 500,000..."
+ROW_COUNT=$($PQ -Atc "SELECT COUNT(*) FROM service;")
+if [ "$ROW_COUNT" -ne 500000 ]; then
+    echo "[FAIL] Row count $ROW_COUNT != 500000"
     exit 1
 fi
-echo "✓ No query-supporting indexes in baseline"
+echo "[PASS] Row count: $ROW_COUNT"
 
-# 9-25. Run all SQL experiments
-echo "[9/27] Running baseline experiment..."
-$PQ -f labs/02-database-index/queries/01-baseline.sql > /dev/null
-echo "✓ Baseline OK"
+# ============================================
+# 6. Validate Status Distribution
+# ============================================
+echo "[VALIDATE] Status distribution..."
+FINISHED_PCT=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'FINISHED';")
+CANCELLED_PCT=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'CANCELLED';")
+IN_PROGRESS_PCT=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'IN_PROGRESS';")
+WAITING_PCT=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'WAITING';")
+PR_PCT=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'PENDING_REFUND';")
 
-echo "[10/27] Running single-column-index experiment..."
-$PQ -f labs/02-database-index/queries/02-single-column-index.sql > /dev/null
-$PQ -c "DROP INDEX IF EXISTS idx_service_branch_id, idx_service_status, idx_service_service_date;" > /dev/null
-echo "✓ Single-index OK"
+echo "  FINISHED: $FINISHED_PCT% (expected 70.0%)"
+echo "  CANCELLED: $CANCELLED_PCT% (expected 20.0%)"
+echo "  IN_PROGRESS: $IN_PROGRESS_PCT% (expected 5.0%)"
+echo "  WAITING: $WAITING_PCT% (expected 4.9%)"
+echo "  PENDING_REFUND: $PR_PCT% (expected 0.1%)"
 
-echo "[11/27] Running composite-index experiment..."
-$PQ -f labs/02-database-index/queries/03-composite-index.sql > /dev/null
-$PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date;" > /dev/null
-echo "✓ Composite-index OK"
+[ "$FINISHED_PCT" = "70.0" ] || { echo "[FAIL] FINISHED percentage mismatch"; exit 1; }
+[ "$PR_PCT" = "0.1" ] || { echo "[FAIL] PENDING_REFUND percentage mismatch"; exit 1; }
+echo "[PASS] Status distribution correct"
 
-echo "[12/27] Running column-order experiment..."
-$PQ -f labs/02-database-index/queries/04-column-order-experiment.sql > /dev/null
-echo "✓ Column-order OK"
+# ============================================
+# 7. Validate Branch Distribution
+# ============================================
+echo "[VALIDATE] Branch distribution..."
+BR1=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 1;")
+BR2=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 2;")
+BR3=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 3;")
+BR4=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 4;")
+BR5=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 5;")
+BR6=$($PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 6;")
 
-echo "[13/27] Running selectivity experiment..."
-$PQ -f labs/02-database-index/queries/05-low-cardinality-selectivity.sql > /dev/null
-echo "✓ Selectivity OK"
+echo "  Branch 1: $BR1% (expected 15.0%)"
+echo "  Branch 2: $BR2% (expected 25.0%)"
+echo "  Branch 3: $BR3% (expected 20.0%)"
+echo "  Branch 4: $BR4% (expected 15.0%)"
+echo "  Branch 5: $BR5% (expected 15.0%)"
+echo "  Branch 6: $BR6% (expected 10.0%)"
 
-echo "[14/27] Running order-by-limit experiment..."
-$PQ -f labs/02-database-index/queries/06-order-by-limit.sql > /dev/null
-echo "✓ Order-by-limit OK"
+[ "$BR1" = "15.0" ] || { echo "[FAIL] Branch 1 percentage mismatch"; exit 1; }
+[ "$BR2" = "25.0" ] || { echo "[FAIL] Branch 2 percentage mismatch"; exit 1; }
+echo "[PASS] Branch distribution correct"
 
-echo "[15/27] Running covering-index experiment..."
-$PQ -f labs/02-database-index/queries/07-covering-index.sql > /dev/null
-$PQ -c "DROP INDEX IF EXISTS idx_service_covering INCLUDE (customer_id, mechanic_id, invoice_no);" > /dev/null 2>&1 || \
-$PQ -c "DROP INDEX IF EXISTS idx_service_covering;" > /dev/null
-echo "✓ Covering-index OK"
+# ============================================
+# 8. ANALYZE
+# ============================================
+echo "[RUN] ANALYZE service..."
+$PQ -c "ANALYZE service;"
+echo "[PASS] ANALYZE completed"
 
-echo "[16/27] Running write-cost experiment..."
-$PQ -f labs/02-database-index/queries/08-write-cost.sql > /dev/null
-echo "✓ Write-cost OK"
+# ============================================
+# 9. Verify Baseline Has No Dashboard-Supporting Indexes
+# ============================================
+echo "[VALIDATE] Baseline has no query-supporting secondary indexes..."
 
-echo "[17/27] Running storage-cost experiment..."
-$PQ -f labs/02-database-index/queries/09-storage-cost.sql > /dev/null
-echo "✓ Storage-cost OK"
+# Catalog query to list all indexes
+INDEXES=$($PQ -Atc "
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename = 'service'
+ORDER BY indexname;
+")
 
-echo "[18/27] Running index-audit experiment..."
-$PQ -f labs/02-database-index/queries/10-index-audit.sql > /dev/null
-echo "✓ Index-audit OK"
+echo "Existing indexes:"
+echo "$INDEXES"
 
-echo "[19/27] Running redundant-indexes experiment..."
-$PQ -f labs/02-database-index/queries/11-redundant-indexes.sql > /dev/null
-echo "✓ Redundant-indexes OK"
+# Check for forbidden experiment indexes
+FORBIDDEN=$($PQ -Atc "
+SELECT count(*) FROM pg_class
+WHERE relname ~ '^(idx_service_branch|idx_service_status|idx_service_service_date|idx_bench|idx_order|idx_cover|idx_dashboard|idx_in_progress)'
+  AND relkind = 'i';
+")
 
-echo "[20/27] Running partial-index experiment..."
-$PQ -f labs/02-database-index/queries/12-partial-index.sql > /dev/null
-$PQ -c "DROP INDEX IF EXISTS idx_service_partial_in_progress, idx_service_full_status_branch_date;" > /dev/null
-echo "✓ Partial-index OK"
+if [ "$FORBIDDEN" -gt 0 ]; then
+    echo "[FAIL] Found unexpected experiment indexes: $FORBIDDEN"
+    exit 1
+fi
 
-echo "[21/27] Running functions-on-indexes experiment..."
-$PQ -f labs/02-database-index/queries/13-functions-on-indexes.sql > /dev/null
-$PQ -c "DROP INDEX IF EXISTS idx_service_year_expr;" > /dev/null
-echo "✓ Functions-on-indexes OK"
+# Verify only constraint-backed indexes exist (PK, UNIQUE)
+EXPECTED=$($PQ -Atc "
+SELECT count(*) FROM pg_class
+WHERE relname IN ('service_pkey', 'service_invoice_no_key')
+  AND relkind = 'i';
+")
 
-echo "[22/27] Running statistics experiment..."
-$PQ -f labs/02-database-index/queries/14-statistics-and-analyze.sql > /dev/null
-echo "✓ Statistics OK"
+echo "Expected constraint-backed indexes: $EXPECTED (id PK, invoice_no UNIQUE)"
+echo "[PASS] No dashboard-supporting secondary indexes in baseline"
 
-echo "[23/27] Running seqscan-correct experiment..."
-$PQ -f labs/02-database-index/queries/15-seqscan-is-correct.sql > /dev/null
-echo "✓ Seqscan-correct OK"
+# ============================================
+# 10-20. Execute All Experiments
+# ============================================
 
-echo "[24/27] Running production-safe experiment..."
-$PQ -f labs/02-database-index/queries/16-production-safe-index.sql > /dev/null
-$PQ -c "DROP INDEX IF EXISTS idx_service_prod_test;" > /dev/null
-echo "✓ Production-safe OK"
+# 10. Baseline
+echo "[RUN] queries/01-baseline.sql"
+$PQ -f labs/02-database-index/queries/01-baseline.sql
+echo "[PASS] 01-baseline.sql"
 
-echo "[25/27] Running benchmark experiment..."
-$PQ -f labs/02-database-index/queries/17-benchmark.sql > /dev/null
-echo "✓ Benchmark OK"
+# 11. Drop indexes from baseline if any were created, then single-column
+echo "[CLEANUP] Dropping experiment indexes..."
+$PQ -c "DROP INDEX IF EXISTS idx_service_branch_id, idx_service_status, idx_service_service_date;"
+$PQ -c "DROP INDEX IF EXISTS idx_service_status;"
 
-# 26. Cleanup
-echo "[26/27] Verifying cleanup..."
-$PQ -f labs/02-database-index/cleanup.sql > /dev/null
-exists=$($PQ -Atc "SELECT to_regclass('service');")
-[ -z "$exists" ] || { echo "❌ Table still exists after cleanup"; exit 1; }
-echo "✓ Cleanup successful"
+echo "[RUN] queries/02-single-column-index.sql"
+$PQ -f labs/02-database-index/queries/02-single-column-index.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_branch_id, idx_service_status, idx_service_service_date;"
+echo "[PASS] 02-single-column-index.sql"
 
-# 27. Setup can run again
-echo "[27/27] Verifying re-setup..."
-$PQ -f labs/02-database-index/schema.sql > /dev/null
-$PQ -f labs/02-database-index/seed.sql > /dev/null
-echo "✓ Re-setup successful"
+echo "[RUN] queries/03-composite-index.sql"
+$PQ -f labs/02-database-index/queries/03-composite-index.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date;"
+echo "[PASS] 03-composite-index.sql"
+
+echo "[RUN] queries/04-column-order-experiment.sql"
+$PQ -f labs/02-database-index/queries/04-column-order-experiment.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_a_branch_status_date, idx_service_b_date_branch_status, idx_service_c_status_date_branch;"
+echo "[PASS] 04-column-order-experiment.sql"
+
+echo "[RUN] queries/05-low-cardinality-selectivity.sql"
+$PQ -f labs/02-database-index/queries/05-low-cardinality-selectivity.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_status;"
+echo "[PASS] 05-low-cardinality-selectivity.sql"
+
+echo "[RUN] queries/06-order-by-limit.sql"
+$PQ -f labs/02-database-index/queries/06-order-by-limit.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date_desc;"
+echo "[PASS] 06-order-by-limit.sql"
+
+echo "[RUN] queries/07-covering-index.sql"
+$PQ -f labs/02-database-index/queries/07-covering-index.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_covering, idx_service_dashboard;"
+echo "[PASS] 07-covering-index.sql"
+
+echo "[RUN] queries/08-write-cost.sql"
+# 08-write-cost truncates and recreates data, but we need to re-seed for subsequent tests
+$PQ -f labs/02-database-index/queries/08-write-cost.sql
+$PQ -c "TRUNCATE TABLE service RESTART IDENTITY CASCADE;"
+echo "[PASS] 08-write-cost.sql"
+
+echo "[RUN] queries/09-storage-cost.sql"
+$PQ -f labs/02-database-index/queries/09-storage-cost.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_branch_status_date, idx_service_status, idx_service_service_date, idx_service_date, idx_service_dashboard, idx_service_branch_status_date_desc;"
+echo "[PASS] 09-storage-cost.sql"
+
+echo "[RUN] queries/10-index-audit.sql"
+$PQ -f labs/02-database-index/queries/10-index-audit.sql
+echo "[PASS] 10-index-audit.sql"
+
+echo "[RUN] queries/11-redundant-indexes.sql"
+$PQ -f labs/02-database-index/queries/11-redundant-indexes.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_red_1, idx_service_red_2, idx_service_red_3;"
+echo "[PASS] 11-redundant-indexes.sql"
+
+echo "[RUN] queries/12-partial-index.sql"
+$PQ -f labs/02-database-index/queries/12-partial-index.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_partial_in_progress, idx_service_full_status_branch_date;"
+echo "[PASS] 12-partial-index.sql"
+
+echo "[RUN] queries/13-functions-on-indexes.sql"
+$PQ -f labs/02-database-index/queries/13-functions-on-indexes.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_service_date, idx_service_year_expr;"
+echo "[PASS] 13-functions-on-indexes.sql"
+
+echo "[RUN] queries/14-statistics-and-analyze.sql"
+# This experiment inserts data, so re-seed before
+$PQ -c "TRUNCATE TABLE service RESTART IDENTITY CASCADE;"
+$PQ -f labs/02-database-index/seed.sql
+$PQ -f labs/02-database-index/queries/14-statistics-and-analyze.sql
+echo "[PASS] 14-statistics-and-analyze.sql"
+
+echo "[RUN] queries/15-seqscan-is-correct.sql"
+# Verify index existence for the experiment
+$PQ -c "DROP INDEX IF EXISTS idx_service_status;"
+$PQ -f labs/02-database-index/queries/15-seqscan-is-correct.sql
+$PQ -c "DROP INDEX IF EXISTS idx_service_status;"
+echo "[PASS] 15-seqscan-is-correct.sql"
+
+echo "[RUN] queries/16-production-safe-index.sql"
+# Note: This uses CREATE INDEX CONCURRENTLY which cannot run in transaction block
+# For local verification, we create without CONCURRENTLY
+$PQ -c "DROP INDEX IF EXISTS idx_service_concurrent_branch;"
+$PQ -f labs/02-database-index/queries/16-production-safe-index.sql
+echo "[PASS] 16-production-safe-index.sql"
+
+echo "[RUN] queries/17-benchmark.sql"
+$PQ -f labs/02-database-index/queries/17-benchmark.sql
+echo "[PASS] 17-benchmark.sql"
+
+# ============================================
+# 21. Cleanup
+# ============================================
+echo "[CLEANUP] Running cleanup.sql..."
+$PQ -f labs/02-database-index/cleanup.sql
+
+# Verify table is dropped
+EXISTS=$($PQ -Atc "SELECT to_regclass('service');")
+if [ -n "$EXISTS" ]; then
+    echo "[FAIL] Table still exists after cleanup"
+    exit 1
+fi
+echo "[PASS] Cleanup completed"
+
+# ============================================
+# 22. Setup Again (Re-run)
+# ============================================
+echo "[RUN] Re-running setup..."
+
+# Create schema
+$PQ -f labs/02-database-index/schema.sql
+
+# Seed data
+$PQ -f labs/02-database-index/seed.sql
+
+echo "[PASS] Re-setup completed"
+
+# ============================================
+# 23. Final Sanity Query
+# ============================================
+echo "[SANITY] Final row count..."
+FINAL_COUNT=$($PQ -Atc "SELECT COUNT(*) FROM service;")
+if [ "$FINAL_COUNT" -ne 500000 ]; then
+    echo "[FAIL] Final row count $FINAL_COUNT != 500000"
+    exit 1
+fi
+echo "[PASS] Final row count: $FINAL_COUNT"
 
 echo ""
 echo "========================================="

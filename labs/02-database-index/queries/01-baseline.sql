@@ -33,7 +33,7 @@ ORDER BY service_date DESC;
 -- The database is doing a ____________ which ____________ (is/is not) efficient
 -- because ____________.
 
------------------------------------
+-- -----------------------------------
 
 -- Understanding the output
 
@@ -64,7 +64,7 @@ ORDER BY service_date DESC;
 -- Execution Time: Actual wall clock time (ANALYZE only)
 -- -- Varies by hardware, cache, row count
 
------------------------------------
+-- -----------------------------------
 
 -- Exercise: Identify these metrics from your plan
 

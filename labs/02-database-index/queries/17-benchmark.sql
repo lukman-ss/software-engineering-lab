@@ -7,15 +7,32 @@
 
 -- ============================================
 -- WORKFLOW:
--- 1. Use EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) to inspect execution plans
+-- 1. Use EXPLAIN (ANALYZE, BUFFERS) to inspect execution plans
 --    - Shows row/buffer counts without terminal output overhead
 -- 2. Record observations in the comparison table at the end
 -- 3. Focus on relative performance between strategies, not absolute timing
---
+-- ============================================
+
+-- ============================================
 -- LIMITATIONS NOTE:
--- - WARM-CACHE: Once PostgreSQL has read pages into RAM, queries are faster.
--- - We intentionally keep the cache warm for reproducible relative comparisons.
--- - COLD-CACHE testing requires `pg_prewarm` or full server restart.
+-- ============================================
+-- WARM-CACHE: Once PostgreSQL has read pages into RAM, queries are faster.
+-- We intentionally keep the cache warm for reproducible relative comparisons.
+--
+-- Other factors affecting measurements:
+-- - OS page cache: shared read may be satisfied from kernel cache
+-- - Background load: concurrent activity affects timing
+-- - Checkpoints: can cause I/O spikes
+-- - WAL activity: index maintenance generates WAL
+-- - Hardware: CPU, RAM, disk speed vary between systems
+-- - PostgreSQL configuration: shared_buffers, work_mem, etc.
+--
+-- Cold-cache testing requires pg_prewarm or full server restart.
+-- Do NOT auto-flush OS caches - results are environment-dependent.
+--
+-- EXPLAIN (ANALYZE) shows END-TO-END/client timing including network overhead.
+-- For pure server timing, consider using EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+-- and measuring system clock time around the query.
 
 -- ============================================
 -- SETUP: Ensure clean index state for fair comparison
@@ -36,7 +53,7 @@ ANALYZE service;
 
 -- Compare execution plans
 -- Full table scan with Sort node
-EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
 WHERE branch_id = 2
@@ -57,7 +74,7 @@ CREATE INDEX idx_bench_service_date ON service(service_date);
 ANALYZE service;
 
 -- Planner may use Bitmap Heap Scan + BitmapAnd to combine indexes
-EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
 WHERE branch_id = 2
@@ -70,6 +87,7 @@ ORDER BY service_date DESC;
 DROP INDEX idx_bench_branch_id;
 DROP INDEX idx_bench_status;
 DROP INDEX idx_bench_service_date;
+DROP INDEX IF EXISTS idx_service_status;
 
 -- ============================================
 -- SCENARIO C: Wrong Composite Index Order
@@ -80,8 +98,10 @@ CREATE INDEX idx_bench_composite_wrong
 
 ANALYZE service;
 
--- Date is leftmost, cannot efficiently use equality predicates on branch_id/status
-EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+-- Date is leftmost; equality predicates on branch_id/status cannot be used efficiently
+-- PostgreSQL can still use the index for the date range, but must scan
+-- a larger portion since leading column doesn't constrain equality
+EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
 WHERE branch_id = 2
@@ -103,7 +123,8 @@ CREATE INDEX idx_bench_composite_correct
 ANALYZE service;
 
 -- Equality columns first (branch_id, status), then range column (service_date)
-EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+-- This allows tight B-tree range bounding from left to right
+EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
 WHERE branch_id = 2
@@ -116,32 +137,6 @@ ORDER BY service_date DESC;
 DROP INDEX idx_bench_composite_correct;
 
 -- ============================================
--- SCENARIO E: Covering Index (INCLUDE)
--- ============================================
--- NOTE: This is a DIFFERENT workload comparison.
--- A covering index enables Index-Only Scan by storing all needed columns.
--- This measures index-only vs heap access, NOT apples-to-apples with SELECT * scenarios.
-
-CREATE INDEX idx_bench_covering
-    ON service(branch_id, status, service_date DESC)
-    INCLUDE (customer_id, mechanic_id, invoice_no);
-
-ANALYZE service;
-
--- Projection query: only indexed columns needed
-EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
-SELECT branch_id, status, service_date, customer_id, mechanic_id, invoice_no
-FROM service
-WHERE branch_id = 2
-  AND status = 'FINISHED'
-  AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
-ORDER BY service_date DESC;
-
--- Record: Index Only Scan (no heap access), Buffers = read _____ hit _____
-
-DROP INDEX idx_bench_covering;
-
--- ============================================
 -- COMPARISON TABLE (fill in your observations)
 -- ============================================
 --
@@ -151,16 +146,27 @@ DROP INDEX idx_bench_covering;
 -- | B: Single-column x3     | Bitmap Heap Scan    | _____/_____ |
 -- | C: Wrong composite      | Index + Sort        | _____/_____ |
 -- | D: Recommended composite| Index Scan (no Sort)| _____/_____ |
--- | E: Covering (INCLUDE)   | Index Only Scan     | _____/_____ |
 --
 -- KEY OBSERVATIONS:
 -- 1. Seq Scan + Sort is slow for selective queries
 -- 2. Bitmap Heap Scan combines multiple indexes efficiently
 -- 3. Composite index eliminates both index access and Sort
--- 4. Covering index avoids heap access entirely
---
--- REMEMBER: Raw query timing via \timing is affected by:
--- - Network latency (psql to database)
--- - Terminal rendering
--- - pg_backend_pid() scheduling
--- Use EXPLAIN ANALYZE for server-side comparison.
+-- 4. Covering (INCLUDE) indexes belong in separate experiment
+
+-- ============================================
+-- NOTES ON PLAN NODES:
+-- ============================================
+-- - Index Scan: Single index used for finding rows
+-- - Bitmap Heap Scan: Multiple indexes combined into bitmap, then heap fetched
+-- - Seq Scan: Sequential table read (often correct for high-match queries)
+-- - Index Only Scan: All needed columns from index, no heap access
+--   (requires visibility map conditions; check "Heap Fetches" in output)
+-- - Sort: Explicit sort operation; eliminated when ORDER BY matches index
+
+-- ============================================
+-- NOTE: Covering indices comparison
+-- ============================================
+-- Covering indexes are investigated in 07-covering-index.sql.
+-- They enable Index Only Scan but require different query patterns.
+-- Comparing SELECT * benchmark against covering-index queries on
+-- different columns would not be apples-to-apples.

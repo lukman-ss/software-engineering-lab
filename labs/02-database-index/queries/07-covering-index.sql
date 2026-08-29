@@ -7,9 +7,9 @@
 -- 2. Prevents Index Only Scans
 -- 3. Increases I/O and network transfer
 
-================================
+-- ================================
 -- CONTROLLED QUERY: Select only needed columns
-================================
+-- ================================
 
 -- Imagine a dashboard only needs these specific fields
 SELECT branch_id, status, service_date, customer_id, mechanic_id, invoice_no
@@ -20,9 +20,9 @@ WHERE branch_id = 2
 ORDER BY service_date DESC
 LIMIT 20;
 
-================================
+-- ================================
 -- EXPERIMENT WITH COVERING INDEX (INCLUDE)
-================================
+-- ================================
 
 -- PostgreSQL's INCLUDE feature adds non-key columns to leaf nodes
 -- Allows index to satisfy query without visiting heap (table)
@@ -45,9 +45,9 @@ LIMIT 20;
 -- - "Index Only Scan"
 -- - "Heap Fetches: X" (ideally 0 or small)
 
-================================
+-- ================================
 -- COMPARE: WITH SELECT *
-================================
+-- ================================
 
 -- Now run the same query but fetch ALL columns
 -- The index doesn't have `id` or `created_at`
@@ -64,9 +64,9 @@ LIMIT 20;
 -- - Degraded from "Index Only Scan" to "Index Scan"
 -- - Buffer "shared read/hit" count likely increased
 
-================================
+-- ================================
 -- THE VISIBILITY MAP
-================================
+-- ================================
 
 -- IMPORTANT: INCLUDE does NOT guarantee Index Only Scan!
 -- PostgreSQL still needs to check if row is visible (not deleted/updated)
@@ -89,9 +89,9 @@ WHERE branch_id = 2
 ORDER BY service_date DESC
 LIMIT 20;
 
-================================
+-- ================================
 -- TRADE-OFFS OF INCLUDE
-================================
+-- ================================
 
 -- Why not INCLUDE every column?
 -- 1. Index becomes huge (storage cost)
@@ -99,4 +99,4 @@ LIMIT 20;
 -- 3. UPDATEs to INCLUDEd columns must update index (HOT update penalty)
 
 -- Clean up
-DROP INDEX idx_service_dashboard;
+DROP INDEX IF EXISTS idx_service_dashboard;

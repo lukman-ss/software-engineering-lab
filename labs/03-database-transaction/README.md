@@ -263,3 +263,10 @@ go test -v ./labs/03-database-transaction/... -count=1
 | `TestTransientFailureSuccessAfterRetry` | Retry mekanisme bekerja |
 | `TestDeadLetterQueue` | Event gagal masuk DLQ |
 | `TestSagaPaymentWithCompensatingAction` | Compensasi dijalankan saat step gagal |
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 02 — Database Index](../02-database-index/)
+- **Next**: [Lab 04 — Caching](../04-caching/)

@@ -1,663 +1,293 @@
 # Lab 04 — Caching: Optimalkan Latency, Tapi Apa Kostsnya?
 
-> **Mental Model**: Caching adalah trade-off antara **latency** (cepat) dan **consistency** (benar). Senior engineer memilih teknik caching yang tepat untuk workadje nya.
+> **Mental Model**: Caching adalah trade-off antara **latency** (cepat) dan **consistency** (benar). Senior engineer memilih teknik caching yang tepat untuk workload nya.
 
 ---
 
-## 1. Mengapa Caching Diperlukan?
+## Learning Objectives
 
-```
-Timeline:
-T0: Client query inventory item
-T1: App query DB (50ms)
-T2: App return ke client
-[Total latency: ~50ms]
+Setelah menyelesaikan lab ini, Anda akan memahami:
 
-Dengan Caching:
-T0: Client query inventory item  
-T1: App check cache (Redis, 0.5ms) → HIT
-T2: App return ke client
-[Total latency: ~1ms]
-```
-
-**Keuntungan**: Latency turun 50x. Namun...
+- Mengapa caching diperlukan & kapan tidak boleh
+- Cache Aside pattern & implementasinya
+- Cara mengatasi *Cache Stampede* dengan Single Flight
+- TTL strategy & jitter untuk stampede mitigation
+- Cache Key design untuk multi-tenant & versioning
+- Graceful degradation saat cache down
+- Source of Truth: Database vs Cache role
+- Heat map bottleneck: Database → Redis tradeoff
+- Time-zone aware caching untuk business day
 
 ---
 
-## 2. Cache Aside Pattern (Standar)
+## Problem
 
-### Flow
+Dashboard workshop menampilkan statistik dilihat oleh banyak user. Tanpa cache, setiap request menghasilkan *heavy aggregation* ke database:
 
-```
-[Client] → [App] → [Cache] → (MISS) → [DB] → [Cache] → [App] → [Client]
-                         → (HIT) →  [App] → [Client]
-```
-
-### Implementasi
-
-```go
-func GetProductWithCache(ctx context.Context, cache *RedisClient, db *sql.DB, id string) (Product, error) {
-    // 1. Check cache dulu
-    key := cacheKey("product", id)
-    cached, err := cache.Get(ctx, key)
-    if err == nil && cached != "" {
-        var p Product
-        if json.Unmarshal([]byte(cached), &p) == nil {
-            return p, nil  // CACHE HIT
-        }
-    }
-    
-    // 2. Cache miss → query DB
-    p, err := db.GetProduct(ctx, id)
-    if err != nil {
-        return Product{}, err
-    }
-    
-    // 3. Populate cache dengan TTL
-    data, _ := json.Marshal(p)
-    cache.Set(ctx, key, string(data), 5*time.Minute)
-    
-    return p, nil
-}
-```
-
-### Kapan Package?
-
-- ✅ Data **aba-aba** (profil, konfigurasi)
-- ✅ Data yang **jarang berubah**
-- ✅ Query yang **mahal/dangerous** di DB
-
-### Kapan Jangan Package?
-
-- ❌ Data **transaksi** (payment amount)
-- ❌ Data yang **kritis keakuratan**
-- ❌ Data yang **sering berubah**
-
----
-
-## 3. Cache Stampede (Thundering Herd)
-
-### Masalah
+**Traffic Simulation:**
 
 ```
-Timeline:
-T0: Cache key EXPIRES
-T1: 1000 request masuk, semua CACHE MISS
-T2: Semua query DB → overload database
-T3: DB timeout → semua request gagal
-```
-
-### Solusi: Cache dengan Probabilistic Early Expiration
-
-```go
-func shouldRefresh(expiredAt time.Time) bool {
-    age := time.Since(expiredAt)
-    ttl := 5 * time.Minute
-    
-    // Jika sudah 80% TTL berlalu, refresh randomly
-    if age > ttl*8/10 {
-        return rand.Float64() < 0.5  // 50% chance
-    }
-    return false
-}
+[500 concurrent users] → Dashboard Request
+                              ↓
+                     Database: 6 queries + join/aggregation
+                              ↓
+                            3000 total DB queries
 ```
 
 ---
 
-## 4. Single Flight Pattern
-
-### Ide
-
-Jika banyak request untuk **same key**, jalankan **hanya satu** query DB. Result dialokasikan ke semua request.
+## Why Cache Exists
 
 ```
-Request A ──┐
-Request B ──┼──► SingleFlight ──► DB ──► Cache
-Request C ──┘
-```
-
-### Implementasi
-
-```go
-var flight = singleflight.Group{}
-
-func GetWithSingleFlight(ctx context.Context, key string) (Product, error) {
-    result, err, _ := flight.Do(key, func() (interface{}, error) {
-        return db.GetProduct(ctx, key)
-    })
-    return result.(Product), err
-}
-```
-
-### Keuntungan
-
-- ⭐ Mengurangi load DB 90%+
-- ⭐ Mengatasi stampede tanpa kompleksitas lock
-
----
-
-## 5. Distributed Lock (Redis-based)
-
-### Masalah
-
-Single flight tidak aman bila **multiple app instances** (horizontal scaling). Butuh lock yang **distribusi**.
-
-### Redlock Algorithm (Sederhana)
-
-```go
-const LOCK_KEY = "lock:item:" + id
-const LOCK_VALUE = uuid.New().String()
-const LOCK_TTL = 10 * time.Second
-
-// SET key value NX PX ttl ( dengan random value untuk uniqueness )
-func acquireLock(ctx context.Context, client *redis.Client, key string) (bool, string) {
-    value := uuid.New().String()
-    acquired := client.SetNX(ctx, key, value, LOCK_TTL).Val()
-    return acquired, value
-}
-
-func releaseLock(ctx context.Context, client *redis.Client, key, value string) {
-    // Lua script: Hanya delete jika value cocok (prevent releasing someone else's lock)
-    script := redis.NewScript(`
-        if redis.call("GET", KEYS[1]) == ARGV[1] then
-            return redis.call("DEL", KEYS[1])
-        else
-            return 0
-        end
-    `)
-    script.Run(ctx, client, key, value)
-}
-```
-
-### Catatan Penting
-
-- Lock harus memiliki **TTL** (auto-release bila process crash)
-- Value harus **unique** (UUID) supaya hanya yang mengunci yang bisa lepaskan
-- Jangan gunakan lock untuk query read-only
-
----
-
-## 6. Cache Key Design
-
-### Prinsip
-
-1. **Prefix untuk namespace**: `product:123`, `user:456`
-2. **Version untuk invalidation**: `product:123:v2`
-3. **Tag-based**: `user:456:posts` → semua key yang berhubungan
-
-### Contoh
-
-```go
-func cacheKey(entity, id string) string {
-    return fmt.Sprintf("%s:%s:v2", entity, id)
-}
-
-// Untuk multi-level cache
-func productDetailKey(id string) string {
-    return fmt.Sprintf("product:%s:detail:v1", id)
-}
+┌────────┐     ┌──────────┐     ┌───────┐
+│ Client │ ──► │  YourApp │ ──► │  DB   │
+└────────┘     └──────────┘     └───────┘
+                     │               ✗
+                     │               ✗ Heavy query every request
+                     │               ✗ Latency ~50ms+
+                     ▼
+                     │
+               ┌─────┴─────┐
+               │   Redis   │  ← Cache
+               └───────────┘
+                     │
+                     ▼
+                ~1ms latency
 ```
 
 ---
 
-## 7. Cache Invalidation Strategi
+## Source of Truth
 
-### 7.1 Time-based (TTL)
+| Layer | Technology | Role |
+|-------|------------|------|
+| **Primary** | PostgreSQL | Permanent, ACID, can rebuild cache |
+| **Cache** | Redis | Derived, TTL-bound, on-demand rebuild |
 
-```go
-redis.Set(ctx, key, value, 5*time.Minute)
-```
-
-- ✅ Simple
-- ❌ Data bisa stale sampai TTL habis
-
-### 7.2 Write-through
-
-```go
-db.Update(entity)
-cache.Set(key, newValue, ttl)  // Update cache setelah DB success
-```
-
-- ✅ Consistent
-- ❌ Latency write naik
-
-### 7.3 Write-behind
-
-```go
-cache.Set(key, newValue, ttl)
-asyncQueue.Enqueue(updateDB)  // DB update nanti
-```
-
-- ✅ Latency write rendah
-- ❌ Risiko data hilang bila crash
+Redis down → Cache miss → Fallback to DB → Request sukses (degraded mode).
 
 ---
 
-## 8. Cache Metrics yang Harus Dipantau
+## Architecture
 
-| Metric | Tujuan |
-|--------|--------|
-| `cache_hit_rate` | Hitrate harus > 80% |
-| `cache_miss_latency` | Bandingkan latency miss vs hit |
-| `eviction_count` | Jika banyak eviction, TTL terlalu pendek |
-| `cache_size_bytes` | Memory usage |
-| `cached_item_ttl_seconds` | Distribusi TTL yang diterima |
+```
+                    ┌─────────────────┐
+                    │     Client      │
+                    └────────┬────────┘
+                             │ Request
+                             ▼
+┌────────────────────────────────────────┐
+│        Application (Go + context)      │
+│  ┌──────────────┐ ┌─────────────────┐ │
+│  │  CacheAside  │ │  SingleFlight   │ │
+│  └──────┬───────┘ └────────┬────────┘ │
+└─────────┼──────────────────┼──────────┘
+          │                  │
+          ▼                  │
+    ┌─────┴─────┐            │
+    │   Redis   │            │ Cache Hit
+    └───────────┘            │
+          │                  │
+          ▼                ┌─┴─┐
+    ┌─────┴─────┐        │   │
+    │   Cache   │ ◄──────┘   │ MISS
+    └─────┬─────┘           │
+          │                 │
+          ▼                 │
+    ┌─────┴─────┐           │
+    │  Database │ ──────────┘ (rebuild)
+    │ (PostgreSQL)          │
+    └───────────┘           │
+```
 
 ---
 
-## 9. Cache Invalidation (Bagian 8)
-
-Cache invalidation adalah masalah nomor dua paling sulit dalam computer science (No. 1: naming, No. 3: off-by-one).
-
-### Masalah
-
-Cache menyimpan snapshot. Jika data berubah tapi cache tidak di-invalidate, client melihat data stale.
-
-### Flow yang Benar: COMMIT → INVALIDATE
+## Without Cache
 
 ```
-[Aplikasi]
+[Client]
     │
-    ├── BEGIN TRANSACTION
-    ├── UPDATE invoices SET status='paid' WHERE id=100
-    ├── COMMIT  ✅ (DB committed)
+    ▼
+[Application]
     │
-    └── INVALIDATE dashboard cache
-            │
-            └── SET cache_key "" (atau DEL cache_key)
+    ▼
+[Database Query] → Compute Aggregation → Return
+    │                    ↑
+    └────────────────────┘ (50ms + CPU + network)
 ```
 
-### Mengapa TIDAK: INVALIDATE → COMMIT?
-
-```
-[Aplikasi]
-    │
-    ├── INVALIDATE cache  ❌ (cache kosong)
-    │
-    ├── BEGIN TRANSACTION
-    ├── UPDATE invoices...
-    ├── COMMIT (GAGAL! DB crash/timeout)
-    │
-    └── Hasil: Cache kosong + DB tidak berubah
-              Client Baca → MISS → Query DB → Dapat OLD data (stale!)
-```
-
-**Race condition:** Jika delete cache sebelum commit, dan commit gagal, cache akan tetap kosong sampai TTL. Client yang read akan dapat stale data dari DB yang tidak jadi commit.
-
-### Implementasi Invalidation
-
-```go
-// Setelah DB commit berhasil
-func (s *DashboardService) CreateInvoice(ctx context.Context, branchID int64) error {
-    // BEGIN, INSERT, COMMIT di sini
-    tx, _ := s.db.BeginTx(ctx, nil)
-    _, err := tx.ExecContext(ctx, "INSERT INTO invoices ...")
-    if err != nil {
-        tx.Rollback()
-        return err
-    }
-    tx.Commit() // ✅ COMMIT success
-
-    // INVALIDATE setelah commit
-    err = s.InvalidateBranchDashboard(ctx, branchID)
-    if err != nil {
-        // Log error tapi jangan fail transaction
-        // TTL adalah safety net jika invalidation gagal
-        log.Println("cache invalidation failed:", err)
-    }
-    return nil
-}
-```
-
-### Failure Window: COMMIT → Crash → Invalidate
-
-```
-T1: DB COMMIT success
-T2: Process crash (sebelum invalidate)
-T3: Client baca → cache HIT → data stale (lama)
-T4: TTL expire (30s) → cache miss → query DB → data baru
-```
-
-**Mitigation:**
-- TTL adalah safety net (30s dalam contoh ini)
-- Untuk sistem kompleks: gunakan Outbox pattern (lihat Lab 03) untuk reliable invalidation
-
-### Events yang Perlu Di-invalidate
-
-| Event | Action |
-|-------|--------|
-| Invoice dibuat | `InvalidateBranchDashboard(branchID)` |
-| Invoice dibayar | `InvalidateBranchDashboard(branchID)` |
-| Service selesai | `InvalidateBranchDashboard(branchID)` |
-| Sparepart digunakan | `InvalidateBranchDashboard(branchID)` |
-| Customer dibuat/diubah | `InvalidateBranchDashboard(branchID)` |
-| Vehicle dibuat | `InvalidateBranchDashboard(branchID)` |
-
-### Test: Invalidation Membuktikan Cache Baru
-
-```go
-// Step 1: Request dashboard (cache miss)
-d1, _ := svc.GetDashboard(ctx, branchID)
-// Step 2: Mutate DB (invoice created)
-svc.CreateInvoice(ctx, branchID, 5000.0)
-// Step 3: Invalidate cache
-svc.InvalidateBranchDashboard(ctx, branchID)
-// Step 4: Request berikutnya (cache miss, fresh data)
-d2, _ := svc.GetDashboard(ctx, branchID)
-// d2 harus berbeda dari d1 (menunjukkan invalidation berhasil)
-```
-
-**Test harus gagal jika `InvalidateBranchDashboard()` dihapus:**
-- Tanpa invalidation, Step 4 akan mengembalikan d1 (stale)
-- With invalidation, Step 4 mengembalikan d2 (fresh)
+**Result:** Setiap request = heavy DB query.
 
 ---
 
-## 10. Stale Data (Bagian 9)
+## Cache Aside (Hit & Miss)
 
-Pertanyaan utama caching bukan:
-
-> "Apakah datanya berubah?"
-
-tetapi:
-
-> "Berapa lama stale data masih dapat diterima?"
-
-### Contoh
-
-| Data | Stale 60 detik | Acceptable? |
-|------|----------------|-------------|
-| `TopMechanic` | Terlambat 1 menit | ✅ Biasanya OK |
-| `InvoiceCountToday` | Terlambat 1 menit | ✅ Operasional OK |
-| `SaldoWallet` | Terlambat 1 menit | ❌ Mungkin tidak OK |
-| `StockRealTime` | Terlambat 1 menit | ❌ Race condition |
-
-### Miskonsepsi: "Data sering berubah = tidak boleh cache"
-
-Ini **SALAH**. Data real-time tetap dapat memiliki cache/read model tertentu.
-
-**Contoh:** Stock gudang
-- Tidak boleh cache hasil query langsung (race condition)
-- Tetapi boleh cache: "Stock snapshot per 5 detik" jika business menerima 5s delay
-- Atau: "Reserved stock" vs "Available stock" (dua model berbeda)
-
-**Key insight:** Cache bukan about "data berubah atau tidak", tapi about **consistency requirement**.
-
-### TTL Bukan Correctness Mechanism
-
-TTL adalah safety net, bukan source of truth.
+### Cache Hit Path
 
 ```
-Tanpa invalidation aktif:
-- Data bisa stale sampai TTL habis (max 30s dalam contoh)
-- Jika DB crash setelah commit, cache masih serve stale data
+[Client]
+    │
+    ▼
+[Application]
+    │
+    ▼
+[Redis GET]
+    │ HIT
+    ▼
+[Return Cached JSON]
+    │
+    ▼
+[Client]
+```
 
-Dengan invalidation aktif:
-- Data fresh segera setelah mutation
-- TTL hanya backup jika invalidation gagal
+### Cache Miss Path
+
+```
+[Client]
+    │
+    ▼
+[Application]
+    │
+    ▼
+[Redis GET]
+    │ MISS
+    ▼
+[Database Query] → Compute
+    │
+    ▼
+[Redis SET (TTL)] ← Populate cache
+    │
+    ▼
+[Return JSON]
 ```
 
 ---
 
-## 11. Redis Bukan Selalu Cache (Bagian 10)
+## TTL & Cache Invalidation
 
-### Miskonsepsi Umum
+### TTL Strategy (CMMS Dashboard)
 
-> "OTP tidak boleh disimpan di Redis karena bukan cacheable"
-
-**SALAH.** Redis dapat digunakan untuk banyak hal:
-
-| Use Case | Role Redis |
-|----------|-----------|
-| Cache dashboard | **Cache** (snapshot dari DB) |
-| OTP verification | **Ephemeral state store** (TTL-bound) |
-| Rate limiter | **Counter storage** (atomic INCR) |
-| Distributed lock | **Lock storage** (SETNX) |
-| User session | **Session storage** (TTL-bound) |
-| Job queue | **Queue storage** (LIST/BRPOP) |
-
-### Bedanya
-
-- **Redis** = teknologi / data store
-- **Cache** = architectural responsibility (mengurangi DB load)
-
-OTP di Redis:
-- ✅ Valid (Redis sebagai ephemeral state store)
-- ❌ Bukan cache (tidak menyimpan snapshot dari DB)
-- TTL = expiration (bukan safety net)
-
-### Kapan Redis = Cache?
-
-Redis adalah cache jika:
-1. Data berasal dari database (snapshot)
-2. Tujuannya mengurangi DB load
-3. Stale data acceptable (TTL-based)
-
-Redis bukan cache jika:
-1. Data tidak ada di database (OTP, session)
-2. Tujuannya state management (lock, rate limit)
-3. Data harus hilang setelah TTL (ephemeral)
-
----
-
-## 9. Trade-off: Staleness vs Performance
-
-```
-Tanpa Cache:
-- Latency: 50ms
-- Consistency: Strong (data selalu baru)
-
-Dengan Cache (5min TTL):
-- Latency: 1ms
-- Consistency: Eventual (data mungkin 5 menit beda)
-
-Pertanyaan: "Data berubah seberapa sering? Apakah 5 menit stale OK?"
-```
-
----
-
-## 10. Studi Kasus: CMMS/Workshop Dashboard
-
-### Use Case
-
-Dashboard menampilkan statistik workshop/bengkel:
-
-- `InvoiceCountToday` — Jumlah invoice hari ini
-- `TotalRevenueToday` — Pendapatan hari ini  
-- `TopMechanic` — Mekanik paling banyak service
-- `TopSparepart` — Sparepart terlaris
-- `VehicleCountToday` — Kendaraan baru hari ini
-- `ActiveCustomer` — Customer aktif 30 hari terakhir
-
-### Masalah: Cache Miss on Every Request
-
-```
-[500 concurrent users request dashboard]
-          ↓
-      Cache Check (MISS)
-          ↓
-      Database Query (6 queries per request)
-          ↓
-   Aggregation + Join
-          ↓
-       Return to client
-          ↓
-      All 500 requests... same DB work!
-```
-
-**Baseline (Naive Service):**
-- Setiap request dashboard = 6 query DB + aggregation
-- 500 request = ~3000 query DB
-- Latensi tinggi, beban DB meningkat
-
-### Solusi: Cache Aside + Granular TTL
-
-#### Cache Key Design
-
-Key: `cmms:dashboard:v1:branch:{branchID}:date:{YYYY-MM-DD}`
-
-**Alasan:**
-- `cmms` = namespace
-- `dashboard` = entity type
-- `v1` = versioning (invalidasi saat format berubah)
-- `branch:{branchID}` = multi-tenant support
-- `date:{YYYY-MM-DD}` = daily granularity (reset otomatis tiap hari)
-
-#### TTL Strategy
-
-| Field | TTL | Alasan |
+| Field | TTL | Reason |
 |-------|-----|--------|
-| InvoiceCountToday | 30 detik | Dekat transaction time, butuh fresh |
-| TotalRevenueToday | 30 detik | Mirip invoice count |
-| TopMechanic | 2 menit | Perubahan lebih lambat |
-| TopSparepart | 2 menit | Perubahan paling lambat |
-| VehicleCountToday | 15 detik | Biasanya di awal hari |
-| ActiveCustomer | 1 menit | Perubahan sedang |
+| InvoiceCount | 30s | Near transaction time |
+| Revenue | 30s | Same as invoice count |
+| TopMechanic | 2min | Changes slowly |
+| TopSparepart | 2min | Changes slowly |
+| VehicleCount | 15s | Usually at day start |
+| ActiveCustomer | 1min | Moderate changes |
 
-**Trade-off:** Cache teraggregasi sebagai satu object dengan TTL 30 detik. TTL bukan correctness mechanism utama—ini safety net. Untuk invalidation aktif, panggil `InvalidateDashboardCache()` setelah:
-- POST /invoices → invalidate
-- POST /vehicles → invalidate
+### Invalidation Flow
+
+```
+[Aplikasi]
+    │
+    ├── BEGIN
+    ├── UPDATE invoices SET status='paid' WHERE id=100
+    ├── COMMIT ✅
+    │
+    └── INVALIDATE cache key
+            │
+            ├── (or TTL asafety net)
+```
 
 ---
 
-## Bagian 8 — Cache Stampede (Thundering Herd)
+## Cache Stampede
 
-### Masalah
+### Stampede Scenario (Unprotected)
 
 ```
-Timeline:
-T0: Cache key EXPIRES
-T1: 1000 request masuk, semua CACHE MISS
-T2: Semua query DB → overload database
-T3: DB timeout → semua request gagal
+             Cache EXPIRES
+                    │
+           100 Requests
+                    │
+        ┌─────────┴──────────┐
+        │                    │
+        ▼                    ▼
+   DB Query              DB Query
+        │                    │
+        ┌────────────────────┘
+        │
+   ┌────┴────┐
+   │  DB Overload!  │
+   └──────────┘
 ```
 
-### Demonstrasi: Broken vs Protected
+### Protected (Single Flight)
 
-| Service | DB Rebuild Count (100 concurrent) |
-|---------|-----------------------------------|
-| `BrokenStampedeService` | ~100 |
-| `ProtectedStampedeService` | 1 |
+```
+             Cache EXPIRES
+                    │
+           100 Requests
+                    │
+        ┌──────────┴──────────┐
+        │  singleflight.Do()  │
+        └─────────────────────┘
+                    │
+                    ▼
+             1 DB Query Only
+                    │
+                    ▼
+          Shared Result to ALL
+```
 
-**Broken (Tanpa singleflight):**
+---
+
+## Single Flight
+
 ```go
-// Setiap goroutine langsung query DB
-for i := 0; i < 100; i++ {
-    cache.Get() // MISS
-    db.Query()   // SEMUA query DB !
+var flight singleflight.Group{}
+
+func GetData(ctx context.Context, key string) (Dashboard, error) {
+    result, _, _ := flight.Do(key, func() (interface{}, error) {
+        return fetchFromDB()
+    })
+    return result.(Dashboard), nil
 }
 ```
 
-**Protected (Dengan singleflight):**
-```go
-// SingleFlight deduplicates concurrent DB queries
-flight.Do(key, func() {
-    return cache.Get() // HANYA SATU eksekusi
-})
-// 99 goroutine lain menunggu hasil yang sama
+---
+
+## Distributed Lock (Redis SETNX)
+
+```
+App Instance A          Redis           App Instance B
+      │                   │                   │
+      ├── SET lock:1 token NX PX 10000 ──► Accepted
+      │                   │                   │
+      │            ┌──────┴──────┐            │
+      │            │  Lock held  │            │
+      │            └─────────────┘            │
+      │                   │                   │
+      └── GET lock:1 ─────┼───► Returns old token
+                          │                   │
+      ◄─── Wait ──────────┘                   │
 ```
 
 ---
 
-## Bagian 9 — Distributed Stampede & Single Flight Limitation
-
-### Limitation Single Flight
-
-Single flight hanya melindungi **satu process/application instance**.
+## TTL Jitter
 
 ```
-App Instance A ──► SingleFlight ──► DB
-App Instance B ──► SingleFlight ──► DB
-App Instance C ──► SingleFlight ──► DB
+Without Jitter:
+100 keys created at T0
+All expire at T0 + 60s  ← Stampede!
 
-Semua instance punya SingleFlight sendiri → Stampede masih terjadi!
+With Jitter (baseTTL + random(0..15s)):
+Keys expire between T0 + 60s to T0 + 75s
 ```
 
-### Solusi: Distributed Lock dengan Redis
-
-Gunakan Redis `SET key unique-token NX PX ttl` untuk mutual exclusion lintas instance.
-
+**Helper:**
 ```go
-// Acquire lock
-token := uuid.New().String()
-acquired := redis.SetNX(ctx, "lock:dashboard:branch:1", token, 10*time.Second)
-
-// Release dengan atomic compare-and-delete (Lua script)
-// if redis.call("GET", KEYS[1]) == ARGV[1] then
-//     return redis.call("DEL", KEYS[1])
-// else
-//     return 0
-// end
-```
-
-### Trade-off
-
-- ✅ Single flight: Sangat efisien (single-process)
-- ✅ Distributed lock: Melindungi multi-instance
-- ❌ Distributed lock: Network round-trip + Lua script overhead
-
----
-
-## Bagian 10 — TTL Jitter
-
-### Masalah: Synchronized Expiration
-
-```
-100 cache key dibuat bersamaan
-TTL semuanya 60 detik
-↓
-60 detik kemudian semuanya expired bersamaan
-↓
-STAMPEDE! Semua request miss cache
-```
-
-### Solusi: baseTTL + random jitter
-
-```go
-// 60s + random(0..15s) → TTL antara 60-75 detik
 func TTLWithJitter(base, maxJitter time.Duration) time.Duration {
     jitter := time.Duration(rand.Int63n(int64(maxJitter)))
     return base + jitter
 }
 ```
 
-**Result:** Expiration tersebar, stampede mitigasi.
-
 ---
 
-## Bagian 11 — Negative Caching
-
-### Scenario
-
-```
-GET /product/999999
-Product tidak ada di database
-```
-
-### Tanpa Negative Cache
-
-- Request bot berulang
-- Setiap request = database lookup
-- DB tertekan oleh traffic pencarian tidak-valid
-
-### Dengan Negative Cache
-
-```go
-cache.Set("product:999999", "NULL_NOT_FOUND", 30*time.Second)
-```
-
-- Subsequent request → cache hit (not-found)
-- DB protection untuk key tidak ada
-
-### Trade-off
-
-Jika object baru dibuat selama negative TTL:
-- User masih dapat `404` sampai TTL habis
-- Business decision: TTL pendek (5-10 detik) untuk balance
-
----
-
-## Bagian 12 — Cache Key Design
+## Cache Key Design
 
 ### Format
 
@@ -665,65 +295,208 @@ Jika object baru dibuat selama negative TTL:
 namespace:entity:vVersion:tenant:identifier:date
 ```
 
-Contoh: `cmms:dashboard:v1:branch:12:2026-08-28`
+### Examples
 
-### Komponen
-
-| Komponen | Tujuan |
-|----------|--------|
-| `cmms` | Namespace aplikasi |
-| `dashboard` | Entity/resource type |
-| `v1` | Version (invalidation saat schema berubah) |
-| `branch:12` | Tenant/owner isolation |
-| `2026-08-28` | Date/window granularity |
-
-### Mengapa Version Berguna?
-
-```go
-// v1 → v2 (schema change)
-"product:123:v1" → "product:123:v2"
-
-// Tanpa version: harus bulk delete semua key
-// Dengan version: cuma buat key baru, lama auto-expire
-```
+- Dashboard: `cmms:dashboard:v1:branch:12:2026-08-29`
+- Product: `product:123:v1` (versioned for migration)
 
 ### Multi-Tenant Isolation
 
-```
-Tenant A: cmms:dashboard:v1:branch:1:2026-08-28
-Tenant B: cmms:dashboard:v1:branch:2:2026-08-28
-```
-
-Setiap tenant punya key terpisah, tidak ada collision/cache poisoning.
-
-### Evolvable Key Patterns
-
-| Pattern | Use Case |
-|---------|----------|
-| `resource:id` | Single resource |
-| `resource:id:field` | Nested field |
-| `resource:list:tenant:status` | Filtered list |
-| `resource:search:query:hash` | Query result |
+| Tenant | Key |
+|--------|-----|
+| Tenant A, Branch 1 | `cmms:dashboard:v1:tenant:1:branch:1:2026-08-29` |
+| Tenant B, Branch 1 | `cmms:dashboard:v1:tenant:2:branch:1:2026-08-29` |
 
 ---
 
-## Menjalankan Semua Test
+## Cache Failure (Graceful Degradation)
 
-```bash
-cd labs/04-caching && go test -v -count=1 ./...
+```
+Client Request
+      │
+      ▼
+   [Redis] ─X─ ERROR (Redis down)
+      │
+      ▼
+[Fallback to Database] ← Source of Truth
+      │
+      ▼
+  Request succeeds ✓ (slower)
 ```
 
-| Test | Bukti |
-|------|-------|
-| `TestNaiveNoCache` | Latency tidak ada cache |
-| `TestCacheAsideHit` | Cache hit mengurangi latency |
-| `TestCacheStaleRead` | Data cache bisa stal |
-| `TestSingleFlightConcurrentRequests` | Single flight menghindari duplicate query |
-| `TestCacheStampedeMitigation` | Probabilistic refresh mengurangi stampede |
-| `TestDistributedLockMutualExclusion` | Lock only satu yang dapat lock |
-| `TestCacheKeyIncludesVersion` | Version di key untuk invalidation |
-| `TestStampedeBrokenVersion` | Broken service = stampede |
-| `TestStampedeProtectedVersion` | Protected service = single query |
-| `TestTTLWithJitter` | TTL jitter mengurangi synchronized expirations |
-| `TestNegativeCache` | Negative cache mengurangi DB load untuk 404s |
-| `TestDashboardCacheInvalidation` | Invalidation setelah mutation |
+---
+
+## Metrics
+
+| Counter | Meaning |
+|---------|---------|
+| `cache_hit` | Cache returned valid data |
+| `cache_miss` | Cache empty |
+| `cache_error` | Redis error/down |
+| `database_query` | Query to PostgreSQL |
+| `cache_rebuild` | Cache populated from DB |
+
+---
+
+## Common Mistakes
+
+| Mistake | Correct |
+|---------|---------|
+| Cache as single point of failure | Cache as optimization layer |
+| No invalidation after write | Invalidate on mutation |
+| TTL never reviewed | TTL based on data volatility |
+| Global keys (no tenant) | Tenant-scoped keys |
+| No monitoring | Track hit/miss/error rates |
+
+---
+
+## Running the Lab
+
+### Prerequisites
+
+- Go 1.22+
+
+### Run Unit Tests
+
+```bash
+cd /Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/04-caching
+go test -v -count=1 ./...
+```
+
+### Run Experiments
+
+```bash
+go run . -scenario=without-cache
+go run . -scenario=cache-aside
+go run . -scenario=stampede-unprotected
+go run . -scenario=stampede-protected
+```
+
+### Expected Results
+
+```
+Scenario: without-cache
+Requests: 100
+DB Queries: 100
+Cache Hits: 0
+
+Scenario: cache-aside  
+Requests: 100
+DB Queries: 1
+Cache Hits: 99
+
+Scenario: stampede-unprotected
+Concurrent Requests: 100
+DB Rebuilds: 100
+
+Scenario: stampede-protected
+Concurrent Requests: 100
+DB Rebuilds: 1    ← Singleflight!
+```
+
+---
+
+## Exercises
+
+1. **Implement Write-Through** - Add `PayInvoice(ctx, invoiceID)` that updates both DB and cache
+2. **Add Negative Caching** - Cache 404 for 5 seconds
+3. **Multi-Tenant Key Builder** - Create factory function for tenant-scoped keys
+4. **Time-Zone aware** - Implement `TodayInLocation()` for branch timezone support
+5. **Benchmark** - Measure latency with/without cache under load
+6. **Lock Contention** - Add distributed lock for invoice updates
+
+---
+
+## Bagian 21 — Separation of Concerns: Caching vs Optimistic Locking
+
+Lab ini **tidak mencampur** Caching dengan Optimistic Locking.
+
+| Topik | Fokus Utama |
+|-------|-------------|
+| **Optimistic Locking (Lab 12)** | Concurrent writes, Lost update, Version column (`version = version + 1`), Compare-and-swap |
+| **Caching (Lab 04)** | Redundant reads/computation, Cache Aside, TTL, Invalidation, Stampede |
+
+Jangan pernah menggunakan Optimistic Locking sebagai mekanisme cache consistency. Optimistic locking adalah pattern database untuk mencegah race condition pada update, sedangkan caching adalah pattern read-side untuk mengurangi latency dan load.
+
+---
+
+## Bagian 22 — Security, PII, & Permission Caching
+
+### Sensitive Data (PII & Credentials)
+- **Jangan pernah cache** password, credential, token akses, atau PII sensitif (seperti nomor kartu kredit, nomor KTP) secara sembarangan di shared cache.
+- Pastikan cache key mempertahankan **authorization boundary** sehingga User A tidak pernah membaca data milik User B.
+
+### Permission Caching & Risks
+Permission sering di-cache untuk mengurangi query ke DB authorization. Namun ini membawa **risiko besar**:
+
+```
+[Admin mencabut permission User A]
+               ↓
+[Database terupdate]
+               ↓
+[Cache permission User A MASIH ADA (TTL 10 menit)]
+               ↓
+[User A tetap bisa akses resource terlarang selama 10 menit!]
+```
+
+**Mitigasi:**
+1. Gunakan **TTL sangat pendek** (misal 5-10 detik) untuk authorization data.
+2. Lakukan **Active Invalidation** (hapus cache permission segera saat role/permission berubah).
+3. Gunakan **Key Versioning** pada permission (misal `user:123:perms:v5`).
+4. **Jangan cache** permission jika consistency requirement terlalu ketat (misal sistem finansial core).
+
+---
+
+## Bagian 23 — Common Mistakes (Kesalahan Umum)
+
+1. **Cache Everything**: Meng-cache semua hal tanpa analisis akses pattern.
+2. **Cache Cheap Queries**: Meng-cache query `SELECT NOW()` atau key-value lookup yang sudah < 0.1ms di DB.
+3. **No Invalidation Strategy**: Mengandalkan 100% pada TTL tanpa aktif invalidation saat data berubah.
+4. **Remember Forever**: Menyimpan data tanpa TTL atau eviction policy, berisiko memory leak/OOM.
+5. **Global Key on Multi-Tenant**: Menggunakan key generik (`products:list`) sehingga data antar tenant tercampur.
+6. **TTL Terlalu Panjang / Pendek**: Terlalu panjang = stale data; terlalu pendek = cache miss rate tinggi.
+7. **Synchronized Expiration**: Ribuan key expire di detik yang sama (stampede tanpa jitter).
+8. **Cache = Source of Truth**: Menganggap Redis sebagai penyimpanan utama dan mengabaikan DB backup.
+9. **Redis Failure = App Crash**: Tidak menerapkan fallback (graceful degradation) saat Redis down.
+10. **Singleflight vs Distributed Lock**: Menganggap singleflight (`golang.org/x/sync/singleflight`) menyelesaikan stampede lintas instance (padahal hanya single-process).
+11. **Unsafe Permission Caching**: Meng-cache permission tanpa invalidation, menyebabkan ekskalasi privilege setelah hak akses dicabut.
+
+---
+
+## Senior Engineer Takeaways
+
+1. **Cache is not free** — TTL + Eviction planning are required
+2. **Hot keys exist** — Cache moves bottleneck from DB to Redis (capacity planning matters)
+3. **Graceful degradation** — Cache down ≠ system down
+4. **Invalidation hard** — TTL as safety net, not correctness
+5. **Multi-tenancy** — Key design must isolate tenants from day one
+6. **Timezone matters** — "Today" depends on business timezone
+7. **Staleness trade-off** — Ask "How stale is acceptable?" not "Is data changed?"
+8. **Redis ≠ Cache** — Redis is the technology, cache is the architectural pattern
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 03 — Distributed Transaction](../03-database-transaction/)
+- **Next**: [Lab 05 — Pessimistic Locking](../05-pessimistic-locking/)
+- **All Labs**: [](../)
+
+---
+
+## Menggunakan Lab Ini
+
+### Run Experiments
+
+```bash
+cd labs/04-caching
+
+# Run tests
+go test -v -count=1 ./...
+
+# Run specific scenarios
+go run . -scenario=without-cache
+go run . -scenario=cache-aside
+go run . -scenario=stampede-unprotected
+go run . -scenario=stampede-protected
+```

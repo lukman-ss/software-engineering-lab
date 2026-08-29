@@ -10,3 +10,10 @@ Optimistic locking assumes that data contention is infrequent. Instead of lockin
 
 ## Retry Policy
 When a conflict occurs, the operation can be retried with jitter/backoff a limited number of times before returning an error to the caller.
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 11 — Race Condition](../11-race-condition/)
+- **Next**: (End of phase 1)

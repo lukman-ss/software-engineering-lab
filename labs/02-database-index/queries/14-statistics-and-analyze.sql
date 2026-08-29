@@ -6,9 +6,9 @@
 -- The PostgreSQL planner chooses the execution plan based on its statistical model.
 -- `ANALYZE` updates these statistics.
 
-================================
+-- ================================
 -- PART 1: Planner Statistics (`pg_stats`)
-================================
+-- ================================
 
 -- Important statistics columns in `pg_stats`:
 -- n_distinct         : Number (or fraction) of distinct values in a column.
@@ -41,9 +41,9 @@ FROM pg_stats
 WHERE tablename = 'service'
   AND attname = 'service_date';
 
-================================
+-- ================================
 -- PART 2: Insert Substantial Data Without ANALYZE
-================================
+-- ================================
 
 -- Drop existing indexes to observe planner choices based on stale statistics
 DROP INDEX IF EXISTS idx_service_branch_status_date;
@@ -67,9 +67,9 @@ SELECT * FROM service WHERE branch_id = 9;
 -- Compare the `rows` (estimate) with the actual row count.
 -- Notice if the estimate is wildly incorrect because ANALYZE hasn't run since the insert.
 
-================================
+-- ================================
 -- PART 3: Run ANALYZE and Observe Plan Change
-================================
+-- ================================
 
 ANALYZE service;
 
@@ -87,9 +87,9 @@ FROM pg_stats
 WHERE tablename = 'service'
   AND attname = 'branch_id';
 
-================================
+-- ================================
 -- PART 4: Estimated vs Actual Rows
-================================
+-- ================================
 
 -- Compare the planner's estimates with reality.
 -- Look for large discrepancies (indicating stale stats or skewed data).
@@ -107,9 +107,9 @@ WHERE branch_id = 5
 -- decisions based on bad assumptions. Running `ANALYZE` frequently helps keep this accurate.
 -- BUT: Running ANALYZE does NOT guarantee a plan change!
 
-================================
+-- ================================
 -- CLEANUP
-================================
+-- ================================
 
 DELETE FROM service WHERE invoice_no LIKE 'STATS-%';
 ANALYZE service;

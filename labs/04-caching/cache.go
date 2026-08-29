@@ -32,8 +32,8 @@ func CacheKey(entity, id string, version int) string {
 
 // ShouldRefreshEarly menggunakan probabilitas untuk mencegah stampede.
 // Jika data sudah 80% TTL berlalu, random 50% request akan refresh.
-func ShouldRefreshEarly(cache CacheInterface, key string) bool {
-	data, expiry, err := cache.GetWithExpiry(context.Background(), key)
+func ShouldRefreshEarly(ctx context.Context, cache CacheInterface, key string) bool {
+	data, expiry, err := cache.GetWithExpiry(ctx, key)
 	if err != nil || data == "" {
 		return false
 	}

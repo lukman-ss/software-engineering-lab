@@ -42,11 +42,11 @@ ORDER BY service_date DESC;
 -- Buffers: read _____, hit _____
 -- Sort needed? Yes / No
 
------------------------------------
+-- -----------------------------------
 
 -- Understanding PostgreSQL's index combination
 
--- PostgreSQL CAN combine indexes via BitmapAnd when multiple are useful:
+-- PostgreSQL CAN combine indexes via BitmapAnd when multiple are suitable:
 -- 1. BitmapIndexScan on idx_service_branch_id
 -- 2. BitmapIndexScan on idx_service_status
 -- 3. BitmapIndexScan on idx_service_service_date
@@ -59,7 +59,7 @@ ORDER BY service_date DESC;
 
 -- The planner chooses the cheapest plan based on statistics
 
------------------------------------
+-- -----------------------------------
 
 -- Compare with baseline
 -- Baseline execution time: _____ ms
@@ -70,7 +70,7 @@ ORDER BY service_date DESC;
 -- DO NOT automatically mean better performance
 -- PostgreSQL uses what's cheapest based on selectivity
 
------------------------------------
+-- -----------------------------------
 
 -- Cleanup: Drop these indexes to prepare for composite index test
 DROP INDEX IF EXISTS idx_service_branch_id;

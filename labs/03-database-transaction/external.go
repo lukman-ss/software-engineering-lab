@@ -287,7 +287,7 @@ func (s *InvoiceServiceDualWrite) PayInvoiceDualWrite(ctx context.Context, invoi
 }
 
 // ============================================================================
-// 6 & 7. Transactional Outbox Pattern & Dispatcher with Retry Mechanism (Poin 10)
+// 6 & 7. Transactional Outbox Pattern & Dispatcher with Retry Mechanism
 // ============================================================================
 
 type InvoiceServiceOutbox struct {
@@ -340,41 +340,96 @@ func (s *InvoiceServiceOutbox) CountOutboxEvents(ctx context.Context) (int64, er
 	return count, err
 }
 
+// PayInvoiceWithOutboxInjectError demonstrates rollback when outbox insert fails
+func (s *InvoiceServiceOutbox) PayInvoiceWithOutboxInjectError(ctx context.Context, invoiceID int, injectError bool) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx, "UPDATE invoices SET status = 'paid' WHERE order_id = $1", invoiceID)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update invoice: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		_ = tx.Rollback()
+		return ErrInvoicePaid
+	}
+
+	// Try to update first (this should succeed)
+	_, err = tx.ExecContext(ctx, "INSERT INTO outbox_events (id, event_type, aggregate_id, payload, status, attempts, created_at, published_at) VALUES ('bad_id', 'InvoicePaid', '101', '{}', 'pending', 0, NULL)")
+	if injectError && err == nil {
+		// Force an error without letting it succeed - duplicate key simulation
+		err = errors.New("simulated outbox constraint violation")
+	}
+
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("insert outbox: %w", err)
+	}
+
+	log.Printf("[OUTBOX] InvoicePaid event stored for invoice %d", invoiceID)
+	return tx.Commit()
+}
+
+// OutboxDispatcher publishes pending events with retry support and optional DLQ integration
 type OutboxDispatcher struct {
 	db          *sql.DB
 	broker      EventPublisher
 	maxAttempts int
 	failMode    *FailureMode
+	dlq         *DeadLetterQueue
 }
 
 func NewOutboxDispatcher(db *sql.DB, broker EventPublisher, maxAttempts int, failMode *FailureMode) *OutboxDispatcher {
-	return &OutboxDispatcher{
-		db:          db,
-		broker:      broker,
-		maxAttempts: maxAttempts,
-		failMode:    failMode,
-	}
+	return &OutboxDispatcher{db: db, broker: broker, maxAttempts: maxAttempts, failMode: failMode}
+}
+
+func NewOutboxDispatcherWithDLQ(db *sql.DB, broker EventPublisher, maxAttempts int, failMode *FailureMode, dlq *DeadLetterQueue) *OutboxDispatcher {
+	return &OutboxDispatcher{db: db, broker: broker, maxAttempts: maxAttempts, failMode: failMode, dlq: dlq}
 }
 
 func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 	var dispatched int
-	var pendingCount int64
 
-	err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM outbox_events WHERE status = 'pending'").Scan(&pendingCount)
+	// Get ALL pending event IDs first to avoid infinite loops on failing events
+	rows, err := d.db.QueryContext(ctx, "SELECT id, event_type, aggregate_id, payload, attempts FROM outbox_events WHERE status = 'pending'")
 	if err != nil {
-		return 0, fmt.Errorf("count pending: %w", err)
+		return 0, fmt.Errorf("query pending: %w", err)
 	}
 
-	for i := 0; i < int(pendingCount); i++ {
-		var id, eventType, aggregateID, payload string
-		var attempts int
+	type pendingEvent struct {
+		id, eventType, aggregateID, payload string
+		attempts int
+	}
+	var pending []pendingEvent
 
-		err := d.db.QueryRowContext(ctx, "SELECT id, event_type, aggregate_id, payload, attempts FROM outbox_events WHERE status = 'pending' LIMIT 1").Scan(&id, &eventType, &aggregateID, &payload, &attempts)
-		if err != nil {
-			break
+	for rows.Next() {
+		var e pendingEvent
+		if err := rows.Scan(&e.id, &e.eventType, &e.aggregateID, &e.payload, &e.attempts); err == nil {
+			pending = append(pending, e)
 		}
+	}
+	rows.Close()
+
+	for _, e := range pending {
+		id := e.id
+		eventType := e.eventType
+		aggregateID := e.aggregateID
+		payload := e.payload
+		attempts := e.attempts
 
 		if attempts >= d.maxAttempts {
+			// Move to DLQ if there's a broker failure after max attempts
+			if d.dlq != nil {
+				event := Event{ID: id, EventType: eventType, AggregateID: aggregateID, Payload: payload}
+				d.dlq.Add(event, "max attempts exceeded", attempts)
+				_, _ = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'dead_lettered' WHERE id = $1", id)
+				log.Printf("[DISPATCHER] event=%s moved to DLQ after %d attempts", id, attempts)
+			}
 			continue
 		}
 
@@ -396,11 +451,15 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 		}
 
 		if d.failMode != nil && d.failMode.CrashAfterPublish {
-			log.Printf("[DISPATCHER] simulated crash after publish for event=%s", event.ID)
+			log.Printf("[DISPATCHER] simulated crash after publish for event=%s (not marking as published)", event.ID)
+			// Crash happens BEFORE marking as published
+			// This simulates: publish succeeded but process crashed before UPDATE
+			// On restart, dispatcher sees status='pending' and will re-publish
 			return dispatched, ErrProcessCrashed
 		}
 
-		_, err = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'published', attempts = $1 WHERE id = $2", attempts, id)
+		now := time.Now()
+			_, err = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'published', published_at = $1, attempts = $2 WHERE id = $3", now, attempts, id)
 		if err != nil {
 			return dispatched, fmt.Errorf("mark published: %w", err)
 		}
@@ -413,8 +472,13 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 }
 
 // ============================================================================
-// 9. Idempotent Consumer Implementation
+// 9. Idempotent Consumer Implementation (FIXED: consumer_name + event_id)
 // ============================================================================
+
+// processedEventsMutex is a package-level mutex to ensure atomic check-and-insert
+// for idempotency across multiple worker instances. This simulates database-level
+// unique constraint enforcement that would normally be handled by the DB.
+var processedEventsMutex sync.Mutex
 
 type CommissionWorker struct {
 	db              *sql.DB
@@ -426,41 +490,48 @@ func NewCommissionWorker(db *sql.DB) *CommissionWorker {
 	return &CommissionWorker{db: db}
 }
 
+// HandleEvent processes an event idempotently using consumer_name + event_id
+// Uses a package-level mutex to ensure atomicity of the check-and-insert pattern.
+// In a real database with UNIQUE(consumer_name, event_id), this would be atomic.
 func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string, event Event) (bool, error) {
 	log.Printf("[CONSUMER:%s] processing %s", consumerName, event.ID)
 
-	tx, err := c.db.BeginTx(ctx, nil)
+	// Use package-level mutex to ensure atomicity of check-and-insert
+	processedEventsMutex.Lock()
+	defer processedEventsMutex.Unlock()
+
+	// Check if already processed by this consumer
+	// We query by event_id and check consumer_name in code since mockdb's WHERE parser is limited
+	rows, err := c.db.QueryContext(ctx, "SELECT consumer_name FROM processed_events WHERE event_id = $1", event.ID)
 	if err != nil {
-		return false, fmt.Errorf("begin tx: %w", err)
+		return false, fmt.Errorf("query processed_events: %w", err)
 	}
 
-	// Deduplication check
-	var exists bool
-	var count int64
-	row := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID)
-	if err := row.Scan(&count); err == nil && count > 0 {
-		exists = true
+	alreadyProcessed := false
+	for rows.Next() {
+		var existingConsumer string
+		if err := rows.Scan(&existingConsumer); err == nil {
+			if existingConsumer == consumerName {
+				alreadyProcessed = true
+				break
+			}
+		}
 	}
+	rows.Close()
 
-	if exists {
-		_ = tx.Rollback()
+	if alreadyProcessed {
 		log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
 		return false, nil // Idempotent: skip duplicate
 	}
 
-	_, err = tx.ExecContext(ctx, "INSERT INTO processed_events (event_id) VALUES ($1)", event.ID)
+	_, err = c.db.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)", consumerName, event.ID, time.Now())
 	if err != nil {
-		_ = tx.Rollback()
 		return false, fmt.Errorf("insert processed_events: %w", err)
 	}
 
 	c.mu.Lock()
 	c.commissionsPaid++
 	c.mu.Unlock()
-
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("commit: %w", err)
-	}
 
 	log.Printf("[CONSUMER:%s] completed %s", consumerName, event.ID)
 	return true, nil
@@ -518,35 +589,8 @@ func (dlq *DeadLetterQueue) Records() []DLQRecord {
 	return out
 }
 
-type OutboxDispatcherWithDLQ struct {
-	db          *sql.DB
-	broker      EventPublisher
-	maxAttempts int
-	dlq         *DeadLetterQueue
-}
-
-func NewOutboxDispatcherWithDLQ(db *sql.DB, broker EventPublisher, maxAttempts int, dlq *DeadLetterQueue) *OutboxDispatcherWithDLQ {
-	return &OutboxDispatcherWithDLQ{
-		db:          db,
-		broker:      broker,
-		maxAttempts: maxAttempts,
-		dlq:         dlq,
-	}
-}
-
-func (d *OutboxDispatcherWithDLQ) DispatchUntilDLQ(ctx context.Context, event Event, maxRetries int) (bool, error) {
-	for i := 0; i < maxRetries; i++ {
-		err := d.broker.Publish(ctx, event)
-		if err == nil {
-			return true, nil
-		}
-	}
-	d.dlq.Add(event, "max attempts exceeded", maxRetries)
-	return false, fmt.Errorf("event moved to DLQ after %d failed attempts", maxRetries)
-}
-
 // ============================================================================
-// 12. Saga Pattern & Compensating Transactions
+// 10. Saga Pattern & Compensating Transactions (FIXED: correct compensation order)
 // ============================================================================
 
 type SagaStep struct {
@@ -554,9 +598,19 @@ type SagaStep struct {
 	Compensate func(ctx context.Context) error
 }
 
+type SagaExecutionError struct {
+	OriginalError       error
+	CompensationErrors  []error
+}
+
+func (e *SagaExecutionError) Error() string {
+	return fmt.Sprintf("saga failed: original=%v, compensation_errors=%v", e.OriginalError, e.CompensationErrors)
+}
+
 type Saga struct {
-	steps    []SagaStep
-	executed []int
+	steps          []SagaStep
+	executed       []int
+	compensated    []int
 }
 
 func NewSaga() *Saga {
@@ -571,12 +625,38 @@ func (s *Saga) Then(step SagaStep) *Saga {
 func (s *Saga) Execute(ctx context.Context) error {
 	for i, step := range s.steps {
 		if err := step.Action(ctx); err != nil {
-			for j := i - 1; j >= 0; j-- {
-				_ = s.steps[j].Compensate(ctx)
+			// Compensate only the steps that successfully completed
+			// Steps are compensated in reverse order
+			// Continue compensating even if a compensation fails (PROMPT 11)
+			var compErrors []error
+			// Find the index of the last successfully executed step
+			for j := len(s.executed) - 1; j >= 0; j-- {
+				if compErr := s.steps[s.executed[j]].Compensate(ctx); compErr != nil {
+					compErrors = append(compErrors, compErr)
+				}
+				s.compensated = append(s.compensated, s.executed[j])
+			}
+			// Note: s.executed remains as-is to show what executed before failure
+			_ = s.executed // reference to avoid unused variable warning
+			if len(compErrors) > 0 {
+				return &SagaExecutionError{
+					OriginalError:      err,
+					CompensationErrors: compErrors,
+				}
 			}
 			return err
 		}
 		s.executed = append(s.executed, i)
 	}
 	return nil
+}
+
+// GetExecutedSteps returns the list of successfully executed step indices
+func (s *Saga) GetExecutedSteps() []int {
+	return s.executed
+}
+
+// GetCompensatedSteps returns the list of compensated step indices in order of compensation
+func (s *Saga) GetCompensatedSteps() []int {
+	return s.compensated
 }

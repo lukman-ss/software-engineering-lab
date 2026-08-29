@@ -121,7 +121,7 @@ func TestCacheStampedeMitigation(t *testing.T) {
 	// Simulate early refresh check
 	count := 0
 	for i := 0; i < 100; i++ {
-		if caching.ShouldRefreshEarly(cache, key) {
+		if caching.ShouldRefreshEarly(ctx, cache, key) {
 			count++
 		}
 	}

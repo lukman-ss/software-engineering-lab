@@ -71,13 +71,16 @@ This query:
 
 ## Dataset
 
-The table is seeded with ~500,000 rows with realistic, skewed distributions via `generate_series()`:
-- Branch 2 and 5 busiest (~20% each)
-- Branch 1, 3, 4, 6 moderate (~20% each)
-- FINISHED status: ~75% of rows (high-volume)
-- CANCELLED status: ~24% of rows
-- WAITING status: ~1% of rows (low-volume)
-- PENDING_REFUND status: ~0.1% of rows (rare case for selectivity experiments)
+The table is seeded with exactly 500,000 rows with realistic, skewed distributions via `generate_series()`:
+- Branch 2 busiest (25%)
+- Branch 3 moderate (20%)
+- Branch 1, 4, 5 moderate (15% each)
+- Branch 6 least busy (10%)
+- FINISHED status: 70.0% of rows (high-volume)
+- CANCELLED status: 20.0% of rows
+- IN_PROGRESS status: 5.0% of rows
+- WAITING status: 4.9% of rows
+- PENDING_REFUND status: 0.1% of rows (rare case for selectivity experiments)
 
 ---
 
@@ -100,7 +103,7 @@ psql -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/seed.sql
 Verify data volume:
 ```sql
 SELECT COUNT(*) FROM service;
--- Expected: ~500,000 rows
+-- Expected: 500,000 rows
 ```
 
 Check distributions:
@@ -108,6 +111,22 @@ Check distributions:
 SELECT status, COUNT(*) FROM service GROUP BY status;
 SELECT branch_id, COUNT(*) FROM service GROUP BY branch_id;
 ```
+
+### Baseline Verification
+
+Verify the baseline has no dashboard-supporting secondary indexes:
+
+```sql
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename = 'service'
+ORDER BY indexname;
+```
+
+Expected output: ONLY constraint-backed indexes (`service_pkey`, `service_invoice_no_key`).
+
+No dashboard-supporting secondary indexes exist for (`branch_id`, `status`, `service_date`) in the baseline.
 
 ---
 
@@ -118,12 +137,12 @@ These are **NOT** the same thing:
 | Concept | Definition | Example |
 |---------|------------|---------|
 | **Cardinality** | Number of distinct values | `status` has 5 distinct values |
-| **Match fraction** | `matching_rows / total_rows` | `status = 'FINISHED'` → 0.75 |
+| **Match fraction** | `matching_rows / total_rows` | `status = 'FINISHED'` → 0.70 |
 
-> **Convention used in this lab**: We use "match fraction" to refer to the numeric ratio (e.g., 0.75). We say a predicate is "highly selective" if the match fraction is small (e.g., 0.1%), meaning it filters out most rows. We say it is "not very selective" if the match fraction is large (e.g., 75%).
+> **Convention used in this lab**: We use "match fraction" to refer to the numeric ratio (e.g., 0.70). We say a predicate is "highly selective" if the match fraction is small (e.g., 0.1%), meaning it filters out most rows. We say it is "not very selective" if the match fraction is large (e.g., 70%).
 
 **Key insight**: Low cardinality does NOT mean index is useless.
-- `status = 'FINISHED'` (75% match fraction) = not very selective = Seq Scan may win
+- `status = 'FINISHED'` (70% match fraction) = not very selective = Seq Scan may win
 - `status = 'PENDING_REFUND'` (0.1% match fraction) = highly selective = Index wins!
 
 Check PostgreSQL statistics:
@@ -219,7 +238,7 @@ Compare three different column orders. Learn why left-to-right ordering matters.
 However, `WHERE b = ?` (skipping `a`) is not literally "impossible". PostgreSQL 16 can in principle use the index, but without a constraint on the leftmost column, it may need to scan a large or complete portion of the index. The planner will therefore often prefer Seq Scan or another index.
 
 ### Experiment 5: Selectivity Analysis (queries/05-low-cardinality-selectivity.sql)
-Test `status = 'FINISHED'` (75% match) vs `status = 'PENDING_REFUND'` (0.1% match).
+Test `status = 'FINISHED'` (70% match) vs `status = 'PENDING_REFUND'` (0.1% match).
 See same index produce different plans based on predicate selectivity.
 
 ### Experiment 6: ORDER BY + LIMIT (queries/06-order-by-limit.sql)
@@ -250,7 +269,7 @@ Compare `EXTRACT(YEAR FROM service_date)` (non-SARGable) with range predicates a
 Inspect `pg_stats` (`n_distinct`, `most_common_vals`, `histogram_bounds`). See how running `ANALYZE` updates planner estimates.
 
 ### Experiment 15: When Seq Scan is Correct (queries/15-seqscan-is-correct.sql)
-Destroy the misconception that Seq Scan = bad. See why reading 75% of the table sequentially beats index traversal + random heap access.
+Destroy the misconception that Seq Scan = bad. See why reading 70% of the table sequentially beats index traversal + random heap access.
 
 ### Experiment 16: Production-Safe Index Creation (queries/16-production-safe-index.sql)
 Learn how `CREATE INDEX CONCURRENTLY` avoids locking production tables during long builds.
@@ -297,23 +316,23 @@ ORDER BY service_date DESC;
 CREATE INDEX idx_service_branch_status_date
 ON service(branch_id, status, service_date DESC);
 ```
-This is a candidate based on this query shape, not a universally correct index.
+This is a workload-specific candidate, not a universally correct index.
 
-**2. Column order matters** because multicolumn B-tree indexes are searched from left to right. Equality predicates (`branch_id`, `status`) filter down the tree; the range predicate (`service_date`) bounds the scan. Column order determines which predicates can be used and in what order.
+**2. Column order matters** because leading equality predicates can tightly constrain the B-tree scan range. The range predicate then bounds the remaining portion. Column order affects how much of the index PostgreSQL must scan.
 
-**3. Prove usage** by running `EXPLAIN (ANALYZE, BUFFERS)` and looking for "Index Scan" or "Index Only Scan" in the plan, plus seeing `rows=` values that match the filter selectivity.
+**3. Prove usage** by running `EXPLAIN (ANALYZE, BUFFERS)` and inspecting the actual plan tree to identify which index nodes participate (Index Scan, Index Only Scan, Bitmap Index Scan, Bitmap Heap Scan, BitmapAnd, or BitmapOr).
 
 **4. INSERT impact** - The index adds B-tree maintenance overhead. Each INSERT must find the correct key position and may cause page splits.
 
 **5. UPDATE impact** - Updating an indexed column requires index modification. Updating non-indexed columns may use HOT updates to avoid index touch.
 
-**6. Three independent indexes CAN work** because PostgreSQL can combine them using BitmapAnd: Bitmap Index Scan → Bitmap Heap Scan pattern. However, a well-designed composite index is usually cheaper.
+**6. Three independent indexes CAN work** because PostgreSQL can combine them via bitmap operations. A composite index can be cheaper for this repeated query shape, but PostgreSQL can combine independent indexes through BitmapAnd. Measure the real workload.
 
 **7. BitmapAnd** allows PostgreSQL to use multiple single-column indexes: each predicate filters rows independently, bitmaps are ANDed together, then the result fetches rows.
 
 **8. Seq Scan might be chosen** when the predicate is not selective enough (e.g., 70% match) — sequential read is cheaper than random page access via index.
 
-**9. Sort elimination** - The index provides rows in `service_date DESC` order, so the Sort node is unnecessary.
+**9. Sort elimination** - The index provides rows in `service_date DESC` order. PostgreSQL B-tree indexes support backward scans, so an ASC-defined index can also satisfy DESC ordering via scan reversal.
 
 **10. 90% FINISHED** - The predicate has a large match fraction (not highly selective); Seq Scan would likely be chosen even with the index available.
 
@@ -321,11 +340,11 @@ This is a candidate based on this query shape, not a universally correct index.
 
 **12. LIMIT 20** - Index allows early termination: stop after 20 matching rows instead of processing all.
 
-**13. INCLUDE** useful when the query can satisfy all columns from the index (fewer columns), enabling Index Only Scan and avoiding heap access.
+**13. INCLUDE** is useful when all referenced columns are available from the index (fewer columns) and visibility map state allows heap visibility checks to be skipped, enabling Index Only Scan and avoiding heap access. Check "Heap Fetches" in the EXPLAIN ANALYZE output to verify.
 
 **14. Partial index** better when the query always filters a small subset (e.g., `status = 'IN_PROGRESS'` ~5%). Partial index size advantage grows when the indexed subset is substantially smaller than the full table. Faster maintenance, less storage.
 
-**15. Check `pg_stat_user_indexes`** where `idx_scan = 0` with sufficient monitoring period, high index size, and no functional dependencies indicate an unused index.
+**15. Check `pg_stat_user_indexes`** where `idx_scan = 0` over a meaningful observation period is only a candidate signal. Before dropping, verify: statistics reset time, workload coverage, constraints/dependencies, rare jobs, maintenance/reporting traffic, index size, and write cost.
 </details>
 
 ---
@@ -336,7 +355,7 @@ This is a candidate based on this query shape, not a universally correct index.
 labs/02-database-index/
 ├── README.md           # This file - learning guide
 ├── schema.sql          # Table definition
-├── seed.sql            # ~500,000 row realistic dataset
+├── seed.sql            # Exactly 500,000 row realistic dataset
 ├── cleanup.sql         # Reset everything
 ├── queries/
 │   ├── 01-baseline.sql
