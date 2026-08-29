@@ -203,7 +203,8 @@ func (m *MockCacheWithStats) SetWithExpiry(key, data string, ttl, actualExpiry t
 	m.expiries[key] = actualExpiry
 }
 
-// MockRedisClient - implements LockInterface for distributed locking tests
+// MockRedisClient - implements LockInterface for distributed locking tests.
+// Provides atomic SET NX and compare-and-delete (via ReleaseLock in distributed_lock.go).
 type MockRedisClient struct {
 	data map[string]string
 	mu   sync.RWMutex
@@ -215,6 +216,8 @@ func NewMockRedisClient() *MockRedisClient {
 	}
 }
 
+// SetNX atomically sets key only if it doesn't exist.
+// Returns true if key was set, false if key already existed.
 func (r *MockRedisClient) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -227,6 +230,7 @@ func (r *MockRedisClient) SetNX(ctx context.Context, key, value string, ttl time
 	return true, nil
 }
 
+// Get retrieves value (for lock token verification).
 func (r *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -238,6 +242,9 @@ func (r *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
+// Del deletes a key by value verification.
+// In Redis, this would be a Lua script: if GET == ARGV then DEL.
+// For simplicity, this returns whether key existed and was deleted.
 func (r *MockRedisClient) Del(ctx context.Context, key string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -247,6 +254,21 @@ func (r *MockRedisClient) Del(ctx context.Context, key string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// CompareAndDel atomically deletes only if value matches.
+// Returns true if deleted, false if value didn't match or key missing.
+func (r *MockRedisClient) CompareAndDel(ctx context.Context, key, value string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	val, exists := r.data[key]
+	if !exists || val != value {
+		return false, nil // Key missing or value mismatch
+	}
+
+	delete(r.data, key)
+	return true, nil
 }
 
 // HeavyDB is for stampede testing

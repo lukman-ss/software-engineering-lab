@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	caching "github.com/lukman/software-engineer-lab/labs/04-caching"
 )
@@ -42,35 +43,32 @@ func main() {
 }
 
 // Scenario 1: without-cache (baseline demo)
+// Simulates 100 direct repository calls with NO caching
 func runWithoutCache(ctx context.Context) {
 	fmt.Println("=== SCENARIO: without-cache (baseline demo) ===")
-	fmt.Println("Explanation: This simulation shows the pattern WITHOUT caching.")
-	fmt.Println("In production: every request would query the database.")
+	fmt.Println("Explanation: This simulation shows the pattern WITHOUT any caching layer.")
+	fmt.Println("Every request goes directly to the repository/database.")
 
-	cache := caching.NewMockCache()
-	metrics := caching.NewCacheMetrics()
-
-	// Use FakeDashboardRepository which counts invocations
 	repo := caching.NewFakeDashboardRepository()
-
-	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 
 	const reqCount = 100
 	fmt.Printf("Simulating %d sequential requests to dashboard...\n", reqCount)
 
+	// Direct repository calls - no caching
 	for i := 0; i < reqCount; i++ {
-		_, _ = svc.GetDashboard(ctx, 1)
+		_, _ = repo.GetDashboard(ctx, 1, time.Now())
 	}
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Requests: %d\n", reqCount)
-	fmt.Printf("Repository Calls: %d (simulated - would be 100 in production)\n", repo.CallCount)
+	fmt.Printf("Repository Calls: %d\n", repo.CallCount)
 	fmt.Printf("Cache Hits: 0\n")
-	fmt.Printf("Cache Misses: %d (all requests miss cache)\n", reqCount)
+	fmt.Printf("Cache Misses: 0\n")
 	fmt.Printf("\nConclusion: Without cache, every request puts full load on database.\n")
 }
 
 // Scenario 2: cache-aside
+// First request misses and populates cache, subsequent requests hit
 func runCacheAside(ctx context.Context) {
 	fmt.Println("=== SCENARIO: cache-aside ===")
 	cache := caching.NewMockCacheWithStats()
@@ -96,17 +94,19 @@ func runCacheAside(ctx context.Context) {
 }
 
 // Scenario 3: stampede-unprotected
+// Multiple concurrent requests when cache is empty hit DB multiple times
 func runStampedeUnprotected(ctx context.Context) {
 	fmt.Println("=== SCENARIO: stampede-unprotected ===")
-	fmt.Println("Context: Cache key expired. 100 users request dashboard simultaneously.")
+	fmt.Println("Context: Cache key expired/empty. 100 users request dashboard simultaneously.")
 
 	cache := caching.NewMockCache()
 	repo := caching.NewCounterRepository()
 	svc := caching.NewBrokenStampedeService(cache, repo)
 
 	const concurrentReqs = 100
-	var wg sync.WaitGroup
+	fmt.Printf("Simulating %d concurrent requests to dashboard...\n", concurrentReqs)
 
+	var wg sync.WaitGroup
 	for i := 0; i < concurrentReqs; i++ {
 		wg.Add(1)
 		go func() {
@@ -124,9 +124,10 @@ func runStampedeUnprotected(ctx context.Context) {
 }
 
 // Scenario 4: stampede-protected
+// Singleflight deduplicates concurrent requests into one DB call
 func runStampedeProtected(ctx context.Context) {
 	fmt.Println("=== SCENARIO: stampede-protected ===")
-	fmt.Println("Context: Cache key expired. 100 users request dashboard simultaneously.")
+	fmt.Println("Context: Cache key expired/empty. 100 users request dashboard simultaneously.")
 	fmt.Println("Protection: singleflight")
 
 	cache := caching.NewMockCache()
@@ -134,8 +135,9 @@ func runStampedeProtected(ctx context.Context) {
 	svc := caching.NewProtectedStampedeService(cache, repo)
 
 	const concurrentReqs = 100
-	var wg sync.WaitGroup
+	fmt.Printf("Simulating %d concurrent requests to dashboard...\n", concurrentReqs)
 
+	var wg sync.WaitGroup
 	for i := 0; i < concurrentReqs; i++ {
 		wg.Add(1)
 		go func() {

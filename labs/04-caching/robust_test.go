@@ -10,29 +10,36 @@ import (
 	caching "github.com/lukman/software-engineer-lab/labs/04-caching"
 )
 
-// --- FAKTA: Cache bukan single point of failure ---
-
-// TestCacheFailureGracefulDegradation demonstrasikan bahwa cache down tidak menyebabkan 500 error
+// TestCacheFailureGracefulDegradation verifies: when cache fails, service falls back to repository.
 func TestCacheFailureGracefulDegradation(t *testing.T) {
-	// Simulasi Redis down
 	cache := caching.NewFailingMockCache()
 	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// Service dengan failing cache
-	// Service harus fallback ke database bila cache gagal
-	_, cacheErr := cache.Get(ctx, "test")
-	if cacheErr == nil {
-		t.Fatal("expected cache to fail (simulating Redis down)")
+	// Request should succeed via fallback
+	result, err := svc.GetDashboard(ctx, 1)
+	if err != nil {
+		t.Fatalf("expected fallback to succeed, got error: %v", err)
 	}
 
-	// Counter error ditambah
-	metrics.IncError()
-	if metrics.Errors() != 1 {
-		t.Error("expected error count to increment")
+	// Repository should have been called for fallback
+	if repo.CallCount == 0 {
+		t.Error("repository should have been called for fallback")
 	}
 
-	t.Log("SUCCESS: Cache failure increments error counter (fallback mechanism ready)")
+	// Metrics should show error
+	if metrics.Errors() == 0 {
+		t.Error("cache failure should increment error counter")
+	}
+
+	// Result should be valid
+	if result.BranchID != 1 {
+		t.Errorf("expected BranchID 1, got %d", result.BranchID)
+	}
+
+	t.Log("✓ Cache failure triggers fallback to repository")
 }
 
 // TestMetricsTracking mengecek bahwa semua metrik tercatat
@@ -172,56 +179,52 @@ func TestConcurrentCacheOperations(t *testing.T) {
 	t.Log("SUCCESS: No race conditions (sync.RLock/Sync.Mutex in mock)")
 }
 
-// TestSourceOfTruth verifies database is source of truth
+// TestSourceOfTruth verifies repository is source of truth for cache
 func TestSourceOfTruth(t *testing.T) {
-	// Key insight: PostgreSQL = source of truth, Redis = derived state
-
-	// Scenario 1: Redis empty, DB has data
-	// Result: Cache miss, DB query, rebuild cache
-
-	// Scenario 2: Redis corrupt, DB healthy
-	// Result: Unmarshal error, delete cache, DB query, rebuild
-
-	// Scenario 3: Redis down, DB healthy
-	// Result: Cache error, fallback to DB
-
-	// Scenario 4: Redis up, DB down
-	// Result: Cache miss, DB error (propagate error)
-
-	t.Log("Source of Truth: PostgreSQL database")
-	t.Log("Cache: Redis — derived state, rebuildable from source of truth")
-	t.Log("If Redis is lost: system rebuilds cache on demand (no data loss)")
-
-	// Demonstrate: can rebuild from DB
+	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
-	_ = ctx
-	data := `{"test":"rebuilt_from_db"}`
-	if len(data) == 0 {
-		t.Error("should be able to rebuild cache from source of truth")
+
+	branchID := int64(1)
+
+	// Step 1: Initial request - repo returns InvoiceCountToday=42
+	repo.CallCount = 0
+	_, _ = svc.GetDashboard(ctx, branchID)
+
+	if repo.CallCount != 1 {
+		t.Fatalf("expected 1 repo call, got %d", repo.CallCount)
 	}
 
-	t.Log("SUCCESS: Cache can always be rebuilt from PostgreSQL")
-}
+	// Step 2: Verify cache has been populated
+	_, err := cache.Get(ctx, caching.DashboardCacheKey(branchID))
+	if err != nil {
+		t.Fatalf("expected cache to be populated: %v", err)
+	}
 
-// TestCacheWarmUp is a placeholder for pre-warming discussion
-func TestCacheWarmUpPlaceholder(t *testing.T) {
-	// Cache warm-up strategy:
-	// 1. Lazy loading (cache aside): on-demand, simple, can have thundering herd
-	// 2. Pre-warming: on deployment/restart, iterate hot keys, populate cache
+	// Step 3: Modify repo to return different value (simulate DB update)
+	repo.NextValue = func() caching.Dashboard {
+		return caching.Dashboard{BranchID: branchID, InvoiceCountToday: 99}
+	}
 
-	// When useful:
-	// - High-traffic dashboard with known hot keys
-	// - Expensive reports that need to be fast immediately
-	// - Known expensive queries
+	// Step 4: Invalidate cache (simulates commit -> invalidate)
+	_ = cache.Delete(ctx, caching.DashboardCacheKey(branchID))
 
-	// Implementation (not required for lab):
-	// func WarmUp(ctx context.Context, keys []string) {
-	//     for _, key := range keys {
-	//         data := computeExpensiveQuery(key)
-	//         cache.Set(key, data, ttl)
-	//     }
-	// }
+	// Step 5: Next request should get fresh data from repo
+	repo.CallCount = 0
+	result, err := svc.GetDashboard(ctx, branchID)
+	if err != nil {
+		t.Fatalf("expected request to succeed after invalidation: %v", err)
+	}
 
-	t.Log("Cache warm-up: optional, useful for known hot keys")
-	t.Log("Default: lazy loading (cache aside)")
+	if repo.CallCount != 1 {
+		t.Errorf("expected 1 repo call after invalidation, got %d", repo.CallCount)
+	}
+
+	if result.InvoiceCountToday != 99 {
+		t.Errorf("expected InvoiceCountToday=99 from updated repo, got %d", result.InvoiceCountToday)
+	}
+
+	t.Log("✓ Source of Truth verified: repo -> cache -> invalidation -> fresh repo data")
 }

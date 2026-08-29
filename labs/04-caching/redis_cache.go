@@ -100,6 +100,25 @@ func (c *RedisCache) Del(ctx context.Context, key string) (bool, error) {
 	return count > 0, nil
 }
 
+// CompareAndDel atomically deletes only if value matches via Lua script.
+func (c *RedisCache) CompareAndDel(ctx context.Context, key, value string) (bool, error) {
+	script := `
+	if redis.call("GET", KEYS[1]) == ARGV[1] then
+		return redis.call("DEL", KEYS[1])
+	else
+		return 0
+	end`
+	result, err := c.client.Eval(ctx, script, []string{key}, value).Result()
+	if err != nil {
+		return false, fmt.Errorf("redis eval: %w", err)
+	}
+
+	if val, ok := result.(int64); ok {
+		return val == 1, nil
+	}
+	return false, nil
+}
+
 // GetWithExpiry retrieves a value and its remaining TTL.
 func (c *RedisCache) GetWithExpiry(ctx context.Context, key string) (string, time.Time, error) {
 	val, err := c.client.Get(ctx, key).Result()

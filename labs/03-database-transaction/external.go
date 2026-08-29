@@ -612,13 +612,13 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 // ============================================================================
 
 // CommissionWorker processes events idempotently.
-// KEY DESIGN (PROMPT 67-70): business state + processed_events are committed
-// in a SINGLE transaction. This prevents:
+// KEY DESIGN: business state (commissions) + processed_events are committed
+// in a SINGLE transaction. This ensures:
 //   - business state committed but dedup record lost (redelivery = duplicate)
 //   - dedup record committed but business state lost (skipped processing)
 type CommissionWorker struct {
 	db              *sql.DB
-	commissionsPaid int64
+	commissionsPaid int64 // observability only, NOT business state
 	mu              sync.Mutex
 }
 
@@ -627,7 +627,8 @@ func NewCommissionWorker(db *sql.DB) *CommissionWorker {
 }
 
 // HandleEvent processes an event idempotently using consumer_name + event_id.
-// Business state and deduplication record are committed atomically in one transaction.
+// Uses atomic INSERT ON CONFLICT DO NOTHING pattern for race-free deduplication.
+// Business state (commissions) and dedup marker are committed atomically.
 // Returns (true, nil) = processed, (false, nil) = duplicate skipped, (false, error) = failure.
 func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string, event Event) (bool, error) {
 	log.Printf("[CONSUMER:%s] processing %s", consumerName, event.ID)
@@ -636,46 +637,42 @@ func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string,
 	if err != nil {
 		return false, fmt.Errorf("begin tx: %w", err)
 	}
-	defer func() {
-		if tx != nil {
-			_ = tx.Rollback()
-		}
-	}()
 
-	// 1. Check if already processed (idempotency check within transaction)
-	var existingConsumer string
-	rows, err := tx.QueryContext(ctx, "SELECT consumer_name FROM processed_events WHERE event_id = $1", event.ID)
-	if err != nil {
-		return false, fmt.Errorf("query processed_events: %w", err)
-	}
-	for rows.Next() {
-		if err := rows.Scan(&existingConsumer); err == nil && existingConsumer == consumerName {
-			rows.Close()
-			log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
-			return false, nil // Idempotent skip
-		}
-	}
-	rows.Close()
-
-	// 2. Business operation (within transaction)
-	c.mu.Lock()
-	c.commissionsPaid++
-	c.mu.Unlock()
-
-	// 3. Record deduplication entry in SAME transaction
-	_, err = tx.ExecContext(ctx,
-		"INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)",
+	// 1. Atomically try to claim the event (ON CONFLICT DO NOTHING)
+	result, err := tx.ExecContext(ctx,
+		"INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING",
 		consumerName, event.ID, time.Now())
 	if err != nil {
+		_ = tx.Rollback()
 		return false, fmt.Errorf("insert processed_events: %w", err)
 	}
 
-	// 4. Commit both business state + dedup atomically
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		_ = tx.Rollback()
+		log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
+		return false, nil // Idempotent skip
+	}
+
+	// 2. Business operation - INSERT into commissions table (within same transaction)
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO commissions (event_id, invoice_id, amount, created_at) VALUES ($1, $2, $3, $4)",
+		event.ID, event.AggregateID, 10000.0, time.Now())
+	if err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("insert commission: %w", err)
+	}
+
+	// 3. Commit both dedup marker + business state atomically
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit consumer tx: %w", err)
 	}
 
-	tx = nil // committed, don't rollback in defer
+	// Observability counter (out of tx for metrics, NOT business state)
+	c.mu.Lock()
+	c.commissionsPaid++
+	c.mu.Unlock()
+
 	log.Printf("[CONSUMER:%s] completed %s", consumerName, event.ID)
 	return true, nil
 }
@@ -684,6 +681,13 @@ func (c *CommissionWorker) CommissionsPaidCount() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.commissionsPaid
+}
+
+// GetDBCommissionCount returns the actual business state count from the database
+func (c *CommissionWorker) GetDBCommissionCount(ctx context.Context) (int64, error) {
+	var count int64
+	err := c.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&count)
+	return count, err
 }
 
 // ============================================================================

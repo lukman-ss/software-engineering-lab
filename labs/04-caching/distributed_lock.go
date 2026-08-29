@@ -42,17 +42,15 @@ func TryAcquireLock(ctx context.Context, locker LockInterface, key string, ttl t
 
 // ReleaseLock melepaskan lock hanya jika value cocok (prevents releasing someone else's lock)
 func ReleaseLock(ctx context.Context, locker LockInterface, key, value string) error {
-	// Dalam implementasi nyata, ini menggunakan Lua script:
-	// if redis.call("GET", KEYS[1]) == ARGV[1] then
-	//     return redis.call("DEL", KEYS[1])
-	// else
-	//     return 0
-	// end
-
-	// Untuk mock, kita hapus semua key yang dimulai dengan lock:
-	current, _ := locker.Get(ctx, key)
-	_ = current // Mock implementation
-	_, _ = locker.Del(ctx, key)
+	// Use atomic compare-and-delete to prevent releasing someone else's lock
+	deleted, err := locker.CompareAndDel(ctx, key, value)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		// Lock was held by someone else or didn't exist
+		return fmt.Errorf("lock not released: value mismatch or key missing")
+	}
 	return nil
 }
 

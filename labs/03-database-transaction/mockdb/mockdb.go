@@ -33,6 +33,7 @@ func newDB() *DB {
 			"invoices":            {},
 			"outbox_events":       {},
 			"processed_events":    {},
+			"commissions":         {},
 		},
 	}
 }
@@ -119,6 +120,10 @@ func (t *txn) Rollback() error {
 	return nil
 }
 
+func (c *conn) CheckConstraintViolation(query string, vals []driver.Value) error {
+	return nil
+}
+
 func (c *conn) ExecContext(_ context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	return c.exec(query, toVals(args))
 }
@@ -195,7 +200,7 @@ func doExec(tables map[string]*tableState, q string, vals []driver.Value) (drive
 
 	upper := strings.ToUpper(strings.TrimSpace(normalized))
 
-	if strings.HasPrefix(upper, "INSERT") && strings.Contains(upper, "RETURNING") {
+	if strings.HasPrefix(upper, "INSERT") && (strings.Contains(upper, "RETURNING") || strings.Contains(upper, "ON CONFLICT")) {
 		return doInsertReturning(tables, normalized, vals)
 	}
 
@@ -264,6 +269,8 @@ func doInsert(tables map[string]*tableState, q string, vals []driver.Value) (dri
 }
 
 // doInsertReturning handles INSERT INTO ... ON CONFLICT DO NOTHING RETURNING
+// When ON CONFLICT is detected, returns result with affected=0 (not an error)
+// This allows the caller to check RowsAffected() to determine if insert happened.
 func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Value) (driver.Result, error) {
 	upper := strings.ToUpper(q)
 
@@ -302,7 +309,11 @@ func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Va
 
 	// Find VALUES
 	idxVals := strings.Index(upper, " VALUES ")
-	valsParenOpen := idxVals
+	if idxVals < 0 {
+		return nil, fmt.Errorf("malformed VALUES: %s", q)
+	}
+	// Find opening paren after VALUES keyword
+	valsParenOpen := strings.Index(q[idxVals:], "(") + idxVals
 	valsParenClose := findMatchingClose(q, valsParenOpen)
 	if valsParenClose < 0 {
 		return nil, fmt.Errorf("malformed VALUES: %s", q)
@@ -349,7 +360,8 @@ func doInsertReturning(tables map[string]*tableState, q string, vals []driver.Va
 			}
 		}
 		if allMatch {
-			return nil, sql.ErrNoRows
+			// Conflict detected - DO NOTHING (return affected=0)
+			return &result{affected: 0}, nil
 		}
 	}
 
