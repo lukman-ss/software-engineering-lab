@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lukman/software-engineer-lab/pkg/middleware"
+	"github.com/lukman-ss/software-engineering-lab/pkg/middleware"
 )
 
 func TestRequestIDMiddleware(t *testing.T) {

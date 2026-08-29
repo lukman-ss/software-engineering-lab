@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	apperrors "github.com/lukman/software-engineer-lab/pkg/errors"
+	apperrors "github.com/lukman-ss/software-engineering-lab/pkg/errors"
 )
 
 var (

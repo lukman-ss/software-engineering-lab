@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lukman/software-engineer-lab/labs/01-idempotency/safe"
+	"github.com/lukman-ss/software-engineering-lab/labs/01-idempotency/safe"
 )
 
 // 1. Same key + same payload -> side effect only once

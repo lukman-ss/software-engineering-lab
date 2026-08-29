@@ -1,4 +1,4 @@
-module github.com/lukman/software-engineer-lab
+module github.com/lukman-ss/software-engineering-lab
 
 go 1.22
 

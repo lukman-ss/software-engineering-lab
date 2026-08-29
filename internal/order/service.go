@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lukman/software-engineer-lab/internal/inventory"
-	"github.com/lukman/software-engineer-lab/internal/notification"
+	"github.com/lukman-ss/software-engineering-lab/internal/inventory"
+	"github.com/lukman-ss/software-engineering-lab/internal/notification"
 	"github.com/lukman/software-engineering-lab/internal/payment"
 	"github.com/lukman/software-engineering-lab/pkg/util"
 )

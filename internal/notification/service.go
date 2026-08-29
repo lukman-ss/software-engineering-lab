@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lukman/software-engineer-lab/pkg/util"
+	"github.com/lukman-ss/software-engineering-lab/pkg/util"
 )
 
 type appService struct {

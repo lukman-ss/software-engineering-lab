@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	apperrors "github.com/lukman/software-engineer-lab/pkg/errors"
+	apperrors "github.com/lukman-ss/software-engineering-lab/pkg/errors"
 )
 
 func TestFromError(t *testing.T) {

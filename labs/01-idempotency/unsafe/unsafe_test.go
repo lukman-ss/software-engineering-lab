@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lukman/software-engineer-lab/labs/01-idempotency/unsafe"
+	"github.com/lukman-ss/software-engineering-lab/labs/01-idempotency/unsafe"
 )
 
 // TestDuplicatePaymentBug demonstrates that without idempotency,

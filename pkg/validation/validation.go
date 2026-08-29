@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	apperrors "github.com/lukman/software-engineer-lab/pkg/errors"
+	apperrors "github.com/lukman-ss/software-engineering-lab/pkg/errors"
 )
 
 // MaxBodySize is the default maximum request body size (1 MB).

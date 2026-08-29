@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	caching "github.com/lukman/software-engineer-lab/labs/04-caching"
+	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
 // Integration tests for essential cache behaviors.

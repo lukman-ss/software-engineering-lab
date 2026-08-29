@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lukman/software-engineer-lab/pkg/database"
+	"github.com/lukman-ss/software-engineering-lab/pkg/database"
 )
 
 func main() {

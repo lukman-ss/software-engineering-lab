@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	transaction "github.com/lukman/software-engineer-lab/labs/03-database-transaction"
-	"github.com/lukman/software-engineer-lab/labs/03-database-transaction/mockdb"
+	transaction "github.com/lukman-ss/software-engineering-lab/labs/03-database-transaction"
+	"github.com/lukman-ss/software-engineering-lab/labs/03-database-transaction/mockdb"
 )
 
 func seedTestDB(t *testing.T, db *sql.DB) {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	caching "github.com/lukman/software-engineer-lab/labs/04-caching"
+	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
 // TestMultiTenancyKeyIsolation memastikan tenant/branch berbeda menghasilkan key berbeda.

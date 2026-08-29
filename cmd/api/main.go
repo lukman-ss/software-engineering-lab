@@ -12,15 +12,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lukman/software-engineer-lab/internal/inventory"
-	"github.com/lukman/software-engineer-lab/internal/notification"
-	"github.com/lukman/software-engineer-lab/internal/order"
-	"github.com/lukman/software-engineer-lab/internal/payment"
-	"github.com/lukman/software-engineer-lab/internal/wallet"
-	"github.com/lukman/software-engineer-lab/pkg/database"
-	apperrors "github.com/lukman/software-engineer-lab/pkg/errors"
-	"github.com/lukman/software-engineer-lab/pkg/middleware"
-	"github.com/lukman/software-engineer-lab/pkg/validation"
+	"github.com/lukman-ss/software-engineering-lab/internal/inventory"
+	"github.com/lukman-ss/software-engineering-lab/internal/notification"
+	"github.com/lukman-ss/software-engineering-lab/internal/order"
+	"github.com/lukman-ss/software-engineering-lab/internal/payment"
+	"github.com/lukman-ss/software-engineering-lab/internal/wallet"
+	"github.com/lukman-ss/software-engineering-lab/pkg/database"
+	apperrors "github.com/lukman-ss/software-engineering-lab/pkg/errors"
+	"github.com/lukman-ss/software-engineering-lab/pkg/middleware"
+	"github.com/lukman-ss/software-engineering-lab/pkg/validation"
 )
 
 type app struct {
