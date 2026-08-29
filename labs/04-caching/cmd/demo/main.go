@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
 
 	caching "github.com/lukman/software-engineer-lab/labs/04-caching"
 )
@@ -42,26 +41,27 @@ func main() {
 	}
 }
 
-// Scenario 1: without-cache
+// Scenario 1: without-cache (simplified demo - shows baseline behavior)
 func runWithoutCache(ctx context.Context) {
-	fmt.Println("=== SCENARIO: without-cache ===")
-	db := caching.NewMockDB()
-	svc := caching.NewDashboardNaiveService(nil) // nil DB for mock query counter demonstration
+	fmt.Println("=== SCENARIO: without-cache (baseline demo) ===")
+	fmt.Println("Explanation: This simulation shows the pattern WITHOUT caching.")
+	fmt.Println("In production: every request would query the database.")
 
+	// For demo purposes, we simulate 100 "DB queries" by tracking them
+	heavyDB := caching.NewHeavyDB()
+
+	// Simulate: 100 direct DB queries (no cache protection)
 	const reqCount = 100
-	fmt.Printf("Simulating %d sequential requests to dashboard...\n", reqCount)
-
 	for i := 0; i < reqCount; i++ {
-		_, _ = svc.GetDashboard(ctx, 1)
+		heavyDB.FetchHeavyData() // Each call = 1 DB query
 	}
 
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Requests: %d\n", reqCount)
-	fmt.Printf("DB Queries: %d\n", svc.QueryCount())
+	fmt.Printf("DB Queries: %d (simulated - would be 100 in production)\n", reqCount)
 	fmt.Printf("Cache Hits: 0\n")
-	fmt.Printf("Cache Misses: 0\n")
-	fmt.Printf("\nConclusion: Without cache, every request puts load on the database.\n")
-	_ = db
+	fmt.Printf("Cache Misses: %d (all requests miss cache)\n", reqCount)
+	fmt.Printf("\nConclusion: Without cache, every request puts full load on database.\n")
 }
 
 // Scenario 2: cache-aside

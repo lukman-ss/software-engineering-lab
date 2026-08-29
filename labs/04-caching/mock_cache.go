@@ -2,8 +2,6 @@ package caching
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,7 +35,7 @@ func NewFailingMockCache() *MockCache {
 
 func (m *MockCache) Get(ctx context.Context, key string) (string, error) {
 	if m.fail {
-		return "", errors.New("cache connection failed")
+		return "", ErrCacheDown
 	}
 
 	m.mu.Lock()
@@ -45,14 +43,14 @@ func (m *MockCache) Get(ctx context.Context, key string) (string, error) {
 
 	data, ok := m.data[key]
 	if !ok {
-		return "", errors.New("cache miss")
+		return "", ErrCacheMiss
 	}
 
 	// Check expiry
 	if expiry, ok := m.expiries[key]; ok && time.Now().After(expiry) {
 		delete(m.data, key)
 		delete(m.expiries, key)
-		return "", errors.New("cache expired")
+		return "", ErrCacheMiss
 	}
 
 	return data, nil
@@ -60,7 +58,7 @@ func (m *MockCache) Get(ctx context.Context, key string) (string, error) {
 
 func (m *MockCache) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	if m.fail {
-		return errors.New("cache connection failed")
+		return ErrCacheDown
 	}
 
 	m.mu.Lock()
@@ -76,9 +74,20 @@ func (m *MockCache) Set(ctx context.Context, key, value string, ttl time.Duratio
 	return nil
 }
 
+func (m *MockCache) Delete(ctx context.Context, key string) error {
+	if m.fail {
+		return ErrCacheDown
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.data, key)
+	delete(m.expiries, key)
+	return nil
+}
+
 func (m *MockCache) GetWithExpiry(ctx context.Context, key string) (string, time.Time, error) {
 	if m.fail {
-		return "", time.Time{}, errors.New("cache connection failed")
+		return "", time.Time{}, ErrCacheDown
 	}
 
 	m.mu.Lock()
@@ -86,7 +95,7 @@ func (m *MockCache) GetWithExpiry(ctx context.Context, key string) (string, time
 
 	data, ok := m.data[key]
 	if !ok {
-		return "", time.Time{}, errors.New("cache miss")
+		return "", time.Time{}, ErrCacheMiss
 	}
 
 	expiry, ok := m.expiries[key]
@@ -97,7 +106,7 @@ func (m *MockCache) GetWithExpiry(ctx context.Context, key string) (string, time
 	if time.Now().After(expiry) {
 		delete(m.data, key)
 		delete(m.expiries, key)
-		return "", time.Time{}, errors.New("cache expired")
+		return "", time.Time{}, ErrCacheMiss
 	}
 
 	return data, expiry, nil
@@ -145,14 +154,14 @@ func (m *MockCacheWithStats) Get(ctx context.Context, key string) (string, error
 	data, ok := m.data[key]
 	if !ok {
 		m.misses++
-		return "", errors.New("cache miss")
+		return "", ErrCacheMiss
 	}
 
 	// Check expiry
 	if !m.expireAt.IsZero() {
 		if time.Now().After(m.expireAt) {
 			m.misses++
-			return "", errors.New("cache expired")
+			return "", ErrCacheMiss
 		}
 	}
 
@@ -166,6 +175,15 @@ func (m *MockCacheWithStats) Set(ctx context.Context, key, value string, ttl tim
 
 	m.data[key] = value
 	m.expireAt = time.Now().Add(ttl)
+	return nil
+}
+
+func (m *MockCacheWithStats) Delete(ctx context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.data, key)
+	delete(m.expiries, key)
+	m.expireAt = time.Time{}
 	return nil
 }
 
@@ -185,8 +203,7 @@ func (m *MockCacheWithStats) SetWithExpiry(key, data string, ttl, actualExpiry t
 	m.expiries[key] = actualExpiry
 }
 
-// MockRedisClient - a simplified interface for Redis-like operations
-// Used for testing distributed lock scenarios
+// MockRedisClient - implements LockInterface for distributed locking tests
 type MockRedisClient struct {
 	data map[string]string
 	mu   sync.RWMutex
@@ -210,24 +227,29 @@ func (r *MockRedisClient) SetNX(ctx context.Context, key, value string, ttl time
 	return true, nil
 }
 
-func (r *MockRedisClient) Get(ctx context.Context, key string) (string, bool, error) {
+func (r *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	val, exists := r.data[key]
-	return val, exists, nil
+	if !exists {
+		return "", nil
+	}
+	return val, nil
 }
 
-func (r *MockRedisClient) Del(ctx context.Context, key string) (int, error) {
+func (r *MockRedisClient) Del(ctx context.Context, key string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if _, exists := r.data[key]; exists {
 		delete(r.data, key)
-		return 1, nil
+		return true, nil
 	}
-	return 0, nil
+	return false, nil
 }
+
+// HeavyDB is for stampede testing
 
 // HeavyDB adalah simulasi DB untuk testing stampede
 type HeavyDB struct {
@@ -255,3 +277,4 @@ func (db *HeavyDB) Reset() {
 // Ensure interfaces are satisfied
 var _ CacheInterface = (*MockCache)(nil)
 var _ CacheInterface = (*MockCacheWithStats)(nil)
+var _ LockInterface = (*MockRedisClient)(nil)

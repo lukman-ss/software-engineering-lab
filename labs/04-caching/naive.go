@@ -3,7 +3,6 @@ package caching
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -38,26 +37,3 @@ func (s *NaiveService) GetProduct(ctx context.Context, key string) (Product, err
 	return p, nil
 }
 
-func extractID(key string) string {
-	// Key format: entity:id
-	parts := splitKey(key)
-	if len(parts) >= 2 {
-		return parts[1]
-	}
-	return key
-}
-
-func splitKey(key string) []string {
-	var parts []string
-	current := ""
-	for _, c := range key {
-		if c == ':' {
-			parts = append(parts, current)
-			current = ""
-		} else {
-			current += string(c)
-		}
-	}
-	parts = append(parts, current)
-	return parts
-}

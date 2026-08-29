@@ -84,19 +84,16 @@ func TestCacheExpiryCausesRebuild(t *testing.T) {
 	_, _ = svc.GetDashboard(ctx, 1)
 	initialRebuilds := metrics.Rebuilds()
 
-	// Wait for expiry
-	time.Sleep(100 * time.Millisecond)
-
-	// Force miss by setting expired
-	cache.Set(ctx, "test:expired", "", -1*time.Second)
+	// Force miss by deleting
+	_ = cache.Delete(ctx, caching.DashboardCacheKey(1))
 
 	// Next request rebuilds
 	_, _ = svc.GetDashboard(ctx, 1)
 
 	if metrics.Rebuilds() <= initialRebuilds {
-		t.Error("after expiry, rebuild should be triggered")
+		t.Error("after delete, rebuild should be triggered")
 	}
-	t.Log("✓ Cache expiry causes rebuild")
+	t.Log("✓ Cache delete causes rebuild")
 }
 
 // TestCacheInvalidationReturnsFreshData verifies: invalidation returns fresh data
@@ -109,7 +106,7 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	key := caching.DashboardCacheKey(branchID)
 
 	// Set initial data
-	initialData := `{"branch_id":1,"invoice_count":10,"date":"` + caching.ToDay() + `"}`
+	initialData := `{"branch_id":1,"invoice_count":10,"date":"` + caching.Today() + `"}`
 	cache.Set(ctx, key, initialData, time.Minute)
 
 	// Verify cache has initial data

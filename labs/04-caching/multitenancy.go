@@ -28,12 +28,6 @@ func (k TenantKey) Build() string {
 	)
 }
 
-// TodayInLocation mengembalikan tanggal hari ini berdasarkan timezone yang diberikan.
-// Penting untuk dashboard yang dihitung berdasarkan bisnis timezone cabang.
-func TodayInLocation(loc *time.Location) string {
-	return time.Now().In(loc).Format("2006-01-02")
-}
-
 // NewTenantDashboardKey membuat key untuk dashboard dengan tenant isolation
 func NewTenantDashboardKey(tenantID, branchID int64, loc *time.Location) TenantKey {
 	return TenantKey{
@@ -42,7 +36,7 @@ func NewTenantDashboardKey(tenantID, branchID int64, loc *time.Location) TenantK
 		BranchID:  branchID,
 		Entity:    "dashboard",
 		Version:   1,
-		Date:      TodayInLocation(loc),
+		Date:      TodayInLocation(defaultClock.Now(), loc),
 	}
 }
 

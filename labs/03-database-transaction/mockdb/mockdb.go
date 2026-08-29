@@ -91,21 +91,30 @@ func (c *conn) begin() (driver.Tx, error) {
 	c.db.mu.Lock()
 	c.tx = cloneTables(c.db.committed)
 	c.db.mu.Unlock()
-	return &txn{c: c}, nil
+	return &txn{c: c, open: true}, nil
 }
 
-type txn struct{ c *conn }
+type txn struct {
+	c       *conn
+	open    bool // tracks if transaction is still open
+}
+
+func (t *txn) IsOpen() bool {
+	return t.open
+}
 
 func (t *txn) Commit() error {
 	c := t.c
 	c.db.mu.Lock()
 	c.db.committed = c.tx
 	c.db.mu.Unlock()
-	c.tx = nil
+	t.open = false
+	t.c.tx = nil
 	return nil
 }
 
 func (t *txn) Rollback() error {
+	t.open = false
 	t.c.tx = nil
 	return nil
 }

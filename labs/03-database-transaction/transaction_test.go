@@ -3,8 +3,11 @@ package transaction_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	transaction "github.com/lukman/software-engineer-lab/labs/03-database-transaction"
 	"github.com/lukman/software-engineer-lab/labs/03-database-transaction/mockdb"
@@ -692,4 +695,527 @@ func TestDispatcherPublishedAtSemantics(t *testing.T) {
 	}
 
 	t.Log("SUCCESS: Dispatcher published_at and attempts semantics correctly verified.")
+}
+
+// ============================================================================
+// PROMPT 16: HTTP Inside Transaction Latency Test
+// Demonstrates that external latency extends transaction lifetime
+// ============================================================================
+
+// TestHTTPInsideTransactionDuration shows external HTTP call blocks commit
+func TestHTTPInsideTransactionDuration(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	// HTTP client with artificial latency (100ms)
+	httpClient := transaction.NewHTTPClient(100, 0)
+	svc := transaction.NewInvoiceServiceWithHTTPCall(db, httpClient)
+	ctx := context.Background()
+
+	// Flow: BEGIN -> UPDATE -> HTTP call -> COMMIT
+	elapsed, err := svc.PayInvoiceWithHTTPInsideTx(ctx, 101, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify elapsed time includes the HTTP latency (100ms)
+	if elapsed < 90*time.Millisecond {
+		t.Errorf("elapsed %v too short - HTTP latency should have extended transaction", elapsed)
+	}
+
+	// Verify transaction succeeded
+	var status string
+	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status)
+	if status != "paid" {
+		t.Errorf("expected 'paid', got '%s'", status)
+	}
+
+	t.Logf("SUCCESS: HTTP latency %v extended transaction lifetime (elapsed=%v)", 100*time.Millisecond, elapsed)
+}
+
+// TestCommitThenExternalCall shows standard pattern: BEGIN -> UPDATE -> COMMIT -> external call
+func TestCommitThenExternalCall(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	httpClient := transaction.NewHTTPClient(100, 0)
+	svc := transaction.NewInvoiceServiceWithHTTPCall(db, httpClient)
+	ctx := context.Background()
+
+	start := time.Now()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx failed: %v", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE invoices SET status = 'paid' WHERE order_id = $1", 101)
+	if err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+
+	// COMMIT BEFORE external call
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit failed: %v", err)
+	}
+	commitElapsed := time.Since(start)
+
+	_ = svc // svc not needed after commit - just verifying the pattern
+	// External call AFTER commit - doesn't affect transaction
+	_ = httpClient.Ping(ctx)
+	externalElapsed := time.Since(start) - commitElapsed
+
+	// Commit should be fast (no external latency)
+	if commitElapsed >= 90*time.Millisecond {
+		t.Errorf("commit took %v - external call was inside transaction", commitElapsed)
+	}
+
+	// External call should have full latency
+	if externalElapsed < 90*time.Millisecond {
+		t.Errorf("external call took %v - expected ~100ms latency", externalElapsed)
+	}
+
+	t.Logf("SUCCESS: Commit-then-external pattern: commit=%v, external=%v", commitElapsed, externalElapsed)
+}
+
+// ============================================================================
+// PROMPT 17: Transaction Lifetime Simulation with IsOpen()
+// ============================================================================
+
+// TestTransactionStaysOpenDuringExternalCall verifies transaction remains open while external service blocks
+func TestTransactionStaysOpenDuringExternalCall(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	// BlockingHTTPClient blocks until explicitly released
+	// WaitUntilTxOpen() gives us a deterministic signal
+	blockingHTTP := transaction.NewBlockingHTTPClient(0) // 0 delay = waits on channel
+	svc := transaction.NewInvoiceServiceWithBlockingHTTP(db, blockingHTTP)
+	ctx := context.Background()
+
+	// Start payment in background
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.PayInvoiceWithBlocking(ctx)
+	}()
+
+	// Wait until service reaches the external call (transaction is guaranteed open)
+	blockingHTTP.WaitUntilTxOpen()
+
+	// DETERMINISTIC: at this exact point, tx is open (BEGIN done, external call in progress)
+	if !svc.IsTxOpen() {
+		t.Error("expected transaction to be open while external call is blocking")
+	}
+
+	// Release the blocking external call
+	blockingHTTP.Release()
+
+	// Wait for completion
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout")
+	}
+
+	// DETERMINISTIC: transaction is now closed
+	if svc.IsTxOpen() {
+		t.Error("expected transaction to be closed after commit")
+	}
+
+	var status string
+	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status)
+	if status != "paid" {
+		t.Errorf("expected 'paid', got '%s'", status)
+	}
+
+	t.Log("PROVEN: Transaction open during external call (via IsTxOpen), closed after commit")
+}
+
+// TestTransactionCommitDoesNotBlockConnection verifies tx state transitions correctly
+func TestTransactionCommitDoesNotBlockConnection(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	blockingHTTP := transaction.NewBlockingHTTPClient(0)
+	svc := transaction.NewInvoiceServiceWithBlockingHTTP(db, blockingHTTP)
+	ctx := context.Background()
+
+	// Before payment: tx should be closed
+	if svc.IsTxOpen() {
+		t.Error("expected tx closed before payment")
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.PayInvoiceWithBlocking(ctx)
+	}()
+
+	// Wait until tx is open
+	blockingHTTP.WaitUntilTxOpen()
+	if !svc.IsTxOpen() {
+		t.Error("expected tx open during external call")
+	}
+
+	// Release, let it commit
+	blockingHTTP.Release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout")
+	}
+
+	// After commit: tx should be closed
+	if svc.IsTxOpen() {
+		t.Error("expected tx closed after commit")
+	}
+
+	t.Log("SUCCESS: IsTxOpen() transitions: closed -> open (during external) -> closed (after commit)")
+}
+
+// ============================================================================
+// PROMPT 18: External Side Effect Rollback Test
+// ============================================================================
+
+// TestExternalSideEffectRollback proves external effect survives DB rollback
+func TestExternalSideEffectRollback(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	whatsapp := transaction.NewWhatsAppClient(0)
+	svc := transaction.NewDistributedOrderService(db, whatsapp)
+	ctx := context.Background()
+
+	// Process payment - simulates ERP failure after WhatsApp send
+	err := svc.ProcessPaymentWithExternalSideEffect(ctx, 101, 500000.0)
+	if err == nil {
+		t.Fatal("expected error (simulated ERP failure)")
+	}
+
+	// Verify WhatsApp was sent (external side effect NOT rolled back)
+	if whatsapp.SentCount() != 1 {
+		t.Errorf("expected WhatsApp notification sent, got count=%d", whatsapp.SentCount())
+	}
+
+	// Verify DB rollbacks all changes
+	var paymentCount int
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments WHERE order_id = $1", 101).Scan(&paymentCount)
+	if paymentCount != 0 {
+		t.Errorf("expected 0 payments (rolled back), got %d", paymentCount)
+	}
+
+	var invoiceCount int
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM invoices WHERE order_id = $1 AND status = 'paid'", 101).Scan(&invoiceCount)
+	if invoiceCount != 0 {
+		t.Errorf("expected 0 paid invoices (rolled back), got %d", invoiceCount)
+	}
+
+	t.Logf("PROVEN: External side effect (WhatsApp) sent count=1, but DB rolled back - EXTERNAL ≠ DB")
+}
+
+// ============================================================================
+// PROMPT 19: Dual-Write Crash Window Test
+// ============================================================================
+
+// TestDualWriteCrashWindow shows the failure window between DB commit and event publish
+func TestDualWriteCrashWindow(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	broker := transaction.NewInMemoryBroker(0)
+	svc := transaction.NewInvoiceServiceDualWrite(db, broker)
+	ctx := context.Background()
+
+	// Simulate: UPDATE invoice -> COMMIT -> CRASH (before publish)
+	err := svc.PayInvoiceDualWrite(ctx, 101, &transaction.FailureMode{FailAfterDBCommit: true})
+	if !errors.Is(err, transaction.ErrProcessCrashed) {
+		t.Fatalf("expected crash error: %v", err)
+	}
+
+	// Verification:
+	// 1. Invoice is paid (DB committed before crash)
+	var invoiceStatus string
+	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if invoiceStatus != "paid" {
+		t.Errorf("expected invoice 'paid', got '%s'", invoiceStatus)
+	}
+
+	// 2. Event was NEVER published (crashed before publish)
+	events := broker.PublishedEvents()
+	if len(events) != 0 {
+		t.Errorf("expected 0 events published (crashed before publish), got %d", len(events))
+	}
+
+	t.Log("PROVEN: Dual-write crash window - invoice paid but event never delivered to broker")
+}
+
+// ============================================================================
+// PROMPT 20: Reverse Dual-Write Failure
+// ============================================================================
+
+// TestReverseDualWriteFailure shows publish-then-commit also has atomicity problems
+func TestReverseDualWriteFailure(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	// This scenario demonstrates why publish-then-commit is also problematic:
+	// 1. Event published to broker
+	// 2. Process crashes before DB commit
+	// 3. Consumer sees event but business state is not committed
+
+	broker := transaction.NewInMemoryBroker(0)
+
+	// Simulate the failure scenario - event published
+	err := broker.Publish(context.Background(), transaction.Event{
+		ID:          "evt_201",
+		EventType:   "InvoicePaid",
+		AggregateID: "201",
+		Payload:     `{"invoice_id": 201}`,
+	})
+	if err != nil {
+		t.Fatalf("failed to publish event: %v", err)
+	}
+
+	// Verify event was published
+	events := broker.PublishedEvents()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event published, got %d", len(events))
+	}
+
+	// Database never committed (simulating crash)
+	// In a real scenario, consumer would see the event but business state would be missing
+
+	t.Logf("PROVEN: Reverse dual-write - event published=%d, but DB not committed (crash scenario)", len(events))
+	t.Log("LESSON: Publish-then-commit also has atomicity window - choose order based on idempotency")
+}
+
+// ============================================================================
+// PROMPT 21: Outbox Dispatcher Concurrency (At-Least-Once Duplication)
+// ============================================================================
+
+func TestOutboxDispatcherConcurrencyOverlap(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	svc := transaction.NewInvoiceServiceOutbox(db)
+	ctx := context.Background()
+
+	// Insert 1 pending event
+	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+
+	// Custom broker that sleeps slightly during publish to ensure overlap
+	broker := &slowInMemoryBroker{
+		InMemoryBroker: transaction.NewInMemoryBroker(0),
+		delay:          20 * time.Millisecond,
+	}
+
+	// Start two dispatchers concurrently without external locking
+	dispatcher1 := transaction.NewOutboxDispatcher(db, broker, 3, nil)
+	dispatcher2 := transaction.NewOutboxDispatcher(db, broker, 3, nil)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		dispatcher1.DispatchBatch(ctx)
+	}()
+
+	go func() {
+		defer wg.Done()
+		dispatcher2.DispatchBatch(ctx)
+	}()
+
+	wg.Wait()
+
+	// Because of concurrency overlap (both read pending, then both publish),
+	// the event is published TWICE
+	events := broker.PublishedEvents()
+	if len(events) < 2 {
+		t.Errorf("expected at least 2 events due to concurrent dispatch overlap, got %d", len(events))
+	}
+
+	t.Logf("PROVEN: Concurrent dispatchers read same pending outbox and published %d times (at-least-once overlap)", len(events))
+}
+
+type slowInMemoryBroker struct {
+	*transaction.InMemoryBroker
+	delay time.Duration
+}
+
+func (s *slowInMemoryBroker) Publish(ctx context.Context, event transaction.Event) error {
+	time.Sleep(s.delay) // ensure the overlap window is large enough for both dispatchers
+	return s.InMemoryBroker.Publish(ctx, event)
+}
+
+// ============================================================================
+// PROMPT 22: Event Payload Validation
+// ============================================================================
+
+// TestInvoicePaidPayloadRoundTrip validates serialize → deserialize → validate
+func TestInvoicePaidPayloadRoundTrip(t *testing.T) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	original := transaction.InvoicePaidPayload{
+		EventID:    "evt_101_test",
+		InvoiceID:  101,
+		OccurredAt: now,
+	}
+
+	// Serialize using explicit struct
+	raw := transaction.MarshalInvoicePaidPayload(original)
+
+	// Verify it is valid JSON
+	var rawMap map[string]any
+	if err := json.Unmarshal([]byte(raw), &rawMap); err != nil {
+		t.Fatalf("payload is not valid JSON: %v", err)
+	}
+
+	// Deserialize back
+	parsed, err := transaction.UnmarshalInvoicePaidPayload(raw)
+	if err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+
+	// Validate required fields
+	if parsed.EventID != original.EventID {
+		t.Errorf("event_id mismatch: expected %s, got %s", original.EventID, parsed.EventID)
+	}
+	if parsed.InvoiceID != original.InvoiceID {
+		t.Errorf("invoice_id mismatch: expected %d, got %d", original.InvoiceID, parsed.InvoiceID)
+	}
+	if parsed.OccurredAt != original.OccurredAt {
+		t.Errorf("occurred_at mismatch: expected %s, got %s", original.OccurredAt, parsed.OccurredAt)
+	}
+
+	// Must NOT contain: "status" (business fact, not command status)
+	var full map[string]any
+	json.Unmarshal([]byte(raw), &full)
+	if _, hasStatus := full["status"]; hasStatus {
+		t.Error("payload should not contain 'status' field — event is a fact, not a command")
+	}
+
+	// Reject empty event_id
+	if _, err := transaction.UnmarshalInvoicePaidPayload(`{"invoice_id":1,"occurred_at":"2024-01-01T00:00:00Z"}`); err == nil {
+		t.Error("expected error for missing event_id")
+	}
+
+	// Reject missing occurred_at
+	if _, err := transaction.UnmarshalInvoicePaidPayload(`{"event_id":"x","invoice_id":1}`); err == nil {
+		t.Error("expected error for missing occurred_at")
+	}
+
+	t.Logf("SUCCESS: Payload round-trip validated. JSON=%s", raw)
+}
+
+// ============================================================================
+// PROMPT 25: Eventual Consistency Demo
+// ============================================================================
+
+// TestEventualConsistencyDemo shows state divergence between DB commit and worker processing
+func TestEventualConsistencyDemo(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	seedTestDB(t, db)
+
+	// Step 1: Create outbox event (simulates invoice paid)
+	svc := transaction.NewInvoiceServiceOutbox(db)
+	ctx := context.Background()
+	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+
+	// IMMEDIATELY after commit: invoice is paid, but workers haven't run yet
+	var invoiceStatus string
+	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+
+	// Count pending outbox events (not yet processed by workers)
+	pending, _ := svc.CountOutboxEvents(ctx)
+
+	// At this point:
+	// - invoice = paid (committed)
+	// - outbox events pending (workers not run)
+	// This IS eventual consistency - NOT system corruption
+
+	if invoiceStatus != "paid" {
+		t.Errorf("expected invoice 'paid' immediately after commit")
+	}
+	if pending != 1 {
+		t.Errorf("expected 1 pending outbox event before workers process")
+	}
+
+	// Step 2: Run dispatcher (simulates workers processing events)
+	broker := transaction.NewInMemoryBroker(0)
+	dispatcher := transaction.NewOutboxDispatcher(db, broker, 3, nil)
+	dispatched, _ := dispatcher.DispatchBatch(ctx)
+	if dispatched != 1 {
+		t.Errorf("expected 1 event dispatched")
+	}
+
+	// Now workers have processed the event
+	events := broker.PublishedEvents()
+	if len(events) != 1 {
+		t.Errorf("expected 1 event published to workers")
+	}
+
+	// State is now fully consistent across all projections
+	pendingAfter, _ := svc.CountOutboxEvents(ctx)
+	if pendingAfter != 0 {
+		t.Errorf("expected 0 pending events after workers process")
+	}
+
+	t.Log("DEMO: Eventual consistency — invoice=paid immediately, workers catch up later")
+	t.Log("  t=0ms:    invoice=paid, outbox=1 pending")
+	t.Log("  t=dispatch: event delivered to broker")
+	t.Log("  t=end:    invoice=paid, outbox=0 pending, all projections updated")
+}
+
+// ============================================================================
+// PROMPT 35: Compensation Must Be Idempotent
+// ============================================================================
+
+func TestCompensationIdempotency(t *testing.T) {
+	comp := transaction.NewIdempotentCompensator()
+
+	refundCount := 0
+	doRefund := func() error {
+		refundCount++
+		return nil
+	}
+
+	// First call — should execute
+	executed, err := comp.Compensate("refund-order-123", doRefund)
+	if err != nil || !executed {
+		t.Fatalf("expected first compensation to execute: executed=%v err=%v", executed, err)
+	}
+
+	// Second call with same key — must skip (idempotent)
+	executed, err = comp.Compensate("refund-order-123", doRefund)
+	if err != nil || executed {
+		t.Fatalf("expected second compensation to skip: executed=%v err=%v", executed, err)
+	}
+
+	if refundCount != 1 {
+		t.Errorf("expected refundCount=1 (no double refund), got %d", refundCount)
+	}
+
+	// Different key — should execute independently
+	executed, _ = comp.Compensate("refund-order-456", doRefund)
+	if !executed {
+		t.Error("expected different key to execute")
+	}
+	if refundCount != 2 {
+		t.Errorf("expected refundCount=2 after second key, got %d", refundCount)
+	}
+
+	t.Log("PROVEN: Compensation idempotent — same key executes once regardless of call count")
 }

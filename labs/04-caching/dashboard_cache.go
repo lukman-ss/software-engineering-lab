@@ -55,8 +55,7 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 // Prefered flow: COMMIT DB -> Invalidate Cache
 func (s *DashboardCacheService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
 	key := dashboardCacheKey(branchID)
-	// Set value kosong atau hapus key di cache
-	return s.cache.Set(ctx, key, "", -1*time.Second)
+	return s.cache.Delete(ctx, key)
 }
 
 // --- REPRESENTATIVE MUTATION METHODS (Bagian 8) ---

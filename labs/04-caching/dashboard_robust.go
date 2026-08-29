@@ -57,7 +57,7 @@ func (s *RobustDashboardService) GetDashboard(ctx context.Context, branchID int6
 	if err := json.Unmarshal([]byte(cached), &d); err != nil {
 		// Corrupt cache entry
 		s.metrics.IncError()
-		_ = s.cache.Set(ctx, key, "", -1*time.Second) // delete corrupt
+		_ = s.cache.Delete(ctx, key) // delete corrupt entry
 		return s.fetchAndPopulate(ctx, branchID, key)
 	}
 
@@ -94,7 +94,7 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, branchID 
 // InvalidateBranchDashboard invalidates cache for a branch after data mutation
 func (s *RobustDashboardService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
 	key := DashboardCacheKey(branchID)
-	return s.cache.Set(ctx, key, "", -1*time.Second)
+	return s.cache.Delete(ctx, key)
 }
 
 // QueryCount returns total database queries made

@@ -3,6 +3,7 @@ package transaction
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -48,6 +49,42 @@ type OutboxEvent struct {
 	Attempts    int
 	CreatedAt   time.Time
 	PublishedAt *time.Time
+}
+
+// InvoicePaidPayload is the canonical payload for InvoicePaid events.
+// Use explicit structs, not fmt.Sprintf — guarantees valid JSON, correct types.
+// ponytail: no encryption/PII scrubbing; add when regulatory required
+type InvoicePaidPayload struct {
+	EventID    string `json:"event_id"`
+	InvoiceID  int    `json:"invoice_id"`
+	OccurredAt string `json:"occurred_at"` // RFC3339
+}
+
+// MarshalInvoicePaidPayload serializes the payload and panics on failure (impossible for this struct)
+func MarshalInvoicePaidPayload(p InvoicePaidPayload) string {
+	b, err := json.Marshal(p)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal InvoicePaidPayload: %v", err))
+	}
+	return string(b)
+}
+
+// UnmarshalInvoicePaidPayload deserializes a raw JSON string into InvoicePaidPayload
+func UnmarshalInvoicePaidPayload(raw string) (InvoicePaidPayload, error) {
+	var p InvoicePaidPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return p, fmt.Errorf("invalid InvoicePaid payload: %w", err)
+	}
+	if p.EventID == "" {
+		return p, fmt.Errorf("payload missing event_id")
+	}
+	if p.InvoiceID == 0 {
+		return p, fmt.Errorf("payload missing invoice_id")
+	}
+	if p.OccurredAt == "" {
+		return p, fmt.Errorf("payload missing occurred_at")
+	}
+	return p, nil
 }
 
 // ============================================================================
@@ -210,6 +247,101 @@ func (s *InvoiceServiceWithHTTPCall) PayInvoiceWithHTTPInsideTx(ctx context.Cont
 }
 
 // ============================================================================
+// 4b. Blocking HTTP Client for Transaction Lifetime Testing
+// ============================================================================
+
+// BlockingHTTPClient blocks until channel is closed - for testing transaction lifetime
+type BlockingHTTPClient struct {
+	blockChan    chan struct{}
+	delay        time.Duration
+	txOpenSignal chan struct{} // closed when Ping is called (i.e. tx is open)
+}
+
+func NewBlockingHTTPClient(delay time.Duration) *BlockingHTTPClient {
+	return &BlockingHTTPClient{
+		blockChan:    make(chan struct{}),
+		delay:        delay,
+		txOpenSignal: make(chan struct{}),
+	}
+}
+
+// WaitUntilTxOpen blocks until the service reaches the external call (i.e. transaction is open)
+func (c *BlockingHTTPClient) WaitUntilTxOpen() {
+	<-c.txOpenSignal
+}
+
+func (c *BlockingHTTPClient) Ping(ctx context.Context) error {
+	// Signal that we're inside the external call (transaction is open)
+	select {
+	case <-c.txOpenSignal:
+		// already signalled
+	default:
+		close(c.txOpenSignal)
+	}
+
+	if c.delay > 0 {
+		time.Sleep(c.delay)
+		return nil
+	}
+	select {
+	case <-c.blockChan:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *BlockingHTTPClient) Release() {
+	select {
+	case c.blockChan <- struct{}{}:
+	default:
+	}
+}
+
+// InvoiceServiceWithBlockingHTTP uses BlockingHTTPClient to simulate long-running external call
+type InvoiceServiceWithBlockingHTTP struct {
+	db          *sql.DB
+	http        *BlockingHTTPClient
+	txOpen      int32 // 1 = transaction is open, 0 = closed; accessed via atomic
+}
+
+func NewInvoiceServiceWithBlockingHTTP(db *sql.DB, http *BlockingHTTPClient) *InvoiceServiceWithBlockingHTTP {
+	return &InvoiceServiceWithBlockingHTTP{db: db, http: http}
+}
+
+// IsTxOpen returns true if a transaction is currently open in this service
+func (s *InvoiceServiceWithBlockingHTTP) IsTxOpen() bool {
+	return atomic.LoadInt32(&s.txOpen) == 1
+}
+
+func (s *InvoiceServiceWithBlockingHTTP) PayInvoiceWithBlocking(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	atomic.StoreInt32(&s.txOpen, 1)
+
+	defer func() {
+		atomic.StoreInt32(&s.txOpen, 0)
+	}()
+
+	_, err = tx.ExecContext(ctx, "UPDATE invoices SET status = 'paid' WHERE order_id = $1", 101)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update invoice: %w", err)
+	}
+
+	// External call that blocks - transaction remains open
+	err = s.http.Ping(ctx)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("http ping failed: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// ============================================================================
 // 5. Dual-Write Problem Simulation
 // ============================================================================
 
@@ -317,7 +449,11 @@ func (s *InvoiceServiceOutbox) PayInvoiceWithOutbox(ctx context.Context, invoice
 	}
 
 	eventID := fmt.Sprintf("evt_%d_%d", invoiceID, time.Now().UnixNano())
-	eventPayload := fmt.Sprintf(`{"invoice_id": %d, "status": "paid", "timestamp": "%s"}`, invoiceID, time.Now().Format(time.RFC3339))
+	eventPayload := MarshalInvoicePaidPayload(InvoicePaidPayload{
+		EventID:    eventID,
+		InvoiceID:  invoiceID,
+		OccurredAt: time.Now().Format(time.RFC3339),
+	})
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO outbox_events
@@ -659,4 +795,33 @@ func (s *Saga) GetExecutedSteps() []int {
 // GetCompensatedSteps returns the list of compensated step indices in order of compensation
 func (s *Saga) GetCompensatedSteps() []int {
 	return s.compensated
+}
+
+// ============================================================================
+// IdempotentCompensator: Compensation must be idempotent
+// Running RefundPayment order-123 twice must not double-refund.
+// ============================================================================
+
+type IdempotentCompensator struct {
+	mu       sync.Mutex
+	executed map[string]bool
+}
+
+func NewIdempotentCompensator() *IdempotentCompensator {
+	return &IdempotentCompensator{executed: make(map[string]bool)}
+}
+
+// Compensate runs action only if key has not been used before.
+// Returns (executed, nil) if action was run, (false, nil) if skipped (idempotent).
+func (c *IdempotentCompensator) Compensate(key string, action func() error) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.executed[key] {
+		return false, nil // idempotent skip
+	}
+	if err := action(); err != nil {
+		return false, err
+	}
+	c.executed[key] = true
+	return true, nil
 }

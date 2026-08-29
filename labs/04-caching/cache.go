@@ -4,10 +4,8 @@ package caching
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
 )
 
@@ -22,7 +20,16 @@ type Product struct {
 type CacheInterface interface {
 	Get(ctx context.Context, key string) (string, error)
 	Set(ctx context.Context, key, value string, ttl time.Duration) error
+	Delete(ctx context.Context, key string) error
 	GetWithExpiry(ctx context.Context, key string) (string, time.Time, error)
+}
+
+// LockInterface mendefinisikan operation untuk distributed locking.
+// SetNX = Set if Not eXists, dengan TTL.
+type LockInterface interface {
+	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
+	Get(ctx context.Context, key string) (string, error)
+	Del(ctx context.Context, key string) (bool, error)
 }
 
 // CacheKey membuat cache key dengan format: entity:id:vVersion
@@ -51,5 +58,29 @@ func ShouldRefreshEarly(ctx context.Context, cache CacheInterface, key string) b
 // DashboardCacheKey membuat cache key untuk dashboard statistik.
 // Format: cmms:dashboard:v1:branch:{branchID}:date:{YYYY-MM-DD}
 func DashboardCacheKey(branchID int64) string {
-	return fmt.Sprintf("cmms:dashboard:v1:branch:%d:date:%s", branchID, ToDay())
+	return fmt.Sprintf("cmms:dashboard:v1:branch:%d:date:%s", branchID, Today())
+}
+
+// extractID mengambil segment ID dari cache key format "entity:id[:...]".
+func extractID(key string) string {
+	parts := splitKey(key)
+	if len(parts) >= 2 {
+		return parts[1]
+	}
+	return key
+}
+
+// splitKey memisahkan key berdasarkan karakter ':'.
+func splitKey(key string) []string {
+	var parts []string
+	current := ""
+	for _, c := range key {
+		if c == ':' {
+			parts = append(parts, current)
+			current = ""
+		} else {
+			current += string(c)
+		}
+	}
+	return append(parts, current)
 }

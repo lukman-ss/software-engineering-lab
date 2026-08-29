@@ -44,7 +44,7 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 		BranchID:          branchID,
 		InvoiceCountToday: 50,
 		TotalRevenueToday: 250000.0,
-		Date:              caching.ToDay(),
+		Date:              caching.Today(),
 	}
 	data, _ := json.Marshal(dashboard)
 	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(data), 30*time.Second)
@@ -80,7 +80,7 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 		BranchID:          branchID,
 		InvoiceCountToday: 10,
 		TotalRevenueToday: 100000.0,
-		Date:              caching.ToDay(),
+		Date:              caching.Today(),
 	}
 	jsonData, _ := json.Marshal(initialData)
 	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(jsonData), 30*time.Second)
@@ -123,12 +123,12 @@ func TestCacheInvalidationRequiredAfterDataChange(t *testing.T) {
 	branchID := int64(42)
 
 	// Initial state
-	initial := caching.Dashboard{InvoiceCountToday: 100, Date: caching.ToDay()}
+	initial := caching.Dashboard{InvoiceCountToday: 100, Date: caching.Today()}
 	data, _ := json.Marshal(initial)
 	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(data), 30*time.Second)
 
 	// Mutate database directly (simulate another process)
-	mutated := caching.Dashboard{InvoiceCountToday: 150, Date: caching.ToDay()}
+	mutated := caching.Dashboard{InvoiceCountToday: 150, Date: caching.Today()}
 	mutatedData, _ := json.Marshal(mutated)
 
 	// WITHOUT invalidation, cache still has old data
@@ -187,7 +187,7 @@ func TestCacheHitRatioImprovesWithMutations(t *testing.T) {
 	hits, misses := 0, 0
 
 	// Populate cache
-	dashboard := caching.Dashboard{InvoiceCountToday: 50, Date: caching.ToDay()}
+	dashboard := caching.Dashboard{InvoiceCountToday: 50, Date: caching.Today()}
 	data, _ := json.Marshal(dashboard)
 	cache.Set(ctx, caching.DashboardCacheKey(branchID), string(data), 30*time.Second)
 
@@ -222,8 +222,8 @@ func TestStaleDataAcceptableForDashboard(t *testing.T) {
 	cache := caching.NewMockCache()
 	ctx := context.Background()
 
-	trueData := caching.Dashboard{InvoiceCountToday: 100, Date: caching.ToDay()}
-	staleData := caching.Dashboard{InvoiceCountToday: 95, Date: caching.ToDay()}
+	trueData := caching.Dashboard{InvoiceCountToday: 100, Date: caching.Today()}
+	staleData := caching.Dashboard{InvoiceCountToday: 95, Date: caching.Today()}
 
 	data, _ := json.Marshal(trueData)
 	cache.Set(ctx, "dash", string(data), 30*time.Second)
