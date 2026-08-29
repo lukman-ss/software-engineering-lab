@@ -77,7 +77,7 @@ func Connector() driver.Connector { return &connector{db: newDB()} }
 func NewDB() *sql.DB { return sql.OpenDB(Connector()) }
 
 func (c *connector) Connect(context.Context) (driver.Conn, error) { return &conn{db: c.db}, nil }
-func (c *connector) Driver() driver.Driver                         { return staticDriver{} }
+func (c *connector) Driver() driver.Driver                        { return staticDriver{} }
 
 type conn struct {
 	db *DB
@@ -88,7 +88,7 @@ func (c *conn) Prepare(query string) (driver.Stmt, error) { return &stmt{c: c, q
 func (c *conn) PrepareContext(_ context.Context, query string) (driver.Stmt, error) {
 	return &stmt{c: c, query: query}, nil
 }
-func (c *conn) Close() error    { return nil }
+func (c *conn) Close() error               { return nil }
 func (c *conn) Ping(context.Context) error { return nil }
 
 func (c *conn) Begin() (driver.Tx, error) { return c.begin() }
@@ -155,8 +155,8 @@ type stmt struct {
 	query string
 }
 
-func (s *stmt) Close() error              { return nil }
-func (s *stmt) NumInput() int             { return -1 }
+func (s *stmt) Close() error  { return nil }
+func (s *stmt) NumInput() int { return -1 }
 func (s *stmt) Exec(args []driver.Value) (driver.Result, error) {
 	return s.c.exec(s.query, args)
 }
@@ -222,7 +222,7 @@ func doInsert(tables map[string]*tableState, q string, vals []driver.Value) (dri
 	}
 
 	// Table name is the first word after "INSERT INTO "
-	afterInsert := strings.TrimSpace(q[idxInto+len("INSERT INTO ") :])
+	afterInsert := strings.TrimSpace(q[idxInto+len("INSERT INTO "):])
 	spaceIdx := strings.Index(afterInsert, " ")
 	parenIdx := strings.Index(afterInsert, "(")
 	endIdx := spaceIdx
@@ -293,7 +293,7 @@ func doUpdate(tables map[string]*tableState, q string, vals []driver.Value) (dri
 	}
 	table := strings.Fields(q[len("UPDATE "):setIdx])[0]
 
-	setPart := q[setIdx+len(" SET "):whereIdx]
+	setPart := q[setIdx+len(" SET ") : whereIdx]
 	wherePart := q[whereIdx+len(" WHERE "):]
 
 	eq := strings.Index(setPart, "=")

@@ -2,94 +2,90 @@
 -- Experiment: Composite Index Column Order
 -- Demonstrates why column order matters in multicolumn B-tree indexes
 
-================================
+-- PostgreSQL 16 compatibility note:
+-- This repository targets PostgreSQL 16. PostgreSQL 18 introduced B-tree skip-scan
+-- optimization, which is NOT covered here. All behavior described below is for PG16.
+
+-- ============================================
 -- SETUP: Create three indexes with different column orders
-================================
+-- ============================================
 
 -- Index A: Optimal for our main query (equality + equality + range)
 DROP INDEX IF EXISTS idx_service_a_branch_status_date;
 CREATE INDEX idx_service_a_branch_status_date
     ON service(branch_id, status, service_date);
 
--- Index B: Wrong order for equality predicates (range first - bad)
+-- Index B: Range first (less useful for our query pattern)
 DROP INDEX IF EXISTS idx_service_b_date_branch_status;
 CREATE INDEX idx_service_b_date_branch_status
     ON service(service_date, branch_id, status);
 
--- Index C: Wrong order (equality but different prefix)
+-- Index C: Different leading column
 DROP INDEX IF EXISTS idx_service_c_status_date_branch;
 CREATE INDEX idx_service_c_status_date_branch
     ON service(status, service_date, branch_id);
 
--- The key insight: PostgreSQL can use a multicolumn B-tree index
--- when the query has conditions on an ORDERED PREFIX of indexed columns.
+-- PostgreSQL 16 B-tree multicolumn behavior:
+-- For index on (a, b, c), constraints on leading columns determine how much
+-- of the index scan range can be bounded efficiently.
 --
--- For index on (a, b, c):
--- - WHERE a = ?           ✓ Uses index
--- - WHERE a = ? AND b = ? ✓ Uses index
--- - WHERE a = ? AND b = ? AND c > ? ✓ Uses index
--- - WHERE b = ?           ✗ CANNOT use index (no prefix match)
--- - WHERE c = ?           ✗ CANNOT use index
--- - WHERE b = ? AND c = ? ✗ CANNOT use index
+-- - WHERE a = ?           → constrains index range efficiently
+-- - WHERE a = ? AND b = ? → constrains further
+-- - WHERE a = ? AND b = ? AND c > ? → bounds tight range
+-- - WHERE b = ?           → can use index, but may scan large/complete portion;
+--                            planner often prefers Seq Scan or another index
+-- - WHERE c = ?           → same reasoning as above
 
-================================
+-- ============================================
 -- QUERY 1: WHERE branch_id = 2
--- This query needs to understand how tight each index can make the scan
-================================
+-- ============================================
 
 -- With Index A (branch_id, status, service_date)
--- PostgreSQL knows branch_id = 2, can narrow scan to ~1/6 of index
+-- Constrains index range to branch_id=2; very efficient
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service WHERE branch_id = 2;
 
 -- With Index B (service_date, branch_id, status)
--- PostgreSQL CANNOT use this index (branch_id is not leftmost)
--- Wait, let me check - actually it CAN skip to branch_id but...
--- No, wait! This is a common misconception. Let's verify:
+-- branch_id is not the leading column. PostgreSQL 16 can in principle use
+-- this index, but without a constraint on service_date it may need to scan
+-- a large or complete portion. Planner often prefers Seq Scan here.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service WHERE branch_id = 2;
--- Actually, PostgreSQL can ONLY use index when prefix matches
--- So Index B cannot be used for WHERE branch_id = 2
 
 -- With Index C (status, service_date, branch_id)
--- Same issue - branch_id is not leftmost
+-- Same reasoning: branch_id is not leading, so planner may prefer Seq Scan.
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service WHERE branch_id = 2;
 
--- Record: Index A is the ONLY one usable for Query 1
--- Index B and C must do Sequential Scan
--- Why? Because B-tree can only be traversed when leftmost keys are constrained
+-- Expected: Index A is the most efficient for Query 1.
+-- Index B and C may still be used (not literally impossible), but the planner
+-- will likely choose Seq Scan because scanning a large portion of the index
+-- is more expensive than a sequential table scan.
 
-================================
+-- ============================================
 -- QUERY 2: WHERE branch_id = 2 AND status = 'FINISHED'
--- Understanding index prefix matching
-================================
+-- ============================================
 
--- Index A: branch_id first, then status
--- PostgreSQL can first narrow to branch_id=2, then within that subset narrow to status='FINISHED'
--- This is called "reducing the index scan range" at each level
+-- Index A: constrains on branch_id then status; very efficient
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service WHERE branch_id = 2 AND status = 'FINISHED';
 
--- Index B: service_date first - cannot use at all for this query
+-- Index B: service_date first; without date constraint, planner likely Seq Scan
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service WHERE branch_id = 2 AND status = 'FINISHED';
 
--- Index C: status first, then service_date, then branch_id
--- CAN use for this query! PostgreSQL can use status to find 'FINISHED'
--- Then sort within each status value, then filter branch_id
--- Wait - but the order matters for efficiency
+-- Index C: constrains on status then service_date then branch_id;
+-- can use, but branch_id filtering is less efficient than Index A
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service WHERE status = 'FINISHED' AND branch_id = 2;
 
 -- Key distinction:
--- - Reducing scan range: Index narrows WHERE clause
--- - Filtering: Index finds rows but needs extra checks
+-- - Reducing scan range: Index narrows WHERE clause from the start
+-- - Filtering: Index finds rows but needs extra checks deeper in
 
-================================
+-- ============================================
 -- QUERY 3: Full query with ORDER BY
--- The complete picture
-================================
+-- ============================================
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service
@@ -98,12 +94,9 @@ WHERE branch_id = 2
   AND service_date BETWEEN '2026-01-01' AND '2026-01-31'
 ORDER BY service_date DESC;
 
--- Which index works best and why?
-
-================================
+-- ============================================
 -- QUERY 4-6: Individual predicates
--- Understanding selectivity at each level
-================================
+-- ============================================
 
 -- Query 4: WHERE status = 'FINISHED'
 EXPLAIN (ANALYZE, BUFFERS)
@@ -117,10 +110,9 @@ SELECT COUNT(*) FROM service WHERE service_date BETWEEN '2026-01-01' AND '2026-0
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT COUNT(*) FROM service WHERE branch_id = 2;
 
-================================
+-- ============================================
 -- CLEANUP
--- Drop test indexes to move to next experiment
-================================
+-- ============================================
 
 DROP INDEX IF EXISTS idx_service_a_branch_status_date;
 DROP INDEX IF EXISTS idx_service_b_date_branch_status;

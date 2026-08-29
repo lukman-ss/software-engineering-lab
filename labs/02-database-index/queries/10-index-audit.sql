@@ -2,47 +2,57 @@
 -- Experiment: Index Usage Audit
 -- Teaches how to inspect index usage statistics in PostgreSQL
 
--- Do NOT simply drop indexes with idx_scan = 0!
+-- WARNING: Do NOT simply drop indexes with idx_scan = 0!
 -- Zero usage can be misleading due to statistics reset, restarts, or short observation periods
 
-================================
--- Key Statistics to Monitor
-================================
+-- ============================================
+-- Key Statistics to Monitor (pg_stat_user_indexes)
+-- ============================================
 
--- From pg_stat_user_indexes:
--- idx_scan      : How many times has index been used?
--- idx_tup_read  : How many table rows has index have looked at?
--- idx_tup_fetch : How many table rows has index successfully fetched?
---
--- If idx_tup_read is much larger than idx_tup_fetch, index was used for filtering
--- but many rows were scanned that didn't match.
+-- idx_scan: Number of index scans initiated. This is incremented
+-- each time the planner chooses to use this index for a query.
 
--- Table structure reference
+-- idx_tup_read: Number of index entries returned by scans.
+-- Includes rows found via Bitmap Index Scans (bitmap is built from multiple indexes).
+
+-- idx_tup_fetch: Number of live heap tuples fetched by "Index Scans" (not Index Only Scans).
+-- Note: Bitmap Heap Scans do NOT increment per-index idx_tup_fetch - they fetch
+-- rows in a separate pass after combining bitmaps.
+
+-- IMPORTANT: idx_tup_fetch / idx_tup_read is NOT a generic "efficiency percentage".
+-- It measures the ratio of heap tuples fetched via Index Scans only.
+-- Bitmap Scans can have very different behavior.
+
+-- ============================================
+-- Index Structure Reference
+-- ============================================
+
 SELECT
     indexrelid::regclass AS index_name,
     indisunique AS is_unique,
     indisprimary AS is_primary,
-    indkey::int[] AS column_numbers
+    indkey::int[] AS column_numbers,
+    indpred AS partial_predicate
 FROM pg_index
 WHERE indrelid = 'service'::regclass;
 
-================================
+-- ============================================
 -- Current Index Usage Statistics
-================================
+-- ============================================
 
 SELECT
     indexname,
     idx_scan AS "Index Scans",
-    idx_tup_read AS "Tuple Reads",
-    idx_tup_fetch AS "Tuple Fetches",
+    idx_tup_read AS "Tuples Read",
+    idx_tup_fetch AS "Tuples Fetched",
     pg_size_pretty(pg_relation_size(indexname::regclass)) AS size
 FROM pg_stat_user_indexes
 WHERE schemaname = 'public' AND tablename = 'service'
 ORDER BY idx_scan DESC;
 
-================================
+-- ============================================
 -- Audit Checklist for Candidate Indexes
-================================
+-- ============================================
 
 -- 1. Identify low-usage indexes
 SELECT
@@ -61,33 +71,31 @@ ORDER BY idx_scan ASC NULLS LAST;
 -- ✓ No recent server restart would have reset counters to 0
 -- ✓ Query patterns are stable (not seasonal changes)
 -- ✓ Index might support rare operational queries
--- ✓ Index might enforce constraints (e.g., UNIQUE, FOREIGN KEY)
--- ✓ Multiple indexes sharing same column might be useful
+-- ✓ Index backs a constraint that requires it:
+--   - PRIMARY KEY (automatically created, cannot drop)
+--   - UNIQUE (required for constraint, cannot drop)
+--   - EXCLUSION constraint (if applicable)
+-- ✓ Foreign key indexes: a FK column typically has an index on the
+--   referencing table for performance, but it is NOT strictly required.
+-- ✓ Multiple indexes sharing same column might be useful for different queries
 
-================================
--- Detailed Per-Index Analysis
-================================
+-- ============================================
+-- Indexes Supporting Constraints
+-- ============================================
 
+-- PRIMARY KEY and UNIQUE indexes are constraint-backed
 SELECT
-    i.indexrelid::regclass AS index_name,
-    i.indkey::text AS indexed_columns,
-    a.idx_scan,
-    a.idx_tup_read,
-    a.idx_tup_fetch,
-    -- Efficiency ratio: how selective is this index?
-    CASE
-        WHEN a.idx_tup_read > 0 THEN
-            round(a.idx_tup_fetch::numeric / a.idx_tup_read::numeric * 100, 2)
-        ELSE 0
-    END AS "Fetch Efficiency %"
-FROM pg_index i
-LEFT JOIN pg_stat_user_indexes a ON i.indexrelid = a.indexrelid
-WHERE i.indrelid = 'service'::regclass
-ORDER BY a.idx_scan DESC NULLS LAST;
+    c.conname AS constraint_name,
+    c.contype,
+    i.indexrelid::regclass AS index_name
+FROM pg_constraint c
+JOIN pg_index i ON c.conindid = i.indexrelid
+WHERE c.conrelid = 'service'::regclass;
 
-================================
+-- ============================================
 -- Tables Without Any Index Usage
 -- (Investigate before dropping!)
+-- ============================================
 
 SELECT
     indexname,

@@ -5,68 +5,69 @@
 -- Wrapping an indexed column in a function typically prevents index usage.
 -- Query structure determines whether PostgreSQL can use an index effectively.
 
-================================
+-- ============================================
 -- PART 1: Query With Expression
-================================
+-- ============================================
 
 -- Create standard index on service_date
 DROP INDEX IF EXISTS idx_service_service_date;
 CREATE INDEX idx_service_service_date ON service(service_date);
 
--- Query using DATE() function on indexed column
+-- Query using EXTRACT(YEAR FROM ...) expression
+-- Note: service_date is already a DATE, so DATE(service_date) is an identity conversion
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT count(*)
 FROM service
-WHERE DATE(service_date) = DATE '2026-01-15';
+WHERE EXTRACT(YEAR FROM service_date) = 2026;
 
 -- Look at the plan: it's likely a Sequential Scan or Bitmap Heap Scan.
 -- Why? The index stores raw `service_date` values.
--- The function `DATE(service_date)` changes the value.
--- PostgreSQL must apply DATE() to every row to check the condition.
--- Therefore, the index isn't directly searchable for `DATE '2026-01-15'`.
+-- The function `EXTRACT(YEAR FROM service_date)` changes the value representation.
+-- PostgreSQL must apply the function to every row to check the condition.
+-- Therefore, the index isn't directly searchable for `2026`.
 
-================================
+-- ============================================
 -- PART 2: Query With Range Predicate
-================================
+-- ============================================
 
 -- Same intent, but rewritten to use a range condition (SARGable)
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT count(*)
 FROM service
-WHERE service_date >= '2026-01-15 00:00:00'
-  AND service_date < '2026-01-16 00:00:00';
+WHERE service_date >= DATE '2026-01-01'
+  AND service_date < DATE '2027-01-01';
 
 -- Look at the plan: Index Scan or Bitmap Index Scan!
 -- Why? The query predicate uses the raw `service_date` column.
--- PostgreSQL can search the index for values between these bounds.
+-- PostgreSQL can search the index for values within this range.
 
 -- SARGable = Search Argument Able
--- A predicate is SARGable if the DBMS engine can take advantage of an index to speed up the execution of the query.
--- Using `DATE(column)` makes it non-SARGable.
+-- A predicate is SARGable if the DBMS engine can take advantage of an index to speed up the execution.
+-- Using `EXTRACT(YEAR FROM column)` makes it non-SARGable.
 
-================================
+-- ============================================
 -- PART 3: Expression Indexes
-================================
+-- ============================================
 
 -- What if you CANNOT rewrite the query?
 -- You can create an Expression Index.
 
-DROP INDEX IF EXISTS idx_service_date_expr;
--- Create an index specifically for the `DATE()` function result
-CREATE INDEX idx_service_date_expr ON service(DATE(service_date));
+DROP INDEX IF EXISTS idx_service_year_expr;
+-- Create an index specifically for the EXTRACT(YEAR FROM ...) result
+CREATE INDEX idx_service_year_expr ON service((EXTRACT(YEAR FROM service_date)));
 
 -- Re-run the expression query
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT count(*)
 FROM service
-WHERE DATE(service_date) = DATE '2026-01-15';
+WHERE EXTRACT(YEAR FROM service_date) = 2026;
 
--- Now the plan should show "Index Scan using idx_service_date_expr".
--- Because the index literally stores the results of DATE(service_date).
+-- Now the plan should show "Index Scan using idx_service_year_expr".
+-- Because the index stores the results of EXTRACT(YEAR FROM service_date).
 
-================================
+-- ============================================
 -- PART 4: Trade-Off Analysis
-================================
+-- ============================================
 
 -- Should you always use expression indexes? NO!
 
@@ -86,4 +87,4 @@ WHERE DATE(service_date) = DATE '2026-01-15';
 
 -- Cleanup
 DROP INDEX IF EXISTS idx_service_service_date;
-DROP INDEX IF EXISTS idx_service_date_expr;
+DROP INDEX IF EXISTS idx_service_year_expr;

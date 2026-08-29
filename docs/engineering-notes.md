@@ -88,7 +88,17 @@ business_payment_total{status, provider}
 
 **Choice**: Hybrid — Redis for fast path, DB as source of truth
 
-### Optimistic vs Pessimistic Locking (Lab 04/05)
+### Caching Strategy (Lab 04)
+| Approach | Pros | Cons |
+|----------|------|------|
+| Cache Aside | Simple to implement, standard | Cache stampede on expiration |
+| Cache Aside + Single Flight | Deduplicates concurrent DB queries | Still blocks if DB is slow |
+| Cache Aside + Jitter | Prevents expiration clusters | Slightly harder to test |
+| Redis Distributed Lock | Mutual exclusion across instances | Network overhead, split-brain risk |
+
+**Choice**: Cache Aside with Single Flight for high-traffic endpoints.
+
+### Optimistic vs Pessimistic Locking (Lab 05/12)
 | Approach | Pros | Cons |
 |----------|------|------|
 | Optimistic | No lock wait, high throughput | Retry on conflict, not for high contention |

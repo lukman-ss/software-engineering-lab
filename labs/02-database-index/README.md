@@ -34,7 +34,7 @@ A senior engineer cares about:
 - **throughput** — queries per second the system can sustain
 - **rows scanned** — how many rows the planner actually examined
 - **buffers** — shared hits vs shared reads (cache effectiveness)
-- **selectivity** — what fraction of rows each predicate filters
+- **match fraction** — what fraction of rows each predicate filters
 - **planner estimates** — how close `rows=` matches `Actual Rows`
 - **write amplification** — cost of maintaining indexes on INSERT/UPDATE/DELETE
 - **storage** — disk footprint of indexes
@@ -93,8 +93,8 @@ Run the setup script to create the schema and seed data:
 
 Or manually:
 ```bash
-psql -d software_engineer_lab -f schema.sql
-psql -d software_engineer_lab -f seed.sql
+psql -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/schema.sql
+psql -d se_lab -v ON_ERROR_STOP=1 -f labs/02-database-index/seed.sql
 ```
 
 Verify data volume:
@@ -118,11 +118,13 @@ These are **NOT** the same thing:
 | Concept | Definition | Example |
 |---------|------------|---------|
 | **Cardinality** | Number of distinct values | `status` has 5 distinct values |
-| **Selectivity** | Fraction of rows filtered by predicate | `status = 'FINISHED'` → 75% selectivity = 0.75 |
+| **Match fraction** | `matching_rows / total_rows` | `status = 'FINISHED'` → 0.75 |
+
+> **Convention used in this lab**: We use "match fraction" to refer to the numeric ratio (e.g., 0.75). We say a predicate is "highly selective" if the match fraction is small (e.g., 0.1%), meaning it filters out most rows. We say it is "not very selective" if the match fraction is large (e.g., 75%).
 
 **Key insight**: Low cardinality does NOT mean index is useless.
-- `status = 'FINISHED'` (75% match) = low selectivity = Seq Scan may win
-- `status = 'PENDING_REFUND'` (0.1% match) = high selectivity = Index wins!
+- `status = 'FINISHED'` (75% match fraction) = not very selective = Seq Scan may win
+- `status = 'PENDING_REFUND'` (0.1% match fraction) = highly selective = Index wins!
 
 Check PostgreSQL statistics:
 ```sql
@@ -172,7 +174,7 @@ ORDER BY service_date DESC;
 | Field | Meaning |
 |-------|---------|
 | `cost` | Planner's estimate (abstract units, NOT milliseconds) |
-| `actual time` | Microseconds from ANALYZE |
+| `actual time` | **Milliseconds** from ANALYZE (not microseconds) |
 | `rows` (estimate) | Planner's guess |
 | `Actual Rows` | Reality check |
 
@@ -180,8 +182,8 @@ ORDER BY service_date DESC;
 
 | Type | Meaning |
 |------|---------|
-| `shared read` | Blocks had to be read from disk |
-| `shared hit` | Blocks were in OS cache |
+| `shared read` | PostgreSQL had to **read the block into shared buffers**. The underlying OS may satisfy this from kernel page cache, so it does not necessarily mean physical disk I/O. |
+| `shared hit` | Requested block was already present in PostgreSQL **shared buffers**. |
 
 ### Execution Plan Nodes
 
@@ -189,7 +191,7 @@ ORDER BY service_date DESC;
 |------|-----------------|
 | **Seq Scan** | No usable index, or index not helpful |
 | **Index Scan** | Single index used |
-| **Bitmap Heap Scan** | Multiple indexes combined via bitmap |
+| **Bitmap Heap Scan** | Heap rows fetched using a bitmap of tuple/page locations. The bitmap can come from: one Bitmap Index Scan; BitmapAnd over several indexes; or BitmapOr over several indexes. |
 | **Sort** | ORDER BY couldn't use index order |
 | **Limit** | `LIMIT` clause pushed down |
 
@@ -209,7 +211,12 @@ Test the optimal `(branch_id, status, service_date DESC)` index.
 ### Experiment 4: Column Order Demonstration (queries/04-column-order-experiment.sql)
 Compare three different column orders. Learn why left-to-right ordering matters.
 
-Key insight: A B-tree index can only be traversed when the **leftmost** columns are constrained.
+**Key insight for PostgreSQL 16**: For a B-tree index on `(a, b, c)`, constraints on leading columns determine how much of the index scan range can be bounded efficiently:
+- `WHERE a = ?` → can efficiently constrain the index range
+- `WHERE a = ? AND b = ?` → can constrain it further
+- `WHERE a = ? AND b = ? AND c BETWEEN ...` → bounds a tight range
+
+However, `WHERE b = ?` (skipping `a`) is not literally "impossible". PostgreSQL 16 can in principle use the index, but without a constraint on the leftmost column, it may need to scan a large or complete portion of the index. The planner will therefore often prefer Seq Scan or another index.
 
 ### Experiment 5: Selectivity Analysis (queries/05-low-cardinality-selectivity.sql)
 Test `status = 'FINISHED'` (75% match) vs `status = 'PENDING_REFUND'` (0.1% match).
@@ -234,10 +241,10 @@ Learn how to identify unused indexes using `pg_stat_user_indexes`. Understand wh
 Detect exact duplicates and overlapping prefix indexes. Learn workload-driven cleanup rather than simplistic dropping.
 
 ### Experiment 12: Partial Indexes (queries/12-partial-index.sql)
-Create partial indexes (`WHERE status = 'FINISHED'`). See how they reduce index size and improve performance for specific subsets.
+Create partial indexes for small subsets (e.g., `status = 'IN_PROGRESS'`). Compare index size and query performance against full indexes.
 
 ### Experiment 13: Functions on Indexed Columns (queries/13-functions-on-indexes.sql)
-Compare `DATE(service_date) = ...` (non-SARGable) with range predicates and expression indexes (`CREATE INDEX ON table((DATE(column)))`).
+Compare `EXTRACT(YEAR FROM service_date)` (non-SARGable) with range predicates and expression indexes (`CREATE INDEX ON table((EXTRACT(YEAR FROM column)))`).
 
 ### Experiment 14: PostgreSQL Statistics & ANALYZE (queries/14-statistics-and-analyze.sql)
 Inspect `pg_stats` (`n_distinct`, `most_common_vals`, `histogram_bounds`). See how running `ANALYZE` updates planner estimates.
@@ -308,15 +315,15 @@ This is a candidate based on this query shape, not a universally correct index.
 
 **9. Sort elimination** - The index provides rows in `service_date DESC` order, so the Sort node is unnecessary.
 
-**10. 90% FINISHED** - The predicate would not be selective; Seq Scan would likely be chosen even with the index available.
+**10. 90% FINISHED** - The predicate has a large match fraction (not highly selective); Seq Scan would likely be chosen even with the index available.
 
-**11. 0.1% FINISHED** - Index would be very effective; few heap pages need inspection.
+**11. 0.1% FINISHED** - The predicate has a very small match fraction (highly selective); index would be very effective; few heap pages need inspection.
 
 **12. LIMIT 20** - Index allows early termination: stop after 20 matching rows instead of processing all.
 
 **13. INCLUDE** useful when the query can satisfy all columns from the index (fewer columns), enabling Index Only Scan and avoiding heap access.
 
-**14. Partial index** better when the query always filters `status = 'FINISHED'` and FINISHED is a large portion of the table—smaller index, faster maintenance.
+**14. Partial index** better when the query always filters a small subset (e.g., `status = 'IN_PROGRESS'` ~5%). Partial index size advantage grows when the indexed subset is substantially smaller than the full table. Faster maintenance, less storage.
 
 **15. Check `pg_stat_user_indexes`** where `idx_scan = 0` with sufficient monitoring period, high index size, and no functional dependencies indicate an unused index.
 </details>
@@ -353,6 +360,7 @@ labs/02-database-index/
 │   └── create_indexes.sql
 └── scripts/
     └── setup_lab.sh
+    └── verify_lab.sh
 ```
 
 ---
@@ -361,32 +369,43 @@ labs/02-database-index/
 
 ### Composite Index Column Order
 
-For `WHERE a = ? AND b = ? AND c > ? ORDER BY c`:
+For `WHERE a = ? AND b = ? AND c > ? ORDER BY c DESC`:
 
 ```sql
-CREATE INDEX idx ON table (a, b, c DESC);
+CREATE INDEX idx ON table (a, b, c);
 ```
 
 - **Equality first**: Filter down index quickly
 - **Range last**: Can use for filtering AND ordering
-- **DESC**: Enables backward scan, eliminating Sort
+- **Direction**: PostgreSQL B-tree indexes can be scanned **both forward and backward**. Both `(a, b, c)` and `(a, b, c DESC)` can support `ORDER BY c DESC` here. Explicit ASC/DESC definitions matter when you have **mixed ordering requirements** in a multicolumn ORDER BY (e.g., `ORDER BY x ASC, y DESC`).
 
-### Leading Column Rule
+### Leading Column Rule (PostgreSQL 16)
 
-For index on `(a, b, c)`:
-- `WHERE a = ?` ✓ Uses index
-- `WHERE a = ? AND b = ?` ✓ Uses index  
-- `WHERE a = ? AND b = ? AND c > ?` ✓ Uses index
-- `WHERE b = ?` ✗ Index not usable (no `a` constraint)
+For an index on `(a, b, c)`:
 
-### Cardinality vs Selectivity
+Constraints on leading columns determine how much of the B-tree scan range can be bounded:
+
+- `WHERE a = ?` → constrains index range efficiently
+- `WHERE a = ? AND b = ?` → constrains further
+- `WHERE a = ? AND b = ? AND c > ?` → bounds tight range
+- `WHERE b = ?` → can use index in principle, but without a constraint on `a` the planner may need to scan a large or complete portion. Often prefers Seq Scan or another index.
+- `WHERE b = ? AND c = ?` → same reasoning
+
+PostgreSQL 16 can technically use any index structure, but performance depends on whether the leftmost column(s) provide useful constraints.
+
+**PostgreSQL 18 compatibility note**: B-tree skip-scan optimization may change this behavior for certain cases. This repository targets PostgreSQL 16.
+
+### Cardinality vs Match Fraction
 
 ```text
 cardinality = distinct values
-selectivity = rows selected / total rows
+match_fraction = matching_rows / total_rows
+
+A predicate is "selective" when match_fraction is small.
+A predicate is "non-selective" when match_fraction is large.
 ```
 
-Both matter! Low cardinality with high selectivity = index useful.
+Both matter! Low cardinality with a highly selective predicate = index useful.
 
 ### SARGable Predicates
 
@@ -398,7 +417,18 @@ Indexes do not make decisions. The PostgreSQL planner chooses execution plans ba
 
 ### Production-Safe Builds
 
-Always use `CREATE INDEX CONCURRENTLY` on large production tables to avoid acquiring `ACCESS EXCLUSIVE` locks that block write operations.
+Use `CREATE INDEX CONCURRENTLY` on large production tables when you need to:
+- Preserve concurrent write availability
+- Fit between maintenance windows
+- Avoid application downtime
+
+Understand the trade-offs:
+- Takes longer and requires more resources
+- Cannot run in a transaction block
+- Can leave an INVALID index if build fails
+- Monitors old snapshots and can wait on long transactions
+
+For smaller tables or during maintenance windows, a regular `CREATE INDEX` may be simpler and faster.
 
 ---
 
@@ -454,23 +484,23 @@ make lab-02-setup DB_HOST=your-host DB_USER=your-user
 
 ## Theory Audit: Common Misconceptions Corrected
 
-### ❌ Full Table Scan is always bad.
-✅ **A sequential scan can be optimal when a query reads a large portion of a table.** Reading 70-90% of rows with index traversal plus random heap access (typically 10+ I/O per row) is almost always slower than a single sequential scan that reads pages consecutively.
+### ❌ Full Table Scan is inherently bad.
+✅ **A sequential scan can be optimal when a query reads a large portion of a table.** Reading a large percentage of rows with index traversal plus random heap access is often slower than a single sequential scan that reads pages consecutively.
 
-### ❌ Never index low-cardinality columns.
-✅ **Low cardinality alone does not determine index usefulness; predicate selectivity and data distribution matter.** An index on a 5-value column can be very useful if the predicate matches 0.1% of rows. An index on an infinite-unique column is useless if the predicate matches 99% of rows.
+### ❌ Do not index low-cardinality columns.
+✅ **Low cardinality alone does not determine index usefulness; predicate selectivity and data distribution matter.** An index on a 5-value column can be very useful if the predicate match fraction is 0.1%. An index on an infinite-unique column is rarely useful if the predicate matches 99% of rows.
 
-### ❌ Never create separate indexes when a composite index exists.
-✅ **PostgreSQL can combine indexes with bitmap operations; composite indexes can still be better for important query patterns.** `BitmapAnd` allows the planner to intersect bitmaps from multiple indexes. Composite indexes win when the same prefix is used repeatedly and the index is smaller/faster than combining multiple bitmaps.
+### ❌ Do not create separate indexes when a composite index exists.
+✅ **PostgreSQL can combine indexes with bitmap operations.** `BitmapAnd` allows the planner to intersect bitmaps from multiple indexes. Composite indexes typically win when the same prefix is used repeatedly and the index is smaller/faster than combining multiple bitmaps, but separate indexes provide more flexibility for varied workloads.
 
-### ❌ Index columns are always evaluated strictly left to right and later columns become useless.
-✅ **PostgreSQL multicolumn B-tree behavior allows the planner to use any prefix of the index key.** The leftmost column forms the primary partition. Subsequent columns allow finer filtering within each partition. The planner can use columns in any order as long as there is no column skip.
+### ❌ Index columns are evaluated strictly left to right and later columns become useless if one is skipped.
+✅ **PostgreSQL multicolumn B-tree behavior allows the planner to use the index in principle, but skipping leading columns often results in scanning a large portion of the index.** The leftmost columns determine how much of the B-tree scan range can be bounded efficiently.
 
 ### ❌ If an index exists PostgreSQL will use it.
-✅ **The planner chooses the estimated cheapest plan.** It compares all available indexes and the sequential scan, picking whichever it estimates has the lowest total cost based on `n_distinct`, `most_common_freqs`, and histogram data from `ANALYZE`.
+✅ **The planner chooses the estimated cheapest plan.** It compares available index paths and the sequential scan, picking whichever it estimates has the lowest total cost based on `n_distinct`, `most_common_freqs`, and histogram data from `ANALYZE`.
 
 ### ❌ EXPLAIN cost is execution time.
-✅ **Cost is an abstract unit based on CPU pages and I/O** used by the planner. `total_cost` vs `startup_cost` are relative estimates. `actual_time` (from `ANALYZE`) is wall-clock microseconds. Cost does NOT equal milliseconds.
+✅ **Cost is an abstract unit based on CPU pages and I/O** used by the planner. `total_cost` vs `startup_cost` are relative estimates. `actual_time` (from `EXPLAIN ANALYZE`) is reported in **milliseconds**. Cost does NOT equal milliseconds.
 
 ### ❌ Index Only Scan means PostgreSQL never touches the heap.
-✅ **It means PostgreSQL only needed index columns, but heap Fetches can still occur if the visibility map indicates potential unvacuumed tuples.** An `Index Only Scan` is only possible when the visibility map shows all tuples on the checked pages are visible. If `Heap Fetches > 0`, the visibility map was incomplete or the page contained recently updated/deleted rows.
+✅ **It means PostgreSQL only needed index columns to satisfy the query, but heap Fetches can still occur.** An `Index Only Scan` avoids heap access only when the visibility map indicates the tuples on the checked pages are visible to all transactions. If `Heap Fetches > 0`, the visibility map was incomplete or the page contained recently updated/deleted rows.

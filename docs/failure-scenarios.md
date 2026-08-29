@@ -183,7 +183,7 @@ T3: Both think they hold lock ❌
 | 01 | Duplicate payment | Unique constraint violation | Idempotency key |
 | 02 | Data race | `-race` detector, flaky tests | Mutex, atomic, CAS |
 | 03 | Inconsistent state | Integration tests | Transaction boundaries |
-| 04 | Lost update | Concurrent test | Optimistic locking |
+| 12 | Lost update | Concurrent test | Optimistic locking |
 | 05 | Lock contention | Load test | Pessimistic locking |
 | 06 | Deadlock | Stress test, pg_locks | Lock ordering, timeout |
 | 07 | Event loss | Chaos test (kill broker) | Outbox pattern |

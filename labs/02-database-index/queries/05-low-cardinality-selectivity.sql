@@ -2,14 +2,20 @@
 -- Experiment: Low Cardinality vs Selectivity
 -- Corrects the oversimplified "don't index low-cardinality columns" rule
 
--- KEY INSIGHT: Cardinality (distinct values) is different from Selectivity (fraction matched)
+-- KEY INSIGHT: Cardinality (distinct values) is different from Match fraction
 -- - Cardinality = number of distinct values in a column
--- - Selectivity = fraction of rows a predicate filters out (0.0 to 1.0)
+-- - Match fraction (selectivity) = fraction of rows a predicate filters out (0.0 to 1.0)
+
+-- Note on pg_stats.n_distinct:
+-- n_distinct > 0 = estimated number of distinct values
+-- n_distinct < 0 = negative fraction: |n_distinct| = distinct_rows / total_rows
+-- Example: n_distinct = -1 means nearly one distinct value per row (high uniqueness)
+-- Example: n_distinct = -0.5 means about half as many distinct values as rows
 
 -- An index on a low-cardinality column CAN be useful when:
--- 1. The predicate selects a small fraction (high selectivity)
+-- 1. The predicate selects a small fraction (highly selective)
 -- 2. Index is combined with other indexes (BitmapAnd)
--- 3. The column is used together with high-selectivity columns
+-- 3. The column is used together with highly selective columns
 
 -- Check statistics for the status column
 SELECT
@@ -21,21 +27,15 @@ FROM pg_stats
 WHERE tablename = 'service'
 AND attname = 'status';
 
--- n_distinct = -1 means negative value = count of distinct values
--- n_distinct = -4 means absolute value = count of distinct values
--- Positive value = fraction (selectivity) of distinct values
-
 -- The rule "don't index low-cardinality columns" is WRONG because:
--- Scenario A: status = 'FINISHED' (75% of rows) -> Low selectivity -> Index may not help
--- Scenario B: status = 'PENDING_REFUND' (0.1% of rows) -> High selectivity -> Index very helpful!
+-- Scenario A: status = 'FINISHED' (75% of rows) -> not very selective -> Seq Scan may win
+-- Scenario B: status = 'PENDING_REFUND' (0.1% of rows) -> highly selective -> Index very helpful!
 
-================================
+-- ============================================
 -- SCENARIO A: FINISHED = ~75% of rows
--- Low selectivity predicate
--- PostgreSQL may prefer Seq Scan
-================================
+-- Not very selective predicate
+-- ============================================
 
--- First, verify actual percentages
 SELECT status, COUNT(*) * 100.0 / (SELECT COUNT(*) FROM service) AS pct
 FROM service
 GROUP BY status
@@ -51,36 +51,32 @@ SELECT COUNT(*) FROM service WHERE status = 'FINISHED';
 -- Why might index still be used?
 -- If combined with other filters in a composite index!
 
-================================
+-- ============================================
 -- SCENARIO B: PENDING_REFUND = ~0.1% of rows
--- High selectivity predicate (good for index!)
--- Same index, different value
-================================
+-- Highly selective predicate (good for index!)
+-- ============================================
 
--- Verify the rare status distribution
 SELECT status, COUNT(*) FROM service WHERE status = 'PENDING_REFUND';
 
--- Run the query
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT COUNT(*) FROM service WHERE status = 'PENDING_REFUND';
 
 -- Typical outcome: Index Scan wins because only ~500 rows need checking
 
--- This proves: same index, different predicate selectivity = different plans!
-
-================================
+-- ============================================
 -- COMBINED INDEX DEMONSTRATION
 -- How low-cardinality can still help
-================================
+-- ============================================
 
 -- Create composite index for our original query pattern
 CREATE INDEX idx_service_branch_status_date
     ON service(branch_id, status, service_date);
 
 -- Now the status filter becomes useful:
--- Even though status='FINISHED' matches 75% of table,
--- when combined with branch_id=2 (20% of table),
--- the effective selectivity is 0.75 * 0.20 = 15%
+-- Important: 0.75 * 0.20 is an APPROXIMATION based on statistical independence.
+-- In this synthetic data, FINISHED and branch_id are approximately independent,
+-- but in production they may be correlated.
+-- The actual selectivity could differ from this naive multiplication.
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM service

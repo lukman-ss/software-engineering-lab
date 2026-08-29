@@ -54,8 +54,8 @@ ORDER BY service_date DESC;
 -- -- Mismatch = stale statistics
 
 -- Buffers:
--- -- shared read = disk reads
--- -- shared hit = already in cache
+-- -- shared read = PostgreSQL read block into shared buffers (OS may cache it)
+-- -- shared hit = block was already in PostgreSQL shared buffers
 -- -- Fewer reads = better cache usage
 
 -- Planning Time: Query planning duration

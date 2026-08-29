@@ -8,7 +8,7 @@ DB_HOST ?= localhost
 DB_PORT ?= 5432
 DB_USER ?= postgres
 DB_PASSWORD ?= postgres
-DB_PSQL := psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME)
+DB_PSQL := psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1
 PSQL := PGPASSWORD=$(DB_PASSWORD) $(DB_PSQL)
 
 all: vet test

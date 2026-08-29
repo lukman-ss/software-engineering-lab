@@ -13,12 +13,12 @@ DROP INDEX IF EXISTS idx_service_branch_status_date;
 CREATE INDEX idx_service_branch_status_date
     ON service(branch_id, status, service_date DESC);
 
--- Important PostgreSQL multicolumn B-tree behavior:
--- - Supports queries with leftmost prefix
--- - (branch_id) - yes, any query with branch_id
--- - (branch_id, status) - yes, any query with both
--- - (status) - NO! status is not leftmost
--- - (service_date) - NO! service_date is not leftmost
+-- Important PostgreSQL 16 multicolumn B-tree behavior:
+-- - Supports queries that constrain leading columns
+-- - (branch_id) - yes, constrains index range efficiently
+-- - (branch_id, status) - yes, constrains further
+-- - (status) - can use index but may scan large portion (planner often prefers Seq Scan)
+-- - (service_date) - can use index but may scan large portion (planner often prefers Seq Scan)
 
 -- Run the main query
 EXPLAIN (ANALYZE, BUFFERS)

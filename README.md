@@ -117,15 +117,16 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 |-----|---------|
 | 01 | Duplicate requests creating duplicate payments |
 | 02 | Database index query optimization |
-| 11 | Race conditions corrupting inventory counts |
 | 03 | Partial failures leaving inconsistent state |
-| 04 | Lost updates under concurrent access |
+| 04 | Cache stampede and stale reads |
 | 05 | Lock contention causing delays |
 | 06 | Deadlocks hanging the system |
 | 07 | Events lost when database fails |
 | 08 | Retry storms amplifying failures |
 | 09 | Cascading failures from downstream |
 | 10 | Unbounded load causing outages |
+| 11 | Race conditions corrupting inventory counts |
+| 12 | Optimistic locking for concurrent updates |
 
 ## How to Run
 
@@ -187,15 +188,16 @@ make lint          # go vet
 ### Phase 1: Core Labs
 - [x] 01 Idempotency
 - [x] 02 Database Index
-- [x] 11 Race Condition
 - [ ] 03 Database Transaction
-- [ ] 04 Optimistic Locking
+- [x] 04 Caching
 - [ ] 05 Pessimistic Locking
 - [ ] 06 Deadlock
 - [ ] 07 Outbox Pattern
 - [ ] 08 Retry
 - [ ] 09 Circuit Breaker
 - [ ] 10 Rate Limiting
+- [x] 11 Race Condition
+- [ ] 12 Optimistic Locking
 
 ### Phase 2: Extended Topics
 - Bulkhead pattern

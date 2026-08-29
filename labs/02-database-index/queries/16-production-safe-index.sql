@@ -5,37 +5,36 @@
 -- Adding a new index to a large production table is an OPERATIONAL concern.
 -- It can block writes for the duration of the build, or put heavy load on the disk.
 
-================================
--- PART 1: The Dangers of `CREATE INDEX`
-================================
+-- ============================================
+-- PART 1: The Dangers of Standard `CREATE INDEX`
+-- ============================================
 
--- Standard `CREATE INDEX` takes an ACCESS EXCLUSIVE LOCK briefly, then a SHARE lock
--- while building. The SHARE lock BLOCKS all writes (INSERT/UPDATE/DELETE) to the table
--- until the index build completes!
+-- A normal CREATE INDEX permits reads but blocks WRITES (INSERT/UPDATE/DELETE)
+-- on the indexed table until the build finishes.
 --
 -- On a 100M+ row production table, an index build can take minutes or hours.
--- During this time, your application is essentially frozen for writes to that table.
+-- During this time, your application is frozen for writes to that table.
 
 -- DON'T RUN THIS ON PRODUCTION (it's instant on small local data):
 -- CREATE INDEX idx_blocking ON service(branch_id);
 
-================================
+-- ============================================
 -- PART 2: The Solution - `CREATE INDEX CONCURRENTLY`
-================================
+-- ============================================
 
--- `CREATE INDEX CONCURRENTLY` builds the index in two phases, doing multiple scans
--- of the table and allowing CONCURRENT reads and writes during the build.
-
--- 1. Phase 1: Scan table and build index, recording any concurrent writes.
--- 2. Phase 2: Re-scan table to apply the changes that happened during Phase 1.
+-- `CREATE INDEX CONCURRENTLY` builds the index in multiple phases:
+-- 1. First scan builds index, recording concurrent writes
+-- 2. Second scan applies changes that happened during Phase 1
 
 -- TRADE-OFFS:
--- 1. Build takes significantly longer (and uses more resources).
--- 2. If it fails (due to conflicts or disk space), the index is left INVALID.
---    You MUST DROP it and retry.
+-- 1. Build takes longer and uses more resources.
+-- 2. If it fails (conflicts or disk space), index is left INVALID.
+--    You MUST drop it and retry (DROP INDEX CONCURRENTLY).
 -- 3. Cannot run inside a TRANSACTION block.
+-- 4. Monitors old snapshots; can wait for long-running transactions.
+-- 5. Still consumes CPU and I/O.
 
--- The "safer" syntax for production:
+-- The operational syntax for production:
 DROP INDEX IF EXISTS idx_service_concurrent_branch;
 CREATE INDEX CONCURRENTLY idx_service_concurrent_branch
     ON service(branch_id);
@@ -48,83 +47,77 @@ SELECT
 FROM pg_index
 WHERE indexrelid = 'idx_service_concurrent_branch'::regclass;
 
-================================
+-- ============================================
 -- PART 3: Operational Checklist for Index Creation
-================================
+-- ============================================
 
--- Before adding an index in production:
-
--- 1. Measure table size
+-- Before adding an index in production, consider:
+-- 1. Table size
 SELECT
     pg_size_pretty(pg_relation_size('service')) AS table_size,
     pg_size_pretty(pg_indexes_size('service')) AS total_indexes;
 
--- 2. Estimate index size (estimate only; actual depends on data)
---    A B-tree index on a `bigint` or `int` typically takes ~30-50% of the table size.
+-- 2. Available disk space
+--    PostgreSQL needs space for:
+--    - New index
+--    - WAL for the index creation
+--    - Temporary files (during sorting, if needed)
+--    Use OS: df -h on the database server
 
--- 3. Check available disk space
---    Use OS commands like `df -h` on the database server.
+-- 3. Write traffic level
+--    High write volume = longer build time under lock with standard CREATE INDEX.
+--    CONCURRENTLY helps but still uses resources.
 
--- 4. Choose an appropriate load window (low-traffic time)
---    CONCURRENTLY still uses I/O and CPU resources.
+-- 4. Maintenance window considerations
+--    CONCURRENTLY still impacts performance; not truly "non-blocking".
 
--- 5. Run with extended statement_timeout to prevent timeouts
---    Example: SET statement_timeout = '0';
---    Or set it in the connection string / pool config.
+-- 5. Replication/WAL impact
+--    Index creation generates WAL; remote replicas replay all of it.
 
--- 6. Monitor progress with `pg_stat_progress_create_index`
-SELECT * FROM pg_stat_progress_create_index;
+-- 6. Run with extended statement_timeout:
+--    SET statement_timeout = '0';
 
--- 7. Monitor locks to ensure no long-running conflicting queries
-SELECT
-    locktype,
-    relation::regclass,
-    mode,
-    granted
+-- 7. Monitor progress:
+SELECT * FROM pg_stat_progress_create_index
+WHERE pid = pg_backend_pid();
+
+-- 8. Monitor locks for blocking queries:
+SELECT locktype, relation::regclass, mode, granted
 FROM pg_locks
 WHERE relation = 'service'::regclass;
 
-================================
+-- ============================================
 -- PART 4: Handling Failed Builds (Invalid Indexes)
-================================
+-- ============================================
 
--- If a CONCURRENTLY build fails, the index is INVALID.
--- NEVER use an invalid index; it just wastes space.
+-- If CONCURRENTLY build fails, index is INVALID.
+-- NEVER use an invalid index; drop it immediately.
 
--- Check for invalid indexes
 SELECT
     indexrelid::regclass AS invalid_index
 FROM pg_index
 WHERE NOT indisvalid
   AND indrelid = 'service'::regclass;
 
--- Drop invalid indexes before retrying
 -- DROP INDEX CONCURRENTLY IF EXISTS idx_service_concurrent_branch;
 
--- Retry the build
--- CREATE INDEX CONCURRENTLY idx_service_concurrent_branch ON service(branch_id);
-
--- Verify after build
--- SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_service_concurrent_branch'::regclass;
-
-================================
+-- ============================================
 -- PART 5: Verify Query Plan AFTER Index Creation
-================================
+-- ============================================
 
--- Run the query the index was meant for:
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT *
 FROM service
 WHERE branch_id = 5;
 
--- Did the planner actually pick the new index?
--- If not, check:
--- - Does the query match the index's leftmost prefix?
--- - Is the table too small (planner prefers Seq Scan for small tables)?
--- - Are statistics up to date? (`ANALYZE`)
+-- Check: Did planner use the new index?
+-- If not, verify:
+-- - Query matches index's leftmost prefix
+-- - Statistics current (`ANALYZE`)
+-- - Table not too small (Seq Scan may be cheaper)
 
-================================
+-- ============================================
 -- CLEANUP
-================================
+-- ============================================
 
 DROP INDEX CONCURRENTLY IF EXISTS idx_service_concurrent_branch;

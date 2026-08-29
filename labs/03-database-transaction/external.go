@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,15 @@ var (
 	ErrInvoicePaid           = errors.New("invoice already paid")
 	ErrBrokerFailed          = errors.New("message broker publish failed (temporary)")
 )
+
+// === Failure Injection (Poin 22) ===
+
+type FailureMode struct {
+	FailAfterDBCommit   bool
+	FailExternalService bool
+	FailPublishAttempts int
+	CrashAfterPublish   bool
+}
 
 // === Event Types ===
 
@@ -247,7 +257,7 @@ func NewInvoiceServiceDualWrite(db *sql.DB, publisher EventPublisher) *InvoiceSe
 	return &InvoiceServiceDualWrite{db: db, publisher: publisher}
 }
 
-func (s *InvoiceServiceDualWrite) PayInvoiceDualWrite(ctx context.Context, invoiceID int, crashAfterCommit bool) error {
+func (s *InvoiceServiceDualWrite) PayInvoiceDualWrite(ctx context.Context, invoiceID int, failMode *FailureMode) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -263,7 +273,7 @@ func (s *InvoiceServiceDualWrite) PayInvoiceDualWrite(ctx context.Context, invoi
 		return fmt.Errorf("commit: %w", err)
 	}
 
-	if crashAfterCommit {
+	if failMode != nil && failMode.FailAfterDBCommit {
 		return ErrProcessCrashed
 	}
 
@@ -294,14 +304,20 @@ func (s *InvoiceServiceOutbox) PayInvoiceWithOutbox(ctx context.Context, invoice
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, "UPDATE invoices SET status = 'paid' WHERE order_id = $1", invoiceID)
+	result, err := tx.ExecContext(ctx, "UPDATE invoices SET status = 'paid' WHERE order_id = $1", invoiceID)
 	if err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("update invoice: %w", err)
 	}
 
-	eventID := fmt.Sprintf("evt_%d", invoiceID)
-	eventPayload := fmt.Sprintf(`{"invoice_id": %d, "status": "paid"}`, invoiceID)
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		_ = tx.Rollback()
+		return ErrInvoicePaid
+	}
+
+	eventID := fmt.Sprintf("evt_%d_%d", invoiceID, time.Now().UnixNano())
+	eventPayload := fmt.Sprintf(`{"invoice_id": %d, "status": "paid", "timestamp": "%s"}`, invoiceID, time.Now().Format(time.RFC3339))
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO outbox_events
@@ -314,6 +330,7 @@ func (s *InvoiceServiceOutbox) PayInvoiceWithOutbox(ctx context.Context, invoice
 		return fmt.Errorf("insert outbox: %w", err)
 	}
 
+	log.Printf("[OUTBOX] InvoicePaid event stored for invoice %d", invoiceID)
 	return tx.Commit()
 }
 
@@ -324,18 +341,18 @@ func (s *InvoiceServiceOutbox) CountOutboxEvents(ctx context.Context) (int64, er
 }
 
 type OutboxDispatcher struct {
-	db                    *sql.DB
-	broker                EventPublisher
-	maxAttempts           int
-	simulateCrashBeforeMark bool
+	db          *sql.DB
+	broker      EventPublisher
+	maxAttempts int
+	failMode    *FailureMode
 }
 
-func NewOutboxDispatcher(db *sql.DB, broker EventPublisher, maxAttempts int, crashBeforeMark bool) *OutboxDispatcher {
+func NewOutboxDispatcher(db *sql.DB, broker EventPublisher, maxAttempts int, failMode *FailureMode) *OutboxDispatcher {
 	return &OutboxDispatcher{
-		db:                    db,
-		broker:                broker,
-		maxAttempts:           maxAttempts,
-		simulateCrashBeforeMark: crashBeforeMark,
+		db:          db,
+		broker:      broker,
+		maxAttempts: maxAttempts,
+		failMode:    failMode,
 	}
 }
 
@@ -368,15 +385,18 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 			Payload:     payload,
 		}
 
+		log.Printf("[DISPATCHER] publishing event=%s attempt=%d", event.ID, attempts+1)
 		pubErr := d.broker.Publish(ctx, event)
 		attempts++
 
 		if pubErr != nil {
+			log.Printf("[DISPATCHER] publish failed for event=%s: %v", event.ID, pubErr)
 			_, _ = d.db.ExecContext(ctx, "UPDATE outbox_events SET attempts = $1 WHERE id = $2", attempts, id)
 			continue
 		}
 
-		if d.simulateCrashBeforeMark {
+		if d.failMode != nil && d.failMode.CrashAfterPublish {
+			log.Printf("[DISPATCHER] simulated crash after publish for event=%s", event.ID)
 			return dispatched, ErrProcessCrashed
 		}
 
@@ -385,6 +405,7 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 			return dispatched, fmt.Errorf("mark published: %w", err)
 		}
 
+		log.Printf("[DISPATCHER] event=%s marked as published", event.ID)
 		dispatched++
 	}
 
@@ -406,16 +427,25 @@ func NewCommissionWorker(db *sql.DB) *CommissionWorker {
 }
 
 func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string, event Event) (bool, error) {
+	log.Printf("[CONSUMER:%s] processing %s", consumerName, event.ID)
+
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("begin tx: %w", err)
 	}
 
+	// Deduplication check
+	var exists bool
 	var count int64
 	row := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID)
 	if err := row.Scan(&count); err == nil && count > 0 {
+		exists = true
+	}
+
+	if exists {
 		_ = tx.Rollback()
-		return false, nil
+		log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
+		return false, nil // Idempotent: skip duplicate
 	}
 
 	_, err = tx.ExecContext(ctx, "INSERT INTO processed_events (event_id) VALUES ($1)", event.ID)
@@ -432,6 +462,7 @@ func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string,
 		return false, fmt.Errorf("commit: %w", err)
 	}
 
+	log.Printf("[CONSUMER:%s] completed %s", consumerName, event.ID)
 	return true, nil
 }
 
@@ -446,14 +477,14 @@ func (c *CommissionWorker) CommissionsPaidCount() int64 {
 // ============================================================================
 
 type DLQRecord struct {
-	Event     Event
-	Reason    string
-	Attempts  int
-	FailedAt  time.Time
+	Event    Event
+	Reason   string
+	Attempts int
+	FailedAt time.Time
 }
 
 type DeadLetterQueue struct {
-	mu   sync.Mutex
+	mu      sync.Mutex
 	records []DLQRecord
 }
 
@@ -465,11 +496,12 @@ func (dlq *DeadLetterQueue) Add(event Event, reason string, attempts int) {
 	dlq.mu.Lock()
 	defer dlq.mu.Unlock()
 	dlq.records = append(dlq.records, DLQRecord{
-		Event:     event,
-		Reason:    reason,
-		Attempts:  attempts,
-		FailedAt:  time.Now(),
+		Event:    event,
+		Reason:   reason,
+		Attempts: attempts,
+		FailedAt: time.Now(),
 	})
+	log.Printf("[DLQ] %s moved after %d attempts", event.ID, attempts)
 }
 
 func (dlq *DeadLetterQueue) Count() int {
@@ -486,7 +518,6 @@ func (dlq *DeadLetterQueue) Records() []DLQRecord {
 	return out
 }
 
-// OutboxDispatcherWithDLQ extends OutboxDispatcher to move failed events to DLQ
 type OutboxDispatcherWithDLQ struct {
 	db          *sql.DB
 	broker      EventPublisher
@@ -503,8 +534,6 @@ func NewOutboxDispatcherWithDLQ(db *sql.DB, broker EventPublisher, maxAttempts i
 	}
 }
 
-// DispatchUntilDLQ tries to publish, and if max attempts exceeded, moves to DLQ.
-// Returns the number of events successfully published.
 func (d *OutboxDispatcherWithDLQ) DispatchUntilDLQ(ctx context.Context, event Event, maxRetries int) (bool, error) {
 	for i := 0; i < maxRetries; i++ {
 		err := d.broker.Publish(ctx, event)
@@ -512,7 +541,6 @@ func (d *OutboxDispatcherWithDLQ) DispatchUntilDLQ(ctx context.Context, event Ev
 			return true, nil
 		}
 	}
-	// All retries exhausted - move to DLQ
 	d.dlq.Add(event, "max attempts exceeded", maxRetries)
 	return false, fmt.Errorf("event moved to DLQ after %d failed attempts", maxRetries)
 }
@@ -521,20 +549,14 @@ func (d *OutboxDispatcherWithDLQ) DispatchUntilDLQ(ctx context.Context, event Ev
 // 12. Saga Pattern & Compensating Transactions
 // ============================================================================
 
-type ReserveResourceError struct{}
-
-func (ReserveResourceError) Error() string { return "failed to reserve resource" }
-
-// SagaStep represents a single step in a saga with its compensating action.
 type SagaStep struct {
-	Action         func(ctx context.Context) error
-	Compensate     func(ctx context.Context) error
+	Action     func(ctx context.Context) error
+	Compensate func(ctx context.Context) error
 }
 
-// Saga orchestrates a series of steps, running compensating actions on failure.
 type Saga struct {
 	steps    []SagaStep
-	executed []int // indices of completed steps
+	executed []int
 }
 
 func NewSaga() *Saga {
@@ -546,34 +568,15 @@ func (s *Saga) Then(step SagaStep) *Saga {
 	return s
 }
 
-// Execute runs all steps, invoking compensations on failure.
 func (s *Saga) Execute(ctx context.Context) error {
 	for i, step := range s.steps {
 		if err := step.Action(ctx); err != nil {
-			// Compensation: run in reverse order
-			for j := i; j >= 0; j-- {
+			for j := i - 1; j >= 0; j-- {
 				_ = s.steps[j].Compensate(ctx)
 			}
 			return err
 		}
 		s.executed = append(s.executed, i)
 	}
-	return nil
-}
-
-// Simple example: Vendor Payment Saga
-type PaymentReservation struct {
-	Reserved bool
-}
-
-func (pr *PaymentReservation) Reserve(ctx context.Context) error {
-	// Simulate deducting cash from available balance
-	pr.Reserved = true
-	return nil // Success!
-}
-
-func (pr *PaymentReservation) Release(ctx context.Context) error {
-	// Compensating action: refund the reserved amount
-	pr.Reserved = false
 	return nil
 }
