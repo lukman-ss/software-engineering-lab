@@ -152,9 +152,75 @@ idempotent processing
 
 ## 9. Idempotent Consumer
 
-`(consumer_name, event_id)` sebagai unique key untuk deduplikasi.
+### Why Per-Consumer Deduplication?
 
-Test: `TestIdempotentConsumerDeduplication`.
+```
+InvoicePaid evt-123
+        │
+        ├── InventoryConsumer
+        ├── CommissionConsumer
+        └── ERPConsumer
+```
+
+Ketiganya harus memproses event yang sama. Jadi `event_id` sendiri tidak cukup sebagai global processed key.
+
+**Schema processed_events:**
+```
+processed_events
+---------------------------------
+consumer_name
+event_id
+processed_at
+UNIQUE (consumer_name, event_id)
+```
+
+### Consumer Transaction Pattern
+
+```
+Message Delivered
+      │
+      ▼
+BEGIN
+      │
+      ├── Claim (consumer_name, event_id)
+      │
+      ├── Business DB Mutation
+      │
+      └── Commit
+      │
+      ▼
+ACK
+```
+
+Failure sebelum commit:
+- ROLLBACK
+- → message may retry
+
+Crash setelah commit sebelum ACK:
+- message redelivered
+- → dedup prevents duplicate business effect
+
+### At-Least-Once Delivery Semantics
+
+Gunakan pola:
+```
+at-least-once delivery
++
+idempotent consumer
+```
+
+**Tidak** mengubah menjadi "exactly-once". Lebih tepat: "effectively-once business effect" atau "idempotent processing under redelivery". Delivery tetap dapat duplicate, tapi business effect akhirnya hanya sekali.
+
+**Test mappings:**
+- `TestIdempotentConsumerDeduplication` - same consumer duplicate
+- `TestDifferentConsumersSameEvent` - different consumers same event  
+- `TestConcurrentDuplicateConsumer` - concurrent same event dedup
+- `TestConsumerCrashRedelivery` - consumer restart/redelivery
+- `TestAtomicConsumerFlow` - business mutation failure rollback
+- `TestConsumerCrashAfterCommitBeforeAck` - separation of deliveries vs business rows
+- `TestMockDBNoLostUpdates` - verify concurrency does not lose updates
+- `TestMockDBRollbackIsolation` - verify rollback isolation
+- `TestConsumerBusinessMutationFailure` - business mutation failure rollback
 
 ---
 
@@ -451,6 +517,9 @@ go test -v -count=1
 | `TestIdempotentConsumerDeduplication` | Idempotent deduplication | external.go |
 | `TestAtomicConsumerFlow` | Dedup + business state atomic | external.go |
 | `TestConsumerCrashRedelivery` | Crash/redelivery handled idempotently | external.go |
+| `TestConsumerCrashAfterCommitBeforeAck` | Separation of deliveries vs business rows | external.go |
+| `TestMockDBNoLostUpdates` | Mock DB no lost updates | external.go |
+| `TestMockDBRollbackIsolation` | Rollback isolation | external.go |
 | `TestConcurrentDifferentEvents` | Concurrent different events, no lost update | external.go |
 | `TestConcurrentSameEvent` | Concurrent same event, one succeeds | external.go |
 | `TestDifferentConsumersSameEvent` | Different consumers, same event | external.go |

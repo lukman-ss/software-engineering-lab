@@ -13,16 +13,18 @@ import (
 // - Cache miss → query DB
 // - Populate cache setelah DB hit
 type CacheAsideService struct {
-	db    *sql.DB
-	cache CacheInterface
-	ttl   time.Duration
+	db          *sql.DB
+	cache       CacheInterface
+	ttl         time.Duration
+	jitterTTL   time.Duration // max jitter to add to TTL
 }
 
 func NewCacheAsideService(db *sql.DB, cache CacheInterface) *CacheAsideService {
 	return &CacheAsideService{
-		db:    db,
-		cache: cache,
-		ttl:   5 * time.Minute,
+		db:        db,
+		cache:     cache,
+		ttl:       5 * time.Minute,
+		jitterTTL: 15 * time.Second, // Jitter to prevent stampede on expiration
 	}
 }
 
@@ -48,12 +50,14 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, key string) (Product
 	}
 	_ = startDB
 
-	// 3. Populate cache
+	// 3. Populate cache with jitter to prevent synchronized expiration
 	data, err := json.Marshal(p)
 	if err != nil {
 		return Product{}, fmt.Errorf("marshal product: %w", err)
 	}
-	if err := s.cache.Set(ctx, key, string(data), s.ttl); err != nil {
+	// Use jittered TTL to disperse expiration times across cache entries
+	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
+	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
 		// Log but don't fail - we have the data from DB
 		fmt.Printf("warn: cache set failed: %v\n", err)
 	}

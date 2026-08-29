@@ -1,4 +1,4 @@
-# Lab 04 — Caching: Optimalkan Latency, Tapi Apa Kostsnya?
+# Lab 04 — Caching: Mengurangi Latency, Tapi Apa Biayanya?
 
 > **Mental Model**: Caching adalah trade-off antara **latency** (cepat) dan **consistency** (benar). Senior engineer memilih teknik caching yang tepat untuk workload nya.
 
@@ -359,7 +359,7 @@ Client Request
 ### Run Unit Tests
 
 ```bash
-cd /Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/04-caching
+cd labs/04-caching
 go test -v -count=1 ./...
 ```
 
@@ -372,26 +372,26 @@ go run . -scenario=stampede-unprotected
 go run . -scenario=stampede-protected
 ```
 
-### Expected Results
+### Expected Results (Run with `go run ./cmd/demo -scenario=...`)
 
 ```
 Scenario: without-cache
 Requests: 100
-DB Queries: 100
+Repository Calls: 100
 Cache Hits: 0
 
 Scenario: cache-aside  
 Requests: 100
-DB Queries: 1
+Repository Calls: 1
 Cache Hits: 99
 
 Scenario: stampede-unprotected
 Concurrent Requests: 100
-DB Rebuilds: 100
+Repository Calls: 100
 
 Scenario: stampede-protected
 Concurrent Requests: 100
-DB Rebuilds: 1    ← Singleflight!
+Repository Calls: 1    ← Singleflight!
 ```
 
 ---

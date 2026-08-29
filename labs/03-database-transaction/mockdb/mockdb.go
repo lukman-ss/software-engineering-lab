@@ -120,6 +120,9 @@ func (t *txn) IsOpen() bool {
 func (t *txn) Commit() error {
 	c := t.c
 	c.db.mu.Lock()
+	// Commit: replace committed state with transaction's snapshot
+	// Note: This is a simplified MVCC simulation. For proper isolation,
+	// real databases use row-level locks or more sophisticated versioning.
 	c.db.committed = c.tx
 	c.db.mu.Unlock()
 	t.open = false

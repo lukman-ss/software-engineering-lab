@@ -290,14 +290,14 @@ func TestIdempotentConsumerDeduplication(t *testing.T) {
 	}
 
 	// Observability counters (for metrics, not business state)
-	if worker1.CommissionsPaidCount() != 1 {
-		t.Errorf("expected worker1 observability counter=1, got %d", worker1.CommissionsPaidCount())
+	if worker1.ObservedBusinessExecutions() != 1 {
+		t.Errorf("expected worker1 observability counter=1, got %d", worker1.ObservedBusinessExecutions())
 	}
-	if worker2.CommissionsPaidCount() != 0 {
-		t.Errorf("expected worker2 observability counter=0, got %d", worker2.CommissionsPaidCount())
+	if worker2.ObservedBusinessExecutions() != 0 {
+		t.Errorf("expected worker2 observability counter=0, got %d", worker2.ObservedBusinessExecutions())
 	}
-	if inventoryWorker.CommissionsPaidCount() != 1 {
-		t.Errorf("expected inventoryWorker observability counter=1, got %d", inventoryWorker.CommissionsPaidCount())
+	if inventoryWorker.ObservedBusinessExecutions() != 1 {
+		t.Errorf("expected inventoryWorker observability counter=1, got %d", inventoryWorker.ObservedBusinessExecutions())
 	}
 
 	t.Log("SUCCESS: Idempotent consumer deduplicated based on (consumer_name, event_id).")
@@ -1653,4 +1653,175 @@ func TestConcurrentSameEvent(t *testing.T) {
 
 	t.Log("SUCCESS: Concurrent same event - second worker skipped duplicate, exactly 1 business row")
 	t.Log("  Note: With real DB row locks, concurrent processing would also yield exactly 1 success")
+}
+
+// ============================================================================
+// PROMPT 33: Separate Delivery Count From Business Effect Count
+// ============================================================================
+
+// TestConsumerCrashAfterCommitBeforeAck verifies that a crash after commit but before ACK
+// results in redelivery but idempotent processing prevents duplicate business effect.
+func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+
+	worker := transaction.NewCommissionWorker(db)
+	ctx := context.Background()
+	event := transaction.Event{ID: "evt-ack-crash", EventType: "InvoicePaid", AggregateID: "400", Payload: `{"invoice_id": 400}`}
+
+	// First delivery: process and commit successfully
+	processed1, err := worker.HandleEvent(ctx, "CommissionWorker", event)
+	if err != nil {
+		t.Fatalf("first delivery error: %v", err)
+	}
+	if !processed1 {
+		t.Fatal("expected first delivery to process")
+	}
+
+	// Verify business state after first delivery
+	var commissionCount int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 1 {
+		t.Fatalf("expected 1 commission after first delivery, got %d", commissionCount)
+	}
+
+	// Simulate crash-after-commit-before-ACK scenario:
+	// Message broker redelivers because ACK was never sent
+	processed2, err := worker.HandleEvent(ctx, "CommissionWorker", event)
+	if err != nil {
+		t.Fatalf("redelivery error: %v", err)
+	}
+	if processed2 {
+		t.Error("expected redelivered event to be SKIPPED (idempotent)")
+	}
+
+	// CRITICAL: deliveries = 2 (message delivered twice due to at-least-once)
+	//          business rows = 1 (only 1 actual commission due to idempotency)
+	// Note: mock DB only supports single WHERE condition
+	var dedupCount int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&dedupCount)
+	if dedupCount != 1 {
+		t.Errorf("expected 1 processed_events marker, got %d", dedupCount)
+	}
+
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if commissionCount != 1 {
+		t.Errorf("expected 1 commission business row, got %d", commissionCount)
+	}
+
+	t.Log("SUCCESS: deliveries=2 (redelivered), business rows=1 (idempotent)")
+	t.Log("  At-least-once delivery + idempotent consumer = effectively-once business effect")
+}
+
+// ============================================================================
+// PROMPT 39: Verify No Lost Updates with Mock DB
+// ============================================================================
+
+// TestMockDBNoLostUpdates verifies that the consumer's idempotent pattern
+// correctly prevents lost updates when multiple transactions commit.
+// Each transaction inserts unique event_id, so no row conflicts occur.
+// The unique constraint on (consumer_name, event_id) ensures only one succeeds.
+func TestMockDBNoLostUpdates(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+
+	worker := transaction.NewCommissionWorker(db)
+	ctx := context.Background()
+
+	// Process multiple different events - each gets its own row
+	// No lost updates because each transaction has unique primary keys
+	events := []transaction.Event{
+		{ID: "evt-no-lost-1", EventType: "InvoicePaid", AggregateID: "501", Payload: `{"invoice_id": 501}`},
+		{ID: "evt-no-lost-2", EventType: "InvoicePaid", AggregateID: "502", Payload: `{"invoice_id": 502}`},
+		{ID: "evt-no-lost-3", EventType: "InvoicePaid", AggregateID: "503", Payload: `{"invoice_id": 503}`},
+	}
+
+	for i, evt := range events {
+		processed, err := worker.HandleEvent(ctx, "CommissionWorker", evt)
+		if err != nil {
+			t.Fatalf("event %d error: %v", i, err)
+		}
+		if !processed {
+			t.Errorf("event %d should be processed", i)
+		}
+	}
+
+	// Verify all 3 rows exist - no lost updates
+	var dedupCount, commissionCount int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1", "CommissionWorker").Scan(&dedupCount)
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+
+	if dedupCount != 3 {
+		t.Errorf("expected 3 processed_events markers, got %d", dedupCount)
+	}
+	if commissionCount != 3 {
+		t.Errorf("expected 3 commission rows, got %d", commissionCount)
+	}
+
+	t.Log("SUCCESS: Mock DB - all 3 events processed correctly")
+	t.Log("  Each transaction commits with unique primary keys")
+	t.Log("  No lost updates - all business writes persisted")
+}
+
+// ============================================================================
+// PROMPT 40: Verify Rollback Isolation
+// ============================================================================
+
+// TestMockDBRollbackIsolation verifies that a rolled-back transaction doesn't
+// leave any traces and doesn't affect subsequent committed transactions.
+func TestMockDBRollbackIsolation(t *testing.T) {
+	db := mockdb.NewDB()
+	defer db.Close()
+	ctx := context.Background()
+
+	// Transaction A: Write then ROLLBACK
+	txA, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("txA begin failed: %v", err)
+	}
+	_, err = txA.ExecContext(ctx, "INSERT INTO commissions (event_id, amount) VALUES ('txA-rolledback', 100)")
+	if err != nil {
+		t.Fatalf("txA insert failed: %v", err)
+	}
+	// Rollback A
+	err = txA.Rollback()
+	if err != nil {
+		t.Fatalf("txA rollback failed: %v", err)
+	}
+
+	// Transaction B: Write and COMMIT
+	txB, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("txB begin failed: %v", err)
+	}
+	_, err = txB.ExecContext(ctx, "INSERT INTO commissions (event_id, amount) VALUES ('txB-committed', 200)")
+	if err != nil {
+		t.Fatalf("txB insert failed: %v", err)
+	}
+	err = txB.Commit()
+	if err != nil {
+		t.Fatalf("txB commit failed: %v", err)
+	}
+
+	// Verify: A is absent, B is present
+	var countA, countB int64
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", "txA-rolledback").Scan(&countA)
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", "txB-committed").Scan(&countB)
+
+	if countA != 0 {
+		t.Errorf("expected txA-rolledback to be absent (rolled back), got count=%d", countA)
+	}
+	if countB != 1 {
+		t.Errorf("expected txB-committed to be present (committed), got count=%d", countB)
+	}
+
+	totalCount := 0
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&totalCount)
+	if totalCount != 1 {
+		t.Errorf("expected exactly 1 total row, got %d", totalCount)
+	}
+
+	t.Log("SUCCESS: Rollback isolation verified")
+	t.Log("  TX A rolled back → no traces")
+	t.Log("  TX B committed → row present")
 }

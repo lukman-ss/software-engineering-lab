@@ -14,9 +14,9 @@ func TestMultiTenancyKeyIsolation(t *testing.T) {
 		loc = time.UTC
 	}
 
-	keyTenant1Branch1 := caching.NewTenantDashboardKey(1, 10, loc).Build()
-	keyTenant1Branch2 := caching.NewTenantDashboardKey(1, 20, loc).Build()
-	keyTenant2Branch1 := caching.NewTenantDashboardKey(2, 10, loc).Build()
+	keyTenant1Branch1 := caching.NewTenantDashboardKey(1, 10, loc)
+	keyTenant1Branch2 := caching.NewTenantDashboardKey(1, 20, loc)
+	keyTenant2Branch1 := caching.NewTenantDashboardKey(2, 10, loc)
 
 	t.Logf("Key T1B1: %s", keyTenant1Branch1)
 	t.Logf("Key T1B2: %s", keyTenant1Branch2)
@@ -46,11 +46,41 @@ func TestBusinessTimezone(t *testing.T) {
 	t.Logf("Business date in New York: %s", dateNY)
 
 	// They might be different depending on when the test runs, which proves timezone handling matters
-	keyJakarta := caching.NewTenantDashboardKey(1, 1, locJakarta).Build()
-	keyNY := caching.NewTenantDashboardKey(1, 1, locNY).Build()
+	keyJakarta := caching.NewTenantDashboardKey(1, 1, locJakarta)
+	keyNY := caching.NewTenantDashboardKey(1, 1, locNY)
 
 	t.Logf("Key Jakarta: %s", keyJakarta)
 	t.Logf("Key New York: %s", keyNY)
 
 	t.Log("Business timezone handling validated")
+}
+
+// TestDashboardKeyBuilderVersatility demonstrates the unified key builder
+func TestDashboardKeyBuilderVersatility(t *testing.T) {
+	// Single-tenant dashboard key (tenant defaults to 1)
+	singleKey := caching.NewDashboardKey(42).Build()
+	t.Logf("Single-tenant key: %s", singleKey)
+
+	// Multi-tenant dashboard key
+	multiKey := caching.NewDashboardKey(42).WithTenant(5).Build()
+	t.Logf("Multi-tenant key: %s", multiKey)
+
+	// With explicit date
+	specificDate := time.Date(2026, 8, 29, 0, 0, 0, 0, time.UTC)
+	dateKey := caching.NewDashboardKey(42).WithDate(specificDate).Build()
+	t.Logf("Specific date key: %s", dateKey)
+
+	// With version for migration
+	v2Key := caching.NewDashboardKey(42).WithVersion(2).Build()
+	t.Logf("Version 2 key: %s", v2Key)
+
+	// Verify all keys are different
+	keys := []string{singleKey, multiKey, dateKey, v2Key}
+	unique := make(map[string]bool)
+	for _, k := range keys {
+		unique[k] = true
+	}
+	if len(unique) != len(keys) {
+		t.Error("all keys should be unique")
+	}
 }

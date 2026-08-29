@@ -34,7 +34,8 @@ Batasan kepemilikan konsep antar lab:
 - **Lab 01 Idempotency** → berfokus pada *repeated logical operation* & *retry safety* (tidak mengajarkan locking mendalam).
 - **Lab 11 Race Condition** → berfokus pada *concurrent access*.
 - **Lab 03 Database Transaction** → berfokus pada *atomic multi-step database changes*.
-- **Lab 04 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
+- **Lab 04 Caching** → berfokus pada *cache stampede, stale reads, and consistency*.
+- **Lab 12 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
 
 Tujuan repository adalah *progressive learning*, bukan menyelesaikan semua masalah dalam satu lab.
 

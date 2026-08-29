@@ -64,8 +64,8 @@ echo "[PASS] PostgreSQL connection OK"
 reset_dataset
 
 # ============================================
-# Validation: branch 2 quality checks
-# Prevents regression to old correlated seed
+# Regression guard: branch 2 quality checks
+# This is a joint-distribution sanity check, not a statistical-independence test.
 # ============================================
 echo "[VALIDATE] Branch 2 quality checks..."
 
@@ -78,7 +78,7 @@ echo "[PASS] Branch 2 has $BR2_STATUSES distinct statuses"
 
 BR2_FINISHED_PCT=$(PQ -Atc "SELECT round(COUNT(*) FILTER (WHERE status = 'FINISHED') * 100.0 / COUNT(*), 2) FROM service WHERE branch_id = 2;")
 if [ "$BR2_FINISHED_PCT" = "100.00" ]; then
-    echo "[FAIL] Branch 2 has 100% FINISHED — status not independent"
+    echo "[FAIL] Branch/status coupling regression detected: branch 2 is 100% FINISHED"
     exit 1
 fi
 echo "[PASS] Branch 2 FINISHED: $BR2_FINISHED_PCT%"

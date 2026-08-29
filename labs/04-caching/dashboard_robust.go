@@ -28,7 +28,13 @@ func NewRobustDashboardService(repo DashboardRepository, cache CacheInterface, m
 
 // GetDashboard returns dashboard data with graceful degradation.
 func (s *RobustDashboardService) GetDashboard(ctx context.Context, branchID int64) (Dashboard, error) {
-	key := DashboardCacheKey(branchID)
+	return s.GetDashboardWithTenant(ctx, 1, branchID, time.Now().UTC())
+}
+
+// GetDashboardWithTenant returns dashboard data with tenant isolation.
+// Primary entry point for multi-tenant deployments.
+func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
+	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 
 	// 1. Check cache
 	cached, err := s.cache.Get(ctx, key)
@@ -81,17 +87,26 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, branchID 
 	if marshalErr != nil {
 		// Log but don't fail - we have the data
 		fmt.Printf("warn: failed to marshal dashboard for cache: %v\n", marshalErr)
-	} else if setErr := s.cache.Set(ctx, key, string(data), 30*time.Second); setErr != nil {
-		// Log cache set error but don't fail
-		fmt.Printf("warn: cache set failed: %v\n", setErr)
+	} else {
+		// Add jitter to prevent synchronized cache expiration across branches
+		jitteredTTL := TTLWithJitter(30*time.Second, 10*time.Second)
+		if setErr := s.cache.Set(ctx, key, string(data), jitteredTTL); setErr != nil {
+			// Log cache set error but don't fail
+			fmt.Printf("warn: cache set failed: %v\n", setErr)
+		}
 	}
 
 	return d, nil
 }
 
-// InvalidateBranchDashboard invalidates cache for a branch after data mutation
+// InvalidateBranchDashboard invalidates cache for a branch after data mutation.
 func (s *RobustDashboardService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
-	key := DashboardCacheKey(branchID)
+	return s.InvalidateBranchDashboardForTenant(ctx, 1, branchID)
+}
+
+// InvalidateBranchDashboardForTenant invalidates cache with tenant scoping.
+func (s *RobustDashboardService) InvalidateBranchDashboardForTenant(ctx context.Context, tenantID, branchID int64) error {
+	key := NewDashboardKey(branchID).WithTenant(tenantID).Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		// Log errors other than cache miss, but don't fail the operation

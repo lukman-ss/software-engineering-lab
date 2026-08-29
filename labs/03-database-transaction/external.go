@@ -22,13 +22,25 @@ var (
 	ErrBrokerFailed          = errors.New("message broker publish failed (temporary)")
 )
 
-// === Failure Injection (Poin 22) ===
+// === Failure Injection ===
+// Deterministic failure controls for testing crash scenarios.
 
 type FailureMode struct {
-	FailAfterDBCommit   bool
+	// Outbox/Dispatcher related
+	FailAfterDBCommit   bool // Simulate crash after DB commit but before publish
 	FailExternalService bool
-	FailPublishAttempts int
-	CrashAfterPublish   bool
+	FailPublishAttempts int // Fail first N publish attempts
+	CrashAfterPublish   bool // Simulate crash after publish but before marking as published
+
+	// Consumer related
+	FailBusinessMutation bool // Simulate failure during business DB insert
+	FailProcessedInsert  bool // Simulate failure during processed_events insert
+}
+
+// ConsumerFailureMode provides deterministic controls for consumer testing
+type ConsumerFailureMode struct {
+	FailBusinessMutation bool // Fail after dedup insert, before business commitment
+	CrashAfterCommit     bool // Simulate crash after commit, before ACK
 }
 
 // === Event Types ===
@@ -617,9 +629,9 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 //   - business state committed but dedup record lost (redelivery = duplicate)
 //   - dedup record committed but business state lost (skipped processing)
 type CommissionWorker struct {
-	db              *sql.DB
-	commissionsPaid int64 // observability only, NOT business state
-	mu              sync.Mutex
+	db                          *sql.DB
+	observedBusinessExecutions int64 // observability only, NOT source of truth
+	mu                         sync.Mutex
 }
 
 func NewCommissionWorker(db *sql.DB) *CommissionWorker {
@@ -670,17 +682,17 @@ func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string,
 
 	// Observability counter (out of tx for metrics, NOT business state)
 	c.mu.Lock()
-	c.commissionsPaid++
+	c.observedBusinessExecutions++
 	c.mu.Unlock()
 
 	log.Printf("[CONSUMER:%s] completed %s", consumerName, event.ID)
 	return true, nil
 }
 
-func (c *CommissionWorker) CommissionsPaidCount() int64 {
+func (c *CommissionWorker) ObservedBusinessExecutions() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.commissionsPaid
+	return c.observedBusinessExecutions
 }
 
 // GetDBCommissionCount returns the actual business state count from the database

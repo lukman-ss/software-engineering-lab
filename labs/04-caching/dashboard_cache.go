@@ -23,13 +23,18 @@ func NewDashboardCacheService(repo DashboardRepository, cache CacheInterface) *D
 	}
 }
 
-func dashboardCacheKey(branchID int64) string {
-	return fmt.Sprintf("cmms:dashboard:v1:branch:%d:date:%s", branchID, Today())
+// GetDashboard mengembalikan statistik dashboard dengan caching (single-tenant).
+func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64) (Dashboard, error) {
+	return s.GetDashboardWithTenant(ctx, 1, branchID, time.Now().UTC())
 }
 
-// GetDashboard mengembalikan statistik dashboard dengan caching.
-func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64) (Dashboard, error) {
-	key := dashboardCacheKey(branchID)
+// GetDashboardWithTenant mengembalikan statistik dashboard dengan tenant isolation.
+// Primary entry point for multi-tenant deployments.
+func (s *DashboardCacheService) GetDashboardWithTenant(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
+	key := NewDashboardKey(branchID).
+		WithTenant(tenantID).
+		WithDate(businessDate).
+		Build()
 
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
@@ -42,7 +47,7 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 	}
 
 	s.queryCounter.Add(1)
-	d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+	d, err := s.repo.GetDashboardWithTenant(ctx, tenantID, branchID, businessDate)
 	if err != nil {
 		return Dashboard{}, err
 	}
@@ -51,7 +56,10 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 	if err != nil {
 		return Dashboard{}, fmt.Errorf("marshal dashboard: %w", err)
 	}
-	if err := s.cache.Set(ctx, key, string(data), 30*time.Second); err != nil {
+
+	// Add jitter to prevent synchronized cache expiration across branches
+	jitteredTTL := TTLWithJitter(30*time.Second, 10*time.Second)
+	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
 		// Log cache failure but don't fail the request
 		fmt.Printf("warn: cache set failed: %v\n", err)
 	}
@@ -60,9 +68,16 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 }
 
 // InvalidateBranchDashboard menginvalidasi cache untuk branch tertentu.
-// Preferred flow: COMMIT DB -> Invalidate Cache
+// For multi-tenant: use InvalidateBranchDashboardForTenant instead.
 func (s *DashboardCacheService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
-	key := dashboardCacheKey(branchID)
+	return s.InvalidateBranchDashboardForTenant(ctx, 1, branchID)
+}
+
+// InvalidateBranchDashboardForTenant invalidates cache with tenant scoping.
+func (s *DashboardCacheService) InvalidateBranchDashboardForTenant(ctx context.Context, tenantID, branchID int64) error {
+	key := NewDashboardKey(branchID).
+		WithTenant(tenantID).
+		Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		return fmt.Errorf("invalidate cache: %w", err)
@@ -73,48 +88,37 @@ func (s *DashboardCacheService) InvalidateBranchDashboard(ctx context.Context, b
 // --- REPRESENTATIVE MUTATION METHODS (Bagian 8) ---
 
 // CreateInvoice mensimulasikan pembuatan invoice baru (mutasi data).
-// Flow yang benar: BEGIN -> DB update -> COMMIT -> Invalidate Cache
 func (s *DashboardCacheService) CreateInvoice(ctx context.Context, branchID int64, amount float64) error {
-	// In real implementation, this would use a transaction repository.
-	// For demo, we just invalidate cache to simulate mutation occurred.
-	_ = branchID
 	_ = amount
-	// In production: BEGIN -> INSERT invoice -> COMMIT -> Invalidate
 	return s.InvalidateBranchDashboard(ctx, branchID)
 }
 
 // PayInvoice mensimulasikan pembayaran invoice.
 func (s *DashboardCacheService) PayInvoice(ctx context.Context, branchID int64, invoiceID int64) error {
-	// In real implementation, this would update the invoice
 	_ = invoiceID
-	// Invalidate cache setelah commit
 	return s.InvalidateBranchDashboard(ctx, branchID)
 }
 
 // FinishService mensimulasikan penyelesaian servis oleh mekanik.
 func (s *DashboardCacheService) FinishService(ctx context.Context, branchID int64, mechanicID int64) error {
-	// In real implementation, this would update service_records
 	_ = mechanicID
 	return s.InvalidateBranchDashboard(ctx, branchID)
 }
 
 // UseSparepart mensimulasikan penggunaan sparepart.
 func (s *DashboardCacheService) UseSparepart(ctx context.Context, branchID int64, partID int64) error {
-	// In real implementation, this would update parts stock
 	_ = partID
 	return s.InvalidateBranchDashboard(ctx, branchID)
 }
 
 // SaveCustomer mensimulasikan pembuatan/perubahan customer.
 func (s *DashboardCacheService) SaveCustomer(ctx context.Context, branchID int64, customerName string) error {
-	// In real implementation, this would insert/update customer
 	_ = customerName
 	return s.InvalidateBranchDashboard(ctx, branchID)
 }
 
 // CreateVehicle mensimulasikan pembuatan kendaraan baru.
 func (s *DashboardCacheService) CreateVehicle(ctx context.Context, branchID int64, plate string) error {
-	// In real implementation, this would insert vehicle
 	_ = plate
 	return s.InvalidateBranchDashboard(ctx, branchID)
 }

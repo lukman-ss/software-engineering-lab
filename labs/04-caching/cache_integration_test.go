@@ -168,8 +168,8 @@ func TestDifferentBranchDoesNotShareCache(t *testing.T) {
 // TestDifferentTenantDoesNotShareCache verifies: different tenant isolation
 func TestDifferentTenantDoesNotShareCache(t *testing.T) {
 	loc := time.UTC
-	keyTenantA := caching.NewTenantDashboardKey(1, 1, loc).Build()
-	keyTenantB := caching.NewTenantDashboardKey(2, 1, loc).Build()
+	keyTenantA := caching.NewTenantDashboardKey(1, 1, loc)
+	keyTenantB := caching.NewTenantDashboardKey(2, 1, loc)
 
 	if keyTenantA == keyTenantB {
 		t.Error("different tenants should have different cache keys")
@@ -181,6 +181,49 @@ func TestDifferentTenantDoesNotShareCache(t *testing.T) {
 	t.Logf("Tenant B key: %s", keyTenantB)
 
 	t.Log("✓ Different tenant does not share cache")
+}
+
+// TestTenantIsolationInService verifies: Tenant A Branch 1 != Tenant B Branch 1
+func TestTenantIsolationInService(t *testing.T) {
+	ctx := context.Background()
+	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+
+	// Tenant A, Branch 1 - set data
+	keyA1 := caching.NewDashboardKey(1).WithTenant(1).WithDate(today).Build()
+	dataA1 := caching.Dashboard{BranchID: 1, InvoiceCountToday: 100, Date: today.Format("2006-01-02")}
+	dataA1Bytes, _ := json.Marshal(dataA1)
+	cache.Set(ctx, keyA1, string(dataA1Bytes), time.Minute)
+
+	// Tenant B, Branch 1 - set different data
+	keyB1 := caching.NewDashboardKey(1).WithTenant(2).WithDate(today).Build()
+	dataB1 := caching.Dashboard{BranchID: 1, InvoiceCountToday: 200, Date: today.Format("2006-01-02")}
+	dataB1Bytes, _ := json.Marshal(dataB1)
+	cache.Set(ctx, keyB1, string(dataB1Bytes), time.Minute)
+
+	// Tenant A Branch 1 should get 100
+	resultA1, err := svc.GetDashboardWithTenant(ctx, 1, 1, today)
+	if err != nil {
+		t.Fatalf("Tenant A get failed: %v", err)
+	}
+	if resultA1.InvoiceCountToday != 100 {
+		t.Errorf("Tenant A Branch 1: expected 100, got %d", resultA1.InvoiceCountToday)
+	}
+
+	// Tenant B Branch 1 should get 200
+	resultB1, err := svc.GetDashboardWithTenant(ctx, 2, 1, today)
+	if err != nil {
+		t.Fatalf("Tenant B get failed: %v", err)
+	}
+	if resultB1.InvoiceCountToday != 200 {
+		t.Errorf("Tenant B Branch 1: expected 200, got %d", resultB1.InvoiceCountToday)
+	}
+
+	t.Log("✓ Tenant isolation verified: Tenant A Branch 1 ≠ Tenant B Branch 1")
 }
 
 // TestCorruptCacheFallsBackAppropriately verifies: corrupt cache falls back to database
