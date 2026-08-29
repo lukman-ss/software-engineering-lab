@@ -30,7 +30,7 @@ func TestMultiTenancyKeyIsolation(t *testing.T) {
 		t.Error("tenant 1 and tenant 2 should not have the same key")
 	}
 
-	t.Log("SUCCESS: Multi-tenant cache keys are fully isolated")
+	t.Log("Multi-tenant key isolation validated")
 }
 
 // TestBusinessTimezone ensures business day is respected
@@ -52,5 +52,5 @@ func TestBusinessTimezone(t *testing.T) {
 	t.Logf("Key Jakarta: %s", keyJakarta)
 	t.Logf("Key New York: %s", keyNY)
 
-	t.Log("SUCCESS: Business timezone supported correctly via location config")
+	t.Log("Business timezone handling validated")
 }

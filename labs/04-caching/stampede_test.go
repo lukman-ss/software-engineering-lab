@@ -76,7 +76,7 @@ func TestStampedeProtectedVersion(t *testing.T) {
 		t.Errorf("expected 1 rebuild with singleflight, got %d", rebuildCount)
 	}
 
-	t.Log("SUCCESS: Single flight reduces DB load from 100 to 1")
+	t.Log("Single-flight deduplication validated")
 }
 
 // TestTTLWithJitter mengecek TTLWithJitter() untuk mengurangi synchronized expiration
@@ -107,7 +107,7 @@ func TestTTLWithJitter(t *testing.T) {
 
 	// Minimum invariant: mean ~ 67.5s (middle of 60-75s)
 	t.Logf("TTL distribution: min=%v, max=%v", baseTTL, baseTTL+maxJitter)
-	t.Log("SUCCESS: TTL jitter prevents synchronized expiration")
+	t.Log("TTL jitter distribution validated")
 }
 
 // TestNegativeCache mengecek bahwa cache menyimpan "not found"

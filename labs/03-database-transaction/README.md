@@ -43,6 +43,8 @@ A normal database transaction guarantees atomicity only for resources participat
 - BEGIN → UPDATE → HTTP → COMMIT (transaction terblokir latency)
 - BEGIN → UPDATE → COMMIT → HTTP (transaction cepat, external tidak terpengaruh)
 
+> **Catatan senior**: HTTP timeout tidak selalu berarti external operation gagal. Remote service bisa berhasil tapi response hilang akibat jaringan. Karena itu external commands seperti payment/refund/reservation juga perlu idempotency key + status reconciliation. Lihat Daily #1 Idempotency untuk detail.
+
 ---
 
 ## 4. HTTP Inside DB Transaction
@@ -190,6 +192,8 @@ Create payment → Cash out → Generate journal → Sync ERP fails
 - **Retry ERP** (event-driven integration)
 
 Saga compensation untuk **semantic undo**, bukan technical rollback.
+
+**Saga hanya menjalankan compensation untuk step yang sebelumnya berhasil diselesaikan. Step yang gagal sebelum dianggap complete tidak memiliki completed effect yang perlu dikompensasi, kecuali API step tersebut memiliki business semantics khusus.**
 
 ---
 
@@ -428,26 +432,37 @@ go test -v -count=1
 |------|--------|------|
 | `TestUnsafeLocalTransaction` | Partial state corruption | local_transaction.go |
 | `TestSafeLocalTransaction` | ACID rollback | local_transaction.go |
-| `TestExternalSideEffectRollback` | External effect survives DB rollback | external_side_effect.go |
-| `TestHTTPInsideTransactionDuration` | HTTP latency extends transaction | external_side_effect.go |
-| `TestCommitThenExternalCall` | Commit sebelum external | external_side_effect.go |
-| `TestTransactionStaysOpenDuringExternalCall` | IsTxOpen verification | external_side_effect.go |
-| `TestDualWriteCrashWindow` | Invoice paid, event never delivered | dual_write.go |
-| `TestReverseDualWriteFailure` | Publish-then-commit also problematic | dual_write.go |
-| `TestTransactionalOutboxPatternAtomicity` | Business state + outbox atomic | outbox.go |
-| `TestOutboxDispatcherPublishesPending` | Dispatcher publish | dispatcher.go |
-| `TestOutboxDuplicateDeliveryAtLeastOnce` | Crash after publish = duplicate | dispatcher.go |
-| `TestOutboxDispatcherConcurrencyOverlap` | Concurrent dispatchers | dispatcher.go |
-| `TestIdempotentConsumerDeduplication` | Idempotent deduplication | consumer.go |
-| `TestTransientFailureSuccessAfterRetry` | Retry: fail-fail-succeed | retry.go |
-| `TestDeadLetterQueue` | Retry policy exhaust → DLQ | dlq.go |
-| `TestSagaPaymentWithCompensatingAction` | Saga with failure | saga.go |
-| `TestSagaCompensationOrderFourSteps` | Reverse compensation order | saga.go |
-| `TestSagaCompensationFailureHandling` | Continue compensation on failure | saga.go |
-| `TestInvoicePaidPayloadRoundTrip` | JSON serialize/deserialize | outbox.go |
-| `TestEventualConsistencyDemo` |_invoice=paid, worker later | eventual_consistency.go |
-| `TestCompensationIdempotency` | Double compensation = single execution | saga.go |
-| `TestOutboxPendingRecovery` | Broker down → event pending → recovery | outbox.go |
+| `TestExternalSideEffectRollback` | External effect survives DB rollback | external.go |
+| `TestHTTPInsideTransactionDuration` | HTTP latency extends transaction | external.go |
+| `TestCommitThenExternalCall` | Commit sebelum external | external.go |
+| `TestTransactionStaysOpenDuringExternalCall` | IsTxOpen verification | external.go |
+| `TestTransactionCommitDoesNotBlockConnection` | Tx state transitions closed→open→closed | external.go |
+| `TestDualWriteProblemEventLost` | Invoice paid, event never delivered | external.go |
+| `TestDualWriteCrashWindow` | Dual-write crash window demonstrated | external.go |
+| `TestReverseDualWriteFailure` | Publish-then-commit also problematic | external.go |
+| `TestTransactionalOutboxPatternAtomicity` | Business state + outbox atomic | external.go |
+| `TestTransactionalOutboxRollback` | Outbox insert failure → full rollback | external.go |
+| `TestOutboxHappyPathAssertions` | Outbox happy path complete assertions | external.go |
+| `TestOutboxDispatcherPublishesPending` | Dispatcher publish | external.go |
+| `TestOutboxDuplicateDeliveryAtLeastOnce` | Crash after publish = duplicate | external.go |
+| `TestOutboxDispatcherConcurrencyOverlap` | Concurrent dispatchers overlap | external.go |
+| `TestDispatcherPublishedAtSemantics` | published_at and attempts semantics | external.go |
+| `TestOutboxPendingRecovery` | Broker down → event pending → recovery | external.go |
+| `TestIdempotentConsumerDeduplication` | Idempotent deduplication | external.go |
+| `TestAtomicConsumerFlow` | Dedup + business state atomic | external.go |
+| `TestConsumerCrashRedelivery` | Crash/redelivery handled idempotently | external.go |
+| `TestConcurrentDifferentEvents` | Concurrent different events, no lost update | external.go |
+| `TestConcurrentSameEvent` | Concurrent same event, one succeeds | external.go |
+| `TestDifferentConsumersSameEvent` | Different consumers, same event | external.go |
+| `TestTransientFailureSuccessAfterRetry` | Retry: fail-fail-succeed | external.go |
+| `TestDeadLetterQueue` | Retry policy exhaust → DLQ | external.go |
+| `TestSagaPaymentWithCompensatingAction` | Saga with failure | external.go |
+| `TestSagaCompensationOrderFourSteps` | Reverse compensation order | external.go |
+| `TestSagaCompensationFailureHandling` | Continue compensation on failure | external.go |
+| `TestCompensationIdempotency` | Double compensation = single execution | external.go |
+| `TestInvoicePaidPayloadRoundTrip` | JSON serialize/deserialize | external.go |
+| `TestEventualConsistencyDemo` | invoice=paid, worker later | external.go |
+| `TestDistributedTransactionExternalSideEffectLimitation` | External side effect survives rollback | external.go |
 
 ---
 
@@ -487,12 +502,6 @@ go test -v -count=1
 ---
 
 ## Navigasi
-
-- **Previous**: [Lab 02 — Database Index](../02-database-index/)
-- **Next**: [Lab 04 — Caching](../04-caching/)
-| `TestOutboxPendingRecovery` | Broker down → event pending → recovery | outbox.go |
-
-### Navigasi
 
 - **Previous**: [Lab 02 — Database Index](../02-database-index/)
 - **Next**: [Lab 04 — Caching](../04-caching/)

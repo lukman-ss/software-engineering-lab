@@ -56,17 +56,28 @@ func (s *BrokenStampedeService) GetData(ctx context.Context, branchID int64) (Da
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
 		var d Dashboard
-		_ = json.Unmarshal([]byte(cached), &d)
-		return d, nil
+		if unmarshalErr := json.Unmarshal([]byte(cached), &d); unmarshalErr == nil {
+			return d, nil
+		}
+		// If unmarshal fails, we still fall through to DB
 	}
 
 	// 2. Cache miss -> Langsung hajar DB (Tidak ada perlindungan)
 	// Jika ada 100 concurrent request, ke-100-nya akan query DB
-	d, _ := s.repo.GetDashboard(ctx, branchID, time.Now())
+	d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+	if err != nil {
+		return Dashboard{}, err
+	}
 
 	// 3. Set cache
-	data, _ := json.Marshal(d)
-	_ = s.cache.Set(ctx, key, string(data), 1*time.Minute)
+	data, err := json.Marshal(d)
+	if err != nil {
+		return Dashboard{}, fmt.Errorf("marshal: %w", err)
+	}
+	if err := s.cache.Set(ctx, key, string(data), 1*time.Minute); err != nil {
+		// Log but don't fail
+		fmt.Printf("warn: cache set failed: %v\n", err)
+	}
 
 	return d, nil
 }
@@ -91,8 +102,10 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
 		var d Dashboard
-		_ = json.Unmarshal([]byte(cached), &d)
-		return d, nil
+		if unmarshalErr := json.Unmarshal([]byte(cached), &d); unmarshalErr == nil {
+			return d, nil
+		}
+		// If unmarshal fails, fall through to singleflight DB fetch
 	}
 
 	// 2. Cache miss -> Gunakan singleflight
@@ -102,8 +115,14 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 		if err != nil {
 			return Dashboard{}, err
 		}
-		data, _ := json.Marshal(d)
-		_ = s.cache.Set(ctx, key, string(data), 1*time.Minute)
+		data, err := json.Marshal(d)
+		if err != nil {
+			return Dashboard{}, fmt.Errorf("marshal: %w", err)
+		}
+		if setErr := s.cache.Set(ctx, key, string(data), 1*time.Minute); setErr != nil {
+			// Log but don't fail
+			fmt.Printf("warn: cache set failed: %v\n", setErr)
+		}
 		return d, nil
 	})
 

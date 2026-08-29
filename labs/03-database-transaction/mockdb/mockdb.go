@@ -1,4 +1,17 @@
-// Package mockdb provides a minimal in-memory database/sql driver.
+// Package mockdb provides a minimal in-memory database/sql driver for educational purposes.
+//
+// Limitations (not implementing PostgreSQL full semantics):
+//   - No MVCC (Multi-Version Concurrency Control)
+//   - No isolation levels (READ COMMITTED, REPEATABLE READ, etc.)
+//   - No deadlock detection
+//   - No row-level locks (SELECT ... FOR UPDATE)
+//   - No WAL (Write-Ahead Logging)
+//   - No true concurrent locking - uses coarse-grained mutex per operation
+//   - Transaction isolation is application-level via copy-on-write
+//   - No foreign key constraints
+//   - No indexes (full table scan for WHERE clauses)
+//
+// Designed to be atomic enough and concurrency-safe enough for deterministic testing.
 package mockdb
 
 import (

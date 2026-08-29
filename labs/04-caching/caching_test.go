@@ -25,7 +25,7 @@ func TestNaiveNoCache(t *testing.T) {
 		t.Fatal("expected cache miss")
 	}
 
-	t.Log("SUCCESS: Naive pattern = cache miss on every request")
+	t.Log("Naive pattern demonstrates cache miss on every request")
 }
 
 // Test 2: Cache aside pattern - miss then hit
@@ -35,7 +35,10 @@ func TestCacheAsideHit(t *testing.T) {
 
 	// First: populate cache
 	product := caching.Product{ID: "200", Name: "Gadget", Price: 250.0}
-	data, _ := json.Marshal(product)
+	data, err := json.Marshal(product)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
 	cache.Set(ctx, "product:200", string(data), 5*time.Minute)
 
 	// Second: cache hit
@@ -53,7 +56,7 @@ func TestCacheAsideHit(t *testing.T) {
 		t.Errorf("expected Gadget, got %s", p.Name)
 	}
 
-	t.Log("SUCCESS: Cache aside - cache hit works")
+	t.Log("Cache hit returns correct data")
 }
 
 // Test 3: Stale read is possible with cache TTL
@@ -64,7 +67,10 @@ func TestCacheStaleRead(t *testing.T) {
 	key := "product:300"
 	product := caching.Product{ID: "300", Name: "NewName", Price: 200.0}
 
-	data, _ := json.Marshal(product)
+	data, err := json.Marshal(product)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
 	cache.Set(ctx, key, string(data), 5*time.Minute)
 
 	// Cache returns what's stored, even if DB has changed
@@ -77,12 +83,14 @@ func TestCacheStaleRead(t *testing.T) {
 	}
 
 	var cachedProduct caching.Product
-	json.Unmarshal([]byte(cachedData), &cachedProduct)
+	if err := json.Unmarshal([]byte(cachedData), &cachedProduct); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
 	if cachedProduct.Name != "NewName" {
 		t.Errorf("expected 'NewName', got '%s'", cachedProduct.Name)
 	}
 
-	t.Log("PROVEN: Cache can return stale data until TTL expires")
+	t.Log("Cache returns stored data regardless of external changes until TTL expires")
 }
 
 // Test 4: Single Flight Pattern - dedupes concurrent DB queries
@@ -107,7 +115,7 @@ func TestSingleFlightConcurrentRequests(t *testing.T) {
 		t.Errorf("expected 10 cache hits, got %d", hits)
 	}
 
-	t.Log("SUCCESS: Single flight prevents duplicate DB queries under cache hit")
+	t.Log("Concurrent cache hits validated")
 }
 
 // Test 5: Probabilistic early refresh mitigates stampede
@@ -118,7 +126,10 @@ func TestCacheStampedeMitigation(t *testing.T) {
 	key := "product:500"
 	product := caching.Product{ID: "500", Name: "Item", Price: 10.0}
 
-	data, _ := json.Marshal(product)
+	data, err := json.Marshal(product)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
 	cache.Set(ctx, key, string(data), 5*time.Minute)
 
 	// Simulate early refresh check
@@ -130,7 +141,7 @@ func TestCacheStampedeMitigation(t *testing.T) {
 	}
 
 	t.Logf("Early refresh triggers: %d/100", count)
-	t.Log("SUCCESS: Probabilistic refresh disperses stampede risk")
+	t.Log("Early refresh strategy validated")
 }
 
 // Test 6: Distributed lock mutual exclusion
@@ -146,10 +157,27 @@ func TestDistributedLockMutualExclusion(t *testing.T) {
 		t.Fatal("first lock acquisition should succeed")
 	}
 
-	t.Log("Lock acquired by holder1")
-	t.Log("SUCCESS: Distributed lock provides mutual exclusion")
+	// Second holder should fail to acquire the same lock
+	holder2, value2 := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if holder2 {
+		t.Error("second lock acquisition should fail - mutual exclusion violated")
+	}
+	if value2 != "" {
+		t.Error("expected empty value for failed lock acquisition")
+	}
 
-	_ = value1
+	t.Log("Mutual exclusion verified: second holder blocked from acquiring same lock")
+
+	// Release lock
+	if err := caching.ReleaseLock(ctx, locker, key, value1); err != nil {
+		t.Fatalf("failed to release lock: %v", err)
+	}
+
+	// After release, lock should be available again
+	holder3, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if !holder3 {
+		t.Error("lock should be available after release")
+	}
 }
 
 // Test 7: Cache key includes version for easy invalidation
@@ -173,7 +201,7 @@ func TestCacheKeyIncludesVersion(t *testing.T) {
 
 	t.Logf("Key v1: %s", keyV1)
 	t.Logf("Key v2: %s", keyV2)
-	t.Log("SUCCESS: Version in cache key enables cheap invalidation")
+	t.Log("Cache key versioning validated")
 }
 
 // Test 8: Cache miss triggers population
@@ -200,7 +228,7 @@ func TestCacheMissPopulatesCache(t *testing.T) {
 		t.Fatal("cache should be populated after miss")
 	}
 
-	t.Log("SUCCESS: Cache miss triggers population")
+	t.Log("Cache population on miss validated")
 }
 
 // Test 9: Random jitter disperses requests on expiration
@@ -224,7 +252,7 @@ func TestRandomJitterDispersesRequests(t *testing.T) {
 	}
 
 	t.Logf("Jitter distribution: %d unique values out of 100 possible", nonZero)
-	t.Log("SUCCESS: Random jitter disperses cache expiration events")
+	t.Log("Jitter distribution validated")
 }
 
 // Test 10: Cache failure handled gracefully
@@ -238,5 +266,5 @@ func TestCacheFailureHandledGracefully(t *testing.T) {
 		t.Fatal("expected cache to fail")
 	}
 
-	t.Log("SUCCESS: Cache failures are detectable and can trigger fallback")
+	t.Log("Cache failure handling validated")
 }

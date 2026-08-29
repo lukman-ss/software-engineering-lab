@@ -84,52 +84,54 @@ fi
 echo "[PASS] Branch 2 FINISHED: $BR2_FINISHED_PCT%"
 
 # ============================================
-# 3. Validate Status Distribution
+# 3. Validate Status Distribution (exact counts)
 # ============================================
 echo "[VALIDATE] Status distribution..."
-FINISHED_PCT=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'FINISHED';")
-CANCELLED_PCT=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'CANCELLED';")
-IN_PROGRESS_PCT=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'IN_PROGRESS';")
-WAITING_PCT=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'WAITING';")
-PR_PCT=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE status = 'PENDING_REFUND';")
 
-echo "  FINISHED:       $FINISHED_PCT% (expected 70.0%)"
-echo "  CANCELLED:      $CANCELLED_PCT% (expected 20.0%)"
-echo "  IN_PROGRESS:    $IN_PROGRESS_PCT% (expected 5.0%)"
-echo "  WAITING:        $WAITING_PCT% (expected 4.9%)"
-echo "  PENDING_REFUND: $PR_PCT% (expected 0.1%)"
+FINISHED_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE status = 'FINISHED';")
+CANCELLED_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE status = 'CANCELLED';")
+IN_PROGRESS_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE status = 'IN_PROGRESS';")
+WAITING_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE status = 'WAITING';")
+PENDING_REFUND_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE status = 'PENDING_REFUND';")
 
-[ "$FINISHED_PCT" = "70.0" ]   || { echo "[FAIL] FINISHED percentage mismatch"; exit 1; }
-[ "$CANCELLED_PCT" = "20.0" ]  || { echo "[FAIL] CANCELLED percentage mismatch"; exit 1; }
-[ "$IN_PROGRESS_PCT" = "5.0" ] || { echo "[FAIL] IN_PROGRESS percentage mismatch"; exit 1; }
-[ "$WAITING_PCT" = "4.9" ]    || { echo "[FAIL] WAITING percentage mismatch"; exit 1; }
-[ "$PR_PCT" = "0.1" ]          || { echo "[FAIL] PENDING_REFUND percentage mismatch"; exit 1; }
+echo "  FINISHED:       $FINISHED_COUNT (expected 350000)"
+echo "  CANCELLED:      $CANCELLED_COUNT (expected 100000)"
+echo "  IN_PROGRESS:    $IN_PROGRESS_COUNT (expected 25000)"
+echo "  WAITING:        $WAITING_COUNT (expected 24500)"
+echo "  PENDING_REFUND: $PENDING_REFUND_COUNT (expected 500)"
+
+[ "$FINISHED_COUNT" -eq 350000 ] || { echo "[FAIL] FINISHED count mismatch: $FINISHED_COUNT"; exit 1; }
+[ "$CANCELLED_COUNT" -eq 100000 ] || { echo "[FAIL] CANCELLED count mismatch: $CANCELLED_COUNT"; exit 1; }
+[ "$IN_PROGRESS_COUNT" -eq 25000 ] || { echo "[FAIL] IN_PROGRESS count mismatch: $IN_PROGRESS_COUNT"; exit 1; }
+[ "$WAITING_COUNT" -eq 24500 ]    || { echo "[FAIL] WAITING count mismatch: $WAITING_COUNT"; exit 1; }
+[ "$PENDING_REFUND_COUNT" -eq 500 ] || { echo "[FAIL] PENDING_REFUND count mismatch: $PENDING_REFUND_COUNT"; exit 1; }
 echo "[PASS] Status distribution correct"
 
 # ============================================
-# 4. Validate Branch Distribution
+# 4. Validate Branch Distribution (exact counts)
 # ============================================
 echo "[VALIDATE] Branch distribution..."
-BR1=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 1;")
-BR2=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 2;")
-BR3=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 3;")
-BR4=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 4;")
-BR5=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 5;")
-BR6=$(PQ -Atc "SELECT round(COUNT(*) * 100.0 / 500000, 2) FROM service WHERE branch_id = 6;")
 
-echo "  Branch 1: $BR1% (expected 15.0%)"
-echo "  Branch 2: $BR2% (expected 25.0%)"
-echo "  Branch 3: $BR3% (expected 20.0%)"
-echo "  Branch 4: $BR4% (expected 15.0%)"
-echo "  Branch 5: $BR5% (expected 15.0%)"
-echo "  Branch 6: $BR6% (expected 10.0%)"
+BR1_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE branch_id = 1;")
+BR2_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE branch_id = 2;")
+BR3_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE branch_id = 3;")
+BR4_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE branch_id = 4;")
+BR5_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE branch_id = 5;")
+BR6_COUNT=$(PQ -Atc "SELECT COUNT(*) FROM service WHERE branch_id = 6;")
 
-[ "$BR1" = "15.0" ] || { echo "[FAIL] Branch 1 percentage mismatch"; exit 1; }
-[ "$BR2" = "25.0" ] || { echo "[FAIL] Branch 2 percentage mismatch"; exit 1; }
-[ "$BR3" = "20.0" ] || { echo "[FAIL] Branch 3 percentage mismatch"; exit 1; }
-[ "$BR4" = "15.0" ] || { echo "[FAIL] Branch 4 percentage mismatch"; exit 1; }
-[ "$BR5" = "15.0" ] || { echo "[FAIL] Branch 5 percentage mismatch"; exit 1; }
-[ "$BR6" = "10.0" ] || { echo "[FAIL] Branch 6 percentage mismatch"; exit 1; }
+echo "  Branch 1: $BR1_COUNT (expected 75000)"
+echo "  Branch 2: $BR2_COUNT (expected 125000)"
+echo "  Branch 3: $BR3_COUNT (expected 100000)"
+echo "  Branch 4: $BR4_COUNT (expected 75000)"
+echo "  Branch 5: $BR5_COUNT (expected 75000)"
+echo "  Branch 6: $BR6_COUNT (expected 50000)"
+
+[ "$BR1_COUNT" -eq 75000 ] || { echo "[FAIL] Branch 1 count mismatch: $BR1_COUNT"; exit 1; }
+[ "$BR2_COUNT" -eq 125000 ] || { echo "[FAIL] Branch 2 count mismatch: $BR2_COUNT"; exit 1; }
+[ "$BR3_COUNT" -eq 100000 ] || { echo "[FAIL] Branch 3 count mismatch: $BR3_COUNT"; exit 1; }
+[ "$BR4_COUNT" -eq 75000 ] || { echo "[FAIL] Branch 4 count mismatch: $BR4_COUNT"; exit 1; }
+[ "$BR5_COUNT" -eq 75000 ] || { echo "[FAIL] Branch 5 count mismatch: $BR5_COUNT"; exit 1; }
+[ "$BR6_COUNT" -eq 50000 ] || { echo "[FAIL] Branch 6 count mismatch: $BR6_COUNT"; exit 1; }
 echo "[PASS] Branch distribution correct"
 
 # ============================================

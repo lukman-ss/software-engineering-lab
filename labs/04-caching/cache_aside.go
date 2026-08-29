@@ -35,6 +35,7 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, key string) (Product
 			return p, nil // CACHE HIT
 		}
 		// Jika unmarshal gagal, hapus cache (stale/corrupt data)
+		_ = s.cache.Delete(ctx, key)
 	}
 
 	// 2. Cache miss → query DB
@@ -48,8 +49,14 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, key string) (Product
 	_ = startDB
 
 	// 3. Populate cache
-	data, _ := json.Marshal(p)
-	_ = s.cache.Set(ctx, key, string(data), s.ttl)
+	data, err := json.Marshal(p)
+	if err != nil {
+		return Product{}, fmt.Errorf("marshal product: %w", err)
+	}
+	if err := s.cache.Set(ctx, key, string(data), s.ttl); err != nil {
+		// Log but don't fail - we have the data from DB
+		fmt.Printf("warn: cache set failed: %v\n", err)
+	}
 
 	return p, nil
 }

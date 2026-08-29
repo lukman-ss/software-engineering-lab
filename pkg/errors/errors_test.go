@@ -73,8 +73,8 @@ func TestFromError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			extracted := apperrors.FromError(tt.err)
-			if extracted.Category != want {
-				t.Errorf("expected category %v, got %v", want, extracted.Category)
+			if extracted.Category != tt.want {
+				t.Errorf("expected category %v, got %v", tt.want, extracted.Category)
 			}
 		})
 	}

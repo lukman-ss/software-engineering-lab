@@ -44,7 +44,7 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 		t.Errorf("expected 50 invoices, got %d", result.InvoiceCountToday)
 	}
 
-	t.Log("SUCCESS: Cache miss then hit works correctly")
+	t.Log("Cache miss then hit behavior validated")
 }
 
 // Test 2: Cache Invalidation After Mutation
@@ -92,7 +92,7 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 		t.Fatal("cache should be invalidated (miss) after mutation")
 	}
 
-	t.Log("SUCCESS: Cache invalidated after mutation, forcing fresh query")
+	t.Log("Cache invalidation after mutation validated")
 }
 
 // Test 3: Cache Invalidation Prevents Stuck Stale Data
@@ -132,7 +132,7 @@ func TestCacheInvalidationRequiredAfterDataChange(t *testing.T) {
 		t.Error("TEST FAILED: Cache should reflect updated data after invalidation")
 	}
 
-	t.Log("SUCCESS: Invalidation ensures cache reflects latest DB state")
+	t.Log("Cache invalidation propagation validated")
 }
 
 // Test 4: Invalidation Is Async-Unsafe Without Proper Ordering
@@ -187,7 +187,7 @@ func TestCacheHitRatioImprovesWithMutations(t *testing.T) {
 	}
 
 	t.Logf("Cache hit ratio: %d%%", hits*100)
-	t.Log("SUCCESS: Cache significantly reduces DB load under heavy read traffic")
+	t.Log("Cache reduces DB load significantly")
 }
 
 // Test 6: Stale Data Acceptable for Dashboard Statistics
@@ -219,5 +219,5 @@ func TestStaleDataAcceptableForDashboard(t *testing.T) {
 	// TODO: Bagaimana jika stale > 5% dari value?
 	// Itu adalah pertanyaan business, bukan teknis.
 
-	t.Log("SUCCESS: Stale data trade-off is acceptable for aggregated statistics")
+	t.Log("Stale data tolerance validated for aggregated stats")
 }

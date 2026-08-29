@@ -71,7 +71,7 @@ func TestMetricsTracking(t *testing.T) {
 		t.Logf("Hit ratio calculation OK: 2/3 = 66.67%%")
 	}
 
-	t.Log("SUCCESS: Cache metrics tracking works correctly")
+	t.Log("Metrics tracking validated")
 }
 
 // TestDashboardKeyVersioning demonstrasikan key versioning
@@ -92,12 +92,12 @@ func TestDashboardKeyVersioning(t *testing.T) {
 		t.Errorf("key should start with %s", expectedPrefix)
 	}
 
-	// Version check
-	if keyV1[15] != '1' { // "v1" in key
+	// Version check - "v1" starts at position 16 (cmms:dashboard:v1:...)
+	if len(keyV1) <= 17 || keyV1[16] != '1' {
 		t.Error("key V1 should contain v1")
 	}
 
-	t.Log("SUCCESS: Key versioning enables zero-downtime schema migration")
+	t.Log("Key versioning for migration validated")
 }
 
 // TestCorruptCacheHandling demonstrasikan handling cache value yang rusak
@@ -149,7 +149,7 @@ func TestSerializationSafety(t *testing.T) {
 		t.Error("restored data doesn't match original")
 	}
 
-	t.Log("SUCCESS: JSON serialization roundtrip works correctly")
+	t.Log("JSON serialization validated")
 }
 
 // TestConcurrentCacheOperations menghitung race conditions pada concurrent access
@@ -176,7 +176,7 @@ func TestConcurrentCacheOperations(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("Concurrent cache operations completed: %d ops", ops)
-	t.Log("SUCCESS: No race conditions (sync.RLock/Sync.Mutex in mock)")
+	t.Log("Thread-safe cache operations validated")
 }
 
 // TestSourceOfTruth verifies repository is source of truth for cache

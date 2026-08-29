@@ -34,7 +34,7 @@ A senior engineer cares about:
 - **throughput** — queries per second the system can sustain
 - **rows examined** — how many rows the executor processed/rejected at relevant plan nodes (the planner estimates; the executor performs the actual scan)
 - **buffers** — shared hits vs shared reads (cache effectiveness)
-- **match fraction** — what fraction of rows each predicate filters
+- **match fraction** — the fraction of table rows that match a predicate
 - **planner estimates** — how close `rows=` matches `Actual Rows`
 - **write amplification** — cost of maintaining indexes on INSERT/UPDATE/DELETE
 - **storage** — disk footprint of indexes
@@ -391,14 +391,21 @@ labs/02-database-index/
 
 ### Composite Index Column Order
 
-For `WHERE a = ? AND b = ? AND c > ? ORDER BY c DESC`:
+For this query shape:
 
 ```sql
-CREATE INDEX idx ON table (a, b, c);
+WHERE branch_id = equality
+  AND status = equality
+  AND service_date = range/order
 ```
 
-- **Equality first**: Filter down index quickly
-- **Range last**: Can use for filtering AND ordering
+placing the equality keys before the range/order key is a strong
+candidate because it allows PostgreSQL to tightly bound the relevant
+B-tree range.
+
+This is a query-pattern heuristic, not a universal index-column-order law.
+See Experiment 04 for detailed PostgreSQL 16 behavior.
+
 - **Direction**: PostgreSQL B-tree indexes can be scanned **both forward and backward**. Both `(a, b, c)` and `(a, b, c DESC)` can support `ORDER BY c DESC` here. Explicit ASC/DESC definitions matter when you have **mixed ordering requirements** in a multicolumn ORDER BY (e.g., `ORDER BY x ASC, y DESC`).
 
 ### Leading Column Rule (PostgreSQL 16)
@@ -413,7 +420,12 @@ Constraints on leading columns determine how much of the B-tree scan range can b
 - `WHERE b = ?` → can use index in principle, but without a constraint on `a` the planner may need to scan a large or complete portion. Often prefers Seq Scan or another index.
 - `WHERE b = ? AND c = ?` → same reasoning
 
-PostgreSQL 16 can technically use any index structure, but performance depends on whether the leftmost column(s) provide useful constraints.
+For a multicolumn B-tree such as (a, b, c), PostgreSQL 16 can consider
+the index even when predicates constrain only a subset of its columns.
+
+However, without useful leading-column constraints, a large portion of
+the index may need to be scanned, so another index or Seq Scan can be
+cheaper.
 
 **PostgreSQL 18 compatibility note**: B-tree skip-scan optimization may change this behavior for certain cases. This repository targets PostgreSQL 16.
 
@@ -478,8 +490,10 @@ make lab-02-explain     # EXPLAIN ANALYZE experiments
 make lab-02-benchmark   # Experiment 17: benchmark harness
 
 # Or run SQL files directly via psql
-psql -d se_lab -f labs/02-database-index/queries/03-composite-index.sql
-psql -d se_lab -f labs/02-database-index/queries/17-benchmark.sql
+psql -d se_lab -v ON_ERROR_STOP=1 \
+  -f labs/02-database-index/queries/03-composite-index.sql
+psql -d se_lab -v ON_ERROR_STOP=1 \
+  -f labs/02-database-index/queries/17-benchmark.sql
 
 # Automated structural verification
 make lab-02-verify

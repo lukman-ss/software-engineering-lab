@@ -62,7 +62,7 @@ func TestCacheHitDoesNotQueryDatabase(t *testing.T) {
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 
 	// Populate cache first
-	repo.CallCount = 1 // Simulate one call already made
+	_, _ = svc.GetDashboard(ctx, 1)
 
 	initialCalls := repo.CallCount
 

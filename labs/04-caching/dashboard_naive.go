@@ -21,6 +21,8 @@ func NewDashboardNaiveService(db *sql.DB) *DashboardNaiveService {
 
 // GetDashboard mengembalikan statistik dashboard tanpa caching.
 // Setiap pemanggilan menghitung ulang dari database.
+// Note: Uses PostgreSQL range comparison for SARGability on created_at index.
+// Pass business day boundaries from application layer.
 func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64) (Dashboard, error) {
 	// Track query count untuk demonstration
 	s.queryCounter.Add(1)
@@ -30,22 +32,28 @@ func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64
 	d.BranchID = branchID
 	d.Date = Today()
 
+	// Business date boundaries (passed from application for SARGability)
+	// Today: 2026-08-29 00:00:00 UTC to 2026-08-29 23:59:59.999 UTC
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	tomorrow := today.Add(24 * time.Hour)
+	thirtyDaysAgo := today.Add(-30 * 24 * time.Hour)
+
 	// Query 1: Invoice count hari ini
+	// SARGable: created_at >= $2 AND created_at < $3 uses index on created_at
 	row := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM invoices
-		WHERE branch_id = $1 AND DATE(created_at) = DATE('now')
-	`, branchID)
+		WHERE branch_id = $1 AND created_at >= $2 AND created_at < $3
+	`, branchID, today, tomorrow)
 	if err := row.Scan(&d.InvoiceCountToday); err != nil {
 		return Dashboard{}, fmt.Errorf("count invoices: %w", err)
 	}
 
-	// Query 2: Total revenue hari ini (tanpa aggregate di DB, manual untuk demo)
-	// Dalam real world: SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE...
+	// Query 2: Total revenue hari ini
 	row = s.db.QueryRowContext(ctx, `
-		SELECT SUM(amount) FROM payments p
+		SELECT COALESCE(SUM(p.amount), 0) FROM payments p
 		JOIN invoices i ON p.invoice_id = i.id
-		WHERE i.branch_id = $1 AND DATE(i.created_at) = DATE('now')
-	`, branchID)
+		WHERE i.branch_id = $1 AND i.created_at >= $2 AND i.created_at < $3
+	`, branchID, today, tomorrow)
 	if err := row.Scan(&d.TotalRevenueToday); err != nil {
 		return Dashboard{}, fmt.Errorf("sum revenue: %w", err)
 	}
@@ -56,10 +64,10 @@ func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64
 		FROM mechanics m
 		JOIN service_records s ON s.mechanic_id = m.id
 		JOIN invoices i ON s.invoice_id = i.id
-		WHERE i.branch_id = $1 AND DATE(i.created_at) = DATE('now')
+		WHERE i.branch_id = $1 AND i.created_at >= $2 AND i.created_at < $3
 		GROUP BY m.id, m.name
 		ORDER BY cnt DESC LIMIT 1
-	`, branchID)
+	`, branchID, today, tomorrow)
 	if err := row.Scan(&d.TopMechanic.MechanicID, &d.TopMechanic.Name, &d.TopMechanic.Count); err != nil {
 		return Dashboard{}, fmt.Errorf("top mechanic: %w", err)
 	}
@@ -70,10 +78,10 @@ func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64
 		FROM parts p
 		JOIN parts_invoices pi ON pi.part_id = p.id
 		JOIN invoices i ON pi.invoice_id = i.id
-		WHERE i.branch_id = $1 AND DATE(i.created_at) = DATE('now')
+		WHERE i.branch_id = $1 AND i.created_at >= $2 AND i.created_at < $3
 		GROUP BY p.id, p.name
 		ORDER BY cnt DESC LIMIT 1
-	`, branchID)
+	`, branchID, today, tomorrow)
 	if err := row.Scan(&d.TopSparepart.PartID, &d.TopSparepart.Name,
 		&d.TopSparepart.Count, &d.TopSparepart.Revenue); err != nil {
 		return Dashboard{}, fmt.Errorf("top sparepart: %w", err)
@@ -82,18 +90,19 @@ func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64
 	// Query 5: Vehicle count baru hari ini
 	row = s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM vehicles
-		WHERE branch_id = $1 AND DATE(created_at) = DATE('now')
-	`, branchID)
+		WHERE branch_id = $1 AND created_at >= $2 AND created_at < $3
+	`, branchID, today, tomorrow)
 	if err := row.Scan(&d.VehicleCountToday); err != nil {
 		return Dashboard{}, fmt.Errorf("count vehicles: %w", err)
 	}
 
 	// Query 6: Active customer (purchased dalam 30 hari)
+	// SARGable range query for active customers
 	row = s.db.QueryRowContext(ctx, `
 		SELECT COUNT(DISTINCT c.id) FROM customers c
 		JOIN invoices i ON i.customer_id = c.id
-		WHERE i.branch_id = $1 AND i.created_at >= DATE('now', '-30 days')
-	`, branchID)
+		WHERE i.branch_id = $1 AND i.created_at >= $2
+	`, branchID, thirtyDaysAgo)
 	if err := row.Scan(&d.ActiveCustomer); err != nil {
 		return Dashboard{}, fmt.Errorf("count customers: %w", err)
 	}

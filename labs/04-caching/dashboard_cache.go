@@ -3,6 +3,7 @@ package caching
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,8 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 		if err := json.Unmarshal([]byte(cached), &d); err == nil {
 			return d, nil
 		}
+		// Cache corrupt - delete and fetch fresh
+		_ = s.cache.Delete(ctx, key)
 	}
 
 	s.queryCounter.Add(1)
@@ -44,8 +47,14 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 		return Dashboard{}, err
 	}
 
-	data, _ := json.Marshal(d)
-	_ = s.cache.Set(ctx, key, string(data), 30*time.Second)
+	data, err := json.Marshal(d)
+	if err != nil {
+		return Dashboard{}, fmt.Errorf("marshal dashboard: %w", err)
+	}
+	if err := s.cache.Set(ctx, key, string(data), 30*time.Second); err != nil {
+		// Log cache failure but don't fail the request
+		fmt.Printf("warn: cache set failed: %v\n", err)
+	}
 
 	return d, nil
 }
@@ -54,7 +63,11 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 // Preferred flow: COMMIT DB -> Invalidate Cache
 func (s *DashboardCacheService) InvalidateBranchDashboard(ctx context.Context, branchID int64) error {
 	key := dashboardCacheKey(branchID)
-	return s.cache.Delete(ctx, key)
+	err := s.cache.Delete(ctx, key)
+	if err != nil && !errors.Is(err, ErrCacheMiss) {
+		return fmt.Errorf("invalidate cache: %w", err)
+	}
+	return nil
 }
 
 // --- REPRESENTATIVE MUTATION METHODS (Bagian 8) ---
