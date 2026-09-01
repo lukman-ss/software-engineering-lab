@@ -100,23 +100,28 @@ Contoh: Stock display cache 3s untuk UI, tetapi validasi final ke DB dengan `SEL
 
 ---
 
-## 4. Cache Aside
+## 4. Cache Aside vs Read Through
 
-Cache-Aside adalah pola di mana **application** (bukan caching layer abstraction) mengontrol cache interaction:
+Lab ini menggunakan pattern **Cache Aside**. Penting untuk tidak menyamakannya dengan Read Through.
+
+### Cache Aside (Pola yang digunakan di lab ini)
+
+Aplikasi sendiri yang mengontrol orkestrasi antara cache dan database:
 
 ```
-[Client]
-    │
-    ▼
-[App: GET Cache]  → HIT → [Return Cached]
-    │ MISS
-    ▼
-[App: GET Database] → Compute → [App: SET Cache w/ TTL] → [Return]
+[App: GET cache]
+      ↓ miss
+[App: Query database]
+      ↓
+[App: SET cache]
+      ↓
+[App: Return data]
 ```
 
-**Karakteristik:**
-- Cache miss diselesaikan oleh aplikasi, bukan oleh cache provider.
-- BUKAN "Read-Through" (di mana cache service secara otomatis load ke database pada saat miss).
+**Karakteristik Cache Aside:**
+- Cache miss diselesaikan oleh kode aplikasi kita.
+- Aplikasi tahu bahwa ada dua storage layer (Redis & DB).
+- Memberikan kontrol lebih besar atas penanganan error (misal: Redis mati, aplikasi masih bisa query DB).
 
 ---
 
@@ -389,18 +394,85 @@ Contoh: `cmms:tenant:42:branch:7:dashboard:2026-09-01`
 
 ## 13. Cache vs Session
 
-Redis adalah storage engine yang bisa menyimpan keduanya, tetapi semantics aplikasinya sangat berbeda.
+Redis dan database keduanya dapat digunakan untuk menyimpan data, tetapi **tujuan dan semantiknya berbeda total**.
 
-| Aspect | Cache | Session |
-|--------|-------|---------|
-| **Purpose** | Optimization (read reuse) | Conversational state (cart, auth state) |
-| **Ownership** | Bisa shared/global atau per-user | Per-user session |
-| **Source of Truth** | Derived (biasanya bisa di-rebuild dari DB) | Authoritative (contoh: cart sblm checkout) |
-| **Flush Impact** | Latency naik (DB di-hit) | User ter-logout / Cart hilang |
-| **TTL** | Volatilitas data (detik/menit) | Lifecycle login (jam/hari) |
+### CACHE
 
-**Miskonsepsi:** "Data per-user harus masuk session".
-**Koreksi:** Data per-user BISA dan SAH di-cache di layer caching asalkan **key isolation** dilakukan dengan benar (e.g., `tenant:42:user:123:dashboard`). Session storage digunakan untuk *state lifecycle*, caching digunakan untuk *query optimization*.
+**Tujuan:**
+- Optimization / reuse
+- Menghindari computation / I/O berulang
+
+**Scope (bisa multiple):**
+- **Global** — Data yang sama untuk semua user (contoh: daftar cabang)
+- **Tenant scoped** — Isolasi antar konsumen (`tenant:42:*`)
+- **Branch scoped** — Berdasarkan resource bisnis (`branch:7:*`)
+- **User scoped** — Data khusus per-user (`user:123:*`)
+- **Query scoped** — Hasil query tertentu (`query:revenue:2026-09:01`)
+
+**Contoh cache per-user yang VALID:**
+```
+cmms:tenant:42:user:123:permissions:revision:7
+```
+
+**Syarat aman:**
+- Key isolation benar (tenant + user scope)
+- Invalidation benar (triggers saat role berubah)
+- Security requirement dipenuhi (access control di application layer)
+
+---
+
+### SESSION
+
+**Tujuan:**
+- Menyimpan state suatu user/session
+- Lifecycle mengikuti login/session
+
+**Contoh:**
+- Login state (auth token, user_id, expiry)
+- CSRF token
+- Shopping cart server-side
+- Temporary preference (language, theme)
+
+**Implementasi session store dapat menggunakan:**
+- Redis (populer untuk scalability)
+- Database
+- Memory (in-process, tidak scalable)
+- Cookie (client-side, terbatas ukuran)
+- Datastore lain (memcached, DynamoDB, dll)
+
+**Penting:** Session store tidak harus memiliki database sebagai source of truth. Implementasi tertentu mungkin menggunakan database untuk persistensi session, tapi itu adalah detail implementasi, bukan definisi semantik session.
+
+---
+
+### Perbedaan Utama
+
+| Aspek | Cache | Session |
+|-------|-------|---------|
+| **Tujuan Utama** | Performance optimization | State persistence |
+| **Allowed Data Types** | Query results, computed data, aggregations | Auth state, user preferences, shopping cart |
+| **Acceptable Staleness** | Bisa stal (detik-menit) | Harus konsisten |
+| **Failure Mode** | Degradasi performa | Login hilang / cart hilang |
+| **TTL/Expiration** | Singkat (detik-menit) | Panjang (jam-hari) |
+
+---
+
+### Miskonsepsi Permission Cache di Redis
+
+**Miskonsepsi:** "Permission per-user di Redis shared tidak aman."
+
+**Fakta:** Masalahnya bukan Redis shared, tetapi biasanya:
+- Missing tenant scope
+- Missing user scope
+- Stale authorization
+- Revoke latency
+- Invalidation failure
+- Incorrect version/revision
+
+**Solusi yang benar:**
+- Key isolation (`tenant:42:user:123:permissions`)
+- Short TTL (5-10 detik) sebagai safety net
+- Active invalidation saat role berubah
+- Documented Security SLA
 
 ---
 

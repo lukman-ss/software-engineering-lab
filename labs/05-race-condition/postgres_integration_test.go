@@ -286,17 +286,22 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 	repo := NewPostgresAtomicRepository(db)
 
 	// errorCount tracks unexpected DB failures (distinct from expected out-of-stock).
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var successCount int
 	var rejectedCount int
 	var errorCount int
-	var mu sync.Mutex
+
+	ready, release := startGate(attempts)
 
 	wg.Add(attempts)
 
 	for i := 0; i < attempts; i++ {
 		go func() {
 			defer wg.Done()
+			ready <- struct{}{} // signal ready
+			<-release           // wait for synchronized start
+
 			_, err := repo.DecrementStock(ctx, productID)
 			if err != nil {
 				// Distinguish expected out-of-stock from unexpected DB errors.

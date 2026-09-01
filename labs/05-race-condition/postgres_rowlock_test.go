@@ -49,38 +49,59 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	}
 	defer cleanupTestInventory(ctx, db, productID)
 
-	// Manual transactions with barrier to ensure deterministic lock acquisition order.
-	aStarted := make(chan struct{}) // A memegang lock
-	aCommitted := make(chan struct{})
+	// Channels for deterministic coordination:
+	// lockAcquired: A has SELECT ... FOR UPDATE completed
+	// releaseA: signal A to proceed with UPDATE/COMMIT
+	// bStarted: B has started and is blocked
+	// bFinished: B has completed (or rejected)
+	lockAcquired := make(chan struct{})
+	releaseA := make(chan struct{})
 	bStarted := make(chan struct{})
+	bFinished := make(chan struct{})
 
 	var wg sync.WaitGroup
 	var successCount int
 	var outOfStockCount int
 	var unexpectedErrorCount int
-	var mu sync.Mutex
 
 	var aErr, bErr error
 	wg.Add(2)
 
-	// Transaction A — memperoleh lock duluan
+	// Transaction A — starts first, acquires lock, then waits for release signal
 	go func() {
 		defer wg.Done()
-		aErr = trySellWithBarrier(ctx, db, productID, aStarted, aCommitted)
+		aErr = trySellWithLockA(ctx, db, productID, lockAcquired, releaseA)
 	}()
 
-	// Tunggu A yakin punya lock sebelum B mulai
-	go func() {
-		<-aStarted
-		close(bStarted)
-	}()
-
-	// Transaction B — akan ter-block sampai A commit
+	// Transaction B — waits for lock to be acquired, then starts (gets blocked)
 	go func() {
 		defer wg.Done()
-		<-bStarted
-		bErr = trySellWithBarrier(ctx, db, productID, nil, nil)
+		<-lockAcquired // wait until A has the lock
+		close(bStarted) // signal that B has started
+		bErr = trySellWithLockB(ctx, db, productID)
+		close(bFinished) // signal that B has completed
 	}()
+
+	// Wait for A to acquire lock, then B starts
+	<-lockAcquired
+	// B should now be blocked waiting for the lock
+	// Verify B has started but not finished yet
+	select {
+	case <-bStarted:
+		// B has started correctly - it's now blocked on SELECT FOR UPDATE
+	default:
+		t.Fatal("B should have started and be blocked")
+	}
+
+	select {
+	case <-bFinished:
+		t.Fatal("B should NOT have finished yet - it should be blocked on A's lock")
+	default:
+		// B is still blocked - this is correct
+	}
+
+	// Now release A to continue (UPDATE + COMMIT)
+	close(releaseA)
 
 	wg.Wait()
 
@@ -239,10 +260,9 @@ func TestPostgresRowLock_HighContention(t *testing.T) {
 	t.Logf("✅ INVARIANT HOLDS: initial_stock = successful + final_stock")
 }
 
-// trySellWithBarrier performs TrySell with a manual transaction.
-// If lockAcquired != nil, it is closed after SELECT ... FOR UPDATE returns.
-// For deterministic timing, this function manages its own barrier synchronization.
-func trySellWithBarrier(ctx context.Context, db *sql.DB, productID string, lockAcquired chan struct{}, unlockSignal chan struct{}) error {
+// trySellWithLockA performs TrySell in Transaction A (lock holder).
+// Signals lockAcquired after SELECT ... FOR UPDATE, waits for release, then updates and commits.
+func trySellWithLockA(ctx context.Context, db *sql.DB, productID string, lockAcquired chan struct{}, release chan struct{}) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -257,9 +277,49 @@ func trySellWithBarrier(ctx context.Context, db *sql.DB, productID string, lockA
 		return fmt.Errorf("lock and read: %w", err)
 	}
 
-	// Signal lock acquired
+	// Signal lock acquired so B can start its blocked attempt
 	if lockAcquired != nil {
 		close(lockAcquired)
+	}
+
+	// Wait until B has started and is blocked on the lock
+	<-release
+
+	if stock <= 0 {
+		_ = tx.Rollback()
+		return ErrOutOfStock
+	}
+
+	_, err = tx.ExecContext(ctx,
+		"UPDATE inventory_products SET stock = $1 WHERE id = $2",
+		stock-1, productID)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update stock: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+// trySellWithLockB performs TrySell in Transaction B (blocked until A commits).
+func trySellWithLockB(ctx context.Context, db *sql.DB, productID string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var stock int
+	err = tx.QueryRowContext(ctx,
+		"SELECT stock FROM inventory_products WHERE id = $1 FOR UPDATE",
+		productID).Scan(&stock)
+	if err != nil {
+		return fmt.Errorf("lock and read: %w", err)
 	}
 
 	if stock <= 0 {

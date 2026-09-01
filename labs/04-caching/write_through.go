@@ -79,16 +79,11 @@ func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) erro
 	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
 		// Cache set gagal - DB sudah sukses, business operation tetap success
 		// Log error, bukan return error
-		// NOTE: In production, gunakan structured logging, bukan fmt.Printf
-		// This is for demonstration purposes only
-		fmt.Printf("warn: write-through cache set failed for %s: %v\n", key, err)
 
 		// Best-effort: delete stale key sebagai safety fallback
 		// INI BUKAN guaranteed - stale cache masih mungkin bertahan sampai TTL
 		if delErr := s.cache.Delete(ctx, key); delErr != nil {
-			fmt.Printf("warn: stale cache delete also failed for %s: %v\n", key, delErr)
-			// Catat metric: cache_stale_persist_metric++
-			// But business operation is still successful
+			// stale cache persists until TTL
 		}
 	}
 

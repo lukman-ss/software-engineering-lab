@@ -17,7 +17,23 @@ import (
 
 // setupBookingTable ensures the table exists and is clean for testing.
 func setupBookingTable(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx, `TRUNCATE TABLE service_bookings RESTART IDENTITY CASCADE`)
+	// Create table if not exists (schema source of truth)
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS service_bookings (
+			id SERIAL PRIMARY KEY,
+			branch_id VARCHAR(50) NOT NULL,
+			customer_id VARCHAR(50) NOT NULL,
+			service_date DATE NOT NULL,
+			slot_time TIME NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			CONSTRAINT uq_service_bookings_slot UNIQUE (branch_id, service_date, slot_time)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+	// Clean for test
+	_, err = db.ExecContext(ctx, `TRUNCATE TABLE service_bookings RESTART IDENTITY CASCADE`)
 	return err
 }
 

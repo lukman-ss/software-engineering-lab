@@ -1,3 +1,6 @@
+//go:build racedemo
+// +build racedemo
+
 package race
 
 import (
@@ -6,6 +9,9 @@ import (
 )
 
 // TestUnsafeCounter_Race deliberately demonstrates a Go memory data race.
+// Run with `go test -race -tags=racedemo` — this test is EXPECTED to fail under the race detector.
+// Its purpose is to show that `counter++` from multiple goroutines without
+// synchronization triggers the race detector. This is a demo, not a bug.
 // Run with `go test -race` — this test is EXPECTED to fail under the race detector.
 // Its purpose is to show that `counter++` from multiple goroutines without
 // synchronization triggers the race detector. This is a demo, not a bug.
