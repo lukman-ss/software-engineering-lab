@@ -55,7 +55,7 @@ T3 │ WRITE stock = 0 ◄─────┼── WRITE stock = 0
 
 **Invariant broken**: `1 != 2 + 0` ❌
 
-> **Catatan:** `final_stock = 0` tidak otomatis benar hanya karena tidak ada negative stock. Ini adalah bukti bahwa perduaan terjadi — dua transaksi berhasil, padahal stok hanya satu. Untuk sistem yang **tidak mengizinkan overselling**, invariant yang benar adalah `stock >= 0` dan hanya **satu penjualan** yang boleh berhasil. Hasil `successful_sales = 2` menunjukkan state sudah corrupt — sistem mengira 2 unit terjual padahal stok fisik hanya 1 unit. Toko harus meretur uang satu pembeli.
+> **Catatan:** `final_stock = 0` tidak otomatis benar hanya karena tidak ada negative stock. Ini adalah bukti bahwa dua transaksi berhasil, padahal stok hanya satu. Untuk sistem yang **tidak mengizinkan overselling**, invariant yang benar adalah `stock >= 0` dan hanya **satu penjualan** yang boleh berhasil. Hasil `successful_sales = 2` menunjukkan state sudah corrupt — sistem mengira 2 unit terjual padahal stok fisik hanya 1 unit. Toko harus meretur uang satu pembeli.
 
 ---
 
@@ -420,12 +420,19 @@ Correctness bergantung pada tiga hal:
 
 ---
 
-## 16. Memory Data Race vs Business Race Condition
+## 16. Perbedaan: Memory Data Race vs Business Race Condition
 
-- **Memory Data Race**: Dua thread mengakses alamat memory yang sama tanpa sinkronisasi, dan setidaknya salah satunya mengubah nili. (Dapat dideteksi dengan `go test -race`).
-  - Contoh: `counter++` dari banyak goroutine tanpa mutex/atomic.
-- **Business Race Condition**: Alur logika berantakan akibat *interleaving* timing, padahal semua variable di memory sudah *thread-safe* (menggunakan channel atau local variable).
-  - Contoh: dua transaction membaca `stock = 1`, kemudian keduanya menjual barang yang sama secara bersamaan.
+**Memory Data Race** vs **Business Race Condition** adalah dua konsep yang berbeda:
+
+### Memory Data Race
+- Dua thread mengakses alamat memory yang sama tanpa sinkronisasi, dan setidaknya salah satunya mengubah nilai.
+- Dapat dideteksi dengan `go test -race` (Go race detector).
+- Contoh: `counter++` dari banyak goroutine tanpa mutex/atomic.
+
+### Business Race Condition
+- Terjadi pada shared mutable state di database akibat interleaving timing antara READ → CHECK → WRITE.
+- **Tidak dapat dideteksi oleh `go test -race`** karena semua variable di memory sudah thread-safe.
+- Contoh: dua transaction membaca `stock = 1`, kemudian keduanya menjual barang yang sama secara bersamaan.
 
 ```go
 // Kode ini LULUS go test -race (tiap variable thread-safe),
@@ -439,7 +446,7 @@ func (s *Service) TrySell(ctx context.Context, id string) error {
 }
 ```
 
-> **`go test -race` tidak membuktikan kode Anda bebas dari business race condition.** Race detector hanya mendeteksi memory-level concurrent access yang tidak sinkron. Jika business logic Anda melibatkan shared mutable state di database, Anda tetap perlu lock, atomic statement, atau constraint — bahkan jika race detector memberi "PASS".
+> **Penting:** `go test -race` tidak membuktikan kode Anda bebas dari business race condition. Race detector hanya mendeteksi memory-level concurrent access yang tidak sinkron. Jika business logic Anda melibatkan shared mutable state di database, Anda tetap perlu lock, atomic statement, atau constraint — bahkan jika race detector memberi "PASS".
 
 ---
 
@@ -507,9 +514,26 @@ go test -v -run TestAtomicUpdate_StockOne
 go test -v -run TestAtomicUpdate_HighContention
 ```
 
-### Booking Race Condition Test (Unique Constraint)
+### Booking Race Condition Tests
+
+#### In-Memory Booking Concurrency Tests (Mock Repository)
 ```bash
-go test -v -run Test500_ConcurrentBooking
+go test -v -run Test500_ConcurrentBooking           # 500 concurrent, same slot
+go test -v -run TestBooking_SameBranchDifferentBranch  # multi-branch invariant
+go test -v -run TestBooking_ErrorHandling            # error classification
+```
+> Menggunakan `MockBookingRepository` dengan `sync.RWMutex` untuk demonstrate unique constraint di application level.
+
+#### PostgreSQL Booking Unique Constraint Tests (Database constraint)
+```bash
+# 500 concurrent requests: 1 success, 499 SQLSTATE 23505 conflict
+go test -v -tags=integration -run TestPostgres_ConcurrentBooking
+
+# Proof: different branch can book same slot (same date + time)
+go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
+
+# Proof: same branch cannot double-book
+go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
 ```
 
 ### PostgreSQL Integration Tests (Requires `docker-compose up postgres`)
@@ -524,18 +548,65 @@ go test -v -tags=integration -run TestPostgresAtomic_ConcurrentUpdate
 # Membuktikan Pessimistic Row Lock menjaga Invariant
 go test -v -tags=integration -run TestPostgresRowLock_ConcurrentStock
 go test -v -tags=integration -run TestPostgresRowLock_HighContention
+
+# Membuktikan PostgreSQL UNIQUE constraint menolak duplicate booking
+go test -v -tags=integration -run TestPostgres_ConcurrentBooking
+
+# Membuktikan different branch bisa booking slot yang sama
+go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
+
+# Membuktikan multi-branch booking invariant
+go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
 ```
 
-### Secondary Topic: Go Memory Data Race
+### Secondary Topic: Go Memory Data Race (Intentional Demo)
+
+Test `TestUnsafeCounter_Race` sengaja menunjukkan Go data race untuk demonstrasi konsep.
+
 ```bash
-go test -race -v -run TestUnsafeCounter_Race
+# Run intentional race demo (EXPECTED TO FAIL under race detector)
+go test -race -v -tags=racedemo -run TestUnsafeCounter_Race
+
+# Normal validation (should pass - unsafe test excluded)
+go test -race ./...
 ```
 
-### All Tests & Stress Testing
+> **Important:** `TestUnsafeCounter_Race` ada di file `datarace_unsafe_test.go` dengan build tag `//go:build racedemo`. Dengan tag ini, test tidak ikut pada `go test -race ./...` normal - hanya muncul bila eksplisit gunakan `-tags=racedemo`. Ini memisahkan business race testing (yang harus pass) dari memory race demo (yang sengaja melempar race).
+
+## Running the Lab
+
+### 1. Normal Unit Tests
+
 ```bash
-go test -v -count=1 .
-go test -count=20 .   # Menjalankan semua test 20 kali (stress test)
+# Unit tests (in-memory, no DB)
+go test ./...
+
+# With race detector for memory data race detection
+go test -race ./...
 ```
+
+### 2. PostgreSQL Integration Tests
+
+```bash
+# Set up PostgreSQL (from repo root)
+docker-compose up -d postgres
+
+# Run integration tests (requires PostgreSQL)
+go test -tags=integration ./...
+```
+
+### 3. Intentional Go Memory Race Demo (Educational)
+
+```bash
+# Run race demo - EXPECTED TO REPORT DATA RACE
+# This demonstrates Go memory data race intentionally
+go test -race -tags=racedemo -run TestUnsafeCounter_Race
+
+# Normal validation WITHOUT the unsafe demo (should pass)
+go test -race ./...
+```
+
+> **Catatan:** Intentional race demo dengan build tag `racedemo` **diusir** dari normal test suite sehingga `go test -race ./...` selalu PASS. Demo hanya untuk edukasi - jalankan secara eksplisit dengan `-tags=racedemo`.
 
 ---
 
@@ -580,13 +651,13 @@ Setiap integration test concurrency memakai `context.WithTimeout` atau `select` 
 - 500 goroutine tidak berarti 500 koneksi database.
 - `pkg/database` mengkonfigurasi pool: `MaxOpenConns=25`, `MaxIdleConns=5`.
 - Workers yang melebihi pool size akan **menunggu** koneksi — ini dihitung sebagai bagian dari concurrency correctness, bukan bug.
-- Tujuan lab: benjing invariant, bukan membebani PostgreSQL dengan connection explosion.
+- Tujuan lab: menjaga invariant, bukan membebani PostgreSQL dengan connection explosion.
 
 ### Test Isolation & Cleanup (Prompt 18)
 
 - Setiap integration test membuat fixture sendiri (productID unik per test).
 - `defer` cleanup menghapus data agar test bisa dijalankan berulang tanpa state leak.
-- ID produk/booking dirancangkan unik untuk menghindari collision antar test.
+- ID produk/booking dirancang secara unik untuk menghindari collision antar test.
 - `Test500_ConcurrentBooking` memakai slot yang sama secara disengaja untuk trigger race — ini **bukan** bug test isolation, ini adalah fokus dari test itu sendiri.
 
 ### Expected vs Unexpected Errors (Prompt 19)
@@ -615,10 +686,32 @@ go test -race ./...
 
 Prasyarat: PostgreSQL sudah berjalan di `localhost:5432` dengan database `se_lab`.
 
+#### Fresh Database Setup
+
+Schema otomatis di-init via Docker entrypoint pada first database creation:
+
 ```bash
 # Jalankan Docker Compose (dari root repository)
 docker-compose up -d postgres
 
+# Schema auto-created pada fresh database dari:
+# ./labs/05-race-condition/schema.sql → /docker-entrypoint-initdb.d/001-race-condition.sql
+```
+
+> **Penting:** Init script PostgreSQL hanya berjalan pada **first database creation**. Jika volume lama sudah pernah dibuat sebelum schema mount ditambahkan, lakukan reset volume:
+
+```bash
+# Reset fresh test database (HANYA untuk development lab)
+docker compose down -v
+docker compose up -d postgres
+
+# PERINGATAN: -v menghapus local Docker volume test database.
+# JANGAN lakukan ini ke production.
+```
+
+#### Run Tests
+
+```bash
 # Set environment (opsional, default: postgres:5432, user=postgres, pass=postgres, db=se_lab)
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
@@ -633,7 +726,7 @@ go test -v -tags=integration ./...
 Catatan:
 - Test akan `SKIP` bila PostgreSQL tidak tersedia.
 - Connection pool: `MaxOpenConns=25`, `MaxIdleConns=5` (dari `pkg/database`).
-- Setup database dilakukan otomatis oleh `setupTestInventory` dan `setupBookingTable`.
+- `setupTestInventory` membuat test fixture (INSERT/UPDATE), `setupBookingTable` memastikan table ada + TRUNCATE untuk isolation.
 
 ---
 
@@ -668,7 +761,9 @@ Sebelum memilih concurrency control strategy, tanyakan diri sendiri:
 - `postgres_booking.go`: Test Integrasi PostgreSQL Booking (unique constraint)
 - `postgres_booking_test.go`: Test Integrasi PostgreSQL Booking (unique constraint)
 - `schema.sql`: Skema Tabel Database (multi-branch booking)
-- `datarace.go` & `datarace_test.go`: Secondary topic (Go memory model)
+- `datarace.go`: UnsafeCounter (demo race), MutexCounter, AtomicCounter, ChannelCounter implementations
+- `datarace_test.go`: Safe counter tests (Mutex, Atomic, Channel)
+- `datarace_unsafe_test.go`: Build tag `racedemo` - intentional Go data race demo (EXPECTED TO FAIL under race detector)
 
 ---
 

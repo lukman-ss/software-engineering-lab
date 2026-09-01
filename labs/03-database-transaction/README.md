@@ -60,7 +60,7 @@ Batas tersebut **tidak dapat dijamin oleh satu local DB::transaction()**.
 
 Distributed transaction lintas resource secara teknis dapat dilakukan dengan mekanisme seperti Two-Phase Commit (2PC) atau XA pada sistem tertentu, tetapi membawa coupling, availability, operational complexity, dan scalability trade-off. Karena itu banyak arsitektur modern memilih local transaction + messaging + Saga + compensation + Outbox sesuai kebutuhan.
 
-> **Nota**: Lab 03 tidak membahas 2PC/XA secara mendalam. Topik ini tetap menjadi ownership Lab 07.
+> **Nota**: Lab ini hanya memperkenalkan Two-Phase Commit (2PC) dan XA sebagai konteks bahwa distributed transaction lintas resource secara teknis memang ada, tetapi tidak membahas implementasinya secara mendalam. Lab 07 tetap fokus pada Transactional Outbox, bukan 2PC/XA.
 
 ### Flow yang Benar
 
@@ -343,9 +343,27 @@ Untuk menyelesaikan dual-write problem, gunakan Transactional Outbox:
 
 ### Mental Model Outbox:
 
-- **Outbox** → *reliable intent persistence* (mencatat niat secara atomik)
-- **Dispatcher** → *at-least-once delivery* (memastikan terkirim)
-- **Consumer** → *idempotent* (aman diproses ulang)
+**Outbox**
+→ menyimpan business change + event intent secara atomik
+
+**Dispatcher**
+→ mendukung at-least-once delivery
+
+**Consumer**
+→ harus idempotent atau memiliki mekanisme deduplication
+
+> At-least-once berarti sistem berusaha agar message tidak hilang dengan mekanisme retry/redelivery, tetapi duplicate delivery tetap mungkin terjadi.
+
+Contoh:
+```
+Publish berhasil
+↓
+dispatcher crash sebelum mark sent
+↓
+event dikirim ulang
+```
+
+Karena itu `duplicate delivery` bukan bug yang mustahil terjadi, melainkan sesuatu yang harus diantisipasi oleh consumer.
 
 Pada delivery model yang memungkinkan retry atau redelivery, seperti at-least-once delivery, consumer harus dirancang idempotent atau memiliki mekanisme deduplication yang ekuivalen.
 
@@ -381,7 +399,7 @@ Jika Step 3 gagal → Saga mengeksekusi compensation untuk Step 2 lalu Step 1.
 
 ---
 
-## 13. Eventually Consistency
+## 13. Eventual Consistency
 
 Retry merupakan mekanisme umum untuk menangani transient failure pada distributed workflow, tetapi tidak semua failure boleh di-retry.
 
@@ -416,7 +434,9 @@ t=3:  ERP = SYNCED
 
 Temporary inconsistency dapat menjadi kondisi normal pada eventual consistency jika memang sesuai consistency requirement, masih berada dalam batas waktu/staleness yang dapat diterima, dan sistem memiliki mekanisme untuk membawa state tersebut menuju kondisi konsisten.
 
-Retry, recovery, reconciliation, dan monitoring adalah mekanisme yang dapat ditunjukkan.
+Eventual consistency != inconsistent selamanya.
+
+Retry, recovery, reconciliation, monitoring, dan manual intervention adalah mekanisme yang dapat ditunjukkan (sesuai criticality).
 
 > **Penting**: Eventual consistency ≠ state boleh inconsistent selamanya.
 
@@ -465,7 +485,7 @@ Bukan kondisi yang boleh dianggap normal:
 | **retry** | Mencoba kembali operasi yang gagal |
 | **idempotency** | Operasi yang dapat dipanggil berulang kali tanpa efek samping tambahan |
 | **at-least-once** | Delivery model tempat event bisa dikirim berulang kali |
-| **eventual consistency** | State sistem akan menjadi konsisten dalam waktu terseban |
+| **eventual consistency** | State pada beberapa komponen dapat sementara berbeda, tetapi sistem dirancang agar pada akhirnya menuju kondisi konsisten yang diharapkan |
 | **Saga** | Pola untuk distributed transactions dengan kompensasi |
 | **compensation** | Aksi pengembalian untuk membatalkan efek operation sebelumnya |
 | **Outbox** | Mekanisme untuk menyimpan event secara atomic bersama business state |

@@ -1,4 +1,6 @@
-# Lab 06 — API Versioning: Cara Mengubah API Tanpa Merusak Ribuan Client
+# Senior Software Engineer Daily #6
+
+## Lab 06 — API Versioning: Cara Mengubah API Tanpa Merusak Ribuan Client
 
 ## Mental Model Utama
 
@@ -136,12 +138,14 @@ API-Version: 2
 ```
 
 Keuntungan:
-- URL tetap stabil → idempotent endpoint
+- URL resource tetap stabil (memungkinkan caching & routing yang konsisten)
 - Memungkinkan multiple versions dalam satu endpoint
 
 Kerugian:
 - Kurang visibilitas di logs/network traces
 - Membutuhkan middleware parsing header
+
+>**Catatan penting:** Versi di URL atau header **tidak** menentukan apakah endpoint idempotent. Idempotency ditentukan oleh semantics HTTP (GET, PUT, DELETE) dan business operation, bukan lokasi version identifier.
 
 > **Catatan:** URL versioning dipilih untuk lab bukan karena "lebih benar secara universal", tapi karena lebih sederhana untuk demonstrasi.
 
@@ -394,7 +398,7 @@ Namun, perubahan berikut sering **backward compatible**:
 File: `unsafe_server.go`, `unsafe_test.go`
 
 ```go
-// POST /invoices/1001
+// GET /api/invoices/1001
 // Response: customer berubah jadi object
 ```
 
@@ -492,7 +496,7 @@ Accept: application/vnd.company.v1+json
 Accept: application/vnd.company.v2+json
 ```
 
-Lebih idempoten (URL tetap), tapi kurang visibilitas.
+Tapi kurang visibilitas di logs/network traces.
 
 ---
 

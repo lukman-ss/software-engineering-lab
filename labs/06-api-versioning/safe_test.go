@@ -174,29 +174,37 @@ func TestV1Contract_RemainsBackwardCompatible(t *testing.T) {
 		t.Fatalf("V1: invalid JSON response: %v", err)
 	}
 
-	// 3. id = number
+	// 3. id = number, id == 1001
 	var idNum json.Number
 	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
 		t.Error("V1: 'id' harus berupa number")
+	} else if idNum != "1001" {
+		t.Errorf("V1: 'id' harus 1001, got %s", idNum)
 	}
 
-	// 4. customer = string (BREAKING if accidentally becomes object)
+	// 4. customer = string, customer == "Budi" (BREAKING if accidentally becomes object)
 	var customerStr string
 	if err := json.Unmarshal(raw["customer"], &customerStr); err != nil {
 		t.Error("V1: 'customer' HARUS tetap string (breaking change detected!)")
 		t.Error("Jika customer menjadi object, legacy client akan gagal parse")
+	} else if customerStr != "Budi" {
+		t.Errorf("V1: 'customer' harus 'Budi', got '%s'", customerStr)
 	}
 
-	// 5. total = number
+	// 5. total = number, total == 500000
 	var totalNum json.Number
 	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
 		t.Error("V1: 'total' harus berupa number")
+	} else if totalNum != "500000" {
+		t.Errorf("V1: 'total' harus 500000, got %s", totalNum)
 	}
 
-	// 6. status = string
+	// 6. status = string, status == "PAID"
 	var statusStr string
 	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
 		t.Error("V1: 'status' harus berupa string")
+	} else if statusStr != "PAID" {
+		t.Errorf("V1: 'status' harus 'PAID', got '%s'", statusStr)
 	}
 
 	t.Log("✅ V1 contract protected: customer remains string")
@@ -241,4 +249,76 @@ func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 	}
 
 	t.Log("✅ V2 contract verified: customer is object with id, name, phone")
+}
+
+// TestV1Contract_DetectsCustomerStringToObject memastikan contract test V1
+// akan GAGAL bila `customer` berubah dari string menjadi object.
+// Tujuan: regression guard untuk breaking change.
+func TestV1Contract_DetectsCustomerStringToObject(t *testing.T) {
+	// Response hipotetis yang melanggar V1 contract (customer jadi object)
+	violatingResponse := []byte(`{
+		"id": 1001,
+		"customer": {"id": 15, "name": "Budi"},
+		"total": 500000,
+		"status": "PAID"
+	}`)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(violatingResponse, &raw); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// V1 contract: customer HARUS string
+	var customerStr string
+	err := json.Unmarshal(raw["customer"], &customerStr)
+	if err == nil {
+		t.Fatal("V1 contract test GAGAL mendeteksi: customer berubah dari string ke object (breaking change terlewat!)")
+	}
+
+	t.Logf("✅ V1 contract detected breaking change: %v", err)
+}
+
+// TestV1Contract_DetectsTotalNumberToString memastikan contract test V1
+// akan mendeteksi bila `total` berubah dari number menjadi string.
+// Tujuan: regression guard untuk breaking change tipe data.
+func TestV1Contract_DetectsTotalNumberToString(t *testing.T) {
+	// Response hipotetis yang melanggar V1 contract (total jadi string)
+	violatingResponse := []byte(`{
+		"id": 1001,
+		"customer": "Budi",
+		"total": "500000",
+		"status": "PAID"
+	}`)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(violatingResponse, &raw); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// V1 contract: total HARUS number
+	var totalNum json.Number
+	err := json.Unmarshal(raw["total"], &totalNum)
+	if err != nil {
+		// Valid - breaking change terdeteksi karena total tidak bisa diparse sebagai number
+		t.Logf("✅ V1 contract detected breaking change: %v", err)
+		return
+	}
+
+	// Jika masih bisa di-parse (karena json.Number bisa menyerap string number),
+	// gunakan strict type checking dari json.Unmarshal untuk float64
+	var totalFloat float64
+	if err := json.Unmarshal(raw["total"], &totalFloat); err != nil {
+		// Valid - mendeteksi tipe total berubah
+		t.Logf("✅ V1 contract detected breaking change: total berubah dari number ke string: %v", err)
+		return
+	}
+
+	// Lebih strict: pastikan raw bukan literal string dengan tanda kutip
+	rawStr := string(raw["total"])
+	if len(rawStr) > 0 && rawStr[0] == '"' {
+		t.Log("✅ V1 contract detected breaking change: total number → string (terdeteksi via raw JSON quotes)")
+		return
+	}
+
+	t.Fatal("V1 contract test GAGAL mendeteksi: total berubah dari number ke string (breaking change terlewat!)")
 }

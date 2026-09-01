@@ -17,7 +17,7 @@ func TestBreakingChange_LegacyClientFails(t *testing.T) {
 	defer server.Close()
 
 	// Legacy client mencoba decode ke struct yang mengharapkan customer = string
-	url := server.URL + "/?id=1001"
+	url := server.URL + "/api/invoices/1001"
 
 	resp, err := http.Get(url)
 	if err != nil {

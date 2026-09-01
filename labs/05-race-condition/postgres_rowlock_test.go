@@ -76,16 +76,21 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	// Transaction B — waits for lock to be acquired, then starts (gets blocked)
 	go func() {
 		defer wg.Done()
-		<-lockAcquired // wait until A has the lock
+		<-lockAcquired  // wait until A has the lock
 		close(bStarted) // signal that B has started
 		bErr = trySellWithLockB(ctx, db, productID)
 		close(bFinished) // signal that B has completed
 	}()
 
 	// Wait for A to acquire lock, then B starts
-	<-lockAcquired
+	select {
+	case <-lockAcquired:
+	case <-ctx.Done():
+		t.Fatal("transaction A failed to acquire row lock in time")
+	}
+
 	// B should now be blocked waiting for the lock
-	// Verify B has started but not finished yet
+	// Verify B has started but not finished yet (explicit blocking proof)
 	select {
 	case <-bStarted:
 		// B has started correctly - it's now blocked on SELECT FOR UPDATE
@@ -262,12 +267,18 @@ func TestPostgresRowLock_HighContention(t *testing.T) {
 
 // trySellWithLockA performs TrySell in Transaction A (lock holder).
 // Signals lockAcquired after SELECT ... FOR UPDATE, waits for release, then updates and commits.
+// Always ends with COMMIT or ROLLBACK - never leaves transaction open.
 func trySellWithLockA(ctx context.Context, db *sql.DB, productID string, lockAcquired chan struct{}, release chan struct{}) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		// Ensure transaction is always cleaned up
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
 
 	var stock int
 	err = tx.QueryRowContext(ctx,
@@ -282,11 +293,14 @@ func trySellWithLockA(ctx context.Context, db *sql.DB, productID string, lockAcq
 		close(lockAcquired)
 	}
 
-	// Wait until B has started and is blocked on the lock
-	<-release
+	// Wait until B has started and is blocked on the lock (with context timeout)
+	select {
+	case <-release:
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled before release: %w", ctx.Err())
+	}
 
 	if stock <= 0 {
-		_ = tx.Rollback()
 		return ErrOutOfStock
 	}
 
@@ -294,15 +308,15 @@ func trySellWithLockA(ctx context.Context, db *sql.DB, productID string, lockAcq
 		"UPDATE inventory_products SET stock = $1 WHERE id = $2",
 		stock-1, productID)
 	if err != nil {
-		_ = tx.Rollback()
 		return fmt.Errorf("update stock: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		_ = tx.Rollback()
 		return fmt.Errorf("commit: %w", err)
 	}
 
+	// Clear tx so defer doesn't double-rollback
+	tx = nil
 	return nil
 }
 
