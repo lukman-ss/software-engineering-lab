@@ -55,7 +55,7 @@ T3 │ WRITE stock = 0 ◄─────┼── WRITE stock = 0
 
 **Invariant broken**: `1 != 2 + 0` ❌
 
-Final stock = 0 terlihat *valid* di database. Tidak ada negative stock. Tapi **state sudah corrupt** — sistem mengira 2 unit terjual padahal stok fisik hanya 1 unit. Toko harus meretur uang satu pembeli.
+> **Catatan:** `final_stock = 0` tidak otomatis benar hanya karena tidak ada negative stock. Ini adalah bukti bahwa perduaan terjadi — dua transaksi berhasil, padahal stok hanya satu. Untuk sistem yang **tidak mengizinkan overselling**, invariant yang benar adalah `stock >= 0` dan hanya **satu penjualan** yang boleh berhasil. Hasil `successful_sales = 2` menunjukkan state sudah corrupt — sistem mengira 2 unit terjual padahal stok fisik hanya 1 unit. Toko harus meretur uang satu pembeli.
 
 ---
 
@@ -70,6 +70,10 @@ CHECK (apakah operation ini valid?)
  ↓
 WRITE
 ```
+
+> **TOCTOU (Time-Of-Check To Time-Of-Use)**: Antara `CHECK` dan `WRITE`, state dapat berubah karena request lain. Jika tidak ada atomicity, hasil `CHECK` tidak lagi berlaku saat `WRITE` dieksekusi.
+
+Contoh: check slot kosong → beberapa milidetik berlalu (state berubah) → insert booking.
 
 ### Pertanyaan Kunci
 
@@ -152,16 +156,21 @@ FOR UPDATE;
 COMMIT;
 ```
 
-### Penjelasan Teknis (MVCC)
+### Penjelasan Teknis (MVCC & Row Locking)
 
-`SELECT ... FOR UPDATE` mengambil **row-level lock** yang mencegah transaksi lain melakukan *conflicting lock/update* terhadap row yang sama sampai transaction selesai.
+`SELECT ... FOR UPDATE` mengambil **row-level lock** pada row yang dipilih. Lock ini:
 
-> *Catatan MVCC: Ordinary non-locking `SELECT` masih dapat membaca snapshot row tersebut; row lock hanya memblokir writer atau locker lain (seperti transaksi lain yang juga memanggil `FOR UPDATE`).*
+- Membuat transaksi lain yang mencoba memperoleh **conflicting row lock** (misalnya melalui `FOR UPDATE` lain pada row yang sama) **menunggu (blocked)** hingga lock dilepas.
+- Membuat `UPDATE` atau `DELETE` yang bersaing pada row yang sama **menunggu**.
+- **Tidak** memblokir *ordinary non-locking `SELECT`*: reader tanpa `FOR UPDATE` masih dapat membaca snapshot MVCC row tersebut.
+- Lock bertahan sampai **transaction commit atau rollback**.
+
+> **Bukan** `SELECT ... FOR UPDATE` yang "memblokir semua reader", tetapi hanya writer dan locker lain yang konflik. MVCC (Multi-Version Concurrency Control) memungkinkan reader melihat snapshot yang konsisten tanpa perlu lock.
 
 ### Flow
 
-1. **Transaction A** mulai, memanggil `FOR UPDATE`, dan mendapat lock.
-2. **Transaction B** mulai, memanggil `FOR UPDATE` di row yang sama, lalu **menunggu (blocked)**.
+1. **Transaction A** mulai, memanggil `FOR UPDATE`, dan mendapat row-level lock.
+2. **Transaction B** mulai, memanggil `FOR UPDATE` di row yang sama, lalu **menunggu (blocked)** karena konflik lock.
 3. **Transaction A** memvalidasi stok, update ke 0, lalu `COMMIT` (lock dilepas).
 4. **Transaction B** unblocked, membaca stok terbaru (0), memvalidasi stok → gagal, lalu `ROLLBACK`.
 
@@ -194,7 +203,7 @@ Sangat cepat dan efisien. Lihat: `atomic_inventory.go`
 
 ## 9. Solusi 3 — Optimistic Locking
 
-Menggunakan versi (`version`) untuk mendeteksi perubahan state, bukan me-lock di awal.
+Menggunakan kolom `version` untuk mendeteksi perubahan state, bukan me-lock di awal.
 
 ```sql
 UPDATE products
@@ -205,11 +214,20 @@ WHERE id = $2
 
 Jika `0 rows affected`, artinya record sudah diubah transaksi lain sejak terakhir dibaca. Aplikasi bisa melakukan *retry* atau return error. Cocok untuk environment dengan read yang banyak tapi tingkat konflik/update (contention) rendah.
 
+> **Catatan:** Optimistic locking adalah salah satu strategi concurrency control. Lab ini tidak mengimplementasikannya secara penuh — lihat [`labs/12-optimistic-locking`](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/12-optimistic-locking) untuk production-ready implementation.
+
 ---
 
 ## 10. Solusi 4 — Distributed Lock
 
-Jika koordinasi terjadi **di luar scope satu database** (misal memanggil API eksternal), gunakan Distributed Lock (seperti Redis).
+Distributed lock **bukan solusi default** untuk semua race condition. Gunakan hanya ketika coordination benar-benar melintasi:
+
+- **Process** (misalnya multiple replicas di kubernetes)
+- **Instance** (bukan hanya thread yang sama)
+- **Node** (bukan hanya satu mesin)
+- **Resource eksternal** (misalnya API bank, file storage, layanan lain)
+
+Jika invariant sebenarnya berada di **satu database**, maka database lock / atomic update / unique constraint biasanya **lebih sederhana dan lebih andal** dibanding distributed lock.
 
 Contoh: `lock:payment:INV-123`
 
@@ -221,11 +239,24 @@ Skenario:
 
 Distributed lock **jauh lebih kompleks** dari database lock. Anda harus memikirkan:
 - **Ownership**: Hanya pembuat lock yang boleh unlock.
-- **TTL & Expiration**: Lock harus otomatis hilang jika worker mati (crash).
-- **Safe Unlock**: Evaluasi token kepemilikan (via Lua script) sebelum menghapus lock.
-- **Network Partition (Split-Brain)**: Bagaimana jika ada dua master?
+- **TTL & Expiration**: Lock harus otomatis hilang jika worker mati (crash). Jika TTL terlalu pendek, lock bisa hangus sebelum work selesai. Jika terlalu panjang, sistem tidak pulih dari crash.
+- **Safe Unlock**: Evaluasi token kepemilikan (via Lua script) sebelum menghapus lock, agar satu proses tidak meng-unlock lock milik proses lain.
+- **Network Partition (Split-Brain)**: Bagaimana jika ada dua master Redis? Lock bisa menjadi tidak konsisten.
+- **Lock Acquisition Failure**: Jangan anggap lock selalu berhasil. Handle failure gracefully (retry dengan backoff, atau abort).
 
-*Rule: Jika invariant bisa diselesaikan oleh database (Atomic / Row Lock / Unique), jangan pakai Distributed Lock.*
+> **Rule:** Jika invariant bisa diselesaikan oleh database (Atomic / Row Lock / Unique), jangan pakai Distributed Lock. Kalau Anda memakai Redis untuk mengganti `UNIQUE` constraint database, berarti Anda sedang menambah kompleksitas tanpa mendapatkan integrity yang sama.
+
+---
+
+## 10.1. Distributed Lock vs Database Constraint
+
+| Use Case | Rekomendasi |
+|----------|-------------|
+| Stock / Booking / Invoice Number (single DB) | **Database Atomic Update / Row Lock / UNIQUE** |
+| Koordinasi multi-replica / eksternal API | **Distributed Lock** |
+| Mencegah double-click pembayaran | **Idempotency key** (lebih baik dari pada lock) |
+
+---
 
 ---
 
@@ -253,10 +284,13 @@ SELECT MAX(invoice_no) FROM invoices;
 - Request B baca MAX = 100, hitung next = 101.
 - Hasilnya: Dua invoice dengan nomor `INV-000101`!
 
+> **Catatan:** `SELECT MAX(invoice_no) + 1` adalah pattern berbahaya dalam concurrent system. Tidak ada lock, tidak ada atomicity, dan tidak ada jaminan unik.
+
 ### Solusi Invoice Number
 
-1. **Database Sequence**
+1. **Database Sequence (PostgreSQL)**
    ```sql
+   CREATE SEQUENCE invoice_no_seq;
    SELECT nextval('invoice_no_seq');
    ```
    Fungsi `nextval()` atomik dan pasti unik. (Catatan: sequence *tidak* menjamin gapless/urut tanpa bolong).
@@ -264,11 +298,47 @@ SELECT MAX(invoice_no) FROM invoices;
 2. **Dedicated Counter + Row Lock**
    Jika secara regulasi pajak nomor invoice *harus gapless*, gunakan tabel counter khusus yang di-lock secara pesimistik setiap kali generate nomor baru.
 
+### Unique Constraint Sebagai Safety Net
+
+Meskipun Anda sudah pakai sequence atau counter, **tetap pasang `UNIQUE(invoice_no)`** sebagai final safety net. Database constraint adalah lapisan terakhir yang menolak duplikat — bahkan jika ada bug di aplikasi atau race condition yang tidak terdeteksi.
+
+```sql
+CREATE TABLE invoices (
+    id SERIAL PRIMARY KEY,
+    invoice_no INT NOT NULL,
+    customer_id VARCHAR(50) NOT NULL,
+    CONSTRAINT uq_invoice_no UNIQUE (invoice_no)
+);
+```
+
+> **Prinsip:** Sequence/counter menghasilkan angka unik. `UNIQUE` constraint memastikan tidak ada duplikat yang lolos ke database. Keduanya saling melengkapi.
+
 ---
 
 ## 12. Unique Constraint Sebagai Last Defense
 
 Jika nilai harus unik (seperti `invoice_no` atau `slot_booking`), **jangan hanya mengandalkan pengecekan aplikasi.**
+
+### Invariant Booking
+
+Dalam satu kombinasi `branch_id`, `service_date`, dan `slot_time`, maksimal boleh ada **satu booking** untuk slot eksklusif yang sama.
+
+```text
+count(booking WHERE branch_id=X AND service_date=Y AND slot_time=Z) <= 1
+```
+
+### TOCTOU Race pada Check-then-Insert
+
+Kode aplikasi yang "cek dulu, baru insert" memiliki *Time-Of-Check to Time-Of-Use (TOCTOU)* race condition:
+
+```text
+Customer A → CHECK slot kosong   ✅ (kosong)
+Customer B → CHECK slot kosong   ✅ (kosong, belum ada commit A)
+Customer A → INSERT booking      ✅
+Customer B → INSERT booking      ✅ → 2 booking untuk slot yang sama! ❌
+```
+
+Jika hanya mengandalkan `SELECT ... WHERE branch_id=? AND date=? AND slot=?` tanpa database constraint, race ini **tidak dapat dideteksi oleh `go test -race`** dan hanya muncul di production.
 
 ### Contoh Booking Service
 
@@ -286,6 +356,21 @@ CREATE TABLE service_bookings (
 |-------|--------|----------|
 | **Application Check** (`SELECT ...`) | UX — memberitahu user lebih awal | Lemah (mudah dijebol race condition) |
 | **Database Constraint** (`UNIQUE`) | Integrity — menjaga Invariant | Absolut (engine database menolak duplikat) |
+
+### Rekomendasi Senior (Prompt 9)
+
+Untuk kasus slot eksklusif sederhana seperti booking, **jangan berpikir Anda harus memilih tepat satu** dari row locking, optimistic locking, atau unique constraint. Rekomendasi senior adalah:
+
+1. **Database `UNIQUE` constraint** — **baseline yang sangat kuat**. Ini adalah final correctness guarantee. Let database engine yang menolak duplikat.
+2. **Handle conflict secara proper** — baca error kode `23505` (unique_violation) dan ubah jadi user-friendly response.
+3. **Row locking (`SELECT ... FOR UPDATE`)** — gunakan **hanya jika** flow membutuhkan *read-modify-write yang kompleks* (misalnya update stok, generate invoice nomor, atau validasi business rule tambahan sebelum commit).
+
+> **Pokoknya:** Jika invariant bisa diekspresikan langsung sebagai database constraint, gunakan itu. Jangan paksa lock hanya untuk kasus sederhana.
+
+**Konsep response conflict (tanpa fokus HTTP):**
+- Result: `conflict` (bukan `error`)
+- Pesan: `Slot sudah diambil customer lain. Silakan pilih slot lain.`
+- Kode error aplikasi: `ErrDuplicateKey` / `ErrAlreadyBooked`
 
 ---
 
@@ -306,9 +391,9 @@ Race condition terjadi setiap kali ada **shared resource**:
 
 ---
 
-## 15. Transaction Tidak Otomatis Menyelesaikan Semua Masalah
+## 15. Transaction Saja Tidak Cukup
 
-**Transaction ≠ Automatic Serialization.**
+**Transaction ≠ Race-Free.** Membungkus kode dalam `BEGIN` dan `COMMIT` **tidak otomatis** menghilangkan race condition.
 
 ```sql
 BEGIN;
@@ -318,16 +403,43 @@ UPDATE products SET stock = 0 WHERE id = 1;
 COMMIT;
 ```
 
-Pada default isolation level (`READ COMMITTED`), dua transaksi tetap bisa membaca nilai awal yang sama dan menghasilkan *Lost Update*. Membungkus kode dalam `BEGIN` dan `COMMIT` tidak membebaskan Anda dari keharusan merancang strategi lock/atomic yang tepat.
+Pada default isolation level (`READ COMMITTED`):
+
+- Transaction A membaca `stock = 1`.
+- Transaction B membaca `stock = 1` (belum ada commit A).
+- A update `stock = 0`, commit.
+- B update `stock = 0`, commit → **lost update!**
+
+Correctness bergantung pada tiga hal:
+
+1. **Query** — apakah Anda menggunakan `SELECT` biasa, `SELECT ... FOR UPDATE`, atau `UPDATE ... WHERE stock > 0`?
+2. **Lock yang digunakan** — apakah ada row-level lock yang menahan writer lain?
+3. **Isolation semantics** — apakah `READ COMMITTED` cukup, atau butuh `REPEATABLE READ` / `SERIALIZABLE`?
+
+> **Intinya:** Transaction menyediakan atomicity dan konsistensi *dari scope transaksi itu sendiri*, bukan dari interleaving dengan transaksi lain. Jika Anda melakukan *check-then-act* (`SELECT` lalu `UPDATE`), maka isolation level default **tidak melindungi** Anda. Gunakan lock atau atomic statement.
 
 ---
 
 ## 16. Memory Data Race vs Business Race Condition
 
-- **Memory Data Race**: Dua thread mengakses alamat memory yang sama tanpa sinkronisasi, dan setidaknya salah satunya mengubah nilai. (Dapat dideteksi dengan `go test -race`).
+- **Memory Data Race**: Dua thread mengakses alamat memory yang sama tanpa sinkronisasi, dan setidaknya salah satunya mengubah nili. (Dapat dideteksi dengan `go test -race`).
+  - Contoh: `counter++` dari banyak goroutine tanpa mutex/atomic.
 - **Business Race Condition**: Alur logika berantakan akibat *interleaving* timing, padahal semua variable di memory sudah *thread-safe* (menggunakan channel atau local variable).
+  - Contoh: dua transaction membaca `stock = 1`, kemudian keduanya menjual barang yang sama secara bersamaan.
 
-> **`go test -race` tidak membuktikan kode Anda bebas dari business race condition.**
+```go
+// Kode ini LULUS go test -race (tiap variable thread-safe),
+// tapi MASIH punya business race condition (lost update).
+func (s *Service) TrySell(ctx context.Context, id string) error {
+    stock := s.repo.GetStock(ctx, id)   // thread-safe, tapi bisa stale
+    if stock <= 0 {
+        return ErrOutOfStock
+    }
+    return s.repo.SetStock(ctx, id, stock-1) // tidak atomic — lost update!
+}
+```
+
+> **`go test -race` tidak membuktikan kode Anda bebas dari business race condition.** Race detector hanya mendeteksi memory-level concurrent access yang tidak sinkron. Jika business logic Anda melibatkan shared mutable state di database, Anda tetap perlu lock, atomic statement, atau constraint — bahkan jika race detector memberi "PASS".
 
 ---
 
@@ -427,6 +539,121 @@ go test -count=20 .   # Menjalankan semua test 20 kali (stress test)
 
 ---
 
+## Testing Best Practices (Lab Notes)
+
+### Concurrency Test Methodology (Prompt 15)
+
+Tests yang benar **tidak boleh** hanya meluncurkan 500 goroutine sekaligus tanpa sinkronisasi:
+
+```go
+// ❌ Flaky — scheduler tidak menjamin overlapping yang tinggi
+for i := 0; i < 500; i++ {
+    go doSomething()
+}
+```
+
+Pakai **start gate** agar semua worker ready dulu, baru release bersamaan:
+
+```go
+// ✅ Deterministic high-contention
+ready := make(chan struct{}, n)
+release := make(chan struct{})
+for i := 0; i < n; i++ {
+    go func() {
+        ready <- struct{}{} // signal ready
+        <-release          // wait for gate open
+        doSomething()
+    }()
+}
+// fill gate
+for i := 0; i < n; i++ { <-ready }
+close(release)
+```
+
+### Timeout & Deadlock Prevention (Prompt 16)
+
+Setiap integration test concurrency memakai `context.WithTimeout` atau `select` dengan `time.After`. Jika timeout, test gagal dengan pesan diagnosis spesifik (bukan hang).
+
+### Database Connection Pool (Prompt 17)
+
+- **Application concurrency ≠ Database connection count.**
+- 500 goroutine tidak berarti 500 koneksi database.
+- `pkg/database` mengkonfigurasi pool: `MaxOpenConns=25`, `MaxIdleConns=5`.
+- Workers yang melebihi pool size akan **menunggu** koneksi — ini dihitung sebagai bagian dari concurrency correctness, bukan bug.
+- Tujuan lab: benjing invariant, bukan membebani PostgreSQL dengan connection explosion.
+
+### Test Isolation & Cleanup (Prompt 18)
+
+- Setiap integration test membuat fixture sendiri (productID unik per test).
+- `defer` cleanup menghapus data agar test bisa dijalankan berulang tanpa state leak.
+- ID produk/booking dirancangkan unik untuk menghindari collision antar test.
+- `Test500_ConcurrentBooking` memakai slot yang sama secara disengaja untuk trigger race — ini **bukan** bug test isolation, ini adalah fokus dari test itu sendiri.
+
+### Expected vs Unexpected Errors (Prompt 19)
+
+Untuk unique constraint tests:
+- `pq.Error` code `23505` → **expected conflict** (`ErrDuplicateKey`).
+- `connection refused`, `timeout`, `syntax error` → **unexpected error**, test harus gagal.
+
+Assertion: `unexpectedErrorCount == 0`.
+
+---
+
+## Running the Lab
+
+### Unit Tests (In-Memory)
+
+```bash
+# Semua unit tests (in-memory/mock repository)
+go test ./...
+
+# Dengan race detector untuk memory data race
+go test -race ./...
+```
+
+### PostgreSQL Integration Tests
+
+Prasyarat: PostgreSQL sudah berjalan di `localhost:5432` dengan database `se_lab`.
+
+```bash
+# Jalankan Docker Compose (dari root repository)
+docker-compose up -d postgres
+
+# Set environment (opsional, default: postgres:5432, user=postgres, pass=postgres, db=se_lab)
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_USER=postgres
+export POSTGRES_PASSWORD=postgres
+export POSTGRES_DB=se_lab
+
+# Jalankan integration tests (build tag: integration)
+go test -v -tags=integration ./...
+```
+
+Catatan:
+- Test akan `SKIP` bila PostgreSQL tidak tersedia.
+- Connection pool: `MaxOpenConns=25`, `MaxIdleConns=5` (dari `pkg/database`).
+- Setup database dilakukan otomatis oleh `setupTestInventory` dan `setupBookingTable`.
+
+---
+
+## Senior Concurrency Mindset Checklist
+
+Sebelum memilih concurrency control strategy, tanyakan diri sendiri:
+
+1. **Invariant apa yang harus selalu benar?** (contoh: `stock >= 0`, `booking_count <= 1`)
+2. **Resource apa yang diperebutkan?** (stock, booking slot, invoice number, balance)
+3. **Apakah invariant bisa dijaga dengan database constraint?** (UNIQUE, CHECK)
+4. **Apakah operasi bisa dibuat atomic?** (single UPDATE/INSERT statement)
+5. **Apakah perlu row lock?** (bisa saja — jika ada read-modify-write yang rumit)
+6. **Seberapa sering konflik terjadi?** (rendah → optimistic, tinggi → pessimistic)
+7. **Apakah koordinasi melintasi database/process/server?** (gunakan distributed lock hanya jika benar-benar perlu)
+8. **Bagaimana membuktikannya dengan concurrent test?** (gunakan deterministic barrier + high contention + invariant assertion)
+
+> **Rule:** Mulai dari "invariant apa yang harus dijaga?" bukan "lock apa yang dipakai?". Database constraint + atomic operation sering kali lebih kuat daripada application-level coordination.
+
+---
+
 ## Files
 
 - `inventory.go`: Domain model dan Interfaces
@@ -438,5 +665,14 @@ go test -count=20 .   # Menjalankan semua test 20 kali (stress test)
 - `booking_test.go`: Test Uniqueness Constraint (500 concurrent bookings)
 - `postgres_rowlock_test.go`: Test Integrasi PostgreSQL Pessimistic Lock
 - `postgres_integration_test.go`: Test Integrasi PostgreSQL Unsafe & Atomic
-- `schema.sql`: Skema Tabel Database
+- `postgres_booking.go`: Test Integrasi PostgreSQL Booking (unique constraint)
+- `postgres_booking_test.go`: Test Integrasi PostgreSQL Booking (unique constraint)
+- `schema.sql`: Skema Tabel Database (multi-branch booking)
 - `datarace.go` & `datarace_test.go`: Secondary topic (Go memory model)
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 04 — Caching](../04-caching/)
+- **Next**: [Lab 06 — API Versioning](../06-api-versioning/)

@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+// TestUnsafeCounter_Race deliberately demonstrates a Go memory data race.
+// Run with `go test -race` — this test is EXPECTED to fail under the race detector.
+// Its purpose is to show that `counter++` from multiple goroutines without
+// synchronization triggers the race detector. This is a demo, not a bug.
 func TestUnsafeCounter_Race(t *testing.T) {
 	c := &UnsafeCounter{}
 	var wg sync.WaitGroup

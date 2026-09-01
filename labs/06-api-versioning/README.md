@@ -8,19 +8,11 @@ API bukan sekadar endpoint yang menghasilkan HTTP 200. API adalah **kontrak** an
 
 Ini adalah yang paling sering saya temui sebagai akar masalah di perusahaan: tim backend menganggap "backend OK" sudah berarti "semua client masih kann". Padahal, perubahan pada representasi data (JSON/XML) sering merusak client yang sudah ada.
 
-## Studi Kasus: Invoice Bengkel CMMS
+---
 
-### Alur Bisnis
+## Problem: Customer String → Customer Object
 
-Kita punya sistem billing untuk bengkel perawatan mesin (CMMS - Computerized Maintenance Management System). Setiap service mengenerate invoice.
-
-**Contract V1 (versi lama):**
-
-```http
-GET /api/v1/invoices/1001
-```
-
-Response:
+### API Lama
 
 ```json
 {
@@ -31,20 +23,7 @@ Response:
 }
 ```
 
-**Legacy Android Client** sudah sudah terdeploy ke 5.000 perangkat. Model-nya:
-
-```go
-type LegacyInvoice struct {
-    ID       int    `json:"id"`
-    Customer string `json:"customer"`  // HARUS string
-    Total    int64  `json:"total"`
-    Status   string `json:"status"`
-}
-```
-
-### Produk Kemudian Minta Fitur Baru
-
-Tim produk menambah field `customer` menjadi object:
+### Developer Melakukan Refactor
 
 ```json
 {
@@ -59,63 +38,215 @@ Tim produk menambah field `customer` menjadi object:
 }
 ```
 
-**Anda tahu apa yang terjadi?** `customer` berubah dari `string` menjadi `object`. Ini adalah **BREAKING CHANGE**.
-
-Legacy client mencoba `json.Unmarshal` ke `string` → **FAIL**. Tapi server tetap HTTP 200.
+**Perubahan:** `customer` berubah dari `string` menjadi `object`. Client yang sudah ada gagal parse.
 
 ---
 
-## Tujuan Laboratorium
+## Breaking Change
 
-1. Reproduce failure (membuktikan breaking change)
-2. Pahami root cause (kontrak berubah, tidak ada versioning)
-3. Implementasikan solusi (API versioning dengan V1/V2 contract terpisah)
-4. Verifikasi dengan test otomatis
+Berikut adalah contoh-perubahan yang menjadi breaking change:
+
+| Perubahan | Contoh |
+|-----------|--------|
+| Rename field | `name` → `full_name` |
+| Remove field | hapus `phone` |
+| Change type | `"500000"` (string) → `500000` (number) |
+| Change object shape | `customer.name` → `customer.fullName` |
+| Change date format | `"2024-01-01"` → `"01/01/2024"` |
+| Change nullability | field wajib → optional (atau sebaliknya) |
+| Change enum semantics | status `"ACTIVE"` berarti hal lain |
+| Change pagination | `page` → `page_number` |
+| Change endpoint semantics | `/invoices` sekarang mengembalikan draft juga |
 
 ---
 
-## Tiga Skenario
+## Usually Compatible Changes
 
-### 1. Unsafe: Breaking Change Tanpa Versioning
+Namun, perubahan berikut sering **backward compatible**:
 
-Backend secara radung mengubah struktur `customer` dari string ke object.
+| Perubahan | Kondisi |
+|-----------|---------|
+| Adding optional response field | consumer tolerant unknown field |
+| Adding endpoint | tidak memengaruhi existing endpoint |
+| Adding optional query parameter | client tidak wajib pakai |
 
-**File:** `unsafe_server.go`, `unsafe_test.go`
-**Command:** `go test -v -run TestBreakingChange_LegacyClientFails`
+**Penting:** Penambahan field **SELALU aman**? Tidak. Bergantung pada behavior consumer:
+- `json.Unmarshal` Go: abaikan unknown field → aman
+- JSON Schema strict: field baru bisa mismatch → tidak aman
 
-Hasil: Test PASS karena `json.Unmarshal` gagal. Ini membuktikan: **HTTP 200 ≠ backward compatible**.
+---
 
-### 2. Safe: API Versioning dengan V1/V2
+## Unsafe Approach: Breaking Change Tanpa Versioning
 
-Backend menyediakan dua contract berdampingan:
-- `GET /api/v1/invoices/1001` → `customer: "Budi"` (string)
-- `GET /api/v2/invoices/1001` → `customer: {id: 15, name: "Budi", phone: "08123"}` (object)
+### Implementasi
 
-**File:** `safe_server.go`, `safe_test.go`
-**Command:** `go test -v -run TestSafeVersioning`
+File: `unsafe_server.go`, `unsafe_test.go`
 
-Hasil: Kedua client (legacy + new) berhasil. Kontrak dipisah secara eksplisit.
+```go
+// POST /invoices/1001
+// Response: customer berubah jadi object
+```
 
-**Arsitektur:**
+### Masalah
+
+```
+HTTP 200
+├── Valid JSON ✓
+├── Backend OK ✓
+└── Legacy client FAIL ✗ (json: cannot unmarshal object into string)
+```
+
+### Output Test
+
+```
+✅ Breaking change confirmed: legacy client fails to decode:
+   json: cannot unmarshal object into Go struct field LegacyInvoice.customer of type string
+```
+
+---
+
+## Safe Approach: API Versioning
+
+### Dual Contracts
+
+```
+GET /api/v1/invoices/1001 → customer: string
+GET /api/v2/invoices/1001 → customer: object
+```
+
+### Arsitektur
 
 ```
 Domain Model (Invoice, Customer)
        │
-       ├── mapper → InvoiceV1Response
+       ├── mapper → InvoiceV1Response (customer: string)
        │
-       └── mapper → InvoiceV2Response
+       └── mapper → InvoiceV2Response (customer: object)
 ```
 
-### 3. Additive: Penambahan Field Tanpa Breaking Change
+### File
 
-Backend menambah field `currency: "IDR"` tanpa mengubah tipe existing.
+- `domain.go`: Domain model + `ParseLegacyInvoice()` helper
+- `safe_server.go`: V1/V2 DTOs dan handler
+- `safe_test.go`: Contract regression test
 
-**File:** `additive_server.go`, `additive_test.go`
-**Command:** `go test -v -run TestAdditiveField_LegacyClientStillWorks`
+### Contract Tests
 
-Hasil: Legacy client tetap berhasil decode karena `json.Unmarshal` Go secara default mengabaikan unknown field.
+**V1 Contract Protection:**
+```go
+func TestV1Contract_RemainsBackwardCompatible(t *testing.T)
+```
 
-> **Catatan penting:** Penambahan field aman HANYA jika consumer tolerant unknown field. Jika consumer menggunakan strict schema (misal: JSON Schema validation), penambahan field tetap bisa menjadi breaking change.
+Menggunakan `json.RawMessage` untuk semantic assertion (bukan string comparison).
+
+**V2 Contract Verification:**
+```go
+func TestV2Contract_UsesNestedCustomer(t *testing.T)
+```
+
+Memastikan `customer` adalah object dengan field yang benar.
+
+---
+
+## API Versioning ≠ Database Versioning
+
+JANGAN membuat tabel:
+
+```sql
+customers_v2
+invoices_v2
+products_v2
+```
+
+Hanya karena API response berubah! API versioning adalah **representasi public contract**, bukan data model.
+
+---
+
+## URL Versioning vs Header Versioning
+
+### URL Versioning (Pendekatan Lab Ini)
+
+```http
+GET /api/v1/invoices/1001
+GET /api/v2/invoices/1001
+```
+
+Pragmatis, mudah debug, cocok untuk lab.
+
+### Header Versioning (Alternatif)
+
+```http
+GET /api/invoices/1001
+Accept: application/vnd.company.v1+json
+Accept: application/vnd.company.v2+json
+```
+
+Lebih idempoten (URL tetap), tapi kurang visibilitas.
+
+---
+
+## Consumer Inventory
+
+Sebelum melakukan breaking change, tanyakan:
+
+| Pertanyaan | Tujuan |
+|------------|--------|
+| Siapa yang konsumsi endpoint ini? | Android, iOS, Web, Partner, BI |
+| Contract lama apa? | `customer: string` |
+| Additive atau breaking? | Type change = breaking |
+| Field/type/shape berubah? | Ya, customer Type |
+| Semua client bisa deploy bersamaan? | Tidak, ada 5000 Android lama |
+| Perlu major version? | Ya, V1 → V2 |
+| Migration strategy? | Keep V1 + rilis V2 |
+| Support period? | 90 hari |
+| Monitor old-version traffic? | Ya |
+| Compatibility test? | Automated di CI |
+| Deprecation communication? | Release notes |
+| Sunset criteria? | < 5% V1 traffic |
+
+---
+
+## Android Migration Strategy
+
+```
+Time: 0d           30d          60d          90d          120d
+      │             │            │            │            │
+      ▼             ▼            ▼            ▼            ▼
+Release V2   Monitor     Send      Deprecate     Sunset
+             adoption    warning   V1 endpoint
+```
+
+**Kunci:**
+- `android-release` ≠ semua user upgrade
+- Keep V1 aktif sampai adopsi V2 cukup tinggi
+- Monitoring traffic V1 vs V2
+
+---
+
+## Senior Checklist: API Change Review
+
+Sebelum deploy perubahan API:
+
+1. ✅ Siapa consumer?
+2. ✅ Contract lama apa?
+3. ✅ Additive atau breaking?
+4. ✅ Field/type/shape berubah?
+5. ✅ Semua client deploy bersamaan?
+6. ✅ Perlu major version?
+7. ✅ Migration strategy?
+8. ✅ Support period?
+9. ✅ Monitor old-version traffic?
+10. ✅ Compatibility test?
+11. ✅ Deprecation communication?
+12. ✅ Sunset criteria?
+
+---
+
+## Closing Mindset
+
+**Junior:** "Endpoint baru bekerja, sudah."
+
+**Senior:** "Apakah perubahan contract ini tetap aman untuk consumer yang sudah berjalan di production?"
 
 ---
 
@@ -130,7 +261,8 @@ go test -v ./...
 
 # Test masing-masing skenario
 go test -v -run TestBreakingChange_LegacyClientFails
-go test -v -run TestSafeVersioning
+go test -v -run TestV1Contract
+go test -v -run TestV2Contract
 go test -v -run TestAdditiveField_LegacyClientStillWorks
 
 # Dengan race detector
@@ -139,29 +271,24 @@ go test -race -v ./...
 
 ---
 
-## Kesimpulan
-
-| Skenario | Perubahan | Breaking Change? | Solusi |
-|----------|-----------|------------------|--------|
-| Unsafe | `customer: "Budi"` → `customer: {...}` | ✅ YES | API Versioning |
-| Safe | V1 = string, V2 = object | ❌ NO | Parallel Contract |
-| Additive | Tambah `currency` field | ❌ JIKA tolerant | Unknown field skip |
-
-**Prinsip:** Versioning bukan tentang membuat database baru (`invoice_v2`, `customer_v2`). Versioning adalah tentang **representasi public contract**.
-
----
-
 ## File
 
 ```
 labs/06-api-versioning/
-├── go.mod                    # Module go 1.22
-├── domain.go                 # Model Invoice, Customer, LegacyInvoice
-├── unsafe_server.go          # Anti-pattern: breaking change
-├── unsafe_test.go            # Test: legacy client fails
-├── safe_server.go            # V1/V2 contract dengan mapper
-├── safe_test.go              # Test: kedua contract berhasil
-├── additive_server.go        # Penambahan field currency
-├── additive_test.go          # Test: legacy tetap berhasil
-└── README.md                 # This file
+├── go.mod                  # Module go 1.22
+├── domain.go               # Model Invoice, Customer, LegacyInvoice, ParseLegacyInvoice
+├── unsafe_server.go        # Anti-pattern: breaking change
+├── unsafe_test.go          # Test: legacy client fails
+├── safe_server.go          # V1/V2 contract dengan mapper
+├── safe_test.go            # Test: contract regression
+├── additive_server.go      # Penambahan field currency
+├── additive_test.go        # Test: legacy tetap berhasil
+└── README.md               # This file
 ```
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 05 — Race Condition](../05-race-condition/)
+- **Next**: [Lab 07 — Outbox Pattern](../07-outbox-pattern/)

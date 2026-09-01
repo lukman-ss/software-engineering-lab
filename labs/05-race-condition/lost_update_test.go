@@ -161,7 +161,12 @@ func TestLostUpdate_Deterministic(t *testing.T) {
 		t.Errorf("expected final_stock = 0, got %d", finalStock)
 	}
 
-	// Verify invariant is broken — ini adalah expected outcome dari unsafe pattern
+	// Verify invariant is broken — ini adalah expected outcome dari unsafe pattern.
+	//
+	// ⚠️  WARNING: This test deliberately uses an UNSAFE check-then-act implementation.
+	// It is intended only for demonstrating lost update, NOT for production use.
+	// For production, use AtomicInventoryRepository (Prompt: atomic conditional UPDATE)
+	// or PostgresRowLockRepository (SELECT ... FOR UPDATE).
 	var expectedStock int
 	mu.Lock()
 	finalStock, _ = repo.GetStock(ctx, productID)

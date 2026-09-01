@@ -122,13 +122,14 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | 03 | Partial failures leaving inconsistent state |
 | 04 | Cache stampede and stale reads |
 | 05 | Race conditions corrupting inventory counts |
-| 06 | Deadlocks hanging the system |
+| 06 | API versioning - breaking changes and backward compatibility |
 | 07 | Events lost when database fails |
 | 08 | Retry storms amplifying failures |
 | 09 | Cascading failures from downstream |
 | 10 | Unbounded load causing outages |
 | 11 | Lock contention causing delays |
 | 12 | Optimistic locking for concurrent updates |
+| 13 | Deadlocks hanging the system |
 
 ## How to Run
 
@@ -193,13 +194,14 @@ make lint          # go vet
 - [ ] 03 Database Transaction
 - [x] 04 Caching
 - [x] 05 Race Condition
-- [ ] 06 Deadlock
+- [x] 06 API Versioning
 - [ ] 07 Outbox Pattern
 - [ ] 08 Retry
 - [ ] 09 Circuit Breaker
 - [ ] 10 Rate Limiting
 - [ ] 11 Pessimistic Locking
 - [ ] 12 Optimistic Locking
+- [x] 13 Deadlock
 
 ### Phase 2: Extended Topics
 - Bulkhead pattern

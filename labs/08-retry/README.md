@@ -124,3 +124,10 @@ Example output:
 === RUN   TestRetryingTransientErrors
 --- PASS: TestRetryingTransientErrors (0.00s)
 ```
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 07 — Outbox Pattern](../07-outbox-pattern/)
+- **Next**: [Lab 09 — Circuit Breaker](../09-circuit-breaker/)

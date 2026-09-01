@@ -92,3 +92,10 @@ if errors.Is(err, breaker.ErrCircuitOpen) {
 2. **Dependency timeouts**: Circuit opens but root cause is unknown
 3. **Partial outages**: Service responds slowly (not failing fast)
 4. **Cascading failures**: Multiple circuits open interdependent operations
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 08 — Retry](../08-retry/)
+- **Next**: [Lab 10 — Rate Limiting](../10-rate-limiting/)

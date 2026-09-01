@@ -7,6 +7,25 @@ import (
 	"time"
 )
 
+// startGate creates a channel that is closed once all workers have signaled ready.
+// All workers wait on the returned release channel; when all are ready it is closed,
+// releasing them simultaneously for true concurrent execution (no scheduler bias).
+func startGate(n int) (ready chan struct{}, release chan struct{}) {
+	ready = make(chan struct{}, n)
+	release = make(chan struct{})
+	go func() {
+		for i := 0; i < n; i++ {
+			select {
+			case <-ready:
+			case <-time.After(5 * time.Second):
+				return // safety: gate not filled
+			}
+		}
+		close(release)
+	}()
+	return ready, release
+}
+
 // TestAtomicUpdate_StockOne concurrent test.
 //
 // Setup:
@@ -29,9 +48,12 @@ func TestAtomicUpdate_StockOne(t *testing.T) {
 	repo := NewAtomicInventory(initialStock)
 	ctx := context.Background()
 
+	// Counters are concurrency-safe (mutex protects all access).
 	var successCount int
 	var rejectedCount int
 	var mu sync.Mutex
+
+	ready, release := startGate(attempts)
 
 	var wg sync.WaitGroup
 	wg.Add(attempts)
@@ -39,6 +61,8 @@ func TestAtomicUpdate_StockOne(t *testing.T) {
 	for i := 0; i < attempts; i++ {
 		go func() {
 			defer wg.Done()
+			ready <- struct{}{} // signal ready
+			<-release           // wait for gate open
 			newStock, err := repo.DecrementStock(ctx, "unit-oli-mesin")
 			if err != nil {
 				mu.Lock()
@@ -61,7 +85,6 @@ func TestAtomicUpdate_StockOne(t *testing.T) {
 
 	select {
 	case <-done:
-		// Test completed within time
 	case <-time.After(5 * time.Second):
 		t.Fatal("test timeout: goroutine leak detected")
 	}
@@ -127,14 +150,17 @@ func TestAtomicUpdate_HighContention(t *testing.T) {
 	var rejectedCount int
 	var mu sync.Mutex
 
+	ready, release := startGate(attempts)
+
 	var wg sync.WaitGroup
 	wg.Add(attempts)
 
-	// Pool pattern: all 500 goroutines compete for 100 slots
-	// Database connection pool: simulate 10 max connections
+	// All 500 goroutines compete for 100 slots
 	for i := 0; i < attempts; i++ {
 		go func(id int) {
 			defer wg.Done()
+			ready <- struct{}{} // signal ready
+			<-release           // wait for gate open
 			newStock, err := repo.DecrementStock(ctx, "unit-oli-mesin")
 			if err != nil {
 				mu.Lock()
@@ -157,7 +183,6 @@ func TestAtomicUpdate_HighContention(t *testing.T) {
 
 	select {
 	case <-done:
-		// Test completed
 	case <-time.After(10 * time.Second):
 		t.Fatal("test timeout: potential goroutine leak")
 	}

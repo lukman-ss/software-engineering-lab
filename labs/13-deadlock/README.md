@@ -1,4 +1,4 @@
-# Lab 06 — Deadlock Prevention & Resolution
+# Lab 13 — Deadlock Prevention & Resolution
 
 A deadlock occurs when two or more transactions permanently block each other by holding locks the other transactions need.
 
@@ -17,5 +17,5 @@ Always acquire locks in a globally consistent order (e.g., ascending order of ac
 
 ## Navigasi
 
-- **Previous**: [Lab 05 — Race Condition](../05-race-condition/)
-- **Next**: [Lab 07 — Outbox Pattern](../07-outbox-pattern/)
+- **Previous**: [Lab 12 — Optimistic Locking](../12-optimistic-locking/)
+- **Next**: [Lab 14 — (Coming soon)](#)

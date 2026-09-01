@@ -32,6 +32,10 @@ func NewCounterRepository() *CounterRepository {
 	return &CounterRepository{}
 }
 
+// queryDelay is the artificial delay before each DB query returns.
+// This ensures a realistic time-of-check-to-time-of-use window for cache stampede demonstrations.
+const queryDelay = 5 * time.Millisecond
+
 func (r *CounterRepository) GetDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
 	// Check for blocking (thread-safe)
 	r.mu.Lock()
@@ -44,6 +48,14 @@ func (r *CounterRepository) GetDashboard(ctx context.Context, tenantID, branchID
 		case <-ctx.Done():
 			return Dashboard{}, ctx.Err()
 		}
+	}
+
+	// Simulate DB query latency so concurrent cache misses accumulate
+	// before any single goroutine finishes and writes to cache.
+	select {
+	case <-ctx.Done():
+		return Dashboard{}, ctx.Err()
+	case <-time.After(queryDelay):
 	}
 
 	newCount := r.callCount.Add(1)

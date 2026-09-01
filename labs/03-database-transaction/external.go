@@ -27,17 +27,8 @@ var (
 
 type FailureMode struct {
 	// Outbox/Dispatcher related
-	FailAfterDBCommit   bool // Simulate crash after DB commit but before publish
+	FailAfterDBCommit bool // Simulate crash after DB commit but before publish
 	FailExternalService bool
-	FailPublishAttempts int  // Fail first N publish attempts
-	CrashAfterPublish   bool // Simulate crash after publish but before marking as published
-}
-
-// ConsumerFailureMode provides deterministic controls for consumer testing
-type ConsumerFailureMode struct {
-	FailBusinessMutation bool // Fail after dedup insert, before business commitment
-	FailProcessedInsert  bool // Fail during processed_events insert (claim fails)
-	CrashAfterCommit     bool // Simulate crash after commit, before ACK
 }
 
 // === Event Types ===
@@ -430,7 +421,13 @@ func (s *InvoiceServiceDualWrite) PayInvoiceDualWrite(ctx context.Context, invoi
 }
 
 // ============================================================================
-// 6 & 7. Transactional Outbox Pattern & Dispatcher with Retry Mechanism
+// 6 & 7. Transactional Outbox Pattern (Concept) & Simplified Dispatcher
+//
+// NOTE: This is a minimal demonstration of the outbox concept for educational
+// purposes. Production-grade dispatcher features — FOR UPDATE SKIP LOCKED
+// concurrency control, exponential backoff retry, crash-after-publish recovery,
+// Dead Letter Queue (DLQ), poison message handling, replay mechanisms —
+// are covered in Lab 07 — Outbox Pattern.
 // ============================================================================
 
 type InvoiceServiceOutbox struct {
@@ -522,97 +519,66 @@ func (s *InvoiceServiceOutbox) PayInvoiceWithOutboxInjectError(ctx context.Conte
 	return tx.Commit()
 }
 
-// OutboxDispatcher publishes pending events with retry support and optional DLQ integration
+// ============================================================================
+// Simplified Outbox Dispatcher
+//
+// This dispatcher demonstrates the basic concept: read pending events from the
+// outbox table, publish them to a broker, and mark them as published.
+//
+// Production-grade concerns (retry with backoff, concurrency control with
+// FOR UPDATE SKIP LOCKED, crash recovery, DLQ handling) are NOT implemented here.
+// See Lab 07 — Outbox Pattern for the full implementation.
+// ============================================================================
+
 type OutboxDispatcher struct {
-	db          *sql.DB
-	broker      EventPublisher
-	maxAttempts int
-	failMode    *FailureMode
-	dlq         *DeadLetterQueue
+	db     *sql.DB
+	broker EventPublisher
 }
 
-func NewOutboxDispatcher(db *sql.DB, broker EventPublisher, maxAttempts int, failMode *FailureMode) *OutboxDispatcher {
-	return &OutboxDispatcher{db: db, broker: broker, maxAttempts: maxAttempts, failMode: failMode}
-}
-
-func NewOutboxDispatcherWithDLQ(db *sql.DB, broker EventPublisher, maxAttempts int, failMode *FailureMode, dlq *DeadLetterQueue) *OutboxDispatcher {
-	return &OutboxDispatcher{db: db, broker: broker, maxAttempts: maxAttempts, failMode: failMode, dlq: dlq}
+func NewOutboxDispatcher(db *sql.DB, broker EventPublisher) *OutboxDispatcher {
+	return &OutboxDispatcher{db: db, broker: broker}
 }
 
 func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 	var dispatched int
 
-	// Get ALL pending event IDs first to avoid infinite loops on failing events
-	rows, err := d.db.QueryContext(ctx, "SELECT id, event_type, aggregate_id, payload, attempts FROM outbox_events WHERE status = 'pending'")
+	rows, err := d.db.QueryContext(ctx, "SELECT id, event_type, aggregate_id, payload FROM outbox_events WHERE status = 'pending'")
 	if err != nil {
 		return 0, fmt.Errorf("query pending: %w", err)
 	}
 
 	type pendingEvent struct {
 		id, eventType, aggregateID, payload string
-		attempts                            int
 	}
 	var pending []pendingEvent
 
 	for rows.Next() {
 		var e pendingEvent
-		if err := rows.Scan(&e.id, &e.eventType, &e.aggregateID, &e.payload, &e.attempts); err == nil {
+		if err := rows.Scan(&e.id, &e.eventType, &e.aggregateID, &e.payload); err == nil {
 			pending = append(pending, e)
 		}
 	}
 	rows.Close()
 
 	for _, e := range pending {
-		id := e.id
-		eventType := e.eventType
-		aggregateID := e.aggregateID
-		payload := e.payload
-		attempts := e.attempts
-
-		if attempts >= d.maxAttempts {
-			// Move to DLQ if there's a broker failure after max attempts
-			if d.dlq != nil {
-				event := Event{ID: id, EventType: eventType, AggregateID: aggregateID, Payload: payload}
-				d.dlq.Add(event, "max attempts exceeded", attempts)
-				if _, err := d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'dead_lettered' WHERE id = $1", id); err != nil {
-					log.Printf("[DISPATCHER] failed to mark event=%s as dead_lettered: %v", id, err)
-				}
-				log.Printf("[DISPATCHER] event=%s moved to DLQ after %d attempts", id, attempts)
-			}
-			continue
-		}
-
 		event := Event{
-			ID:          id,
-			EventType:   eventType,
-			AggregateID: aggregateID,
-			Payload:     payload,
+			ID:          e.id,
+			EventType:   e.eventType,
+			AggregateID: e.aggregateID,
+			Payload:     e.payload,
 		}
 
-		log.Printf("[DISPATCHER] publishing event=%s attempt=%d", event.ID, attempts+1)
-		pubErr := d.broker.Publish(ctx, event)
-		attempts++
-
-		if pubErr != nil {
-			log.Printf("[DISPATCHER] publish failed for event=%s: %v", event.ID, pubErr)
-			if _, err := d.db.ExecContext(ctx, "UPDATE outbox_events SET attempts = $1 WHERE id = $2", attempts, id); err != nil {
-				log.Printf("[DISPATCHER] failed to update attempts for event=%s: %v", id, err)
-			}
+		log.Printf("[DISPATCHER] publishing event=%s", event.ID)
+		if pubErr := d.broker.Publish(ctx, event); pubErr != nil {
+			log.Printf("[DISPATCHER] publish failed for event=%s: %v — Lab 07 covers retry/backoff", event.ID, pubErr)
 			continue
-		}
-
-		if d.failMode != nil && d.failMode.CrashAfterPublish {
-			log.Printf("[DISPATCHER] simulated crash after publish for event=%s (not marking as published)", event.ID)
-			// Crash happens BEFORE marking as published
-			// This simulates: publish succeeded but process crashed before UPDATE
-			// On restart, dispatcher sees status='pending' and will re-publish
-			return dispatched, ErrProcessCrashed
 		}
 
 		now := time.Now()
-		_, err = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'published', published_at = $1, attempts = $2 WHERE id = $3", now, attempts, id)
+		_, err = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'published', published_at = $1 WHERE id = $2", now, event.ID)
 		if err != nil {
-			return dispatched, fmt.Errorf("mark published: %w", err)
+			log.Printf("[DISPATCHER] failed to mark event=%s as published: %v", event.ID, err)
+			continue
 		}
 
 		log.Printf("[DISPATCHER] event=%s marked as published", event.ID)
@@ -623,34 +589,30 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 }
 
 // ============================================================================
-// 9. Idempotent Consumer Implementation (consumer_name + event_id)
+// 9. Idempotent Consumer (Conceptual Demo)
+//
+// The consumer pattern: dedup marker + business state committed in a single
+// transaction using INSERT ... ON CONFLICT DO NOTHING.
+//
+// Production concerns (per-consumer dedup keys, concurrency control, replay
+// handling) are covered in Lab 07 — Outbox Pattern.
 // ============================================================================
 
 // CommissionWorker processes events idempotently.
 // KEY DESIGN: business state (commissions) and processed_events are
 // committed in a single transaction.
-//
-// This prevents:
-//   - business state committed while the dedup record is lost
-//   - dedup record committed while the business state is lost
 type CommissionWorker struct {
 	db                         *sql.DB
 	observedBusinessExecutions int64 // observability only, NOT source of truth
 	mu                         sync.Mutex
-	failureMode                *ConsumerFailureMode
 }
 
 func NewCommissionWorker(db *sql.DB) *CommissionWorker {
 	return &CommissionWorker{db: db}
 }
 
-func NewCommissionWorkerWithFailure(db *sql.DB, mode *ConsumerFailureMode) *CommissionWorker {
-	return &CommissionWorker{db: db, failureMode: mode}
-}
-
 // HandleEvent processes an event idempotently using consumer_name + event_id.
 // Uses atomic INSERT ON CONFLICT DO NOTHING pattern for race-free deduplication.
-// Business state (commissions) and dedup marker are committed atomically.
 // Returns (true, nil) = processed, (false, nil) = duplicate skipped, (false, error) = failure.
 func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string, event Event) (bool, error) {
 	log.Printf("[CONSUMER:%s] processing %s", consumerName, event.ID)
@@ -674,18 +636,6 @@ func (c *CommissionWorker) HandleEvent(ctx context.Context, consumerName string,
 		_ = tx.Rollback()
 		log.Printf("[CONSUMER:%s] duplicate %s skipped", consumerName, event.ID)
 		return false, nil // Idempotent skip
-	}
-
-	// Inject failure during claim (processed_events insert) BEFORE business mutation
-	if c.failureMode != nil && c.failureMode.FailProcessedInsert {
-		_ = tx.Rollback()
-		return false, fmt.Errorf("failed to claim processed_events for event %s: insert failure", event.ID)
-	}
-
-	// Inject failure after dedup marker but before business mutation
-	if c.failureMode != nil && c.failureMode.FailBusinessMutation {
-		_ = tx.Rollback()
-		return false, fmt.Errorf("failed to process commission for event %s: business mutation failure", event.ID)
 	}
 
 	// 2. Business operation - INSERT into commissions table (within same transaction)
@@ -725,70 +675,9 @@ func (c *CommissionWorker) GetDBCommissionCount(ctx context.Context) (int64, err
 }
 
 // ============================================================================
-// 11. Dead Letter Queue (DLQ) Simulation
-// ============================================================================
-
-type DLQRecord struct {
-	Event    Event
-	Reason   string
-	Attempts int
-	FailedAt time.Time
-}
-
-type DeadLetterQueue struct {
-	mu      sync.Mutex
-	records []DLQRecord
-}
-
-func NewDeadLetterQueue() *DeadLetterQueue {
-	return &DeadLetterQueue{}
-}
-
-func (dlq *DeadLetterQueue) Add(event Event, reason string, attempts int) {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	dlq.records = append(dlq.records, DLQRecord{
-		Event:    event,
-		Reason:   reason,
-		Attempts: attempts,
-		FailedAt: time.Now(),
-	})
-	log.Printf("[DLQ] %s moved after %d attempts", event.ID, attempts)
-}
-
-// Replay returns an event from the DLQ for reprocessing.
-// In production, this would move the event back to a pending queue.
-func (dlq *DeadLetterQueue) Replay(eventID string) *Event {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	for i, r := range dlq.records {
-		if r.Event.ID == eventID {
-			// Remove from DLQ (in production, might move to retry queue)
-			out := dlq.records[i]
-			dlq.records = append(dlq.records[:i], dlq.records[i+1:]...)
-			log.Printf("[DLQ] replaying event=%s for investigation/reprocessing", eventID)
-			return &out.Event
-		}
-	}
-	return nil
-}
-
-func (dlq *DeadLetterQueue) Count() int {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	return len(dlq.records)
-}
-
-func (dlq *DeadLetterQueue) Records() []DLQRecord {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	out := make([]DLQRecord, len(dlq.records))
-	copy(out, dlq.records)
-	return out
-}
-
-// ============================================================================
-// 10. Saga Pattern & Compensating Transactions (FIXED: correct compensation order)
+// Saga Pattern & Compensating Transactions (Conceptual Demo)
+//
+// Saga compensation for semantic undo, not technical rollback.
 // ============================================================================
 
 type SagaStep struct {
@@ -827,15 +716,13 @@ func (s *Saga) Execute(ctx context.Context) error {
 			// Steps are compensated in reverse order
 			// Continue compensating even if a compensation fails
 			var compErrors []error
-			// Find the index of the last successfully executed step
 			for j := len(s.executed) - 1; j >= 0; j-- {
 				if compErr := s.steps[s.executed[j]].Compensate(ctx); compErr != nil {
 					compErrors = append(compErrors, compErr)
 				}
 				s.compensated = append(s.compensated, s.executed[j])
 			}
-			// Note: s.executed remains as-is to show what executed before failure
-			_ = s.executed // reference to avoid unused variable warning
+			_ = s.executed
 			if len(compErrors) > 0 {
 				return &SagaExecutionError{
 					OriginalError:      err,

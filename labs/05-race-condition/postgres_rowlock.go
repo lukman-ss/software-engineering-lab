@@ -9,13 +9,15 @@ import (
 	"fmt"
 )
 
-// PostgresRowLockRepository implements pessimistic row locking solution.
+// PostgresRowLockRepository is a production-safe implementation using pessimistic row locking.
 //
-// Pattern: SELECT ... FOR UPDATE inside a transaction blocks concurrent readers
-// until the transaction commits, preventing lost updates.
+// Pattern: SELECT ... FOR UPDATE inside a transaction takes a row-level lock.
+// Other transactions attempting a conflicting lock on the same row will block
+// until the holding transaction commits or rolls back.
 //
-// This is an alternative to atomic conditional UPDATE when business logic
-// requires reading state before deciding the new value (complex read-modify-write).
+// This is a recommended production pattern when business logic requires reading
+// state before deciding the new value (complex read-modify-write) where an
+// atomic update is not sufficient.
 type PostgresRowLockRepository struct {
 	db *sql.DB
 }
@@ -27,9 +29,13 @@ func NewPostgresRowLockRepository(db *sql.DB) *PostgresRowLockRepository {
 
 // TrySell acquires a row lock, checks stock, then decrements.
 //
-// Transaction A acquires the lock first.
-// Transaction B blocks on SELECT ... FOR UPDATE until A commits.
+// Transaction A acquires the row lock via SELECT ... FOR UPDATE.
+// Transaction B blocks on SELECT ... FOR UPDATE (same row) until A commits.
 // After A commits (stock = 0), B reads stock = 0 → CHECK fails → Reject.
+//
+// Note: Non-locking SELECTs (without FOR UPDATE) using MVCC snapshots are
+// still allowed to read the row while A holds the lock; only conflicting
+// writers/lockers are blocked.
 func (r *PostgresRowLockRepository) TrySell(ctx context.Context, productID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

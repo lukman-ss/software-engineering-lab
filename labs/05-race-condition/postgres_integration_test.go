@@ -6,6 +6,7 @@ package race
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -174,9 +175,11 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 				return
 			}
 			t.Logf("Request A: WRITE stock = %d", stockA-1)
+			mu.Lock()
+			successCount++
+			mu.Unlock()
 		}
 		close(aWriteDone) // signal A selesai WRITE
-		successCount++
 	}()
 
 	// Transaction B
@@ -207,8 +210,10 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 				return
 			}
 			t.Logf("Request B: WRITE stock = %d", stockB-1)
+			mu.Lock()
+			successCount++
+			mu.Unlock()
 		}
-		successCount++
 	}()
 
 	wg.Wait()
@@ -279,9 +284,11 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 
 	repo := NewPostgresAtomicRepository(db)
 
+	// errorCount tracks unexpected DB failures (distinct from expected out-of-stock).
 	var wg sync.WaitGroup
 	var successCount int
 	var rejectedCount int
+	var errorCount int
 	var mu sync.Mutex
 
 	wg.Add(attempts)
@@ -291,6 +298,14 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 			defer wg.Done()
 			_, err := repo.DecrementStock(ctx, productID)
 			if err != nil {
+				// Distinguish expected out-of-stock from unexpected DB errors.
+				if !errors.Is(err, ErrOutOfStock) {
+					t.Errorf("unexpected DB error during atomic update: %v", err)
+					mu.Lock()
+					errorCount++
+					mu.Unlock()
+					return
+				}
 				mu.Lock()
 				rejectedCount++
 				mu.Unlock()
@@ -322,7 +337,8 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 	t.Logf("=== POSTGRES ATOMIC RESULTS ===")
 	t.Logf("Initial stock: %d", initialStock)
 	t.Logf("Successful: %d", successCount)
-	t.Logf("Rejected: %d", rejectedCount)
+	t.Logf("Rejected (out-of-stock): %d", rejectedCount)
+	t.Logf("Error (unexpected DB failure): %d", errorCount)
 	t.Logf("Final stock: %d", finalStock)
 
 	// Assertions
@@ -339,6 +355,9 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 		t.Fatalf("INVARIANT ERROR: initial_stock (%d) != successful (%d) + final_stock (%d)", initialStock, successCount, finalStock)
 	}
 
+	if errorCount > 0 {
+		t.Errorf("expected 0 unexpected DB errors, got %d", errorCount)
+	}
 	if rejectedCount != 400 {
 		t.Errorf("expected rejected = 400, got %d", rejectedCount)
 	}

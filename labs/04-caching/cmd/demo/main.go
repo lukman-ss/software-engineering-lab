@@ -10,6 +10,7 @@ import (
 	"time"
 
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
+	"github.com/DATA-DOG/go-sqlmock"
 )
 
 func main() {
@@ -17,12 +18,13 @@ func main() {
 	flag.Parse()
 
 	if *scenario == "" {
-		fmt.Println("Usage: go run ./cmd/demo -scenario=[without-cache|cache-aside|stampede-unprotected|stampede-protected]")
+		fmt.Println("Usage: go run ./cmd/demo -scenario=[without-cache|cache-aside|stampede-unprotected|stampede-protected|write-through]")
 		fmt.Println("\nAvailable Scenarios:")
 		fmt.Println("  without-cache         : Baseline: 100 requests = 100 repository calls")
 		fmt.Println("  cache-aside           : Standard cache: 100 requests = 1 repo call, 99 cache hits")
 		fmt.Println("  stampede-unprotected  : Cache expire + concurrent requests = DB overloaded")
 		fmt.Println("  stampede-protected    : Cache expire + singleflight = 1 DB rebuild")
+		fmt.Println("  write-through         : Update product: DB + cache synced (no stale window)")
 		os.Exit(1)
 	}
 
@@ -37,6 +39,8 @@ func main() {
 		runStampedeUnprotected(ctx)
 	case "stampede-protected":
 		runStampedeProtected(ctx)
+	case "write-through":
+		runWriteThrough(ctx)
 	default:
 		log.Fatalf("Unknown scenario: %s", *scenario)
 	}
@@ -152,4 +156,45 @@ func runStampedeProtected(ctx context.Context) {
 	fmt.Printf("Concurrent Requests: %d\n", concurrentReqs)
 	fmt.Printf("Repository Calls: %d\n", repo.CallCount())
 	fmt.Printf("\nConclusion: Singleflight deduplicates concurrent requests into a single DB query.\n")
+}
+
+// Scenario 5: write-through
+// Update product writes to BOTH DB and Cache. Read after write returns fresh data.
+func runWriteThrough(ctx context.Context) {
+	fmt.Println("=== SCENARIO: write-through ===")
+	fmt.Println("Context: Update product price. Cache must reflect new value immediately (no stale window).")
+
+	cache := caching.NewMockCache()
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		log.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// Mock DB update success
+	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	svc := caching.NewWriteThroughService(db, cache)
+
+	product := caching.Product{ID: "demo-1", Name: "Brake Pad", Price: 250000}
+	if err := svc.UpdateProduct(ctx, product); err != nil {
+		log.Fatalf("UpdateProduct: %v", err)
+	}
+
+	// Read back from cache (write-through guarantees cache is in sync)
+	key := caching.CacheKey("product", product.ID, 1)
+	cached, err := cache.Get(ctx, key)
+	if err != nil {
+		log.Fatalf("cache get after write-through: %v", err)
+	}
+
+	fmt.Printf("\nResults:\n")
+	fmt.Printf("Updated product: ID=%s Name=%s Price=%.0f\n", product.ID, product.Name, product.Price)
+	fmt.Printf("Cache after write-through: %s\n", cached)
+	fmt.Printf("\nConclusion: Write Through keeps cache and DB in sync — no stale window after write.\n")
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		log.Fatalf("unfulfilled mock expectations: %v", err)
+	}
 }

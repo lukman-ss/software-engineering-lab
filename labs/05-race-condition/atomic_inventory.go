@@ -6,21 +6,26 @@ import (
 	"sync"
 )
 
-// AtomicInventory adalah implementasi safe menggunakan PostgreSQL-style atomic conditional update.
+// AtomicInventory is a production-safe implementation using atomic conditional update.
 //
-// Pola SQL:
+// Pattern SQL (PostgreSQL):
 //
-//	UPDATE products SET stock = stock - 1 WHERE id = $1 AND stock > 0 RETURNING stock
+//	UPDATE inventory_products
+//	SET stock = stock - 1
+//	WHERE id = $1 AND stock > 0
+//	RETURNING stock;
 //
-// Interpretasi:
+// Interpretation:
 //
-//	1 row affected  = decrement sukses
-//	0 rows affected = stock habis / condition tidak terpenuhi
+//   - 1 row affected = decrement success
+//   - 0 rows affected = out of stock / condition not met
 //
-// Keuntungan:
-// - Tidak ada SELECT terlebih dahulu (tidak ada stale read window)
-// - Operasi dilakukan dalam satu statement atomik di database
-// - Concurrent execution di-handle oleh database engine
+// Benefits:
+// - No SELECT before UPDATE (no stale read window)
+// - Operation performed in a single atomic database statement
+// - Concurrent execution handled by the database engine
+//
+// This is a recommended production pattern for inventory decrement.
 type AtomicInventory struct {
 	mu    sync.RWMutex
 	stock int

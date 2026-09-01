@@ -70,6 +70,13 @@ Both operations are in the same transaction - atomic!
 - `CreateOrder()` uses a single transaction for both inserts
 - Either both succeed or both rollback
 
+## Navigasi
+
+- **Previous**: [Lab 06 — API Versioning](../06-api-versioning/)
+- **Next**: [Lab 08 — Retry](../08-retry/)
+
+---
+
 ## Key Differences
 
 | Aspect | Unsafe | Safe |

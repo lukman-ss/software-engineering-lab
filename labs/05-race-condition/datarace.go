@@ -57,7 +57,7 @@ type ChannelCounter struct {
 
 func NewChannelCounter() *ChannelCounter {
 	c := &ChannelCounter{
-		incChan: make(chan struct{}, 1000),
+		incChan: make(chan struct{}),
 		valChan: make(chan int),
 	}
 	go c.run()

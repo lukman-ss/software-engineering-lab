@@ -6,15 +6,15 @@ import (
 	"sync"
 )
 
-// UnsafeInventoryRepository menunjukkan check-then-act pattern yang TIDAK safe
-// untuk business state, meskipun masing-masing operasi read/write-nya aman
-// secara Go memory model.
+// UnsafeInventoryRepository demonstrates an educational unsafe check-then-act pattern.
 //
-// Problem: READ → CHECK → CALCULATE → WRITE adalah sebuah transaksi yang
-// tidak atomic. Antara READ dan WRITE, goroutine lain dapat mengubah state.
+// WARNING: This implementation is **EDUCATIONAL** — it intentionally shows how
+// a race condition can corrupt business state. **DO NOT USE** for production
+// inventory mutation. Use AtomicInventory (atomic conditional update) or
+// PostgresRowLockRepository (SELECT ... FOR UPDATE) in production.
 //
-// Ponytail: ini adalah demo unsafe — jangan pakai di production.
-// Gunakan AtomicInventoryRepository untuk production.
+// Problem: READ → CHECK → CALCULATE → WRITE is not atomic. Between READ and WRITE,
+// another goroutine may change the state.
 type UnsafeInventoryRepository struct {
 	mu     sync.RWMutex
 	stocks map[string]int

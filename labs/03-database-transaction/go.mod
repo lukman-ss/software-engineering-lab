@@ -1,3 +1,3 @@
-module github.com/lukman/software-engineer-lab/labs/03-database-transaction
+module github.com/lukman-ss/software-engineering-lab/labs/03-database-transaction
 
 go 1.26.7
