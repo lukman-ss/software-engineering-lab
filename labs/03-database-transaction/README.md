@@ -86,6 +86,21 @@ Jika ada error → **ROLLBACK** → Semua pembatalan bersama.
 
 > **Business invariant** adalah aturan bisnis yang harus selalu benar meskipun terjadi failure.
 
+### Kapan Membutuhkan Strong Consistency?
+
+Strong/local atomic consistency diperlukan ketika beberapa perubahan merupakan satu business invariant, berada pada transactional datastore yang sama, dan partial state tidak boleh terlihat.
+
+**Contoh:**
+Jika \`payment\` + \`journal\` + \`OPL status\` berada pada database transactional yang sama dan merupakan satu business invariant, maka gunakan **satu local database transaction**.
+
+Tetapi jika:
+- \`payment-service DB\` + \`accounting-service DB\`
+- atau \`local DB\` + \`external inventory service\`
+
+Maka satu local DB transaction tidak dapat memberikan atomicity lintas boundary.
+
+> **Penting**: Jenis data tidak menentukan transaction strategy. Business invariant + transaction boundary yang menentukan.
+
 ### Contoh Business Invariant
 
 **Pembayaran:**
@@ -332,6 +347,20 @@ Untuk menyelesaikan dual-write problem, gunakan Transactional Outbox:
 - **Dispatcher** → *at-least-once delivery* (memastikan terkirim)
 - **Consumer** → *idempotent* (aman diproses ulang)
 
+Pada delivery model yang memungkinkan retry atau redelivery, seperti at-least-once delivery, consumer harus dirancang idempotent atau memiliki mekanisme deduplication yang ekuivalen.
+
+**Contoh:**
+\`InvoicePaid event_id = evt-123\`
+
+- consumer menerima evt-123
+- berhasil
+- ack hilang
+- evt-123 dikirim ulang
+
+Consumer tidak boleh menghasilkan duplicate side effect.
+
+> **Hubungkan ke Lab 01 Idempotency** untuk detail implementasinya.
+
 > **Deep Dive**: Implementasi production-grade Transactional Outbox dibahas secara spesifik pada **Lab 07 — Outbox Pattern**.
 
 ---
@@ -354,6 +383,26 @@ Jika Step 3 gagal → Saga mengeksekusi compensation untuk Step 2 lalu Step 1.
 
 ## 13. Eventually Consistency
 
+Retry merupakan mekanisme umum untuk menangani transient failure pada distributed workflow, tetapi tidak semua failure boleh di-retry.
+
+**Retryable:**
+- timeout
+- temporary network failure
+- HTTP 429
+- HTTP 502/503/504
+- temporary broker unavailable
+
+**Umumnya tidak retryable (tanpa perubahan input/state):**
+- validation error
+- malformed payload
+- unauthorized / forbidden
+- business rule rejection
+- resource not found yang memang permanent
+
+> Retry policy harus membedakan transient failure dan permanent failure.
+
+---
+
 Eventually consistency berarti beberapa component dapat sementara melihat state yang berbeda, tetapi sistem memiliki mekanisme untuk menuju konsistensi.
 
 ### Timeline Contoh
@@ -365,7 +414,22 @@ t=2:  ERP retry
 t=3:  ERP = SYNCED
 ```
 
-Ini **normal**, bukan bug.
+Temporary inconsistency dapat menjadi kondisi normal pada eventual consistency jika memang sesuai consistency requirement, masih berada dalam batas waktu/staleness yang dapat diterima, dan sistem memiliki mekanisme untuk membawa state tersebut menuju kondisi konsisten.
+
+Retry, recovery, reconciliation, dan monitoring adalah mekanisme yang dapat ditunjukkan.
+
+> **Penting**: Eventual consistency ≠ state boleh inconsistent selamanya.
+
+Contoh yang sehat:
+- Payment = PAID
+- ERP = SYNCED setelah retry
+
+Bukan kondisi yang boleh dianggap normal:
+- Payment = PAID
+- ERP = PENDING selamanya
+- tidak ada retry
+- tidak ada reconciliation
+- tidak ada alert
 
 ---
 

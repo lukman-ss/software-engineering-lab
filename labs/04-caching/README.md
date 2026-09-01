@@ -133,7 +133,7 @@ Pertanyaan kuncinya bukan "apakah data berubah?" tetapi **"berapa lama stale dat
 
 ### Read-Your-Writes Problem
 Cache-aside sederhana tidak menjamin read-your-writes. User yang baru saja melakukan update mungkin melihat data lama.
-- Solusi: TTL sangat pendek, invalidate-on-write, atau write-through.
+- Solusi: TTL sangat pendek, invalidate-on-write (dengan safety net TTL), atau write-through (dengan safety net TTL).
 
 ---
 
@@ -236,13 +236,83 @@ Write-Through di sini berarti aplikasi meng-update DB dan Cache pada response pa
 
 ### Karakteristik & Risiko Partial Failure
 
-- **TIDAK Atomic**: Database dan Redis adalah sistem terpisah. Tidak ada atomic commit lintas-sistem.
-- **Bukan Strong Consistency**: Writer race conditions masih bisa terjadi jika tidak dilindungi version order.
-- **Failure Mode Window**:
-  - Jika proses crash setelah DB COMMIT sukses tetapi sebelum Redis SET, data cache menjadi stale.
-  - Jika Cache SET gagal (Redis timeout), operasi bisnis (DB) harus tetap sukses. Kita dapat mencoba fallback DELETE cache, namun jika DELETE juga gagal, stale cache tetap bertahan hingga TTL.
+**Penting: Write-Through tidak memberikan atomicitas atau strong consistency secara otomatis.**
 
-Oleh karena itu, Write-Through hanya *memperpendek* stale window dan memberikan jaminan *read-your-writes* pada best-case scenario, namun **TTL tetap wajib digunakan sebagai safety net**.
+Database PostgreSQL dan Redis adalah dua sistem berbeda. Tanpa distributed transaction/coordinated commit, urutan:
+
+```
+DB COMMIT
+↓
+Redis SET
+```
+
+**TIDAK atomic.**
+
+#### Failure Window yang Mungkin Terjadi:
+
+**Scenario A: Process Crash (Write Skew)**
+
+```
+DB COMMIT sukses
+↓
+process crash
+↓
+Redis SET tidak pernah terjadi
+↓
+cache lama masih tersimpan
+```
+
+**Scenario B: Concurrent Writer Race Condition**
+
+```
+Writer A commit value A
+Writer B commit value B
+Writer B Redis SET B
+Writer A terlambat Redis SET A
+
+Hasil:
+Database = B
+Cache = A (stale)
+```
+
+#### Kesimpulan yang Benar:
+
+- **Tidak Atomic**:Tidak ada guarantee urutan eksekusi DB→Cache.
+- **Tidak Strong Consistency**: Stale window tetap ada, bahkan setelah DB commit.
+- **Read-Your-Writes Tidak Garantir**: Concurrent readers mungkin melihat data stale.
+- **TTL Wajib sebagai Safety Net**: Untuk membersihkan stale data yang terjebak.
+
+**Write-Through dapat membantu:**
+- Mengurangi stale window dibanding Cache-Aside, namun tidak menghilangkan kebutuhan TTL/validation
+- Memungkinkan read-after-write pada happy path (bukan guarantee otomatis)
+- Mengurangi, tidak menghilangkan, kebutuhan invalidation manual
+
+**Tapi perlu:**
+- TTL sebagai fallback untuk semua failure mode
+- Version ordering atau mutex jika concurrent writes relevan
+- Desain error handling yang matang untuk partial failure
+
+---
+
+## Tabel Perbandingan: Cache-Aside vs Write-Through
+
+| Aspek | Cache-Aside | Write-Through |
+|-------|-------------|---------------|
+| **Read Path** | App → Check cache → Miss → DB → SET cache | App → Check cache → HIT → Return |
+| **Write Path** | App → DB write → Explicit cache invalidation | App → DB write → Update cache (best-effort) |
+| **Stale Window** | Perlu (hingga invalidation TTL) | Lebih pendek, tapi tetap ada |
+| **Partial Failure Risk** | Low (DB write saja, cache optional) | Tinggi (cache tidak pernah diupdate mungkin) |
+| **Read-Your-Writes** | Tidak garantir tanpa invalidation | Garantir pada happy path, tidak otomatis |
+| **Write Amplification** | Tidak ada (lazy population) | Ya (write to both DB and cache) |
+| **Complexitas** | Sedang (invalidation logic diperlukan) | Sedang (failure handling diperlukan) |
+| **TTL Safety Net** | Wajib | Wajib |
+| **Use Case** | Read-heavy, write-rare, toleran stale | Read-heavy, write-moderate, butuh read-after-write |
+
+**Penting:** Tidak ada pola yang "universally better". Pilih berdasarkan:
+- Business consistency requirements
+- Write frequency
+- Failure tolerance
+- Operational complexity yang dapat diterima
 
 ---
 
