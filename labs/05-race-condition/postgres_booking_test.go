@@ -134,6 +134,9 @@ func TestPostgres_ConcurrentBooking(t *testing.T) {
 	t.Logf("✅ DB INVARIANT HOLDS: COUNT(bookings) = %d", finalCount)
 }
 
+// TestPostgres_Booking_SameBranchDifferentBranch verifies multi-branch invariant:
+// - same branch + same date + same slot → only 1 booking (second gets unique violation)
+// - different branch + same date + same slot → both allowed
 func TestPostgres_Booking_SameBranchDifferentBranch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -174,4 +177,50 @@ func TestPostgres_Booking_SameBranchDifferentBranch(t *testing.T) {
 	if countA != 1 || countB != 1 {
 		t.Errorf("counts invalid: branch-A=%d, branch-B=%d", countA, countB)
 	}
+}
+
+// TestPostgres_Booking_MultipleBranches proves that different branches can book the same slot.
+// This directly demonstrates the UNIQUE(branch_id, service_date, slot_time) constraint.
+func TestPostgres_Booking_MultipleBranches(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	db, err := database.Connect(ctx, database.FromEnv())
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	defer db.Close()
+
+	if err := setupBookingTable(ctx, db); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	defer setupBookingTable(ctx, db)
+
+	repo := NewPostgresBookingRepository(db)
+
+	// Scenario: Branch 1 and Branch 2, same date, same slot → both should succeed
+	err = repo.CreateBooking(ctx, "branch-01", "2026-09-01 09:00")
+	if err != nil {
+		t.Fatalf("Branch 1 first booking should succeed: %v", err)
+	}
+	err = repo.CreateBooking(ctx, "branch-02", "2026-09-01 09:00")
+	if err != nil {
+		t.Fatalf("Branch 2 booking should succeed (different branch): %v", err)
+	}
+
+	// Verify counts
+	count1, _ := repo.CountBookings(ctx, "branch-01", "2026-09-01 09:00")
+	count2, _ := repo.CountBookings(ctx, "branch-02", "2026-09-01 09:00")
+
+	t.Logf("Branch 1 bookings: %d", count1)
+	t.Logf("Branch 2 bookings: %d", count2)
+
+	if count1 != 1 {
+		t.Errorf("expected 1 booking for branch-01, got %d", count1)
+	}
+	if count2 != 1 {
+		t.Errorf("expected 1 booking for branch-02, got %d", count2)
+	}
+
+	t.Logf("✅ UNIQUE(branch_id, service_date, slot_time) works: different branches can book same slot")
 }

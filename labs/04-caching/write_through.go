@@ -8,9 +8,13 @@ import (
 	"time"
 )
 
-// WriteThroughService menggunakan pola Write Through:
-// Data ditulis secara sinkron ke Database dan Cache pada transaksi yang sama.
-// Request -> Update DB -> Update Cache -> Return
+// WriteThroughService menggunakan pola Write Through.
+//
+// PENTING: Database dan Redis adalah sistem TERPISAH. Tidak ada atomic commit lintar-keduanya.
+// Redis tidak berada dalam SQL transaction sehingga tidak ada "transaction commit" berarti
+// otomatis sinkron dengan Redis.
+//
+// TTL tetap berfungsi sebagai safety net saat proses crash antara DB commit dan cache update.
 type WriteThroughService struct {
 	db        *sql.DB
 	cache     CacheInterface
@@ -18,6 +22,7 @@ type WriteThroughService struct {
 	jitterTTL time.Duration
 }
 
+// NewWriteThroughService membuat service dengan TTL default 5 menit.
 func NewWriteThroughService(db *sql.DB, cache CacheInterface) *WriteThroughService {
 	return &WriteThroughService{
 		db:        db,
@@ -27,13 +32,35 @@ func NewWriteThroughService(db *sql.DB, cache CacheInterface) *WriteThroughServi
 	}
 }
 
-// UpdateProduct melakukan Write Through.
-// 1. Update Database
-// 2. Update Cache (hanya jika DB sukses)
+// UpdateProduct melakukan Write Through:
+// 1. Update Database (Source of Truth)
+// 2. Best-effort update cache
+//
+// CATATAN: Jika cache update gagal, business operation tetap SUCCESS.
+// - Log metric error
+// - Best-effort invalidate stale key
+// - Stale cache masih mungkin bertahan sampai TTL (safety net)
+//
+// Flow yang benar:
+// validate input -> DB write -> DB success -> best-effort cache update -> return success
 func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) error {
-	// 1. Update ke Source of Truth (Database)
-	startDB := time.Now()
-	res, err := s.db.ExecContext(ctx, "UPDATE products SET name = $1, price = $2 WHERE id = $3", p.Name, p.Price, p.ID)
+	// 0. Validasi input
+	if p.ID == "" {
+		return fmt.Errorf("product ID tidak boleh kosong")
+	}
+
+	// 1. Serialize dulu sebelum DB mutation (detect error lebih awal)
+	data, err := json.Marshal(p)
+	if err != nil {
+		// Serialization error = data tidak valid untuk cache
+		// Return error - ini bukan cache failure, data tidak akan pernah sengaja disimpan
+		return fmt.Errorf("data tidak valid untuk cache: %w", err)
+	}
+
+	// 2. Update ke Source of Truth (Database)
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE products SET name = $1, price = $2 WHERE id = $3",
+		p.Name, p.Price, p.ID)
 	if err != nil {
 		return fmt.Errorf("update DB: %w", err)
 	}
@@ -45,28 +72,63 @@ func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) erro
 	if rows == 0 {
 		return fmt.Errorf("product not found")
 	}
-	_ = startDB
 
-	// 2. Write-through ke Cache
+	// 3. Best-effort cache update (setelah DB commit!)
 	key := CacheKey("product", p.ID, 1)
-	data, err := json.Marshal(p)
-	if err != nil {
-		// PENTING: DB sukses, tapi persiapan cache gagal.
-		// Lebih aman untuk INVALIDATE (delete) dibanding membiarkan stale data.
-		_ = s.cache.Delete(ctx, key)
-		return fmt.Errorf("marshal product (DB updated successfully): %w", err)
-	}
-
 	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
 	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
-		// PENTING: DB sukses, tapi update cache gagal (Redis down).
-		// Kita harus log error ini. Request tetap dianggap sukses karena DB (source of truth) sudah berubah.
-		// Pada arsitektur yang sangat ketat, kita mungkin mengharuskan retry/outbox.
+		// Cache set gagal - DB sudah sukses, business operation tetap success
+		// Log error, bukan return error
+		// NOTE: In production, gunakan structured logging, bukan fmt.Printf
+		// This is for demonstration purposes only
 		fmt.Printf("warn: write-through cache set failed for %s: %v\n", key, err)
-		// Kita menghapus key (invalidate) sebagai safety fallback, karena set() gagal
-		// dan kita tidak ingin meninggalkan stale data.
-		_ = s.cache.Delete(ctx, key)
+
+		// Best-effort: delete stale key sebagai safety fallback
+		// INI BUKAN guaranteed - stale cache masih mungkin bertahan sampai TTL
+		if delErr := s.cache.Delete(ctx, key); delErr != nil {
+			fmt.Printf("warn: stale cache delete also failed for %s: %v\n", key, delErr)
+			// Catat metric: cache_stale_persist_metric++
+			// But business operation is still successful
+		}
 	}
 
 	return nil
+}
+
+// GetProduct menggunakan cache-aside pattern untuk read.
+//
+// Cache-Aside: Application mengontrol cache interaction, bukan cache layer.
+// - GET cache
+// - MISS -> GET database
+// - SET cache
+//
+// Bukan Read-Through (di mana cache layer sendiri meload dari backing store).
+func (s *WriteThroughService) GetProduct(ctx context.Context, key string) (Product, error) {
+	// 1. Check cache
+	cached, err := s.cache.Get(ctx, key)
+	if err == nil && cached != "" {
+		var p Product
+		if err := json.Unmarshal([]byte(cached), &p); err == nil {
+			return p, nil // cache hit
+		}
+		// Unmarshal gagal → corrupt cache, delete
+		_ = s.cache.Delete(ctx, key)
+	}
+
+	// 2. Cache miss → query DB
+	var p Product
+	row := s.db.QueryRowContext(ctx, "SELECT id, name, price FROM products WHERE id = $1", extractID(key))
+	err = row.Scan(&p.ID, &p.Name, &p.Price)
+	if err != nil {
+		return Product{}, fmt.Errorf("query DB: %w", err)
+	}
+
+	// 3. Populate cache (best-effort)
+	data, err := json.Marshal(p)
+	if err != nil {
+		return p, fmt.Errorf("marshal product: %w", err) // return data but log error
+	}
+	_ = s.cache.Set(ctx, key, string(data), s.ttl) // log but don't fail
+
+	return p, nil
 }

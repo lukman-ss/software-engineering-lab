@@ -42,21 +42,332 @@ Ini adalah yang paling sering saya temui sebagai akar masalah di perusahaan: tim
 
 ---
 
-## Breaking Change
+## Breaking Change Matrix
 
-Berikut adalah contoh-perubahan yang menjadi breaking change:
+Berikut adalah contoh-perubahan yang menjadi **breaking change**:
+
+### Core Changes
 
 | Perubahan | Contoh |
 |-----------|--------|
 | Rename field | `name` → `full_name` |
 | Remove field | hapus `phone` |
-| Change type | `"500000"` (string) → `500000` (number) |
-| Change object shape | `customer.name` → `customer.fullName` |
-| Change date format | `"2024-01-01"` → `"01/01/2024"` |
-| Change nullability | field wajib → optional (atau sebaliknya) |
+| Change primitive type | `price:number` → `price:string` |
+| string → object | `customer: "Budi"` → `customer: {id: 15, name: "Budi"}` |
+| object → array | `customer: {...}` → `customer: [...]` |
+| Change date format | `2026-07-25` → `25/07/2026` |
+| Change incompatible nullability | field wajib → optional (atau sebaliknya) |
+
+### Semantic Changes
+
+| Perubahan | Contoh |
+|-----------|--------|
 | Change enum semantics | status `"ACTIVE"` berarti hal lain |
-| Change pagination | `page` → `page_number` |
-| Change endpoint semantics | `/invoices` sekarang mengembalikan draft juga |
+| Change HTTP status semantics | `200 OK` → `201 Created` untuk update |
+| Change required request input | field `id` menjadi required |
+| Change pagination contract | `page` → `page_number`, `limit` → `size` |
+| Change business meaning endpoint | `/invoices` sekarang mengembalikan draft juga |
+
+---
+
+## Usually Compatible vs Breaking
+
+### Biasanya Compatible
+
+Perubahan sering **backward compatible**:
+
+| Perubahan | Kondisi |
+|-----------|---------|
+| Add optional response field | consumer tolerant unknown field |
+| Add endpoint | tidak memengaruhi existing endpoint |
+| Add optional query parameter | client tidak wajib pakai |
+
+### Biasanya Breaking
+
+Perubahan yang **pasti breaking**:
+
+| Perubahan | Alasan |
+|-----------|--------|
+| Rename | Consumer pakai nama lama |
+| Remove | Consumer butuh data itu |
+| Change type | Deserialization error |
+| Change response shape | Struct mismatch |
+| Change semantics | Logika bisnis salah |
+
+### API Versioning ≠ Every Change = V2
+
+**JANGAN** mengajarkan bahwa setiap perubahan harus membuat:
+- `v2`
+- `v3`
+- `v4`
+
+**Gunakan major version** saat contract incompatibility memang membutuhkan version boundary.
+
+---
+
+## URL vs Header Versioning
+
+### URL Versioning (Pendekatan Lab Ini)
+
+```http
+GET /api/v1/invoices/1001
+GET /api/v2/invoices/1001
+```
+
+Dipilih untuk lab karena:
+- **Simple** — tidak perlu middleware tambahan
+- **Visible** — langsung terlihat di logs
+- **Debuggable** — easy to test with curl
+- **Easy to document** — clear URL pattern
+- **Easy to route** — `http.ServeMux` handles ini
+
+### Header Versioning (Alternatif)
+
+```http
+GET /api/invoices/1001
+Accept: application/vnd.company.v2+json
+```
+
+atau:
+
+```http
+GET /api/invoices/1001
+API-Version: 2
+```
+
+Keuntungan:
+- URL tetap stabil → idempotent endpoint
+- Memungkinkan multiple versions dalam satu endpoint
+
+Kerugian:
+- Kurang visibilitas di logs/network traces
+- Membutuhkan middleware parsing header
+
+> **Catatan:** URL versioning dipilih untuk lab bukan karena "lebih benar secara universal", tapi karena lebih sederhana untuk demonstrasi.
+
+---
+
+## Consumer Inventory
+
+Sebelum melakukan breaking change, Senior Engineer harus menanyakan:
+
+| Pertanyaan | Contoh Jawaban |
+|------------|----------------|
+| Who consumes this endpoint? | Android (v1.0-v3.5), iOS, Web, Partner ERP, BI Dashboard |
+| Who owns each consumer? | Mobile team (Android), Web team, Partner Integration |
+| Which versions are active? | Android: 30% on v1, 60% on v2, 10% on v3 |
+| Can they deploy independently? | Tidak — semua butuh backend update |
+| Are external partners involved? | Ya — 3 partner ERP pakai v1 |
+| How much V1 traffic remains? | ~15% di minggu pertama |
+| Which mobile versions still hit V1? | Android 8.0-10.0 (ter distribusi lemot) |
+
+> **API versioning tanpa mengetahui consumer lama tetap berbahaya.** Jangan buat V2 hanya karena "mau bangun".
+
+---
+
+## Android Migration Strategy
+
+```
+Time:      0d           30d          60d          90d          120d
+           │             │            │            │            │
+           ▼             ▼            ▼            ▼            ▼
+Day 0: Release V2
+         Monitor      Send         Deprecate      Sunset
+         adoption     warning      V1 endpoint
+```
+
+**Yang harus diingat:**
+
+> **Android release terbaru ≠ semua user sudah upgrade.** Proses upgrade memakan waktu.
+
+Strategi:
+1. Keep V1 stable. (Jangan pernah ubah V1)
+2. Deploy V2.
+3. New Android uses V2.
+4. Old Android remains on V1.
+5. Monitor adoption.
+6. Monitor V1 traffic.
+7. Announce deprecation.
+8. Migrate remaining consumers.
+9. Sunset V1 after criteria are met.
+
+---
+
+## Android Release ≠ All Users Upgrade
+
+```
+Android App Store Distribution (Contoh)
+         │ Total Market Share
+─────────┼─────────────────────────
+ v3.0     │ ■■■■■■■■■■ 45%
+ v2.5     │ ■■■■■■■■■■ 35%
+ v2.0     │ ■■■■■■■■■■ 15%
+ v1.0     │ ■■■■■■■■■■  5%
+```
+
+**Kesimpulan:** Bahkan 1 minggu setelah rilis V2, masih ada 5% user pakai V1.
+
+---
+
+## Deprecation Lifecycle
+
+```
+V1 active
+    ↓
+V2 released
+    ↓
+V1 deprecated
+    ↓
+Migration monitoring
+    ↓
+V1 traffic monitoring
+    ↓
+Sunset criteria reached
+    ↓
+V1 removed
+```
+
+**Timeline hanya contoh:**
+
+```
+Day 0    → V2 released
+Day 30   → V1 deprecated (no new features)
+Day 60   → Warning emails sent
+Day 90   → Sunset criteria check (< 5% traffic)
+Day 100  → V1 removed (jika criteria terpenuhi)
+```
+
+> **INGAT:** 90 hari hanyalah **CONTOH**. Actual timeline bergantung pada:
+> - **SLA** — berapa lama service harus support?
+> - **Partner contract** — berapa lama perjanjian komersial?
+> - **Mobile adoption** — seberapa cepat user upgrade?
+> - **Business criticality** — apa konsekuensi V1 down?
+> - **Security issue** — ada CVE yang harus patched cepat?
+> - **Remaining traffic** — berapa persen V1?
+
+---
+
+## Contract Test vs Server Test
+
+### Server Test
+
+Memverifikasi bahwa server **bisa merespons dengan benar**:
+
+```go
+func TestServer_responds_ok(t *testing.T) {
+    resp := get("/api/v2/invoices/1001")
+    if resp.StatusCode != 200 {
+        t.Error("server should respond")
+    }
+}
+```
+
+### Compatibility Test (Contract Test)
+
+Memverifikasi bahwa **consumer lama masih dapat memahami contract**:
+
+```go
+func TestV1Contract_RemainsBackwardCompatible(t *testing.T) {
+    // ... get response ...
+    
+    // HTTP 200 && valid JSON == OK
+    // TAPI belum cukup!
+    
+    // Harus test:
+    // - id = number
+    // - customer = string (BREAKING jika object!)
+    // - total = number  
+    // - status = string
+}
+```
+
+**Mental model utama Lab 06:**
+
+> `HTTP 200` + `valid JSON` ≠ `backward compatible`
+
+> `LegacyInvoicedecode → error` adalah **bukti breaking change**, bukan bug.
+
+---
+
+## API Documentation
+
+Agar API versioning berhasil, dokumentasi penting banget:
+
+| Dokumen | Tujuan |
+|---------|--------|
+| OpenAPI/Swagger | Schema resmi setiap version |
+| Changelog | Apa yang berubah dari V1 ke V2 |
+| Migration guide | Panduan untuk consumer upgrade |
+| Deprecation notice | Pengumuman V1 deprecated + timeline |
+| Version lifecycle | Aturan create/deprecate/sunset |
+| Owner/contact | Siapa harmoni bila ada edge case |
+
+> **Tidak perlu Swagger dependency** untuk lab ini. Cukup dokumentasi di README + komentar kode.
+
+---
+
+## Common Mistakes (Senior Engineer Checklist)
+
+Berikut adalah kesalahan umum yang harus dihindari:
+
+| Mistake | Dampak | Solusi |
+|---------|--------|--------|
+| `name` langsung ganti `full_name` | Client crash | Gunakan `name` + `full_name` paralel |
+| Hapus field tanpa notice | Consumer error | Deprecation cycle dulu |
+| `price:number` jadi `price:string` | Type error | Version baru |
+| Reuse DTO V1/V2 | Keduanya saling terikat | DTO terpisah |
+| Tidak ada contract test | Breaking lompat | Tambahkan test |
+| Tidak ada consumer inventory | Upgrade tak terduga | Survei dulu |
+| Hapus V1 terlalu cepat | Production outage | Monitor traffic |
+| Versioning semua perubahan kecil | VERSI EXPLOSION | Hanya major changes |
+| `HTTP 200 == compatible` | Assumption salah | Test dari perspective client |
+| Tabel `customers_v2` | Database bloat | API contract versioning |
+
+---
+
+## HTTP Routing Notes
+
+Untuk lab ini, routing menggunakan `http.NewServeMux()`:
+
+```go
+mux.HandleFunc("/api/v1/invoices/", V1Handler)
+mux.HandleFunc("/api/v2/invoices/", V2Handler)
+```
+
+Route `/api/v1/invoices/1001` dipetakan ke `V1Handler`.
+
+Route tak dikenal seperti `/foo` tidak akan menghasilkan invoice — `ServeMux` hanya menangani route yang didaftarkan.
+
+Route seperti `/api/v1/invoices/9999-invalid` akan masuk handler, lalu `strconv.Atoi("")` gagal dan mengembalikan `400 Bad Request`.
+
+---
+
+## Final Code Structure
+
+```
+labs/06-api-versioning/
+├── go.mod                   # Module go 1.22, independent
+├── domain.go                # Internal domain Invoice, Customer
+├── ParseLegacyInvoice()     # Helper untuk test legacy decode
+├── unsafe_server.go         # Anti-pattern: breaking change
+├── unsafe_test.go           # Test: legacy gagal decode
+├── safe_server.go           # V1/V2 DTO + mappers
+├── safe_test.go             # Contract regression tests
+├── additive_server.go       # Field tambahan
+├── additive_test.go         # Test: legacy tetap berhasil
+└── README.md                # Panduan lengkap
+```
+
+---
+
+## Key Takeaways
+
+- **API adalah kontrak**, bukan teknologi. Perubahan harus dievaluasi dari perspective consumer.
+- **HTTP 200 ≠ compatible**. Selalu test decoding di sisi client.
+- **Versioning bukan untuk semua**. Hanya untuk breaking changes.
+- **V1 selalu stabil**. Setelah di-release, jangan pernah ubah lagi.
+- **Contract test wajib**. Prevent breaking change yang terlewat.
+- **Consumer inventory penting**. Tanpa tahu siapa yang pakai, tidak ada cara upgrade yang aman.
 
 ---
 
@@ -239,6 +550,48 @@ Sebelum deploy perubahan API:
 10. ✅ Compatibility test?
 11. ✅ Deprecation communication?
 12. ✅ Sunset criteria?
+
+---
+
+## Exercise
+
+Kasus:
+
+```json
+{
+  "id": 1001,
+  "customer": "Budi",
+  "total": 500000,
+  "status": "PAID"
+}
+```
+
+Menjadi:
+
+```json
+{
+  "id": 1001,
+  "customer": {
+    "id": 15,
+    "name": "Budi",
+    "phone": "08123"
+  },
+  "total": 500000,
+  "status": "PAID"
+}
+```
+
+**Pertanyaan:**
+1. Breaking change?
+2. Perlu V2?
+3. Bagaimana Android lama tetap hidup?
+4. Bagaimana membuktikan compatibility?
+
+**Expected Reasoning:**
+1. **Ya, breaking change** karena tipe data `customer` berubah dari `string` menjadi `object`.
+2. **Ya, perlu V2** (atau namespace baru) karena ini merusak contract, kecuali jika ada mekanisme header versioning yang mendukung.
+3. **Android lama tetap hidup** karena endpoint V1 tetap dilayani backend dengan schema string. Routing memisah request: legacy client memanggil `/v1`, aplikasi baru memanggil `/v2`.
+4. **Membuktikan compatibility** dengan **Contract Regression Test** yang secara eksplisit memverifikasi tipe data `customer` harus berupa string, tidak hanya mengandalkan raw string match.
 
 ---
 

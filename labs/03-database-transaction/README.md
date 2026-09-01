@@ -1,14 +1,69 @@
 # Lab 03 — Database Transaction & Distributed Transaction Boundary
 
-Kenapa Database Transaction Saja Tidak Cukup?
+## 1. Transaction Boundary: Definisi Fundamental
 
-> **Mental Model**: Database transactions (ACID) menjamin atomicity **hanya pada transactional resource yang berpartisipasi dalam transaction tersebut**. External HTTP APIs, email, WhatsApp, object storage, dan kebanyakan external systems tidak ikut berpartisipasi dalam local transaction database aplikasi.
+**Definisi:**
+
+> **Transaction boundary** adalah batas resource/state yang dapat dijamin atomik oleh satu transaction.
+
+### Visualisasi Transaction Boundary
+
+**Satu Database — Satu Transaction Boundary:**
+
+```
+PostgreSQL connection
+┌───────────────────────────┐
+│ payment                   │
+│ invoice                   │
+│ inventory                 │
+│ journal                   │
+└───────────────────────────┘
+        local transaction
+```
+
+Semua operasi di dalam boundary dijamin atomic. Jika satu gagal, semua rollback.
 
 ---
 
-## 1. Local Atomicity
+**Multiple Resources — Multiple Transaction Boundaries:**
+
+```
+PostgreSQL
+    +
+ERP API
+    +
+WhatsApp API
+    +
+Kafka
+```
+
+Batas tersebut **tidak dapat dijamin oleh satu local DB::transaction()**.
+
+---
+
+### Mental Model
+
+| Kondisi | Rollback Bekerja? |
+|---------|-------------------|
+| Same transaction boundary | ✅ Ya, rollback dapat bekerja |
+| Outside transaction boundary | ❌ Tidak, rollback database tidak cukup |
+
+---
+
+## 2. Local Atomicity: Apa yang Dikelola Database Transaction?
+
+**Definisi Teknis yang Akurat:**
+
+> Local database transaction memberikan atomicity pada satu transactional datastore atau transaction boundary yang sama. Ketika workflow melibatkan resource independen seperti database lain, external API, payment gateway, message broker, email, object storage, atau ERP, local transaction tersebut tidak dapat secara otomatis melakukan rollback terhadap side effect di luar transaction boundary.
+
+**Catatan Penting tentang Distributed Transaction:**
+
+Distributed transaction lintas resource secara teknis dapat dilakukan dengan mekanisme seperti Two-Phase Commit (2PC) atau XA pada sistem tertentu, tetapi membawa coupling, availability, operational complexity, dan scalability trade-off. Karena itu banyak arsitektur modern memilih local transaction + messaging + Saga + compensation + Outbox sesuai kebutuhan.
+
+> **Nota**: Lab 03 tidak membahas 2PC/XA secara mendalam. Topik ini tetap menjadi ownership Lab 07.
 
 ### Flow yang Benar
+
 ```
 [BEGIN TRANSACTION]
      │
@@ -25,411 +80,414 @@ Jika ada error → **ROLLBACK** → Semua pembatalan bersama.
 
 ---
 
-## 2. Transaction Boundary
+## 3. Business Invariant: Aturan yang Harus Selalu Benar
 
-Satu local database transaction hanya menjamin atomicity untuk resource yang berpartisipasi. External HTTP APIs, email, WhatsApp, message broker, cloud storage, payment gateway request, ERP request, dan external systems lainnya **tidak ikut berpartisipasi**.
+**Definisi:**
 
-*(XA/2PC dapat koordinasi distributed resource, tapi bukan fokus lab ini.)*
+> **Business invariant** adalah aturan bisnis yang harus selalu benar meskipun terjadi failure.
+
+### Contoh Business Invariant
+
+**Pembayaran:**
+
+Jika payment tercatat PAID, maka payment record dan financial journal yang wajib menjadi bagian dari transaksi tidak boleh berada pada state setengah jadi.
+
+```
+Business invariant:
+- Payment PAID → Journal harus balance
+- Payment FAILED → Tidak ada journal
+- State setengah jadi → TIDAK BOLEH
+```
 
 ---
 
-## 3. External Side Effects
+## 4. Transaction Size: "Large Enough, Small Enough"
 
-Apa yang terjadi ketika kita mencampur HTTP request ke dalam DB transaction?
+Semakin banyak consistency boundary yang terlibat, semakin tidak realistis mengandalkan satu local database transaction untuk menjamin seluruh workflow.
+
+**Gunakan transaction sebesar yang diperlukan untuk menjaga business invariant, tetapi sekecil mungkin agar lock duration, contention, dan coupling tetap terkendali.**
+
+### Mental Model
 
 ```
-[BEGIN] → INSERT payment → HTTP WhatsApp → ERP sync → [COMMIT]
+transaction should be:
+├── large enough to protect invariant
+└── small enough to avoid unnecessary work
 ```
-
-**Risiko Utama**: Transaction bertahan lama → Connection pool tertahan → Throughput menurun drastis.
-
-**External call di dalam transaksi**:
-- BEGIN → UPDATE → HTTP → COMMIT (transaction terblokir latency)
-- BEGIN → UPDATE → COMMIT → HTTP (transaction cepat, external service tidak terpengaruh latency)
-
-> **Catatan senior**: HTTP timeout tidak selalu berarti external operation gagal. Remote service bisa berhasil tapi response hilang akibat jaringan. Karena itu external commands seperti payment/refund/reservation juga perlu idempotency key + status reconciliation. Lihat Daily #1 Idempotency untuk detail.
 
 ---
 
-## 4. HTTP Inside DB Transaction Limitation
+## 5. External Side Effects: Irreversible Actions
+
+### Batasan Transaksi
+
+Jika `InventoryService::deduct()`, `Payment::create()`, `CommissionService::calculate()` semua mengubah tabel yang berada pada **database yang sama** dan menggunakan **transaction yang sama**:
+
+| Table | Status |
+|-------|--------|
+| payments | payment rows |
+| invoices | invoice rows |
+| inventory | inventory rows |
+| commissions | commission rows |
+
+Jika terjadi:
+
+```
+BEGIN
+  INSERT payment
+  UPDATE inventory
+  INSERT commission
+  ERP timeout
+ROLLBACK
+```
+
+Maka **semua** perubahan di database akan dibatalkan:
+
+| Table | Hasil Setelah Rollback |
+|-------|------------------------|
+| payments | ← rollback |
+| inventory | ← rollback |
+| commissions | ← rollback |
+
+**Yang TETAP tidak dapat dibatalkan:**
+- WhatsApp API (sudah terkirim)
+- Email (sudah dikirim)  
+- SMS (sudah dikirim)
+- ERP API (sudah diproses)
+- Payment Gateway API (sudah charging)
+
+---
+
+## 6. Critical vs Non-Critical Side Effects
+
+**External tidak otomatis berarti non-critical. Criticality ditentukan oleh bisnis.**
+
+### Critical Side Effects (tergantung business invariant)
+- Record payment
+- Update financial state  
+- Reserve inventory
+- Generate journal
+- Sync to ERP (jika requirement wajib sebelum payment complete)
+
+### Non-Critical / Secondary Side Effects (tergantung requirement)
+- Email (receipt notification)
+- WhatsApp notification
+- Analytics / reporting
+- Webhook to third party
+- ERP reporting sync
+
+> **Decision**: Tentukan apakah external step menentukan keberhasilan business operation, atau sekadar notification/performance optimization.
+
+---
+
+## 7. Two Inventory Scenarios: Local vs External
+
+### Scenario 1: Inventory dalam Local Database
+
+Jika `InventoryService::deduct()` hanya mengubah tabel inventory di **database yang sama**:
+
+```
+Payment | Invoice | Inventory | Commission  →  local DB transaction
+```
+
+Jika ERP timeout dan DB rollback:
+
+| System | Status |
+|--------|--------|
+| Payment | ← rollback |
+| Invoice | ← rollback |
+| Inventory | ← rollback |
+| Commission | ← rollback |
+| WhatsApp | ← SUDAH terkirim |
+
+**Kesimpulan:** Inventory **bisa** di-rollback jika berada di database yang sama.
+
+---
+
+### Scenario 2: Inventory sebagai External Service
+
+Jika `InventoryService::deduct()` adalah **HTTP request ke inventory-service** yang memiliki database terpisah:
+
+```
+Main DB transaction
+  ↓ HTTP
+inventory-service database (terpisah)
+```
+
+Jika ERP timeout dan database utama rollback:
+
+| System | Status |
+|--------|--------|
+| Main DB (payments, invoices) | ← rollback |
+| Inventory API | ← SUDAH berhasil |
+| WhatsApp API | ← SUDAH terkirim |
+
+**Kesimpulan:** Inventory **tidak bisa** di-rollback jika berada di service terpisah.
+
+---
+
+## 8. Anti-Pattern: HTTP Inside DB Transaction
 
 ```
 [BEGIN TRANSACTION]
      ├── UPDATE invoice SET status = 'paid'
-     ├── HTTP call ke payment gateway (50ms–5s)
+     ├── HTTP call ke payment gateway
      └── [COMMIT]
 ```
 
-**Perbandingan:**
+**Dua masalah utama:**
 
-| Flow | Transaction Lifetime | Konsekuensi |
-|------|---------------------|-------------|
-| BEGIN → UPDATE → HTTP → COMMIT | Selama HTTP call | Connection pool tertahan |
-| BEGIN → UPDATE → COMMIT → HTTP | Durasi DB saja | Tidak terpengaruh latency |
+1. **Connection pool tertahan** — Transaction menunggu HTTP, tidak bisa dilepaskan kembali ke pool.
+2. **External call tidak dapat di-rollback** — WhatsApp, ERP, payment gateway tidak bisa "undone".
 
-Jika terjadi `ROLLBACK` di DB, **HTTP request, WhatsApp, atau email yang sudah terkirim tidak dapat dibatalkan oleh database.** External side effects bersifat independen dari transaction state.
+### Alasan Lengkap
 
-Contoh buruk:
-```sql
-DB::transaction(function () {
-    Payment::create(...);
-    Http::post($erpUrl, ...);
-    WhatsappService::send(...);
-});
-```
-
-Masalahnya:
-- Lock hidup terlalu lama
-- External service latency tidak predictable
-- Timeout → tidak ada garansi rollback bahkan jika gagal
-- Database connection tertahan
-- Throughput turun
+- Transaction terbuka lebih lama
+- Row/table lock hidup lebih lama  
+- Connection database tertahan
+- External latency tidak predictable
+- Timeout external dapat menahan transaction
 - Deadlock probability meningkat
-- API mungkin sudah melakukan side effect walaupun DB rollback
+- Throughput turun
+- External side effect mungkin sukses walaupun DB rollback
 
-Pendekatan yang benar:
-```
-BEGIN
-  Update local business state
-  Insert event/outbox intent
-COMMIT
-```
-Kemudian external work diproses secara asynchronous jika business requirement memungkinkan.
-
-**Caveat**: Tidak semua external call wajib asynchronous. Yang penting adalah memahami consistency requirement dan transaction boundary. Jangan memakai queue hanya karena ingin memakai queue.
-
-Test bukti: `TestHTTPInsideTransactionDuration`, `TestCommitThenExternalCall`, `TestExternalSideEffectRollback`.
+> **Nuansa**: Masalah utamanya bukan karena setiap HTTP call di dalam transaction secara mutlak dilarang, tetapi karena local transaction tidak mampu mengontrol atomicity external side effect dan membuat transaction lifetime bergantung pada resource eksternal.
 
 ---
 
-## 5. Dual-Write Problem
-
-Ketika kita mencoba menyelesaikan permasalahan integrasi dengan message broker, kita dihadapkan pada **Dual-Write Problem**:
+## 9. Timeout != Operation Pasti Gagal (Unknown Outcome)
 
 ```
-[DB commit]   →   success
-                       │
-                  X process crash
-                       │
-              [Publish event]  → TIDAK pernah terjadi
+POST /erp/payment
+    ↓
+ERP berhasil memproses
+    ↓
+network response hilang
+    ↓
+client timeout
 ```
 
-**Hasil**: Invoice = Paid, **event tidak pernah sampai ke consumers**.
+Client melihat **TIMEOUT**, tetapi server sebenarnya: **SUCCESS**
+
+### Unknown Outcome
+
+Karena timeout memberikan **unknown outcome**, integration yang critical harus memiliki mekanisme seperti:
+- Idempotency key
+- Query status endpoint
+- Reconciliation job
+- Event sourcing
+
+> **Hubungkan ke Lab 01 Idempotency** untuk detail implementasinya.
+
+---
+
+## 10. Dual-Write Problem
+
+> "Commit DB dulu baru publish ke message broker!"
+
+Ini dapat menyebabkan **Dual-Write Problem**:
+
+```
+[UPDATE invoice]
+[COMMIT]               → SUCCESS
+                          │
+                 X server crash
+                          │
+[Publish event]        → TIDAK pernah terjadi
+```
+
+**Hasil**: Database = PAID, Event = hilang.
 
 ### Reverse Dual-Write juga bermasalah
 
 ```
-[Publish event]  →  success
-                         │
-                    X process crash
-                         │
-                    [DB commit]  → TIDAK pernah terjadi
+[Publish event]        → SUCCESS
+                          │
+                 X server crash
+                          │
+[COMMIT]               → TIDAK pernah terjadi
 ```
 
 Mengubah urutan **tidak menyelesaikan** atomicity — hanya memindahkan window kegagalan.
 
 ---
 
-## 6. Transactional Outbox (Pengantar)
+## 11. Transactional Outbox
 
-Untuk menyelesaikan dual-write problem, kita gunakan **Transactional Outbox**.
+Untuk menyelesaikan dual-write problem, gunakan Transactional Outbox:
 
 ```
-[BEGIN TRANSACTION]
-     ├── UPDATE invoice SET status = 'paid'
-     └── INSERT INTO outbox_events (...)
-     │
-     └── [COMMIT]
+[Local transaction]
+     ↓
+[Record business state + event intent atomically]
+     ↓
+[COMMIT]
+     ↓
+[Publisher/Dispatcher mengirim event asinkron]
 ```
 
-Transactional Outbox **secara atomik mencatat business change dan *intent* (niat) untuk mengirimkan event ke broker.**
+### Mental Model Outbox:
 
-Flow lengkapnya:
-1. Business transaction + Insert outbox event
-2. **Outbox Worker** berjalan asinkron
-3. **Publish event** ke broker
-4. **Mark as processed** di tabel outbox
+- **Outbox** → *reliable intent persistence* (mencatat niat secara atomik)
+- **Dispatcher** → *at-least-once delivery* (memastikan terkirim)
+- **Consumer** → *idempotent* (aman diproses ulang)
 
-> 💡 **Deep Dive**: Implementasi production-grade Transactional Outbox (dispatcher internals, FOR UPDATE SKIP LOCKED, concurrency, retry dengan backoff, crash-after-publish recovery, DLQ) dibahas secara spesifik pada **Lab 07 — Outbox Pattern**. Lab ini hanya memperkenalkan konsep atomicity-nya.
+> **Deep Dive**: Implementasi production-grade Transactional Outbox dibahas secara spesifik pada **Lab 07 — Outbox Pattern**.
 
 ---
 
-## 7. Eventual Consistency (Pengantar)
+## 12. Saga Pattern & Compensation
 
-Eventual consistency berarti beberapa state pada sistem distributed boleh sementara tidak sinkron, tetapi sistem memiliki mekanisme yang membuat state tersebut pada akhirnya menuju kondisi konsisten yang diharapkan.
+Saga mengelola distributed transactions melalui series of local transactions dengan aksi kompensasi.
 
-Contoh:
 ```
-10:00:00 Payment = PAID
-10:00:01 ERP = PENDING
-10:00:05 ERP retry
-10:00:06 ERP = SYNCED
+Step 1: Reserve Hotel    → Action: reserve | Compensate: release
+Step 2: Book Flight      → Action: book    | Compensate: cancel
+Step 3: Book Car (GAGAL)
+```
+
+Jika Step 3 gagal → Saga mengeksekusi compensation untuk Step 2 lalu Step 1.
+
+> **Penting**: Compensation adalah **business operation baru** yang mengoreksi efek sebelumnya, bukan teknis rollback.
+
+---
+
+## 13. Eventually Consistency
+
+Eventually consistency berarti beberapa component dapat sementara melihat state yang berbeda, tetapi sistem memiliki mekanisme untuk menuju konsistensi.
+
+### Timeline Contoh
+
+```
+t=0:  Payment = PAID (di DB langsung)
+t=1:  ERP = PENDING
+t=2:  ERP retry
+t=3:  ERP = SYNCED
 ```
 
 Ini **normal**, bukan bug.
 
-### Kapan Eventual Consistency Acceptable?
-✅ Notification (WhatsApp, Email)  
-✅ Analytics / Reporting  
-✅ Audit logs  
-✅ Search index updates
+---
 
-### Kapan Butuh Consistency Langsung?
-❌ Payment + ledger + OPL marking → harus satu transaksi
-❌ Inventory stok fisik
-❌ Balance / akuntansi
+## 14. Failure Matrix
+
+| Failure | Local DB | External System | Strategy |
+|---------|----------|-----------------|----------|
+| DB update gagal | rollback | belum dipanggil | local transaction |
+| WhatsApp gagal | committed | failed | retry |
+| ERP timeout (unknown outcome) | committed | unknown | idempotency + status check |
+| Worker crash | committed | pending | queue retry |
+| Event publish gagal setelah DB commit | committed | missing | Outbox |
+| Duplicate delivery | committed | risk duplicate | idempotent consumer |
+| Compensation gagal | committed | inconsistent sementara | retry + reconciliation |
 
 ---
 
-## 8. Retry & Idempotent Consumer (Pengantar)
+## 15. Glossary
 
-Karena sistem terdistribusi bisa gagal sebagian (partial failure), **retry** menjadi mekanisme wajib.
-
-**Producer bisa gagal:**
-- Payment gateway timeout
-- Network error
-- Service unavailable
-
-**Broker bisa tidak tersedia:**
-- Connection refused
-- Disk full
-- Maintenance window
-
-**Consumer bisa crash:**
-- OOM killer
-- Process restart
-- Deployment
-
-**Acknowledgment bisa hilang:**
-- TCP drop
-- Network partition
-- Broker crash
-
-Karena itu, **retry berarti event atau request bisa dikirim/diterima lebih dari sekali (at-least-once delivery)**.
-
-Oleh karena itu, setiap penerima pesan (consumer) **harus idempotent**.
-
-### Observability Requirement
-
-Workflow distributed yang retryable tetapi tidak observable akan sulit dioperasikan di production. Setiap event dan proses harus memiliki:
-
-| Field | Purpose |
-|-------|---------|
-| `correlation_id` | Melacak request chain yang terkait |
-| `event_id` | Unik identifier untuk event |
-| `aggregate_id` | Entity yang memicu event |
-| `attempt` | Nomor upaya retry saat ini |
-| `status` | pending / published / dead_lettered |
-| `last_error` | Pesan error terakhir |
-| `created_at` | Timestamp pembuatan |
-| `processed_at` | Timestamp pemrosesan |
-
-Koneksi queue tidak menjamin delivery. Architecture tetap membutuhkan:
-
-- **Durability** (persist to disk)
-- **Retry** (handle transient failure)
-- **Idempotency** (handle duplicate delivery)
-- **Observability** (debug & monitor)
-- **Recovery** (handle crashes)
-
-### Queue vs Delivery Guarantee
-
-Jangan mengira bahwa menggunakan queue = aman. Architecture tetap membutuhkan:
-
-- Producer bisa gagal
-- Broker bisa unavailable  
-- Consumer bisa crash
-- ACK bisa hilang
-- Message bisa redelivered
-
-### Konsep `processed_events`:
-```
-processed_events
----------------------------------
-consumer_name
-event_id
-processed_at
-UNIQUE (consumer_name, event_id)
-```
-
-Gunakan pola:
-```
-At-least-once delivery
-+
-Idempotent consumer
-=
-Effectively-once business effect
-```
-
-> 💡 **Deep Dive**: Retry policy, eksponensial backoff, dan Dead Letter Queue (DLQ) dibahas lebih dalam di **Lab 08 — Retry** dan **Lab 07 — Outbox Pattern**.
+| Istilah | Definisi |
+|---------|----------|
+| **ACID** | Properties transaksi: Atomicity, Consistency, Isolation, Durability |
+| **atomicity** | Semua operasi dalam transaksi berhasil atau semua gagal |
+| **local transaction** | Transaksi pada satu datastore/txn boundary |
+| **transaction boundary** | Batas resource yang dapat dijamin atomic oleh satu transaction |
+| **business invariant** | Aturan bisnis yang harus selalu benar meski terjadi failure |
+| **external side effect** | Aksi luar dari database (API call, notification) yang tidak ikut transaction |
+| **partial failure** | Beberapa langkah berhasil, beberapa gagal — tidak ada atomicity lintas sistem |
+| **distributed workflow** | Workflow yang melibatkan beberapa sistem/database |
+| **distributed consistency** | Menjamin state konsisten di beberapa sistem secara asynchronous |
+| **dual-write problem** | Masalah konsistensi saat mencoba menulis ke DB lalu publish event secara terpisah |
+| **event-driven** | Pola di mana sistem bereaksi terhadap event, bukan synchronous RPC |
+| **retry** | Mencoba kembali operasi yang gagal |
+| **idempotency** | Operasi yang dapat dipanggil berulang kali tanpa efek samping tambahan |
+| **at-least-once** | Delivery model tempat event bisa dikirim berulang kali |
+| **eventual consistency** | State sistem akan menjadi konsisten dalam waktu terseban |
+| **Saga** | Pola untuk distributed transactions dengan kompensasi |
+| **compensation** | Aksi pengembalian untuk membatalkan efek operation sebelumnya |
+| **Outbox** | Mekanisme untuk menyimpan event secara atomic bersama business state |
+| **DLQ** | Dead Letter Queue — menampung message yang gagal setelah retry maksimal |
+| **reconciliation** | Proses menemukan dan memperbaiki inconsistency yang lolos normal processing |
+| **observability** | Kemampuan memantau dan memdebug sistem melalui logs, metrics, tracing |
+| **unknown outcome** | Ketika timeout terjadi, kita tidak tahu apakah operasi berhasil atau tidak |
 
 ---
 
-## 9. Saga / Compensation (Pengantar)
+## 16. Failure Scenarios untuk Reviewer
 
-Database rollback (`ROLLBACK`) hanya bisa membatalkan transaksi yang belum di-commit.
-Lalu bagaimana jika kita perlu membatalkan *distributed workflow* yang sudah sebagian berhasil?
-
-### Sistem Synchronous (Transaction Local)
-
-Jika semua state berada di satu database:
+### Scenario 1: Inventory Local DB
 
 ```
-Admin klik Bayar
-    ↓
-Buat pembayaran
-    ↓
-Cash Out
-    ↓
-Update status OPL
-    ↓
-Generate jurnal
-    ↓
-Kirim WhatsApp Vendor
-    ↓
-Sync ERP
+Main DB:
+  payment = created
+  inventory = deducted
+
+External:
+  WhatsApp = sent
+
+ERP = timeout
+
+Jika inventory LOCAL:
+  DB rollback
+  payment = absent
+  inventory = restored
+  WhatsApp tetap terkirim
 ```
 
-Jika `payment`, `cash_out`, `opl`, `journal` berada pada satu database dan merupakan satu atomic business invariant:
-
-```sql
-BEGIN
-  Create payment
-  Create cash_out
-  Update OPL
-  Create journal
-COMMIT
-```
-
-Kemudian:
+### Scenario 2: Inventory External Service
 
 ```
-VendorPaymentCompleted event
-        ↓
-WhatsApp Worker
-ERP Sync Worker
-```
+Main DB:
+  payment = created
+  inventory = deducted
 
-Jika ERP gagal:
-- payment tetap committed
-- ERP sync = pending/retry
+External:
+  WhatsApp = sent
+  Inventory API = success
 
-Kecuali business requirement secara eksplisit menyatakan pembayaran tidak boleh dianggap berhasil sebelum ERP confirmation.
+ERP = timeout
 
-Tekankan bahwa architecture mengikuti business invariant.
-
-### Sistem Asynchronous (Saga)
-
-```
-Create payment → Cash out → Generate journal → Sync ERP fails
-```
-
-Jika payment sudah *final*, kita membutuhkan **Saga Compensation** untuk **semantic undo**, bukan technical rollback.
-
-| | Rollback | Compensation |
-|--|----------|----------------|
-| Scope | Transaction scope | Business scope |
-| Effect | Undo uncommitted | New action yang membalikkan efek (reverses) |
-| Example | `ROLLBACK` | `RefundPayment` (membuat record refund baru, bukan DELETE payment) |
-
-Saga compensation membatalkan langkah (step) yang *sebelumnya* telah berhasil dengan menjalankan *compensating action*. Compensation itu sendiri juga harus *idempotent*.
-
-> Catatan: Compensation bukanlah cara untuk mengembalikan sistem seperti semalanya. Email yang sudah terkirim tidak bisa benar-benar di-rollback. Yang mungkin dilakukan: kirim correction email atau corrective business action.
-
----
-
-## 10. Architecture Selection: Synchronous vs Asynchronous
-
-Jangan mengajarkan bahwa `Controller -> Event -> Queue` selalu lebih baik. Architecture dipilih berdasarkan requirement.
-
-### Synchronous Local Transaction cocok jika:
-- User membutuhkan immediate result
-- Consistency harus langsung diketahui
-- Operation sederhana
-- Dependency reliability acceptable
-
-### Asynchronous/Event-Driven cocok jika:
-- Pekerjaan tidak harus selesai sebelum response
-- Latency tinggi
-- Integration dapat gagal sementara
-- Retry diperlukan
-- Loose coupling penting
-
----
-
-## 11. Local vs Distributed Workflow
-
-### Kondisi A — Semua state berada pada database yang sama
-
-Jika `payments`, `invoice`, `inventory`, dan `commission` berada dalam *satu database relasional yang sama*, dan perubahan ini dianggap sebagai satu *business invariant* di mana kegagalan parsial tidak boleh terlihat:
-
-```sql
-BEGIN
-  Insert payment
-  Update invoice
-  Deduct inventory
-  Create commission
-COMMIT
-```
-Pendekatan ini **boleh dan tepat** (Local Transaction).
-
-### Kondisi B — State berada pada boundary berbeda
-
-Jika arsitektur sudah terdistribusi:
-
-```
-PostgreSQL (Order Service)
-+
-ERP API
-+
-WhatsApp API
-+
-Kafka (Message Broker)
-```
-
-Tidak ada satu `DB::transaction()` yang dapat melakukan `ROLLBACK` pada semuanya jika terjadi kegagalan di tengah jalan.
-
-Gunakan: **Local Transaction + Event + Retry + Idempotency + Compensation** sesuai kebutuhan.
-
----
-
-## 12. MockDB Concurrency Model (Educational)
-
-MockDB mengimplementasikan transaction model yang **serialized**:
-
-- `BEGIN` → acquire global transaction mutex
-- `INSERT/UPDATE/DELETE` → operate on transaction snapshot
-- `COMMIT` → merge snapshot to committed, release mutex
-- `ROLLBACK` → discard snapshot, release mutex
-
-Goroutines are concurrent at the application level, while MockDB intentionally serializes write transactions to provide deterministic educational transaction semantics. This verifies application-level logical race paths and atomic dedup behavior under the MockDB model.
-
----
-
-## 13. Test Organization
-
-| Category | Tests | Purpose |
-|----------|-------|---------|
-| **Local Transaction** | `TestUnsafeLocalTransaction`, `TestSafeLocalTransaction` | ACID verification |
-| **External Side Effects** | `TestDistributedTransactionExternalSideEffectLimitation`, `TestHTTPInsideTransactionDuration`, `TestCommitThenExternalCall` | Boundary & external side-effect rollback limitation |
-| **Dual-Write Problems** | `TestDualWriteProblemEventLost`, `TestReverseDualWriteFailure` | Atomicity window analysis |
-| **Transactional Outbox** | `TestTransactionalOutboxPatternAtomicity`, `TestOutboxDispatcherPublishesPending` | Outbox concept atomicity |
-| **Idempotent Consumer** | `TestIdempotentConsumerDeduplication`, `TestAtomicConsumerFlow` | Deduplication key design |
-| **Compensation/Saga** | `TestSagaPaymentWithCompensatingAction`, `TestSagaCompensationFailureHandling` | Semantic undo conceptual demo |
-| **Eventual Consistency** | `TestEventualConsistencyDemo` | Local vs downstream divergence |
-
----
-
-## 14. How to Run
-
-```bash
-cd labs/03-database-transaction
-go test -v -count=1
+Jika inventory EXTERNAL:
+  Main DB rollback
+  Inventory API = STILL deducted
+  WhatsApp tetap sent
 ```
 
 ---
 
-## Navigasi
+## 17. Code References
 
-- **Previous**: [Lab 02 — Database Index](../02-database-index/)
-- **Next**: [Lab 04 — Caching](../04-caching/)
+- `local_transaction.go` — Payment service dengan/tanpa transaction
+- `external.go` — Implementasi WhatsApp, HTTP, Outbox, Saga, Idempotent Consumer  
+- `transaction_test.go` — Semua contoh diverifikasi melalui unit test
+
+---
+
+## 18. Definition of Done
+
+Lab 03 dianggap selesai bila reader dapat menjawab dengan benar:
+
+1. Apa yang sebenarnya dijamin oleh DB transaction?
+2. Apa itu transaction boundary?
+3. Kenapa external API tidak ikut rollback?
+4. Kapan inventory bisa rollback dan kapan tidak?
+5. Mengapa HTTP call di dalam transaction berbahaya?
+6. Apa itu partial failure?
+7. Apa itu distributed consistency problem?
+8. Apa itu dual-write problem?
+9. Mengapa commit DB lalu publish event belum aman?
+10. Apa fungsi Outbox?
+11. Mengapa Outbox tidak berarti exactly-once?
+12. Mengapa consumer harus idempotent?
+13. Mengapa retry bisa menghasilkan duplicate side effect?
+14. Apa arti timeout sebagai unknown outcome?
+15. Apa itu Saga?
+16. Apa itu compensation?
+17. Mengapa compensation bukan rollback?
+18. Apa itu eventual consistency?
+19. Apa fungsi DLQ?
+20. Apa fungsi reconciliation?
+21. Kapan synchronous lebih tepat?
+22. Kapan asynchronous lebih tepat?
+23. Bagaimana menentukan operation yang harus berada dalam satu transaction?
+24. Apa hubungan business invariant dengan transaction boundary?
+25. Bagaimana mendesain flow pembayaran Vendor OPL jika ERP unavailable?

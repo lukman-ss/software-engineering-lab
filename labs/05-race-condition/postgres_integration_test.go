@@ -111,9 +111,10 @@ func cleanupTestInventory(ctx context.Context, db *sql.DB, productID string) err
 // T5: Transaction B  WRITE stock = 0 (overwrite)
 //
 // Expected outcome:
-//   successful_sales = 2
-//   final_stock = 0
-//   1 != 2 + 0 (invariant terbroken)
+//
+//	successful_sales = 2
+//	final_stock = 0
+//	1 != 2 + 0 (invariant terbroken)
 //
 // Test PASS ketika lost update berhasil direproduksi (membuktikan bahwa implementation unsafe bermasalah).
 func TestPostgresUnsafe_LostUpdate(t *testing.T) {

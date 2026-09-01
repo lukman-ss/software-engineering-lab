@@ -15,52 +15,89 @@ import (
 type CacheAsideService struct {
 	db        *sql.DB
 	cache     CacheInterface
+	metrics   *CacheMetrics
 	ttl       time.Duration
-	jitterTTL time.Duration // max jitter to add to TTL
+	jitterTTL time.Duration
 }
 
-func NewCacheAsideService(db *sql.DB, cache CacheInterface) *CacheAsideService {
+// NewCacheAsideService membuat service dengan TTL 5 menit dan jitter 15 detik.
+// metrics diwajibkan untuk observability yang benar.
+func NewCacheAsideService(db *sql.DB, cache CacheInterface, metrics *CacheMetrics) *CacheAsideService {
+	if metrics == nil {
+		metrics = NewCacheMetrics()
+	}
 	return &CacheAsideService{
 		db:        db,
 		cache:     cache,
+		metrics:   metrics,
 		ttl:       5 * time.Minute,
-		jitterTTL: 15 * time.Second, // Jitter to prevent stampede on expiration
+		jitterTTL: 15 * time.Second,
 	}
 }
 
-func (s *CacheAsideService) GetProduct(ctx context.Context, key string) (Product, error) {
-	// 1. Check cache dulu
+// GetProduct menggunakan cache-aside pattern untuk membaca produk.
+// Catatan Observability:
+// - Cache-hit/cache-miss dicatat terpisah
+// - Cache error (Redis down/network) di-categorize, bukan sama dengan miss
+// - Corrupt cache di-log sebagai error untuk debugging
+func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product, error) {
+	key := CacheKey("product", id, 1)
+
+	// 1. Check cache
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
+		// Cache HIT - return data
 		var p Product
 		if err := json.Unmarshal([]byte(cached), &p); err == nil {
-			return p, nil // CACHE HIT
+			s.metrics.IncHit()
+			return p, nil
 		}
-		// Jika unmarshal gagal, hapus cache (stale/corrupt data)
-		_ = s.cache.Delete(ctx, key)
+		// Cache CORRUPT - unmarshal gagal
+		s.metrics.IncError()
+		_ = s.cache.Delete(ctx, key) // attempt cleanup, but don't fail read
+		// Note: In production, log structured error for observability
+	} else if err != nil {
+		// Cache ERROR (Redis down, network, timeout, corrupt value)
+		// Bukan cache miss - error teknis
+		s.metrics.IncError()
+		// NOTE: In production, use structured logging. This is for demo only.
+		fmt.Printf("cache error on GET %s: %v\n", key, err)
+	} else {
+		// Cache MISS - key tidak ada
+		s.metrics.IncMiss()
 	}
 
-	// 2. Cache miss → query DB
-	startDB := time.Now()
+	// 2. Cache miss / error → query DB
+	s.metrics.IncDBQuery()
 	var p Product
-	row := s.db.QueryRowContext(ctx, "SELECT id, name, price FROM products WHERE id = $1", extractID(key))
+	row := s.db.QueryRowContext(ctx, "SELECT id, name, price FROM products WHERE id = $1", id)
 	err = row.Scan(&p.ID, &p.Name, &p.Price)
 	if err != nil {
 		return Product{}, fmt.Errorf("query DB: %w", err)
 	}
-	_ = startDB
 
-	// 3. Populate cache with jitter to prevent synchronized expiration
+	// 3. Populate cache (best-effort)
 	data, err := json.Marshal(p)
 	if err != nil {
-		return Product{}, fmt.Errorf("marshal product: %w", err)
+		// Marshal error = data tidak valid untuk cache, bukan error bisnis
+		// Return data saja, log error
+		fmt.Printf("warn: marshal product failed for cache: %v\n", err)
+		return p, nil
 	}
-	// Use jittered TTL to disperse expiration times across cache entries
+
 	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
 	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
-		// Log but don't fail - we have the data from DB
-		fmt.Printf("warn: cache set failed: %v\n", err)
+		// Cache SET failed - DB success, data tersedia
+		// Log error, bukan fail business read
+		s.metrics.IncError()
+		fmt.Printf("warn: cache set failed for %s: %v\n", key, err)
+		// NOTE: In production, use structured logging. This is for demo only.
 	}
 
 	return p, nil
+}
+
+// GetMetrics mengembalikan metrics untuk observability.
+func (s *CacheAsideService) GetMetrics() *CacheMetrics {
+	return s.metrics
 }

@@ -55,7 +55,10 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	bStarted := make(chan struct{})
 
 	var wg sync.WaitGroup
-	var successCount, rejectCount int
+	var successCount int
+	var outOfStockCount int
+	var unexpectedErrorCount int
+	var mu sync.Mutex
 
 	var aErr, bErr error
 	wg.Add(2)
@@ -79,20 +82,23 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		bErr = trySellWithBarrier(ctx, db, productID, nil, nil)
 	}()
 
-	// Tunggu B selesai (hanya akan selesai setelah A commit)
-	<-aCommitted
 	wg.Wait()
 
-	// Count success/reject
+	// Classify results
 	if aErr == nil {
-		successCount = 1
+		successCount++
+	} else if errors.Is(aErr, ErrOutOfStock) {
+		outOfStockCount++
 	} else {
-		rejectCount = 1
+		unexpectedErrorCount++
 	}
+
 	if bErr == nil {
 		successCount++
+	} else if errors.Is(bErr, ErrOutOfStock) {
+		outOfStockCount++
 	} else {
-		rejectCount++
+		unexpectedErrorCount++
 	}
 
 	repo := NewPostgresRowLockRepository(db)
@@ -106,14 +112,19 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	t.Logf("=== ROW LOCK RESULTS ===")
 	t.Logf("Initial stock: %d", initialStock)
 	t.Logf("Success: %d", successCount)
-	t.Logf("Rejected: %d", rejectCount)
+	t.Logf("Out of stock: %d", outOfStockCount)
+	t.Logf("Unexpected errors: %d", unexpectedErrorCount)
 	t.Logf("Final stock: %d", finalStock)
 
+	// Assertions
+	if unexpectedErrorCount > 0 {
+		t.Errorf("expected 0 unexpected errors, got %d", unexpectedErrorCount)
+	}
 	if successCount != 1 {
 		t.Errorf("expected success = 1, got %d", successCount)
 	}
-	if rejectCount != 1 {
-		t.Errorf("expected reject = 1, got %d", rejectCount)
+	if outOfStockCount != 1 {
+		t.Errorf("expected out of stock = 1, got %d", outOfStockCount)
 	}
 	if finalStock != 0 {
 		t.Errorf("expected final_stock = 0, got %d", finalStock)
@@ -125,12 +136,104 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	}
 
 	// Ensure B was actually blocked until A committed (not just racing past)
-	// If B succeeded, that's a bug since stock=0 after A's decrement
 	if bErr == nil {
-		t.Error("B should have been rejected (stock=0 after A), but succeeded — lock not holding")
+		t.Error("B should have been rejected (stock=0 after A), but succeeded")
 	}
-	if !errors.Is(bErr, ErrOutOfStock) {
-		t.Logf("B rejected with: %v (expected ErrOutOfStock)", bErr)
+
+	t.Logf("✅ INVARIANT HOLDS: initial_stock = successful + final_stock")
+}
+
+// TestPostgresRowLock_HighContention menguji row locking dengan 500 concurrent requests.
+func TestPostgresRowLock_HighContention(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	db, err := database.Connect(ctx, database.FromEnv())
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	defer db.Close()
+
+	productID := "unit-oli-mesin-high-contention"
+	const initialStock = 100
+	const attempts = 500
+
+	if err := setupTestInventory(ctx, db, productID, initialStock); err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	defer cleanupTestInventory(ctx, db, productID)
+
+	repo := NewPostgresRowLockRepository(db)
+
+	var successCount int
+	var outOfStockCount int
+	var unexpectedErrorCount int
+	var mu sync.Mutex
+
+	ready, release := startGate(attempts)
+
+	var wg sync.WaitGroup
+	wg.Add(attempts)
+
+	for i := 0; i < attempts; i++ {
+		go func(i int) {
+			defer wg.Done()
+			ready <- struct{}{}
+			<-release
+
+			err := repo.TrySell(ctx, productID)
+			mu.Lock()
+			if err == nil {
+				successCount++
+			} else if errors.Is(err, ErrOutOfStock) {
+				outOfStockCount++
+			} else {
+				unexpectedErrorCount++
+			}
+			mu.Unlock()
+		}(i)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("test timeout: potential deadlock or DB connection exhaustion")
+	}
+
+	finalStock, err := repo.GetStock(ctx, productID)
+	if err != nil {
+		t.Fatalf("get final stock: %v", err)
+	}
+
+	t.Logf("=== ROW LOCK HIGH CONTENTION RESULTS ===")
+	t.Logf("Initial stock: %d", initialStock)
+	t.Logf("Success: %d", successCount)
+	t.Logf("Out of stock: %d", outOfStockCount)
+	t.Logf("Unexpected errors: %d", unexpectedErrorCount)
+	t.Logf("Final stock: %d", finalStock)
+
+	if unexpectedErrorCount > 0 {
+		t.Errorf("expected 0 unexpected errors, got %d", unexpectedErrorCount)
+	}
+	if successCount != initialStock {
+		t.Errorf("expected success = %d, got %d", initialStock, successCount)
+	}
+	if outOfStockCount != 400 {
+		t.Errorf("expected out of stock = 400, got %d", outOfStockCount)
+	}
+	if finalStock != 0 {
+		t.Errorf("expected final_stock = 0, got %d", finalStock)
+	}
+
+	invariant := successCount + finalStock
+	if invariant != initialStock {
+		t.Errorf("INVARIANT BROKEN: %d + %d != %d", successCount, finalStock, initialStock)
 	}
 
 	t.Logf("✅ INVARIANT HOLDS: initial_stock = successful + final_stock")
@@ -138,7 +241,7 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 
 // trySellWithBarrier performs TrySell with a manual transaction.
 // If lockAcquired != nil, it is closed after SELECT ... FOR UPDATE returns.
-// If unlockSignal != nil, TrySell waits on it before proceeding to UPDATE (not used here).
+// For deterministic timing, this function manages its own barrier synchronization.
 func trySellWithBarrier(ctx context.Context, db *sql.DB, productID string, lockAcquired chan struct{}, unlockSignal chan struct{}) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -178,96 +281,4 @@ func trySellWithBarrier(ctx context.Context, db *sql.DB, productID string, lockA
 	}
 
 	return nil
-}
-
-// TestPostgresRowLock_HighContention menguji row locking dengan 500 concurrent requests.
-//
-// Scenario:
-//   - initial_stock = 100
-//   - requests = 500
-//
-// Expected:
-//   - success = 100
-//   - rejected = 400
-//   - final_stock = 0
-func TestPostgresRowLock_HighContention(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	db, err := database.Connect(ctx, database.FromEnv())
-	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
-	}
-	defer db.Close()
-
-	productID := "unit-oli-mesin-high-contention"
-	const initialStock = 100
-	const attempts = 500
-
-	if err := setupTestInventory(ctx, db, productID, initialStock); err != nil {
-		t.Fatalf("setup failed: %v", err)
-	}
-	defer cleanupTestInventory(ctx, db, productID)
-
-	repo := NewPostgresRowLockRepository(db)
-
-	var wg sync.WaitGroup
-	var successCount, rejectCount int
-	var mu sync.Mutex
-
-	wg.Add(attempts)
-
-	for i := 0; i < attempts; i++ {
-		go func(i int) {
-			defer wg.Done()
-			err := repo.TrySell(ctx, productID)
-			mu.Lock()
-			if err == nil {
-				successCount++
-			} else {
-				rejectCount++
-			}
-			mu.Unlock()
-		}(i)
-	}
-
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-ctx.Done():
-		t.Fatal("test timeout: potential deadlock or DB connection exhaustion")
-	}
-
-	finalStock, err := repo.GetStock(ctx, productID)
-	if err != nil {
-		t.Fatalf("get final stock: %v", err)
-	}
-
-	t.Logf("=== ROW LOCK HIGH CONTENTION RESULTS ===")
-	t.Logf("Initial stock: %d", initialStock)
-	t.Logf("Success: %d", successCount)
-	t.Logf("Rejected: %d", rejectCount)
-	t.Logf("Final stock: %d", finalStock)
-
-	if successCount != initialStock {
-		t.Errorf("expected success = %d, got %d", initialStock, successCount)
-	}
-	if rejectCount != 400 {
-		t.Errorf("expected reject = 400, got %d", rejectCount)
-	}
-	if finalStock != 0 {
-		t.Errorf("expected final_stock = 0, got %d", finalStock)
-	}
-
-	invariant := successCount + finalStock
-	if invariant != initialStock {
-		t.Errorf("INVARIANT BROKEN: %d + %d != %d", successCount, finalStock, initialStock)
-	}
-
-	t.Logf("✅ INVARIANT HOLDS: initial_stock = successful + final_stock")
 }
