@@ -13,7 +13,7 @@ Kenapa Database Transaction Saja Tidak Cukup?
 [BEGIN TRANSACTION]
      │
      ├── INSERT payment
-     ├── UPDATE orders SET status = 'paid'
+     ├── UPDATE invoices SET status = 'paid'
      └── INSERT wallet_transactions
      │
      └── [COMMIT]
@@ -25,7 +25,7 @@ Jika ada error → **ROLLBACK** → Semua pembatalan bersama.
 
 ---
 
-## 2. Where DB Transaction Stops (Transaction Boundary)
+## 2. Transaction Boundary
 
 Satu local database transaction hanya menjamin atomicity untuk resource yang berpartisipasi. External HTTP APIs, email, WhatsApp, message broker, cloud storage, payment gateway request, ERP request, dan external systems lainnya **tidak ikut berpartisipasi**.
 
@@ -68,6 +68,35 @@ Apa yang terjadi ketika kita mencampur HTTP request ke dalam DB transaction?
 | BEGIN → UPDATE → COMMIT → HTTP | Durasi DB saja | Tidak terpengaruh latency |
 
 Jika terjadi `ROLLBACK` di DB, **HTTP request, WhatsApp, atau email yang sudah terkirim tidak dapat dibatalkan oleh database.** External side effects bersifat independen dari transaction state.
+
+Contoh buruk:
+```sql
+DB::transaction(function () {
+    Payment::create(...);
+    Http::post($erpUrl, ...);
+    WhatsappService::send(...);
+});
+```
+
+Masalahnya:
+- Lock hidup terlalu lama
+- External service latency tidak predictable
+- Timeout → tidak ada garansi rollback bahkan jika gagal
+- Database connection tertahan
+- Throughput turun
+- Deadlock probability meningkat
+- API mungkin sudah melakukan side effect walaupun DB rollback
+
+Pendekatan yang benar:
+```
+BEGIN
+  Update local business state
+  Insert event/outbox intent
+COMMIT
+```
+Kemudian external work diproses secara asynchronous jika business requirement memungkinkan.
+
+**Caveat**: Tidak semua external call wajib asynchronous. Yang penting adalah memahami consistency requirement dan transaction boundary. Jangan memakai queue hanya karena ingin memakai queue.
 
 Test bukti: `TestHTTPInsideTransactionDuration`, `TestCommitThenExternalCall`, `TestExternalSideEffectRollback`.
 
@@ -127,7 +156,17 @@ Flow lengkapnya:
 
 ## 7. Eventual Consistency (Pengantar)
 
-Setelah DB commit dan event dicatat, system hilir (downstream) belum tentu *up-to-date*. Ini **normal**, bukan bug.
+Eventual consistency berarti beberapa state pada sistem distributed boleh sementara tidak sinkron, tetapi sistem memiliki mekanisme yang membuat state tersebut pada akhirnya menuju kondisi konsisten yang diharapkan.
+
+Contoh:
+```
+10:00:00 Payment = PAID
+10:00:01 ERP = PENDING
+10:00:05 ERP retry
+10:00:06 ERP = SYNCED
+```
+
+Ini **normal**, bukan bug.
 
 ### Kapan Eventual Consistency Acceptable?
 ✅ Notification (WhatsApp, Email)  
@@ -135,16 +174,75 @@ Setelah DB commit dan event dicatat, system hilir (downstream) belum tentu *up-t
 ✅ Audit logs  
 ✅ Search index updates
 
+### Kapan Butuh Consistency Langsung?
+❌ Payment + ledger + OPL marking → harus satu transaksi
+❌ Inventory stok fisik
+❌ Balance / akuntansi
+
 ---
 
 ## 8. Retry & Idempotent Consumer (Pengantar)
 
 Karena sistem terdistribusi bisa gagal sebagian (partial failure), **retry** menjadi mekanisme wajib.
-Namun, retry berarti event atau request bisa dikirim/diterima lebih dari sekali (at-least-once delivery).
+
+**Producer bisa gagal:**
+- Payment gateway timeout
+- Network error
+- Service unavailable
+
+**Broker bisa tidak tersedia:**
+- Connection refused
+- Disk full
+- Maintenance window
+
+**Consumer bisa crash:**
+- OOM killer
+- Process restart
+- Deployment
+
+**Acknowledgment bisa hilang:**
+- TCP drop
+- Network partition
+- Broker crash
+
+Karena itu, **retry berarti event atau request bisa dikirim/diterima lebih dari sekali (at-least-once delivery)**.
 
 Oleh karena itu, setiap penerima pesan (consumer) **harus idempotent**.
 
-Konsep `processed_events`:
+### Observability Requirement
+
+Workflow distributed yang retryable tetapi tidak observable akan sulit dioperasikan di production. Setiap event dan proses harus memiliki:
+
+| Field | Purpose |
+|-------|---------|
+| `correlation_id` | Melacak request chain yang terkait |
+| `event_id` | Unik identifier untuk event |
+| `aggregate_id` | Entity yang memicu event |
+| `attempt` | Nomor upaya retry saat ini |
+| `status` | pending / published / dead_lettered |
+| `last_error` | Pesan error terakhir |
+| `created_at` | Timestamp pembuatan |
+| `processed_at` | Timestamp pemrosesan |
+
+Koneksi queue tidak menjamin delivery. Architecture tetap membutuhkan:
+
+- **Durability** (persist to disk)
+- **Retry** (handle transient failure)
+- **Idempotency** (handle duplicate delivery)
+- **Observability** (debug & monitor)
+- **Recovery** (handle crashes)
+
+### Queue vs Delivery Guarantee
+
+Jangan mengira bahwa menggunakan queue = aman. Architecture tetap membutuhkan:
+
+- Producer bisa gagal
+- Broker bisa unavailable  
+- Consumer bisa crash
+- ACK bisa hilang
+- Message bisa redelivered
+
+### Konsep `processed_events`:
 ```
 processed_events
 ---------------------------------
@@ -172,6 +270,56 @@ Effectively-once business effect
 Database rollback (`ROLLBACK`) hanya bisa membatalkan transaksi yang belum di-commit.
 Lalu bagaimana jika kita perlu membatalkan *distributed workflow* yang sudah sebagian berhasil?
 
+### Sistem Synchronous (Transaction Local)
+
+Jika semua state berada di satu database:
+
+```
+Admin klik Bayar
+    ↓
+Buat pembayaran
+    ↓
+Cash Out
+    ↓
+Update status OPL
+    ↓
+Generate jurnal
+    ↓
+Kirim WhatsApp Vendor
+    ↓
+Sync ERP
+```
+
+Jika `payment`, `cash_out`, `opl`, `journal` berada pada satu database dan merupakan satu atomic business invariant:
+
+```sql
+BEGIN
+  Create payment
+  Create cash_out
+  Update OPL
+  Create journal
+COMMIT
+```
+
+Kemudian:
+
+```
+VendorPaymentCompleted event
+        ↓
+WhatsApp Worker
+ERP Sync Worker
+```
+
+Jika ERP gagal:
+- payment tetap committed
+- ERP sync = pending/retry
+
+Kecuali business requirement secara eksplisit menyatakan pembayaran tidak boleh dianggap berhasil sebelum ERP confirmation.
+
+Tekankan bahwa architecture mengikuti business invariant.
+
+### Sistem Asynchronous (Saga)
+
 ```
 Create payment → Cash out → Generate journal → Sync ERP fails
 ```
@@ -186,59 +334,62 @@ Jika payment sudah *final*, kita membutuhkan **Saga Compensation** untuk **seman
 
 Saga compensation membatalkan langkah (step) yang *sebelumnya* telah berhasil dengan menjalankan *compensating action*. Compensation itu sendiri juga harus *idempotent*.
 
+> Catatan: Compensation bukanlah cara untuk mengembalikan sistem seperti semalanya. Email yang sudah terkirim tidak bisa benar-benar di-rollback. Yang mungkin dilakukan: kirim correction email atau corrective business action.
+
 ---
 
-## 10. Rule of Thumb: Menentukan Transaction Boundary
+## 10. Architecture Selection: Synchronous vs Asynchronous
 
-### CMMS Case Study (Bengkel / Bengkel Management System)
+Jangan mengajarkan bahwa `Controller -> Event -> Queue` selalu lebih baik. Architecture dipilih berdasarkan requirement.
 
-Bayangkan flow **Invoice Paid**. Apa yang terjadi setelah invoice dibayar?
-- Mengubah Payment state
-- Memotong Inventory stok
-- Menghitung Commission mekanik
-- Mengubah Membership / Poin pelanggan
-- Mengirim WhatsApp notifikasi
-- Sinkronisasi ke ERP
+### Synchronous Local Transaction cocok jika:
+- User membutuhkan immediate result
+- Consistency harus langsung diketahui
+- Operation sederhana
+- Dependency reliability acceptable
 
-**PENTING**: Tidak semua operasi tersebut otomatis dapat (atau harus) berada dalam *satu* transaksi database.
+### Asynchronous/Event-Driven cocok jika:
+- Pekerjaan tidak harus selesai sebelum response
+- Latency tinggi
+- Integration dapat gagal sementara
+- Retry diperlukan
+- Loose coupling penting
 
-#### Kondisi A — Semua state berada pada database yang sama
+---
 
-Jika `payments`, `invoice`, `inventory`, dan `commission` berada dalam *satu database relasional yang sama*, dan perubahan ini dianggap sebagai satu *business invariant* di mana kegagalan parsial (partial failure) sama sekali tidak boleh terjadi/terlihat:
+## 11. Local vs Distributed Workflow
+
+### Kondisi A — Semua state berada pada database yang sama
+
+Jika `payments`, `invoice`, `inventory`, dan `commission` berada dalam *satu database relasional yang sama*, dan perubahan ini dianggap sebagai satu *business invariant* di mana kegagalan parsial tidak boleh terlihat:
 
 ```sql
-BEGIN;
-  Insert payment;
-  Update invoice;
-  Deduct inventory;
-  Create commission;
-COMMIT;
+BEGIN
+  Insert payment
+  Update invoice
+  Deduct inventory
+  Create commission
+COMMIT
 ```
 Pendekatan ini **boleh dan tepat** (Local Transaction).
 
-#### Kondisi B — State berada pada boundary berbeda
+### Kondisi B — State berada pada boundary berbeda
 
 Jika arsitektur sudah terdistribusi:
-- `PostgreSQL` (Order Service)
-- + `ERP API`
-- + `WhatsApp API`
-- + `Kafka` (Message Broker)
+
+```
+PostgreSQL (Order Service)
++
+ERP API
++
+WhatsApp API
++
+Kafka (Message Broker)
+```
 
 Tidak ada satu `DB::transaction()` yang dapat melakukan `ROLLBACK` pada semuanya jika terjadi kegagalan di tengah jalan.
 
 Gunakan: **Local Transaction + Event + Retry + Idempotency + Compensation** sesuai kebutuhan.
-
----
-
-## 11. Transaction Design Rules & Consistency
-
-Jika beberapa perubahan merupakan satu *business invariant*, berada pada transactional datastore yang sama, dan kegagalan parsial tidak boleh terlihat, perubahan tersebut sebaiknya dilakukan secara atomik dalam satu local database transaction.
-
-Namun, jika state berada pada service, database, atau external system yang berbeda, satu local database transaction tidak dapat memberikan atomicity lintas boundary.
-
-Contoh:
-- `payments` + `journal_entries` di dalam satu DB yang sama → **Local Transaction**
-- `payment-service DB` + `accounting-service DB` yang terpisah → **Distributed Workflow**
 
 ---
 
@@ -265,11 +416,11 @@ Goroutines are concurrent at the application level, while MockDB intentionally s
 | **Transactional Outbox** | `TestTransactionalOutboxPatternAtomicity`, `TestOutboxDispatcherPublishesPending` | Outbox concept atomicity |
 | **Idempotent Consumer** | `TestIdempotentConsumerDeduplication`, `TestAtomicConsumerFlow` | Deduplication key design |
 | **Compensation/Saga** | `TestSagaPaymentWithCompensatingAction`, `TestSagaCompensationFailureHandling` | Semantic undo conceptual demo |
-| **Eventual Consistency**| `TestEventualConsistencyDemo` | Local vs downstream divergence |
+| **Eventual Consistency** | `TestEventualConsistencyDemo` | Local vs downstream divergence |
 
 ---
 
-## Cara Menjalankan
+## 14. How to Run
 
 ```bash
 cd labs/03-database-transaction

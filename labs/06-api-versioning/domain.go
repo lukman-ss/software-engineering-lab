@@ -5,17 +5,17 @@ import "encoding/json"
 // Invoice adalah model internal domain untuk invoicing sistem bengkel CMMS.
 // Ini adalah model single source of truth yang tidak terhubung langsung dengan HTTP contract.
 type Invoice struct {
-	ID       int       // Invoice ID
-	Customer Customer  // Data customer (relasi)
-	Total    int64     // Total tagihan dalam IDR
-	Status   string    // PAID, PENDING, OVERDUE
+	ID       int      // Invoice ID
+	Customer Customer // Data customer (relasi)
+	Total    int64    // Total tagihan dalam IDR
+	Status   string   // PAID, PENDING, OVERDUE
 }
 
 // Customer merepresentasikan data pelanggan di sistem.
 type Customer struct {
-	ID     int    // Customer ID
-	Name   string // Nama lengkap
-	Phone  string // Nomor telepon
+	ID    int    // Customer ID
+	Name  string // Nama lengkap
+	Phone string // Nomor telepon
 }
 
 // LegacyInvoice adalah model yang dipakai oleh client Android lama (versi 1.0).

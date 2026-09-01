@@ -26,10 +26,10 @@ type CustomerV2Response struct {
 // InvoiceV2Response adalah contract API untuk V2.
 // Customer sekarang object dengan informasi lebih lengkap.
 type InvoiceV2Response struct {
-	ID       int                  `json:"id"`
-	Customer CustomerV2Response   `json:"customer"` // Object
-	Total    int64               `json:"total"`
-	Status   string               `json:"status"`
+	ID       int                `json:"id"`
+	Customer CustomerV2Response `json:"customer"` // Object
+	Total    int64              `json:"total"`
+	Status   string             `json:"status"`
 }
 
 // mapToV1 mengonversi domain Invoice ke V1 response contract.
@@ -62,7 +62,7 @@ type mockInvoiceRepository struct{}
 
 func (r *mockInvoiceRepository) GetInvoiceByID(ctx any, id int) (Invoice, error) {
 	return Invoice{
-		ID:     id,
+		ID: id,
 		Customer: Customer{
 			ID:    15,
 			Name:  "Budi",

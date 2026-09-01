@@ -23,14 +23,14 @@ func UnsafeHandler(w http.ResponseWriter, r *http.Request) {
 	// Simulasi: backend pernah punya customer="Budi", sekarang jadi object
 	// Ini adalah contoh BREAKING CHANGE yang tidak terdeteksi unit test
 	invoice := map[string]interface{}{
-		"id":       id,
+		"id": id,
 		"customer": map[string]interface{}{ // BREAKING: sebelumnya string "Budi"
-			"id":   15,
-			"name": "Budi",
+			"id":    15,
+			"name":  "Budi",
 			"phone": "08123",
 		},
-		"total":    500000,
-		"status":   "PAID",
+		"total":  500000,
+		"status": "PAID",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
