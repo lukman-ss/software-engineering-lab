@@ -3,12 +3,109 @@ package caching_test
 import (
 	"context"
 	"encoding/json"
+	"math"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
+
+// PartialFailingMockCache is a mock that allows configuring which operations fail
+type PartialFailingMockCache struct {
+	*caching.MockCache
+	FailSet    bool
+	FailDelete bool
+}
+
+func NewPartialFailingMockCache() *PartialFailingMockCache {
+	return &PartialFailingMockCache{
+		MockCache: caching.NewMockCache(),
+	}
+}
+
+func (m *PartialFailingMockCache) Set(ctx context.Context, key, value string, ttl time.Duration) error {
+	if m.FailSet {
+		return caching.ErrCacheDown
+	}
+	return m.MockCache.Set(ctx, key, value, ttl)
+}
+
+func (m *PartialFailingMockCache) Delete(ctx context.Context, key string) error {
+	if m.FailDelete {
+		return caching.ErrCacheDown
+	}
+	return m.MockCache.Delete(ctx, key)
+}
+
+// TestCacheSetFailureMetrics verifies: cache set failure increments error metric but request succeeds
+func TestCacheSetFailureMetrics(t *testing.T) {
+	cache := NewPartialFailingMockCache()
+	cache.FailSet = true
+
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+	ctx := context.Background()
+
+	// Initial request - cache miss -> repo hit -> cache set fails
+	_, err := svc.GetDashboard(ctx, 1)
+
+	// Request should succeed
+	if err != nil {
+		t.Fatalf("expected request to succeed despite cache set failure, got error: %v", err)
+	}
+
+	// Verify metrics
+	if metrics.Misses() != 1 {
+		t.Errorf("expected 1 cache miss, got %d", metrics.Misses())
+	}
+	if metrics.Errors() != 1 {
+		t.Errorf("expected 1 cache error (from set failure), got %d", metrics.Errors())
+	}
+	if metrics.RebuildAttempts() != 1 {
+		t.Errorf("expected 1 rebuild attempt, got %d", metrics.RebuildAttempts())
+	}
+	if metrics.RebuildSuccesses() != 0 {
+		t.Errorf("expected 0 rebuild success, got %d", metrics.RebuildSuccesses())
+	}
+	if metrics.DBQueries() != 1 {
+		t.Errorf("expected 1 db query, got %d", metrics.DBQueries())
+	}
+
+	t.Log("✓ Cache set failure triggers error metric but request succeeds")
+}
+
+// TestCacheDeleteFailureMetrics verifies: cache delete failure increments error metric
+func TestCacheDeleteFailureMetrics(t *testing.T) {
+	cache := NewPartialFailingMockCache()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+	ctx := context.Background()
+
+	// Populate cache first
+	_, _ = svc.GetDashboard(ctx, 1)
+
+	// Now make delete fail
+	cache.FailDelete = true
+
+	// Invalidate cache
+	err := svc.InvalidateDashboard(ctx, 1, 1, time.Now().UTC())
+
+	// Should return error
+	if err == nil {
+		t.Fatal("expected invalidation to return error")
+	}
+
+	// Verify error metric
+	if metrics.Errors() != 1 {
+		t.Errorf("expected 1 cache error (from delete failure), got %d", metrics.Errors())
+	}
+
+	t.Log("✓ Cache delete failure triggers error metric")
+}
 
 // TestCacheFailureGracefulDegradation verifies: when cache fails, service falls back to repository.
 func TestCacheFailureGracefulDegradation(t *testing.T) {
@@ -67,8 +164,9 @@ func TestMetricsTracking(t *testing.T) {
 	hitRatio := m.HitRatio()
 	t.Logf("Cache hit ratio: %.2f%%", hitRatio)
 
-	if hitRatio != 66.66666666666666 { // 2 hit, 1 miss = 66.67%
-		t.Logf("Hit ratio calculation OK: 2/3 = 66.67%%")
+	expected := 2.0 / 3.0 * 100 // 66.67%
+	if math.Abs(hitRatio-expected) > 0.001 {
+		t.Errorf("hit ratio: expected %.4f, got %.4f", expected, hitRatio)
 	}
 
 	t.Log("Metrics tracking validated")
@@ -76,8 +174,11 @@ func TestMetricsTracking(t *testing.T) {
 
 // TestDashboardKeyVersioning demonstrasikan key versioning
 func TestDashboardKeyVersioning(t *testing.T) {
-	keyV1 := caching.NewDashboardKey(42).String()
-	keyV1_Migration := caching.NewDashboardKey(42).WithVersion(2).String()
+	// Use fixed date for deterministic tests
+	fixedDate := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	keyV1 := caching.NewDashboardKey(42).WithDate(fixedDate).String()
+	keyV1_Migration := caching.NewDashboardKey(42).WithVersion(2).WithDate(fixedDate).String()
 
 	t.Logf("Key v1: %s", keyV1)
 	t.Logf("Key v2 (migration): %s", keyV1_Migration)
@@ -86,49 +187,23 @@ func TestDashboardKeyVersioning(t *testing.T) {
 		t.Fatal("different versions should produce different keys")
 	}
 
-	// Key format: cmms:dashboard:v1:branch:42:date:2026-08-29
+	// Key format: cmms:dashboard:v1:tenant:1:branch:42:date:2026-08-29
 	expectedPrefix := "cmms:dashboard:"
-	if keyV1[:len(expectedPrefix)] != expectedPrefix {
+	if !strings.HasPrefix(keyV1, expectedPrefix) {
 		t.Errorf("key should start with %s", expectedPrefix)
 	}
 
-	// Version check - "v1" starts at position 16 (cmms:dashboard:v1:...)
-	if len(keyV1) <= 17 || keyV1[16] != '1' {
-		t.Error("key V1 should contain v1")
+	// Assert expected key format with version
+	expectedKey := "cmms:dashboard:v1:tenant:1:branch:42:date:2026-08-29"
+	if keyV1 != expectedKey {
+		t.Errorf("keyV1 mismatch: expected %s, got %s", expectedKey, keyV1)
 	}
 
 	t.Log("Key versioning for migration validated")
 }
 
-// TestCorruptCacheHandling demonstrasikan handling cache value yang rusak
-func TestCorruptCacheHandling(t *testing.T) {
-	cache := caching.NewMockCache()
-	ctx := context.Background()
-
-	key := "product:corrupt"
-
-	// Set corrupt data (bukan valid JSON produk)
-	corruptJSON := `{"id":"123"` // incomplete JSON
-	cache.Set(ctx, key, corruptJSON, 5*time.Minute)
-
-	// Try to read
-	cached, err := cache.Get(ctx, key)
-	if err != nil {
-		t.Fatalf("cache get returned error: %v", err)
-	}
-
-	// Try to unmarshal
-	var p caching.Product
-	unmarshalErr := json.Unmarshal([]byte(cached), &p)
-	if unmarshalErr == nil {
-		t.Log("unexpected: corrupt JSON parsed")
-	}
-
-	t.Log("PROVEN: Corrupt cache entry detected on unmarshal")
-
-	// Implementation harus: delete cache + rebuild from source of truth
-	t.Log("Pattern: Delete corrupt key, fallback to database, rebuild")
-}
+// Removed TestCorruptCacheHandling as it was redundant/incorrect.
+// True handling of corrupt cache is tested in cache_integration_test.go's TestCorruptCacheFallsBackAppropriately.
 
 // TestSerializationSafety ensures JSON marshal/unmarshal errors are handled
 func TestSerializationSafety(t *testing.T) {

@@ -113,7 +113,10 @@ func Test500_ConcurrentBooking(t *testing.T) {
 	}
 
 	// Verify final count
-	finalCount, _ := repo.CountBookings(ctx, "service-01", "09:00")
+	finalCount, err := repo.CountBookings(ctx, "service-01", "09:00")
+	if err != nil {
+		t.Fatalf("get final count: %v", err)
+	}
 
 	t.Logf("=== CONCURRENT BOOKING RESULTS ===")
 	t.Logf("Created: %d", createdCount)

@@ -24,15 +24,15 @@ var (
 
 // IsCacheMiss returns true if err is a cache miss (not a failure).
 func IsCacheMiss(err error) bool {
-	return err != nil && err == ErrCacheMiss
+	return errors.Is(err, ErrCacheMiss)
 }
 
 // IsCacheDown returns true if cache is unavailable, allowing fallback.
 func IsCacheDown(err error) bool {
-	return err != nil && err == ErrCacheDown
+	return errors.Is(err, ErrCacheDown)
 }
 
 // IsCacheCorrupt returns true if cached data is malformed.
 func IsCacheCorrupt(err error) bool {
-	return err != nil && err == ErrCacheCorrupt
+	return errors.Is(err, ErrCacheCorrupt)
 }

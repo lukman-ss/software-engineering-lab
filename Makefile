@@ -1,7 +1,8 @@
 .PHONY: all run test test-race lint fmt vet clean \
 	infra-up infra-down migrate-up migrate-down \
 	lab-02-setup lab-02-seed lab-02-baseline lab-02-indexes \
-	lab-02-explain lab-02-benchmark lab-02-clean lab-02-verify
+	lab-02-explain lab-02-benchmark lab-02-clean lab-02-verify \
+	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost
@@ -19,23 +20,24 @@ run: fmt vet
 	@go run ./cmd/api
 
 # Run tests
-test:
+test: lab-04-test
 	@echo "Running unit tests..."
 	@go test ./... -v
 
-test-race:
+test-race: lab-04-test-race
 	@echo "Running tests with race detector..."
 	@go test ./... -race -v
 
-lint:
+lint: lab-04-vet
 	@echo "Running linter..."
 	@go vet ./...
 
 fmt:
 	@echo "Formatting code..."
 	@go fmt ./...
+	@cd labs/04-caching && go fmt ./...
 
-vet:
+vet: lab-04-vet
 	@echo "Running go vet..."
 	@go vet ./...
 
@@ -103,3 +105,25 @@ lab-02-verify:
 	@echo "=== Verifying Lab 02 ==="
 	@./labs/02-database-index/scripts/verify_lab.sh
 	@echo "=== Verification Complete ==="
+
+# ==================== Lab 04: Caching ====================
+
+lab-04-test:
+	@echo "=== Testing Lab 04 (Unit Tests) ==="
+	@cd labs/04-caching && go test -count=1 ./...
+
+lab-04-test-race:
+	@echo "=== Testing Lab 04 (Race Detector) ==="
+	@cd labs/04-caching && go test -race -count=1 ./...
+
+lab-04-vet:
+	@echo "=== Vet Lab 04 ==="
+	@cd labs/04-caching && go vet ./...
+
+lab-04-demo:
+	@echo "=== Running Lab 04 Demo ==="
+	@cd labs/04-caching && go run ./cmd/demo -scenario=cache-aside
+
+lab-04-integration:
+	@echo "=== Testing Lab 04 (Integration) ==="
+	@cd labs/04-caching && go test -tags=integration -count=1 ./...

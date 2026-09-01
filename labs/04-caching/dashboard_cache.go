@@ -47,7 +47,7 @@ func (s *DashboardCacheService) GetDashboardWithTenant(ctx context.Context, tena
 	}
 
 	s.queryCounter.Add(1)
-	d, err := s.repo.GetDashboardWithTenant(ctx, tenantID, branchID, businessDate)
+	d, err := s.repo.GetDashboard(ctx, tenantID, branchID, businessDate)
 	if err != nil {
 		return Dashboard{}, err
 	}

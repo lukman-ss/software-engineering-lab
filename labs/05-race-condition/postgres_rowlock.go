@@ -47,7 +47,7 @@ func (r *PostgresRowLockRepository) TrySell(ctx context.Context, productID strin
 	}
 
 	if stock <= 0 {
-		return fmt.Errorf("stock habis: %w", ErrOutOfStock)
+		return ErrOutOfStock
 	}
 
 	// Decrement inside the same transaction — lock prevents concurrent modification

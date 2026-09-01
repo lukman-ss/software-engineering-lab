@@ -2,6 +2,7 @@ package caching
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,15 +23,12 @@ func NewMockCache() *MockCache {
 	}
 }
 
-func NewMockCacheWithTTL(ttl time.Duration) *MockCache {
-	mc := NewMockCache()
-	// TTL is implicit in expiry times
-	_ = ttl
-	return mc
-}
-
 func NewFailingMockCache() *MockCache {
-	return &MockCache{data: make(map[string]string), fail: true}
+	return &MockCache{
+		data:     make(map[string]string),
+		expiries: make(map[string]time.Time),
+		fail:     true,
+	}
 }
 
 func (m *MockCache) Get(ctx context.Context, key string) (string, error) {
@@ -85,6 +83,7 @@ func (m *MockCache) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// GetWithExpiry is part of CacheInterface
 func (m *MockCache) GetWithExpiry(ctx context.Context, key string) (string, time.Time, error) {
 	if m.fail {
 		return "", time.Time{}, ErrCacheDown
@@ -100,6 +99,7 @@ func (m *MockCache) GetWithExpiry(ctx context.Context, key string) (string, time
 
 	expiry, ok := m.expiries[key]
 	if !ok {
+		// Key has no expiry
 		return data, time.Time{}, nil
 	}
 
@@ -113,98 +113,64 @@ func (m *MockCache) GetWithExpiry(ctx context.Context, key string) (string, time
 }
 
 // SetWithExpiry sets data with explicit expiry time (for testing)
-func (m *MockCache) SetWithExpiry(key, data string, ttl, actualExpiry time.Time) {
+func (m *MockCache) SetWithExpiry(key string, data string, actualExpiry time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.data[key] = data
 	m.expiries[key] = actualExpiry
-}
-
-// Statistik untuk testing/debugging
-type CacheStats struct {
-	Hits   int
-	Misses int
-}
-
-func (m *MockCache) Stats() CacheStats {
-	// Not implemented for simplicity
-	return CacheStats{}
 }
 
 // MockCacheWithStats tracks hit/miss for testing
 type MockCacheWithStats struct {
-	*MockCache
-	mu       sync.RWMutex
-	hits     int
-	misses   int
-	expireAt time.Time
+	base   *MockCache
+	hits   atomic.Int64
+	misses atomic.Int64
 }
 
 func NewMockCacheWithStats() *MockCacheWithStats {
 	return &MockCacheWithStats{
-		MockCache: NewMockCache(),
+		base: NewMockCache(),
 	}
 }
 
 func (m *MockCacheWithStats) Get(ctx context.Context, key string) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	data, ok := m.data[key]
-	if !ok {
-		m.misses++
-		return "", ErrCacheMiss
+	data, err := m.base.Get(ctx, key)
+	if errors.Is(err, ErrCacheMiss) {
+		m.misses.Add(1)
+	} else if err == nil {
+		m.hits.Add(1)
 	}
-
-	// Check expiry
-	if !m.expireAt.IsZero() {
-		if time.Now().After(m.expireAt) {
-			m.misses++
-			return "", ErrCacheMiss
-		}
-	}
-
-	m.hits++
-	return data, nil
+	return data, err
 }
 
 func (m *MockCacheWithStats) Set(ctx context.Context, key, value string, ttl time.Duration) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.data[key] = value
-	m.expireAt = time.Now().Add(ttl)
-	return nil
+	return m.base.Set(ctx, key, value, ttl)
 }
 
 func (m *MockCacheWithStats) Delete(ctx context.Context, key string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.data, key)
-	delete(m.expiries, key)
-	m.expireAt = time.Time{}
-	return nil
+	return m.base.Delete(ctx, key)
 }
 
 func (m *MockCacheWithStats) GetWithExpiry(ctx context.Context, key string) (string, time.Time, error) {
-	result, err := m.Get(ctx, key)
-	if err != nil {
-		return "", time.Time{}, err
+	data, expiry, err := m.base.GetWithExpiry(ctx, key)
+	if errors.Is(err, ErrCacheMiss) {
+		m.misses.Add(1)
+	} else if err == nil {
+		m.hits.Add(1)
 	}
-	return result, m.expireAt, nil
+	return data, expiry, err
 }
 
-func (m *MockCacheWithStats) SetWithExpiry(key, data string, ttl, actualExpiry time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *MockCacheWithStats) Hits() int {
+	return int(m.hits.Load())
+}
 
-	m.data[key] = data
-	m.expiries[key] = actualExpiry
+func (m *MockCacheWithStats) Misses() int {
+	return int(m.misses.Load())
 }
 
 // MockRedisClient - implements LockInterface for distributed locking tests.
-// Provides atomic SET NX and compare-and-delete (via ReleaseLock in distributed_lock.go).
 type MockRedisClient struct {
 	data map[string]string
 	mu   sync.RWMutex
@@ -217,7 +183,6 @@ func NewMockRedisClient() *MockRedisClient {
 }
 
 // SetNX atomically sets key only if it doesn't exist.
-// Returns true if key was set, false if key already existed.
 func (r *MockRedisClient) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -227,13 +192,15 @@ func (r *MockRedisClient) SetNX(ctx context.Context, key, value string, ttl time
 	}
 
 	r.data[key] = value
+	// Note: True TTL is not strictly simulated in this simple mock
+	// because SetNX in this lab is only used for mutual exclusion proof.
 	return true, nil
 }
 
 // Get retrieves value (for lock token verification).
 func (r *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	val, exists := r.data[key]
 	if !exists {
@@ -242,22 +209,7 @@ func (r *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
-// Del deletes a key by value verification.
-// In Redis, this would be a Lua script: if GET == ARGV then DEL.
-// For simplicity, this returns whether key existed and was deleted.
-func (r *MockRedisClient) Del(ctx context.Context, key string) (bool, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, exists := r.data[key]; exists {
-		delete(r.data, key)
-		return true, nil
-	}
-	return false, nil
-}
-
 // CompareAndDel atomically deletes only if value matches.
-// Returns true if deleted, false if value didn't match or key missing.
 func (r *MockRedisClient) CompareAndDel(ctx context.Context, key, value string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -269,31 +221,6 @@ func (r *MockRedisClient) CompareAndDel(ctx context.Context, key, value string) 
 
 	delete(r.data, key)
 	return true, nil
-}
-
-// HeavyDB is for stampede testing
-
-// HeavyDB adalah simulasi DB untuk testing stampede
-type HeavyDB struct {
-	rebuildCount atomic.Int64
-}
-
-func NewHeavyDB() *HeavyDB {
-	return &HeavyDB{}
-}
-
-func (db *HeavyDB) FetchHeavyData() string {
-	db.rebuildCount.Add(1)
-	time.Sleep(50 * time.Millisecond) // Simulate expensive query
-	return "heavy_data_result"
-}
-
-func (db *HeavyDB) RebuildCount() int64 {
-	return db.rebuildCount.Load()
-}
-
-func (db *HeavyDB) Reset() {
-	db.rebuildCount.Store(0)
 }
 
 // Ensure interfaces are satisfied

@@ -32,7 +32,7 @@ func NewCounterRepository() *CounterRepository {
 	return &CounterRepository{}
 }
 
-func (r *CounterRepository) GetDashboard(ctx context.Context, branchID int64, businessDate time.Time) (Dashboard, error) {
+func (r *CounterRepository) GetDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
 	// Check for blocking (thread-safe)
 	r.mu.Lock()
 	ch := r.blockCh
@@ -75,6 +75,8 @@ func (r *CounterRepository) Unblock() {
 
 // BrokenStampedeService demonstrates cache stampede vulnerability.
 // Multiple concurrent cache misses result in parallel DB queries.
+// INTENTIONALLY BROKEN FOR LAB DEMONSTRATION.
+// Do not use as production code.
 type BrokenStampedeService struct {
 	cache CacheInterface
 	repo  *CounterRepository
@@ -100,7 +102,7 @@ func (s *BrokenStampedeService) GetData(ctx context.Context, branchID int64) (Da
 
 	// 2. Cache miss -> parallel DB queries (NO protection)
 	// In real system: 100 concurrent requests → 100 DB queries
-	d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+	d, err := s.repo.GetDashboard(ctx, 1, branchID, time.Now())
 	if err != nil {
 		return Dashboard{}, err
 	}
@@ -162,7 +164,7 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 		}
 
 		// Only one goroutine reaches here - it fetches from DB
-		d, err := s.repo.GetDashboard(ctx, branchID, time.Now())
+		d, err := s.repo.GetDashboard(ctx, 1, branchID, time.Now())
 		if err != nil {
 			return Dashboard{}, err
 		}

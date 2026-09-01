@@ -244,7 +244,9 @@ func (s *InvoiceServiceWithHTTPCall) PayInvoiceWithHTTPInsideTx(ctx context.Cont
 	}
 
 	if failAfterDBCommit {
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return elapsed, fmt.Errorf("simulated crash pre-requisite commit failed: %w", err)
+		}
 		return elapsed, ErrProcessCrashed
 	}
 
@@ -572,7 +574,9 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 			if d.dlq != nil {
 				event := Event{ID: id, EventType: eventType, AggregateID: aggregateID, Payload: payload}
 				d.dlq.Add(event, "max attempts exceeded", attempts)
-				_, _ = d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'dead_lettered' WHERE id = $1", id)
+				if _, err := d.db.ExecContext(ctx, "UPDATE outbox_events SET status = 'dead_lettered' WHERE id = $1", id); err != nil {
+					log.Printf("[DISPATCHER] failed to mark event=%s as dead_lettered: %v", id, err)
+				}
 				log.Printf("[DISPATCHER] event=%s moved to DLQ after %d attempts", id, attempts)
 			}
 			continue
@@ -591,7 +595,9 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 
 		if pubErr != nil {
 			log.Printf("[DISPATCHER] publish failed for event=%s: %v", event.ID, pubErr)
-			_, _ = d.db.ExecContext(ctx, "UPDATE outbox_events SET attempts = $1 WHERE id = $2", attempts, id)
+			if _, err := d.db.ExecContext(ctx, "UPDATE outbox_events SET attempts = $1 WHERE id = $2", attempts, id); err != nil {
+				log.Printf("[DISPATCHER] failed to update attempts for event=%s: %v", id, err)
+			}
 			continue
 		}
 
@@ -621,10 +627,12 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 // ============================================================================
 
 // CommissionWorker processes events idempotently.
-// KEY DESIGN: business state (commissions) + processed_events are committed
-// in a SINGLE transaction. This ensures:
-//   - business state committed but dedup record lost (redelivery = duplicate)
-//   - dedup record committed but business state lost (skipped processing)
+// KEY DESIGN: business state (commissions) and processed_events are
+// committed in a single transaction.
+//
+// This prevents:
+//   - business state committed while the dedup record is lost
+//   - dedup record committed while the business state is lost
 type CommissionWorker struct {
 	db                         *sql.DB
 	observedBusinessExecutions int64 // observability only, NOT source of truth
@@ -817,7 +825,7 @@ func (s *Saga) Execute(ctx context.Context) error {
 		if err := step.Action(ctx); err != nil {
 			// Compensate only the steps that successfully completed
 			// Steps are compensated in reverse order
-			// Continue compensating even if a compensation fails (PROMPT 11)
+			// Continue compensating even if a compensation fails
 			var compErrors []error
 			// Find the index of the last successfully executed step
 			for j := len(s.executed) - 1; j >= 0; j-- {

@@ -1,10 +1,9 @@
 // Package mockdb provides a minimal in-memory database/sql driver for educational purposes.
 //
 // Concurrency Model:
-//   - Serialized write transactions (one active writer at a time)
-//   - BEGIN acquires global lock, COMMIT releases it
-//   - INSERT ... ON CONFLICT checks committed state atomically while holding lock
-//   - READ operations can run concurrently within committed state
+//   - write transactions are serialized
+//   - non-transactional access is synchronized by the same mutex
+//   - reads may block while a write transaction is active
 //
 // IMPORTANT: This educational mock serializes write transactions for deterministic atomicity.
 // It does NOT implement PostgreSQL MVCC or isolation semantics — use for learning, not production.

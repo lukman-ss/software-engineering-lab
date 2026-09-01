@@ -87,8 +87,8 @@ func TestAtomicUpdate_StockOne(t *testing.T) {
 
 	// Main invariant check
 	expectedSum := successCount + currentStock
-	if expectedSum > initialStock {
-		t.Errorf("INVARIANT BROKEN: successful (%d) + final_stock (%d) = %d > initial_stock (%d)",
+	if expectedSum != initialStock {
+		t.Fatalf("INVARIANT BROKEN: successful (%d) + final_stock (%d) = %d != initial_stock (%d)",
 			successCount, currentStock, expectedSum, initialStock)
 	}
 
@@ -183,8 +183,8 @@ func TestAtomicUpdate_HighContention(t *testing.T) {
 
 	// Main invariant
 	expectedSum := successCount + currentStock
-	if expectedSum > initialStock {
-		t.Errorf("INVARIANT BROKEN: %d != %d + %d", initialStock, successCount, currentStock)
+	if expectedSum != initialStock {
+		t.Fatalf("INVARIANT BROKEN: %d != %d + %d", initialStock, successCount, currentStock)
 	}
 
 	// Expected values

@@ -12,110 +12,99 @@ import (
 
 // Test 1: Without cache, every request would hit DB directly (naive pattern)
 func TestNaiveNoCache(t *testing.T) {
-	cache := caching.NewMockCache()
+	repo := caching.NewFakeDashboardRepository()
+	// Using a failing cache simulates no-cache
+	cache := caching.NewFailingMockCache()
+	metrics := caching.NewCacheMetrics()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// Simulate naive service: always cache miss → DB query
-	// Di dunia nyata: setiap request dashboard = 6 query DB
-	t.Log("Naive service: setiap request = multiple DB queries (no cache)")
-
-	// Demonstrate cache miss
-	_, err := cache.Get(ctx, "product:100")
-	if err == nil {
-		t.Fatal("expected cache miss")
+	// 5 requests
+	for i := 0; i < 5; i++ {
+		_, _ = svc.GetDashboard(ctx, 1)
 	}
 
-	t.Log("Naive pattern demonstrates cache miss on every request")
+	if repo.CallCount() != 5 {
+		t.Fatalf("expected 5 DB queries, got %d", repo.CallCount())
+	}
+
+	t.Log("✓ Naive pattern demonstrates DB query on every request")
 }
 
 // Test 2: Cache aside pattern - miss then hit
 func TestCacheAsideHit(t *testing.T) {
+	repo := caching.NewFakeDashboardRepository()
 	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// First: populate cache
-	product := caching.Product{ID: "200", Name: "Gadget", Price: 250.0}
-	data, err := json.Marshal(product)
-	if err != nil {
-		t.Fatalf("marshal failed: %v", err)
-	}
-	cache.Set(ctx, "product:200", string(data), 5*time.Minute)
+	// First request: Cache Miss -> DB (1 query)
+	_, _ = svc.GetDashboard(ctx, 1)
 
-	// Second: cache hit
-	cached, err := cache.Get(ctx, "product:200")
-	if err != nil {
-		t.Fatalf("cache get failed: %v", err)
+	if repo.CallCount() != 1 {
+		t.Fatalf("expected 1 DB query on first request, got %d", repo.CallCount())
+	}
+	if metrics.Misses() != 1 {
+		t.Errorf("expected 1 cache miss, got %d", metrics.Misses())
 	}
 
-	var p caching.Product
-	if err := json.Unmarshal([]byte(cached), &p); err != nil {
-		t.Fatalf("unmarshal failed: %v", err)
+	// Next 4 requests: Cache Hit -> No DB queries
+	for i := 0; i < 4; i++ {
+		_, _ = svc.GetDashboard(ctx, 1)
 	}
 
-	if p.Name != "Gadget" {
-		t.Errorf("expected Gadget, got %s", p.Name)
+	if repo.CallCount() != 1 {
+		t.Fatalf("expected DB queries to stay at 1, got %d", repo.CallCount())
+	}
+	if metrics.Hits() != 4 {
+		t.Errorf("expected 4 cache hits, got %d", metrics.Hits())
 	}
 
-	t.Log("Cache hit returns correct data")
+	t.Log("✓ Cache aside pattern validated using robust service")
 }
 
 // Test 3: Stale read is possible with cache TTL
 func TestCacheStaleRead(t *testing.T) {
+	repo := caching.NewFakeDashboardRepository()
 	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	key := "product:300"
-	product := caching.Product{ID: "300", Name: "NewName", Price: 200.0}
+	// Initial request populates cache with default value (43 for tenant 1)
+	res1, _ := svc.GetDashboard(ctx, 1)
 
-	data, err := json.Marshal(product)
-	if err != nil {
-		t.Fatalf("marshal failed: %v", err)
-	}
-	cache.Set(ctx, key, string(data), 5*time.Minute)
+	// DB changes value
+	repo.SetNextValue(func() caching.Dashboard {
+		return caching.Dashboard{BranchID: 1, InvoiceCountToday: 999}
+	})
 
-	// Cache returns what's stored, even if DB has changed
-	cachedData, err := cache.Get(ctx, key)
-	if err != nil {
-		t.Fatalf("cache get failed: %v", err)
-	}
-	if cachedData == "" {
-		t.Fatal("expected cache to have data")
+	// Get again before expiry or invalidation -> STALE read (still 43)
+	res2, _ := svc.GetDashboard(ctx, 1)
+
+	if res2.InvoiceCountToday != res1.InvoiceCountToday {
+		t.Fatalf("expected stale data %d, got %d", res1.InvoiceCountToday, res2.InvoiceCountToday)
 	}
 
-	var cachedProduct caching.Product
-	if err := json.Unmarshal([]byte(cachedData), &cachedProduct); err != nil {
-		t.Fatalf("unmarshal failed: %v", err)
-	}
-	if cachedProduct.Name != "NewName" {
-		t.Errorf("expected 'NewName', got '%s'", cachedProduct.Name)
+	// Invalidate cache
+	_ = svc.InvalidateCurrentDashboard(ctx, 1, 1)
+
+	// Get again after invalidation -> FRESH read (999)
+	res3, _ := svc.GetDashboard(ctx, 1)
+
+	if res3.InvoiceCountToday != 999 {
+		t.Fatalf("expected fresh data 999 after invalidation, got %d", res3.InvoiceCountToday)
 	}
 
-	t.Log("Cache returns stored data regardless of external changes until TTL expires")
+	t.Log("✓ Stale read verified: Cache returns old data until invalidated")
 }
 
 // Test 4: Single Flight Pattern - dedupes concurrent DB queries
 func TestSingleFlightConcurrentRequests(t *testing.T) {
-	cache := caching.NewMockCache()
-	ctx := context.Background()
-
-	// Pre-populate cache
-	data := `{"id":"400","name":"Part","price":50.0}`
-	cache.Set(ctx, "product:400", data, 5*time.Minute)
-
-	// Multiple concurrent readers - all served from cache
-	hits := 0
-	for i := 0; i < 10; i++ {
-		_, err := cache.Get(ctx, "product:400")
-		if err == nil {
-			hits++
-		}
-	}
-
-	if hits != 10 {
-		t.Errorf("expected 10 cache hits, got %d", hits)
-	}
-
-	t.Log("Concurrent cache hits validated")
+	// Replaced by TestStampedeProtectedVersion and TestConcurrentCacheMissProtectedBySingleflight
+	// which test this properly with sync barriers and robust implementations.
+	t.Log("✓ Legacy test removed. Singleflight concurrency is thoroughly tested in stampede_test.go and cache_integration_test.go")
 }
 
 // Test 5: Probabilistic early refresh mitigates stampede
@@ -283,16 +272,5 @@ func TestRandomJitterDispersesRequests(t *testing.T) {
 	t.Log("Jitter distribution validated")
 }
 
-// Test 10: Cache failure handled gracefully
-func TestCacheFailureHandledGracefully(t *testing.T) {
-	cache := caching.NewFailingMockCache()
-	ctx := context.Background()
-
-	// When cache fails, service should fall back to DB
-	_, err := cache.Get(ctx, "test")
-	if err == nil {
-		t.Fatal("expected cache to fail")
-	}
-
-	t.Log("Cache failure handling validated")
-}
+// Removed TestCacheFailureHandledGracefully as it was a redundant/incorrect test.
+// True graceful degradation is tested in robust_test.go's TestCacheFailureGracefulDegradation.

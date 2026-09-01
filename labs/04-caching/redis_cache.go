@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -16,14 +17,16 @@ type RedisCache struct {
 	ttl    time.Duration
 }
 
+const defaultRedisTTL = 5 * time.Minute
+
 // NewRedisCache creates a Redis-backed cache from environment variables.
 // Required env vars: REDIS_ADDR, REDIS_PASSWORD, REDIS_DB
-func NewRedisCache() *RedisCache {
-	return NewRedisCacheWithTTL(5 * time.Minute)
+func NewRedisCache() (*RedisCache, error) {
+	return NewRedisCacheFromEnv(defaultRedisTTL)
 }
 
-// NewRedisCacheWithTTL creates a Redis-backed cache with custom default TTL.
-func NewRedisCacheWithTTL(ttl time.Duration) *RedisCache {
+// NewRedisCacheFromEnv creates a Redis-backed cache from environment variables with specific default TTL.
+func NewRedisCacheFromEnv(ttl time.Duration) (*RedisCache, error) {
 	addr := os.Getenv("REDIS_ADDR")
 	if addr == "" {
 		addr = "localhost:6379"
@@ -32,7 +35,11 @@ func NewRedisCacheWithTTL(ttl time.Duration) *RedisCache {
 	password := os.Getenv("REDIS_PASSWORD")
 	db := 0
 	if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
-		fmt.Sscanf(dbStr, "%d", &db)
+		parsedDB, err := strconv.Atoi(dbStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid REDIS_DB format %q: %w", dbStr, err)
+		}
+		db = parsedDB
 	}
 
 	client := redis.NewClient(&redis.Options{
@@ -41,12 +48,22 @@ func NewRedisCacheWithTTL(ttl time.Duration) *RedisCache {
 		DB:       db,
 	})
 
-	return &RedisCache{client: client, ttl: ttl}
+	return &RedisCache{client: client, ttl: ttl}, nil
 }
 
-// NewRedisClient creates a RedisCache with explicit client (for testing).
+// NewRedisCacheWithTTL creates a Redis-backed cache bypassing env validation errors (legacy wrapper).
+// Will panic if REDIS_DB is invalid.
+func NewRedisCacheWithTTL(ttl time.Duration) *RedisCache {
+	cache, err := NewRedisCacheFromEnv(ttl)
+	if err != nil {
+		panic(err)
+	}
+	return cache
+}
+
+// NewRedisClient creates a RedisCache with explicit client (for testing) with default TTL.
 func NewRedisClient(client *redis.Client) *RedisCache {
-	return &RedisCache{client: client}
+	return &RedisCache{client: client, ttl: defaultRedisTTL}
 }
 
 // Get retrieves a value from Redis.
@@ -91,15 +108,6 @@ func (c *RedisCache) SetNX(ctx context.Context, key, value string, ttl time.Dura
 	return success, nil
 }
 
-// Del deletes a key and returns whether it existed.
-func (c *RedisCache) Del(ctx context.Context, key string) (bool, error) {
-	count, err := c.client.Del(ctx, key).Result()
-	if err != nil {
-		return false, fmt.Errorf("redis del: %w", err)
-	}
-	return count > 0, nil
-}
-
 // CompareAndDel atomically deletes only if value matches via Lua script.
 func (c *RedisCache) CompareAndDel(ctx context.Context, key, value string) (bool, error) {
 	script := `
@@ -133,6 +141,16 @@ func (c *RedisCache) GetWithExpiry(ctx context.Context, key string) (string, tim
 	if err != nil {
 		// TTL check failed, return value without expiry
 		return val, time.Time{}, nil
+	}
+
+	// Handle Redis TTL edge cases
+	if ttl == -2 {
+		// Key does not exist (expired between GET and TTL)
+		return "", time.Time{}, ErrCacheMiss
+	}
+	if ttl == -1 {
+		// Key exists but has no associated expire
+		return val, time.Time{}, nil // zero value time.Time signals no expiry
 	}
 
 	expiry := time.Now().Add(ttl)

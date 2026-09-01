@@ -1,6 +1,6 @@
 # Lab 04 — Caching: Mengurangi Latency, Tapi Apa Biayanya?
 
-> **Mental Model**: Caching adalah trade-off antara **latency** (cepat) dan **consistency** (benar). Senior engineer memilih teknik caching yang tepat untuk workload nya.
+> **Mental Model**: Caching adalah trade-off antara **latency** (cepat) dan **consistency** (benar). Senior engineer memilih teknik caching yang tepat untuk workload-nya.
 
 ---
 
@@ -24,12 +24,12 @@ Setelah menyelesaikan lab ini, Anda akan memahami:
 
 Dashboard workshop menampilkan statistik dilihat oleh banyak user. Tanpa cache, setiap request menghasilkan *heavy aggregation* ke database:
 
-**Traffic Simulation:**
+**Dalam simulasi lab ini:**
 
 ```
 [500 concurrent users] → Dashboard Request
                               ↓
-                     Database: 6 queries + join/aggregation
+                     Database: 6 queries + join/aggregation per request
                               ↓
                             3000 total DB queries
 ```
@@ -167,6 +167,8 @@ Redis down → Cache miss → Fallback to DB → Request sukses (degraded mode).
 
 ### TTL Strategy (CMMS Dashboard)
 
+> **Note**: Lab implementation saat ini meng-cache **seluruh dashboard** dalam satu key dengan TTL dasar `30s + jitter`. Tabel di bawah ini menunjukkan alternatif arsitektur jika kita meng-cache per field (granular caching) berdasarkan volatilitas data.
+
 | Field | TTL | Reason |
 |-------|-----|--------|
 | InvoiceCount | 30s | Near transaction time |
@@ -187,7 +189,7 @@ Redis down → Cache miss → Fallback to DB → Request sukses (degraded mode).
     │
     └── INVALIDATE cache key
             │
-            ├── (or TTL asafety net)
+            ├── (or TTL as a safety net)
 ```
 
 ---
@@ -220,9 +222,9 @@ Redis down → Cache miss → Fallback to DB → Request sukses (degraded mode).
                     │
            100 Requests
                     │
-        ┌──────────┴──────────┐
-        │  singleflight.Do()  │
-        └─────────────────────┘
+        ┌──────────┴───────────┐
+        │ singleflight.DoChan()│
+        └──────────────────────┘
                     │
                     ▼
              1 DB Query Only
@@ -231,18 +233,31 @@ Redis down → Cache miss → Fallback to DB → Request sukses (degraded mode).
           Shared Result to ALL
 ```
 
+> **Note**: `singleflight` bekerja **dalam satu proses Go (intra-process)**. Untuk koordinasi antar instance aplikasi (lintas server), gunakan Distributed Lock.
+
 ---
 
 ## Single Flight
+
+Gunakan `DoChan` agar panggilan mendukung *context cancellation* dengan aman.
 
 ```go
 var flight singleflight.Group{}
 
 func GetData(ctx context.Context, key string) (Dashboard, error) {
-    result, _, _ := flight.Do(key, func() (interface{}, error) {
+    ch := flight.DoChan(key, func() (interface{}, error) {
         return fetchFromDB()
     })
-    return result.(Dashboard), nil
+
+    select {
+    case <-ctx.Done():
+        return Dashboard{}, ctx.Err()
+    case res := <-ch:
+        if res.Err != nil {
+            return Dashboard{}, res.Err
+        }
+        return res.Val.(Dashboard), nil
+    }
 }
 ```
 
@@ -250,19 +265,28 @@ func GetData(ctx context.Context, key string) (Dashboard, error) {
 
 ## Distributed Lock (Redis SETNX)
 
+Distributed lock mengkoordinasi akses antar instance aplikasi berbeda.
+
 ```
-App Instance A          Redis           App Instance B
-      │                   │                   │
-      ├── SET lock:1 token NX PX 10000 ──► Accepted
-      │                   │                   │
-      │            ┌──────┴──────┐            │
-      │            │  Lock held  │            │
-      │            └─────────────┘            │
-      │                   │                   │
-      └── GET lock:1 ─────┼───► Returns old token
-                          │                   │
-      ◄─── Wait ──────────┘                   │
+Instance A                          Redis                   Instance B
+    │                                 │                         │
+    ├── SET lock:1 tokenA NX PX 10k ─►│                         │
+    │                                 ├── success               │
+    │◄─ OK ───────────────────────────┤                         │
+    │                                 │                         │
+    ├── Rebuild Cache                 ├── SET lock:1 tokenB NX ─┤
+    │                                 │                         │
+    │                                 ├── false                 │
+    │                                 ├────────────────────────►│
+    │                                 │                         │ wait/retry/fallback
+    │                                 │
+    ├── Lua: if GET(lock) == tokenA   │
+    ├── then DEL(lock) ──────────────►│
+    │                                 │
+    │◄─ OK (lock released) ───────────┤
 ```
+
+*Note: Token digunakan untuk membuktikan ownership lock, sehingga Instance A tidak secara tidak sengaja menghapus lock milik instance lain jika A terlambat mengeksekusi.*
 
 ---
 
@@ -331,10 +355,11 @@ Client Request
 | Counter | Meaning |
 |---------|---------|
 | `cache_hit` | Cache returned valid data |
-| `cache_miss` | Cache empty |
-| `cache_error` | Redis error/down |
-| `database_query` | Query to PostgreSQL |
-| `cache_rebuild` | Cache populated from DB |
+| `cache_miss` | Expected state when cache is empty |
+| `cache_error` | Redis network error, down, corrupt value, or Set/Delete failure |
+| `database_query` | Query successfully reached PostgreSQL |
+| `cache_rebuild_attempt` | Attempted to populate cache from DB |
+| `cache_rebuild_success` | Successfully populated cache from DB |
 
 ---
 
@@ -355,6 +380,12 @@ Client Request
 ### Prerequisites
 
 - Go 1.22+
+- Docker / Docker Compose (untuk Redis integration tests)
+
+Untuk integration tests, pastikan Redis berjalan:
+```bash
+docker compose up -d redis
+```
 
 ### Run Unit Tests
 
@@ -366,10 +397,10 @@ go test -v -count=1 ./...
 ### Run Experiments
 
 ```bash
-go run . -scenario=without-cache
-go run . -scenario=cache-aside
-go run . -scenario=stampede-unprotected
-go run . -scenario=stampede-protected
+go run ./cmd/demo -scenario=without-cache
+go run ./cmd/demo -scenario=cache-aside
+go run ./cmd/demo -scenario=stampede-unprotected
+go run ./cmd/demo -scenario=stampede-protected
 ```
 
 ### Expected Results (Run with `go run ./cmd/demo -scenario=...`)
@@ -460,6 +491,7 @@ Permission sering di-cache untuk mengurangi query ke DB authorization. Namun ini
 9. **Redis Failure = App Crash**: Tidak menerapkan fallback (graceful degradation) saat Redis down.
 10. **Singleflight vs Distributed Lock**: Menganggap singleflight (`golang.org/x/sync/singleflight`) menyelesaikan stampede lintas instance (padahal hanya single-process).
 11. **Unsafe Permission Caching**: Meng-cache permission tanpa invalidation, menyebabkan ekskalasi privilege setelah hak akses dicabut.
+12. **Print/Console Log for Cache Errors**: Production system harus memakai structured logging yang benar, bukan `fmt.Printf` (hanya dipakai di lab ini untuk kesederhanaan).
 
 ---
 
@@ -468,11 +500,11 @@ Permission sering di-cache untuk mengurangi query ke DB authorization. Namun ini
 1. **Cache is not free** — TTL + Eviction planning are required
 2. **Hot keys exist** — Cache moves bottleneck from DB to Redis (capacity planning matters)
 3. **Graceful degradation** — Cache down ≠ system down
-4. **Invalidation hard** — TTL as safety net, not correctness
+4. **Invalidation hard** — Jika DB COMMIT berhasil tapi proses crash sebelum cache DELETE, *stale cache remains until TTL*. Oleh karena itu TTL = safety net. (Untuk reliability absolut, pertimbangkan Outbox/event-driven invalidation - advanced).
 5. **Multi-tenancy** — Key design must isolate tenants from day one
 6. **Timezone matters** — "Today" depends on business timezone
 7. **Staleness trade-off** — Ask "How stale is acceptable?" not "Is data changed?"
-8. **Redis ≠ Cache** — Redis is the technology, cache is the architectural pattern
+8. **Redis ≠ Cache** — Redis adalah teknologi/datastore, cache adalah pola arsitektur. Redis juga bisa digunakan untuk session, distributed lock, queue, atau ephemeral data; tidak semua data di Redis otomatis bermakna "cache".
 
 ---
 
@@ -480,7 +512,7 @@ Permission sering di-cache untuk mengurangi query ke DB authorization. Namun ini
 
 - **Previous**: [Lab 03 — Distributed Transaction](../03-database-transaction/)
 - **Next**: [Lab 05 — Race Condition](../05-race-condition/)
-- **All Labs**: [](../)
+- **All Labs**: [Labs](../)
 
 ---
 
@@ -495,8 +527,8 @@ cd labs/04-caching
 go test -v -count=1 ./...
 
 # Run specific scenarios
-go run . -scenario=without-cache
-go run . -scenario=cache-aside
-go run . -scenario=stampede-unprotected
-go run . -scenario=stampede-protected
+go run ./cmd/demo -scenario=without-cache
+go run ./cmd/demo -scenario=cache-aside
+go run ./cmd/demo -scenario=stampede-unprotected
+go run ./cmd/demo -scenario=stampede-protected
 ```

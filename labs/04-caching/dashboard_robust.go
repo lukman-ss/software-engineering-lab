@@ -74,10 +74,11 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 }
 
 func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID, branchID int64, businessDate time.Time, key string) (Dashboard, error) {
-	s.metrics.IncRebuild()
+	s.metrics.IncRebuildAttempt()
 
 	// Query repository for real data - use tenant-aware method for proper isolation
-	d, err := s.repo.GetDashboardWithTenant(ctx, tenantID, branchID, businessDate)
+	s.metrics.IncDBQuery() // Ensure DBQuery metric increments exactly when repo is called
+	d, err := s.repo.GetDashboard(ctx, tenantID, branchID, businessDate)
 	if err != nil {
 		return Dashboard{}, fmt.Errorf("repo get: %w", err)
 	}
@@ -91,8 +92,11 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID,
 		// Add jitter to prevent synchronized cache expiration across branches
 		jitteredTTL := TTLWithJitter(30*time.Second, 10*time.Second)
 		if setErr := s.cache.Set(ctx, key, string(data), jitteredTTL); setErr != nil {
-			// Log cache set error but don't fail
+			// Log cache set error but don't fail the request
+			s.metrics.IncError()
 			fmt.Printf("warn: cache set failed: %v\n", setErr)
+		} else {
+			s.metrics.IncRebuildSuccess()
 		}
 	}
 
@@ -104,6 +108,7 @@ func (s *RobustDashboardService) InvalidateDashboard(ctx context.Context, tenant
 	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
+		s.metrics.IncError()
 		// Log errors other than cache miss, but don't fail the operation
 		// (invalidating an already missing key is fine)
 		fmt.Printf("warn: failed to invalidate cache key %s: %v\n", key, err)

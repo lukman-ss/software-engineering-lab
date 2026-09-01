@@ -2,6 +2,7 @@ package caching
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,7 +10,8 @@ import (
 )
 
 // DistributedLock menggunakan Redis SETNX untuk implementasi lock sederhana.
-// Hanya satu proses yang dapat mengunci pada satu waktu.
+// Redis distributed lock digunakan agar hanya satu holder/client/application
+// instance yang memegang lock untuk key tertentu pada saat yang sama.
 type DistributedLock struct {
 	locker  LockInterface
 	ttl     time.Duration
@@ -56,13 +58,19 @@ func ReleaseLock(ctx context.Context, locker LockInterface, key, value string) e
 
 // WithLock mengeksekusi fungsi dengan distributed lock.
 // Retry-logic untuk handle lock contention.
-func (dl *DistributedLock) WithLock(ctx context.Context, key string, fn func(ctx context.Context) error) error {
+func (dl *DistributedLock) WithLock(ctx context.Context, key string, fn func(ctx context.Context) error) (err error) {
 	lockKey := dl.keyFunc(key)
 	acquired, value := TryAcquireLock(ctx, dl.locker, lockKey, dl.ttl)
 	if !acquired {
 		return fmt.Errorf("failed to acquire lock for %s", key)
 	}
 
-	defer ReleaseLock(ctx, dl.locker, lockKey, value)
+	defer func() {
+		releaseErr := ReleaseLock(ctx, dl.locker, lockKey, value)
+		if releaseErr != nil {
+			err = errors.Join(err, releaseErr)
+		}
+	}()
+
 	return fn(ctx)
 }

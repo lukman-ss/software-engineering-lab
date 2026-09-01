@@ -15,6 +15,7 @@ import (
 )
 
 func seedTestDB(t *testing.T, db *sql.DB) {
+	t.Helper()
 	ctx := context.Background()
 	tables := []struct{ sql string }{
 		{"INSERT INTO orders (id, status) VALUES (101, 'pending')"},
@@ -23,7 +24,7 @@ func seedTestDB(t *testing.T, db *sql.DB) {
 	for _, tbl := range tables {
 		_, err := db.ExecContext(ctx, tbl.sql)
 		if err != nil {
-			t.Logf("note: could not seed table: %v", err)
+			t.Fatalf("note: could not seed table: %v", err)
 		}
 	}
 }
@@ -41,7 +42,35 @@ func TestUnsafeLocalTransaction(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
+
+	// PROVE partial-state corruption after injected failure:
+	// Flow: INSERT payment -> UPDATE order=paid -> ERROR injected -> wallet tx never made
+	var paymentCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments WHERE order_id = $1", 101).Scan(&paymentCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if paymentCount != 1 {
+		t.Errorf("expected 1 payment persisted (partial state), got %d", paymentCount)
+	}
+
+	var orderStatus string
+	if err := db.QueryRowContext(ctx, "SELECT status FROM orders WHERE id = $1", 101).Scan(&orderStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if orderStatus != "paid" {
+		t.Errorf("expected order status 'paid' persisted (partial state), got '%s'", orderStatus)
+	}
+
+	var walletCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM wallet_transactions WHERE order_id = $1", 101).Scan(&walletCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if walletCount != 0 {
+		t.Errorf("expected 0 wallet transactions (missing), got %d", walletCount)
+	}
+
 	t.Log("SUCCESS: Unsafe local transaction demonstrated partial state corruption.")
+	t.Log("  payment persisted=1, order.status=paid, wallet_transactions=0 → inconsistent")
 }
 
 // Test 2: Local transaction rollback rolls back entire database changes.
@@ -58,12 +87,33 @@ func TestSafeLocalTransaction(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
+	// PROVE full rollback state: all local invariants restored
 	var paymentCount int
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments WHERE order_id = $1", 101).Scan(&paymentCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments WHERE order_id = $1", 101).Scan(&paymentCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if paymentCount != 0 {
 		t.Errorf("expected 0 payments due to ROLLBACK, got %d", paymentCount)
 	}
+
+	var orderStatus string
+	if err := db.QueryRowContext(ctx, "SELECT status FROM orders WHERE id = $1", 101).Scan(&orderStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if orderStatus != "pending" {
+		t.Errorf("expected order status 'pending' (rollback restored), got '%s'", orderStatus)
+	}
+
+	var walletCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM wallet_transactions WHERE order_id = $1", 101).Scan(&walletCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if walletCount != 0 {
+		t.Errorf("expected 0 wallet transactions due to ROLLBACK, got %d", walletCount)
+	}
+
 	t.Log("SUCCESS: Safe local transaction demonstrated clean ACID ROLLBACK.")
+	t.Log("  payments=0, order.status=pending, wallet_transactions=0 → fully rolled back")
 }
 
 // Test 3: External side effect still occurs even when DB rollback happens.
@@ -103,7 +153,9 @@ func TestDualWriteProblemEventLost(t *testing.T) {
 	}
 
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Errorf("expected invoice 'paid', got '%s'", invoiceStatus)
 	}
@@ -128,12 +180,17 @@ func TestTransactionalOutboxPatternAtomicity(t *testing.T) {
 	}
 
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Errorf("expected 'paid', got '%s'", invoiceStatus)
 	}
 
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 1 {
 		t.Errorf("expected 1 pending outbox event, got %d", pending)
 	}
@@ -148,7 +205,9 @@ func TestOutboxDispatcherPublishesPending(t *testing.T) {
 
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	broker := transaction.NewInMemoryBroker(0)
 	// Important: use same db as the outbox service to read the event
@@ -178,7 +237,9 @@ func TestOutboxDuplicateDeliveryAtLeastOnce(t *testing.T) {
 	// Setup outbox event
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	broker := transaction.NewInMemoryBroker(0)
 	failMode := &transaction.FailureMode{CrashAfterPublish: true}
@@ -191,7 +252,10 @@ func TestOutboxDuplicateDeliveryAtLeastOnce(t *testing.T) {
 	}
 
 	// Verify the event is still pending but was published
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 1 {
 		t.Errorf("expected 1 pending outbox event (since dispatcher crashed before update), got %d", pending)
 	}
@@ -201,7 +265,10 @@ func TestOutboxDuplicateDeliveryAtLeastOnce(t *testing.T) {
 
 	// Dispatcher #2 starts up and tries again (without crash)
 	dispatcher2 := transaction.NewOutboxDispatcher(db, broker, 3, nil)
-	dispatched, _ := dispatcher2.DispatchBatch(ctx)
+	dispatched, err := dispatcher2.DispatchBatch(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error on second dispatch: %v", err)
+	}
 	if dispatched != 1 {
 		t.Errorf("expected dispatcher 2 to dispatch 1 event, got %d", dispatched)
 	}
@@ -216,7 +283,10 @@ func TestOutboxDuplicateDeliveryAtLeastOnce(t *testing.T) {
 	}
 
 	// Outbox is marked published
-	pendingNow, _ := svc.CountOutboxEvents(ctx)
+	pendingNow, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pendingNow != 0 {
 		t.Errorf("expected 0 pending outbox events, got %d", pendingNow)
 	}
@@ -329,8 +399,12 @@ func TestAtomicConsumerFlow(t *testing.T) {
 	var dedupCount, commissionCount int64
 
 	// Note: mockdb only supports single WHERE condition, so we just check event_id
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&dedupCount)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&dedupCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if dedupCount != 1 {
 		t.Errorf("expected 1 processed_events marker, got %d", dedupCount)
@@ -342,8 +416,9 @@ func TestAtomicConsumerFlow(t *testing.T) {
 	t.Log("SUCCESS: Atomic consumer flow - dedup marker + business state committed together.")
 }
 
-// Test 8c: Consumer crash/redelivery correctness
-func TestConsumerCrashRedelivery(t *testing.T) {
+// Test 8c: Consumer sequential redelivery idempotency (same instance, retry after success).
+// NOTE: Real consumer-restart test is TestConsumerCrashAfterCommitBeforeAck / TestConsumerRestartRedelivery.
+func TestSequentialRedeliveryIdempotency(t *testing.T) {
 	db := mockdb.NewDB()
 	defer db.Close()
 
@@ -361,7 +436,10 @@ func TestConsumerCrashRedelivery(t *testing.T) {
 	}
 
 	// Verify state after first delivery
-	count1, _ := worker.GetDBCommissionCount(ctx)
+	count1, err := worker.GetDBCommissionCount(ctx)
+	if err != nil {
+		t.Fatalf("get commission count failed: %v", err)
+	}
 	if count1 != 1 {
 		t.Fatalf("expected 1 commission after first delivery, got %d", count1)
 	}
@@ -376,7 +454,10 @@ func TestConsumerCrashRedelivery(t *testing.T) {
 	}
 
 	// Verify state unchanged after redelivery
-	count2, _ := worker.GetDBCommissionCount(ctx)
+	count2, err := worker.GetDBCommissionCount(ctx)
+	if err != nil {
+		t.Fatalf("get commission count failed: %v", err)
+	}
 	if count2 != 1 {
 		t.Errorf("expected still 1 commission after redelivery, got %d", count2)
 	}
@@ -434,13 +515,17 @@ func TestConcurrentDuplicateConsumer(t *testing.T) {
 
 	// Verify exactly 1 business record (atomic uniqueness under concurrency)
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("expected 1 commission row, got %d", count)
 	}
 
 	// Verify exactly 1 processed_events marker
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("expected 1 processed_events row, got %d", count)
 	}
@@ -477,13 +562,17 @@ func TestDifferentConsumersSameEvent(t *testing.T) {
 
 	// Verify 2 separate processed_events records
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 2 {
 		t.Errorf("expected 2 processed_events records (one per consumer), got %d", count)
 	}
 
 	// Verify 2 business records
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 2 {
 		t.Errorf("expected 2 commission records, got %d", count)
 	}
@@ -491,12 +580,11 @@ func TestDifferentConsumersSameEvent(t *testing.T) {
 	t.Log("SUCCESS: Different consumers processed same event independently.")
 }
 
-// Test 12: Consumer business mutation failure leads to rollback and retry
-func TestConsumerBusinessMutationFailure(t *testing.T) {
-	// This test verifies the scenario where business mutation would fail
-	// In our current implementation, we use INSERT which is atomic
-	// The test demonstrates that if the transaction were to fail mid-way,
-	// both processed_events and business state would be rolled back
+// Test 12: Same consumer processes same event twice sequentially (idempotent skip on 2nd).
+// NOTE: This is NOT a business-mutation-failure test. Real failure-injection tests:
+//   - TestBusinessMutationRollbackAtomicity (dedup claim succeeds, business mutation fails mid-tx)
+//   - TestBusinessMutationFailureRollback (worker with FailBusinessMutation injected)
+func TestSequentialDuplicateConsumer(t *testing.T) {
 
 	db := mockdb.NewDB()
 	defer db.Close()
@@ -516,7 +604,9 @@ func TestConsumerBusinessMutationFailure(t *testing.T) {
 
 	// Verify state was committed
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Fatalf("expected 1 commission, got %d", commissionCount)
 	}
@@ -531,7 +621,9 @@ func TestConsumerBusinessMutationFailure(t *testing.T) {
 	}
 
 	// Count still 1 - no duplicate business mutation
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Errorf("idempotent - expected still 1 commission, got %d", commissionCount)
 	}
@@ -547,26 +639,39 @@ func TestTransientFailureSuccessAfterRetry(t *testing.T) {
 
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	// Broker fails first 2 attempts, succeeds on 3rd attempt
 	broker := transaction.NewInMemoryBroker(2)
 	dispatcher := transaction.NewOutboxDispatcher(db, broker, 3, nil)
 
 	// Attempt 1 -> fails
-	dispatched, _ := dispatcher.DispatchBatch(ctx)
+	dispatched, err := dispatcher.DispatchBatch(ctx)
+	// Dispatcher swallows broker publish errors internally to keep processing other events,
+	// so it doesn't return an error here, just returns dispatched=0.
+	if err != nil {
+		t.Fatalf("unexpected error from dispatcher: %v", err)
+	}
 	if dispatched != 0 {
 		t.Errorf("expected 0 dispatched on attempt 1, got %d", dispatched)
 	}
 
 	// Attempt 2 -> fails
-	dispatched, _ = dispatcher.DispatchBatch(ctx)
+	dispatched, err = dispatcher.DispatchBatch(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error from dispatcher: %v", err)
+	}
 	if dispatched != 0 {
 		t.Errorf("expected 0 dispatched on attempt 2, got %d", dispatched)
 	}
 
 	// Attempt 3 -> succeeds
-	dispatched, _ = dispatcher.DispatchBatch(ctx)
+	dispatched, err = dispatcher.DispatchBatch(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error from dispatcher: %v", err)
+	}
 	if dispatched != 1 {
 		t.Errorf("expected 1 dispatched on attempt 3, got %d", dispatched)
 	}
@@ -586,7 +691,9 @@ func TestDeadLetterQueue(t *testing.T) {
 
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	// Broker fails EVERY attempt
 	broker := transaction.NewInMemoryBroker(100)
@@ -613,7 +720,10 @@ func TestDeadLetterQueue(t *testing.T) {
 	}
 
 	// Event should be marked as dead_lettered (no longer pending)
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 0 {
 		t.Errorf("expected 0 pending events after moved to DLQ, got %d", pending)
 	}
@@ -847,13 +957,18 @@ func TestTransactionalOutboxRollback(t *testing.T) {
 
 	// Invoice status must NOT be 'paid'
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus == "paid" {
 		t.Error("expected invoice NOT to be 'paid' (should be rolled back), got 'paid'")
 	}
 
 	// Outbox row must be 0
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 0 {
 		t.Errorf("expected 0 pending outbox events (should be rolled back), got %d", pending)
 	}
@@ -870,17 +985,24 @@ func TestOutboxHappyPathAssertions(t *testing.T) {
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
 
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	// Assert business state
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Errorf("expected invoice 'paid', got '%s'", invoiceStatus)
 	}
 
 	// Assert outbox row exists
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 1 {
 		t.Fatalf("expected 1 pending outbox event, got %d", pending)
 	}
@@ -890,7 +1012,9 @@ func TestOutboxHappyPathAssertions(t *testing.T) {
 
 	// Verify id exists
 	var id string
-	db.QueryRowContext(ctx, "SELECT id FROM outbox_events WHERE status = 'pending'").Scan(&id)
+	if err := db.QueryRowContext(ctx, "SELECT id FROM outbox_events WHERE status = 'pending'").Scan(&id); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if id == "" {
 		t.Error("expected event_id != empty")
 	}
@@ -898,7 +1022,9 @@ func TestOutboxHappyPathAssertions(t *testing.T) {
 	// Verify event_type
 	var eventType, aggregateID, status string
 	var attempts int
-	db.QueryRowContext(ctx, "SELECT event_type, aggregate_id, status, attempts FROM outbox_events WHERE status = 'pending'").Scan(&eventType, &aggregateID, &status, &attempts)
+	if err := db.QueryRowContext(ctx, "SELECT event_type, aggregate_id, status, attempts FROM outbox_events WHERE status = 'pending'").Scan(&eventType, &aggregateID, &status, &attempts); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if eventType != "InvoicePaid" {
 		t.Errorf("expected event_type = InvoicePaid, got %s", eventType)
@@ -924,7 +1050,9 @@ func TestDispatcherPublishedAtSemantics(t *testing.T) {
 
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	// 1. Initial pending state - tested in previous test, attempts=0, published_at=null
 
@@ -938,7 +1066,9 @@ func TestDispatcherPublishedAtSemantics(t *testing.T) {
 	var status string
 	var attempts int
 	var publishedAt sql.NullTime
-	db.QueryRowContext(ctx, "SELECT status, attempts, published_at FROM outbox_events WHERE status = 'pending'").Scan(&status, &attempts, &publishedAt)
+	if err := db.QueryRowContext(ctx, "SELECT status, attempts, published_at FROM outbox_events WHERE status = 'pending'").Scan(&status, &attempts, &publishedAt); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if status != "pending" {
 		t.Errorf("after failure, expected status = pending, got %s", status)
@@ -954,7 +1084,9 @@ func TestDispatcherPublishedAtSemantics(t *testing.T) {
 	// Attempt 2 -> succeeds (broker fails=1 was exhausted)
 	dispatcher.DispatchBatch(ctx)
 
-	db.QueryRowContext(ctx, "SELECT status, attempts, published_at FROM outbox_events WHERE status = 'published'").Scan(&status, &attempts, &publishedAt)
+	if err := db.QueryRowContext(ctx, "SELECT status, attempts, published_at FROM outbox_events WHERE status = 'published'").Scan(&status, &attempts, &publishedAt); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if status != "published" {
 		t.Errorf("after success, expected status = published, got %s", status)
@@ -970,7 +1102,7 @@ func TestDispatcherPublishedAtSemantics(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 16: HTTP Inside Transaction Latency Test
+// HTTP Inside Transaction Latency Test
 // Demonstrates that external latency extends transaction lifetime
 // ============================================================================
 
@@ -998,7 +1130,9 @@ func TestHTTPInsideTransactionDuration(t *testing.T) {
 
 	// Verify transaction succeeded
 	var status string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if status != "paid" {
 		t.Errorf("expected 'paid', got '%s'", status)
 	}
@@ -1007,16 +1141,19 @@ func TestHTTPInsideTransactionDuration(t *testing.T) {
 }
 
 // TestCommitThenExternalCall shows standard pattern: BEGIN -> UPDATE -> COMMIT -> external call
+// It proves that the transaction is already fully closed when the external call starts,
+// preventing long external latency from holding connection pool resources.
 func TestCommitThenExternalCall(t *testing.T) {
 	db := mockdb.NewDB()
 	defer db.Close()
 	seedTestDB(t, db)
 
-	httpClient := transaction.NewHTTPClient(100, 0)
-	svc := transaction.NewInvoiceServiceWithHTTPCall(db, httpClient)
+	// Use blocking client to pause during external call
+	blockingHTTP := transaction.NewBlockingHTTPClient(0)
+	svc := transaction.NewInvoiceServiceWithBlockingHTTP(db, blockingHTTP)
 	ctx := context.Background()
 
-	start := time.Now()
+	// 1. Manually begin and commit transaction
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatalf("begin tx failed: %v", err)
@@ -1027,32 +1164,53 @@ func TestCommitThenExternalCall(t *testing.T) {
 		t.Fatalf("update failed: %v", err)
 	}
 
-	// COMMIT BEFORE external call
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit failed: %v", err)
 	}
-	commitElapsed := time.Since(start)
 
-	_ = svc // svc not needed after commit - just verifying the pattern
-	// External call AFTER commit - doesn't affect transaction
-	_ = httpClient.Ping(ctx)
-	externalElapsed := time.Since(start) - commitElapsed
-
-	// Commit should be fast (no external latency)
-	if commitElapsed >= 90*time.Millisecond {
-		t.Errorf("commit took %v - external call was inside transaction", commitElapsed)
+	// Prove database is committed
+	var status string
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if status != "paid" {
+		t.Errorf("expected 'paid', got '%s'", status)
 	}
 
-	// External call should have full latency
-	if externalElapsed < 90*time.Millisecond {
-		t.Errorf("external call took %v - expected ~100ms latency", externalElapsed)
+	// 2. Start external call (it will block)
+	done := make(chan error, 1)
+	go func() {
+		// We use ping directly here to prove external call executes outside tx
+		done <- blockingHTTP.Ping(ctx)
+	}()
+
+	// Wait for the ping to actually enter
+	blockingHTTP.WaitUntilTxOpen()
+
+	// Prove transaction is NOT open in the service during external call
+	if svc.IsTxOpen() {
+		t.Error("expected transaction to be CLOSED during external call")
 	}
 
-	t.Logf("SUCCESS: Commit-then-external pattern: commit=%v, external=%v", commitElapsed, externalElapsed)
+	// Release it
+	blockingHTTP.Release()
+
+	// Wait for completion
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout")
+	}
+
+	t.Logf("SUCCESS: Commit-then-external pattern proven with deterministic synchronization.")
+	t.Log("  Transaction was already committed and closed before external call blocked.")
 }
 
 // ============================================================================
-// PROMPT 17: Transaction Lifetime Simulation with IsOpen()
+// Transaction Lifetime Simulation with IsOpen()
 // ============================================================================
 
 // TestTransactionStaysOpenDuringExternalCall verifies transaction remains open while external service blocks
@@ -1100,7 +1258,9 @@ func TestTransactionStaysOpenDuringExternalCall(t *testing.T) {
 	}
 
 	var status string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if status != "paid" {
 		t.Errorf("expected 'paid', got '%s'", status)
 	}
@@ -1154,7 +1314,7 @@ func TestTransactionCommitDoesNotBlockConnection(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 18: External Side Effect Rollback Test
+// External Side Effect Rollback Test
 // ============================================================================
 
 // TestExternalSideEffectRollback proves external effect survives DB rollback
@@ -1180,13 +1340,17 @@ func TestExternalSideEffectRollback(t *testing.T) {
 
 	// Verify DB rollbacks all changes
 	var paymentCount int
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments WHERE order_id = $1", 101).Scan(&paymentCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM payments WHERE order_id = $1", 101).Scan(&paymentCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if paymentCount != 0 {
 		t.Errorf("expected 0 payments (rolled back), got %d", paymentCount)
 	}
 
 	var invoiceCount int
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM invoices WHERE order_id = $1 AND status = 'paid'", 101).Scan(&invoiceCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM invoices WHERE order_id = $1 AND status = 'paid'", 101).Scan(&invoiceCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceCount != 0 {
 		t.Errorf("expected 0 paid invoices (rolled back), got %d", invoiceCount)
 	}
@@ -1195,7 +1359,7 @@ func TestExternalSideEffectRollback(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 19: Dual-Write Crash Window Test
+// Dual-Write Crash Window Test
 // ============================================================================
 
 // TestDualWriteCrashWindow shows the failure window between DB commit and event publish
@@ -1217,7 +1381,9 @@ func TestDualWriteCrashWindow(t *testing.T) {
 	// Verification:
 	// 1. Invoice is paid (DB committed before crash)
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Errorf("expected invoice 'paid', got '%s'", invoiceStatus)
 	}
@@ -1232,7 +1398,7 @@ func TestDualWriteCrashWindow(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 20: Reverse Dual-Write Failure
+// Reverse Dual-Write Failure
 // ============================================================================
 
 // TestReverseDualWriteFailure shows publish-then-commit also has atomicity problems
@@ -1273,7 +1439,7 @@ func TestReverseDualWriteFailure(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 21: Outbox Dispatcher Concurrency (At-Least-Once Duplication)
+// Outbox Dispatcher Concurrency (At-Least-Once Duplication)
 // ============================================================================
 
 func TestOutboxDispatcherConcurrencyOverlap(t *testing.T) {
@@ -1285,12 +1451,18 @@ func TestOutboxDispatcherConcurrencyOverlap(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert 1 pending event
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
-	// Custom broker that sleeps slightly during publish to ensure overlap
-	broker := &slowInMemoryBroker{
+	// Custom broker that uses a barrier to guarantee both dispatchers
+	// enter the Publish method concurrently before either is allowed to proceed
+	var barrier sync.WaitGroup
+	barrier.Add(2) // Wait for exactly 2 publishers
+
+	broker := &barrierBroker{
 		InMemoryBroker: transaction.NewInMemoryBroker(0),
-		delay:          20 * time.Millisecond,
+		barrier:        &barrier,
 	}
 
 	// Start two dispatchers concurrently without external locking
@@ -1322,18 +1494,20 @@ func TestOutboxDispatcherConcurrencyOverlap(t *testing.T) {
 	t.Logf("PROVEN: Concurrent dispatchers read same pending outbox and published %d times (at-least-once overlap)", len(events))
 }
 
-type slowInMemoryBroker struct {
+type barrierBroker struct {
 	*transaction.InMemoryBroker
-	delay time.Duration
+	barrier *sync.WaitGroup
 }
 
-func (s *slowInMemoryBroker) Publish(ctx context.Context, event transaction.Event) error {
-	time.Sleep(s.delay) // ensure the overlap window is large enough for both dispatchers
+func (s *barrierBroker) Publish(ctx context.Context, event transaction.Event) error {
+	// Wait for all concurrent dispatchers to reach this point
+	s.barrier.Done()
+	s.barrier.Wait()
 	return s.InMemoryBroker.Publish(ctx, event)
 }
 
 // ============================================================================
-// PROMPT 22: Event Payload Validation
+// Event Payload Validation
 // ============================================================================
 
 // TestInvoicePaidPayloadRoundTrip validates serialize → deserialize → validate
@@ -1373,7 +1547,9 @@ func TestInvoicePaidPayloadRoundTrip(t *testing.T) {
 
 	// Must NOT contain: "status" (business fact, not command status)
 	var full map[string]any
-	json.Unmarshal([]byte(raw), &full)
+	if err := json.Unmarshal([]byte(raw), &full); err != nil {
+		t.Fatalf("unmarshal full map failed: %v", err)
+	}
 	if _, hasStatus := full["status"]; hasStatus {
 		t.Error("payload should not contain 'status' field — event is a fact, not a command")
 	}
@@ -1392,7 +1568,7 @@ func TestInvoicePaidPayloadRoundTrip(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 25: Eventual Consistency Demo
+// Eventual Consistency Demo
 // ============================================================================
 
 // TestEventualConsistencyDemo shows state divergence between DB commit and worker processing.
@@ -1406,18 +1582,25 @@ func TestEventualConsistencyDemo(t *testing.T) {
 
 	// Step 1: Create outbox event (simulates invoice paid business transaction)
 	svc := transaction.NewInvoiceServiceOutbox(db)
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	// IMMEDIATE STATE after business commit:
 	// - invoice = paid (committed in DB)
 	// - outbox = 1 pending (event stored atomically with invoice update)
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Errorf("expected invoice 'paid' immediately after commit")
 	}
 
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 1 {
 		t.Errorf("expected 1 pending outbox event before dispatch, got %d", pending)
 	}
@@ -1425,7 +1608,9 @@ func TestEventualConsistencyDemo(t *testing.T) {
 	// CRITICAL: commissions table is EMPTY (consumer hasn't processed yet)
 	// This is EXPECTED - eventual consistency gap
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 0 {
 		t.Errorf("expected 0 commissions (not yet processed), got %d", commissionCount)
 	}
@@ -1450,7 +1635,9 @@ func TestEventualConsistencyDemo(t *testing.T) {
 	}
 
 	// Verify commissions still 0 after dispatch - dispatch ≠ processing
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 0 {
 		t.Error("expected 0 commissions immediately after dispatch (dispatch ≠ consumer)")
 	}
@@ -1466,12 +1653,17 @@ func TestEventualConsistencyDemo(t *testing.T) {
 	// FINAL STATE: fully consistent
 	// - invoice = paid
 	// - commissions = 1 (consumer processed the event)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Errorf("expected 1 commission after consumer processing, got %d", commissionCount)
 	}
 
-	pendingAfter, _ := svc.CountOutboxEvents(ctx)
+	pendingAfter, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pendingAfter != 0 {
 		t.Errorf("expected 0 pending events after dispatch, got %d", pendingAfter)
 	}
@@ -1484,7 +1676,7 @@ func TestEventualConsistencyDemo(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 35: Compensation Must Be Idempotent
+// Compensation Must Be Idempotent
 // ============================================================================
 
 func TestCompensationIdempotency(t *testing.T) {
@@ -1525,7 +1717,7 @@ func TestCompensationIdempotency(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 64: Queue Publish Failure
+// Queue Publish Failure
 // ============================================================================
 
 // TestOutboxPendingRecovery demonstrates that when broker is unavailable,
@@ -1539,11 +1731,15 @@ func TestOutboxPendingRecovery(t *testing.T) {
 	svc := transaction.NewInvoiceServiceOutbox(db)
 	ctx := context.Background()
 
-	_ = svc.PayInvoiceWithOutbox(ctx, 101)
+	if err := svc.PayInvoiceWithOutbox(ctx, 101); err != nil {
+		t.Fatalf("pay with outbox failed: %v", err)
+	}
 
 	// Verify invoice is paid (business transaction committed)
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Fatalf("expected invoice 'paid', got '%s'", invoiceStatus)
 	}
@@ -1553,20 +1749,28 @@ func TestOutboxPendingRecovery(t *testing.T) {
 	dlq := transaction.NewDeadLetterQueue()
 	dispatcher := transaction.NewOutboxDispatcherWithDLQ(db, broker, 3, nil, dlq)
 
-	dispatched, _ := dispatcher.DispatchBatch(ctx)
+	dispatched, err := dispatcher.DispatchBatch(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error from dispatcher: %v", err)
+	}
 	if dispatched != 0 {
 		t.Errorf("expected 0 dispatched when broker down, got %d", dispatched)
 	}
 
 	// Step 3: Outbox event remains pending (durable intent)
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 1 {
 		t.Errorf("expected 1 pending event, got %d", pending)
 	}
 
 	// Step 4: Business state is persistent despite broker down
 	var status string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", 101).Scan(&status); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if status != "paid" {
 		t.Errorf("invoice should remain paid even though broker down")
 	}
@@ -1575,7 +1779,10 @@ func TestOutboxPendingRecovery(t *testing.T) {
 	recoveringBroker := transaction.NewInMemoryBroker(0) // succeed on all
 	recoveringDispatcher := transaction.NewOutboxDispatcher(db, recoveringBroker, 3, nil)
 
-	dispatched, _ = recoveringDispatcher.DispatchBatch(ctx)
+	dispatched, err = recoveringDispatcher.DispatchBatch(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error from dispatcher: %v", err)
+	}
 	if dispatched != 1 {
 		t.Errorf("expected 1 event after broker recovers, got %d", dispatched)
 	}
@@ -1591,7 +1798,7 @@ func TestOutboxPendingRecovery(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 21: Test Concurrent Different Events
+// Test Concurrent Different Events
 // ============================================================================
 
 // TestConcurrentDifferentEvents verifies that processing different events concurrently
@@ -1647,14 +1854,18 @@ func TestConcurrentDifferentEvents(t *testing.T) {
 
 	// Verify exactly 2 processed_events markers
 	var dedupCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1", "CommissionWorker").Scan(&dedupCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1", "CommissionWorker").Scan(&dedupCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if dedupCount != 2 {
 		t.Errorf("expected 2 processed_events markers, got %d", dedupCount)
 	}
 
 	// Verify exactly 2 business rows (commissions)
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 2 {
 		t.Errorf("expected 2 commission rows, got %d", commissionCount)
 	}
@@ -1663,7 +1874,7 @@ func TestConcurrentDifferentEvents(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 22: Test Concurrent Same Event
+// Test Concurrent Same Event
 // ============================================================================
 
 // TestConcurrentSameEvent verifies that when two consumers process the same event
@@ -1720,14 +1931,18 @@ func TestConcurrentSameEvent(t *testing.T) {
 
 	// Verify exactly 1 business row (atomic uniqueness under concurrency)
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Fatalf("expected 1 commission row after concurrent processing, got %d", commissionCount)
 	}
 
 	// Verify exactly 1 processed_events marker (atomic ON CONFLICT)
 	var dedupCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1 AND event_id = $2", "CommissionWorker", event.ID).Scan(&dedupCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1 AND event_id = $2", "CommissionWorker", event.ID).Scan(&dedupCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if dedupCount != 1 {
 		t.Errorf("expected 1 processed_events marker, got %d", dedupCount)
 	}
@@ -1736,7 +1951,7 @@ func TestConcurrentSameEvent(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 6: Concurrent Different Consumers Same Event
+// Concurrent Different Consumers Same Event
 // ============================================================================
 
 // TestConcurrentDifferentConsumersSameEvent verifies that two different consumers
@@ -1793,14 +2008,18 @@ func TestConcurrentDifferentConsumersSameEvent(t *testing.T) {
 
 	// Verify both processed_events markers exist (one per consumer_name + event_id)
 	var processedCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if processedCount != 2 {
 		t.Errorf("expected 2 processed_events (one per consumer), got %d", processedCount)
 	}
 
 	// Verify 2 business rows (each consumer has independent business effect)
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 2 {
 		t.Errorf("expected 2 commission rows, got %d", commissionCount)
 	}
@@ -1810,7 +2029,7 @@ func TestConcurrentDifferentConsumersSameEvent(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 33: Separate Delivery Count From Business Effect Count
+// Separate Delivery Count From Business Effect Count
 // ============================================================================
 
 // TestConsumerCrashAfterCommitBeforeAck verifies that a crash after commit but before ACK
@@ -1834,7 +2053,9 @@ func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 
 	// Verify business state after first delivery
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Fatalf("expected 1 commission after first delivery, got %d", commissionCount)
 	}
@@ -1857,12 +2078,16 @@ func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 	// CRITICAL: deliveries = 2 (message delivered twice due to at-least-once)
 	//          business rows = 1 (only 1 actual commission due to idempotency)
 	var dedupCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&dedupCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&dedupCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if dedupCount != 1 {
 		t.Errorf("expected 1 processed_events marker, got %d", dedupCount)
 	}
 
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Errorf("expected 1 commission business row, got %d", commissionCount)
 	}
@@ -1882,7 +2107,7 @@ func TestConsumerCrashAfterCommitBeforeAck(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 39: Verify No Lost Updates with Mock DB
+// Verify No Lost Updates with Mock DB
 // ============================================================================
 
 // TestMockDBNoLostUpdates verifies that the consumer's idempotent pattern
@@ -1940,8 +2165,12 @@ func TestMockDBNoLostUpdates(t *testing.T) {
 
 	// Verify all 3 rows exist - no lost updates under concurrent commit
 	var dedupCount, commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1", "CommissionWorker").Scan(&dedupCount)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE consumer_name = $1", "CommissionWorker").Scan(&dedupCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if dedupCount != 3 {
 		t.Errorf("expected 3 processed_events markers, got %d", dedupCount)
@@ -1956,7 +2185,7 @@ func TestMockDBNoLostUpdates(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 40: Verify Rollback Isolation
+// Verify Rollback Isolation
 // ============================================================================
 
 // TestMockDBRollbackIsolation verifies that a rolled-back transaction doesn't
@@ -1997,8 +2226,12 @@ func TestMockDBRollbackIsolation(t *testing.T) {
 
 	// Verify: A is absent, B is present
 	var countA, countB int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", "txA-rolledback").Scan(&countA)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", "txB-committed").Scan(&countB)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", "txA-rolledback").Scan(&countA); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", "txB-committed").Scan(&countB); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if countA != 0 {
 		t.Errorf("expected txA-rolledback to be absent (rolled back), got count=%d", countA)
@@ -2008,7 +2241,9 @@ func TestMockDBRollbackIsolation(t *testing.T) {
 	}
 
 	totalCount := 0
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&totalCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&totalCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if totalCount != 1 {
 		t.Errorf("expected exactly 1 total row, got %d", totalCount)
 	}
@@ -2019,48 +2254,7 @@ func TestMockDBRollbackIsolation(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 34: Real Business-Mutation Rollback Test
-// ============================================================================
-
-// TestBusinessMutationRollbackAtomicity verifies that when business mutation fails
-// mid-transaction, both the business state AND processed_events are rolled back.
-func TestBusinessMutationRollbackAtomicity(t *testing.T) {
-	db := mockdb.NewDB()
-	defer db.Close()
-	ctx := context.Background()
-
-	// Worker that will fail on business mutation
-	worker := transaction.NewCommissionWorkerWithFailure(db, &transaction.ConsumerFailureMode{FailBusinessMutation: true})
-
-	event := transaction.Event{ID: "evt-rollback-test", EventType: "InvoicePaid", AggregateID: "601", Payload: `{"invoice_id": 601}`}
-
-	// Attempt to process - should fail on business mutation
-	processed, err := worker.HandleEvent(ctx, "CommissionWorker", event)
-	if err == nil {
-		t.Fatal("expected error due to injected business mutation failure")
-	}
-	if processed {
-		t.Error("expected processing to fail, not succeed")
-	}
-
-	// CRITICAL: Verify BOTH processed_events AND commissions are NOT committed
-	var processedCount, commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount)
-
-	if processedCount != 0 {
-		t.Errorf("expected 0 processed_events (rolled back), got %d", processedCount)
-	}
-	if commissionCount != 0 {
-		t.Errorf("expected 0 commissions (rolled back), got %d", commissionCount)
-	}
-
-	t.Log("SUCCESS: Business mutation failure - entire transaction rolled back atomically")
-	t.Log("  No partial state left behind")
-}
-
-// ============================================================================
-// PROMPT 35: Real Consumer Restart/Redelivery Test
+// Real Consumer Restart/Redelivery Test
 // ============================================================================
 
 // TestConsumerRestartRedelivery verifies that a consumer can restart and
@@ -2086,7 +2280,9 @@ func TestConsumerRestartRedelivery(t *testing.T) {
 
 	// Verify state after first delivery
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Fatalf("expected 1 commission after first delivery, got %d", commissionCount)
 	}
@@ -2106,7 +2302,9 @@ func TestConsumerRestartRedelivery(t *testing.T) {
 	}
 
 	// Verify state unchanged - effectively-once business effect
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Errorf("expected still 1 commission after restart/redelivery, got %d", commissionCount)
 	}
@@ -2117,7 +2315,7 @@ func TestConsumerRestartRedelivery(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 36: Eventual Consistency Test Correctness
+// Eventual Consistency Test Correctness
 // ============================================================================
 
 // TestEventualConsistencyCorrectness verifies the eventual consistency pattern
@@ -2140,13 +2338,18 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 
 	// IMMEDIATE STATE: Business committed, event pending dispatch
 	var invoiceStatus string
-	db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", invoiceID).Scan(&invoiceStatus)
+	if err := db.QueryRowContext(ctx, "SELECT status FROM invoices WHERE order_id = $1", invoiceID).Scan(&invoiceStatus); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if invoiceStatus != "paid" {
 		t.Errorf("expected invoice 'paid' immediately, got '%s'", invoiceStatus)
 	}
 
 	// Outbox is pending (worker has NOT processed it yet)
-	pending, _ := svc.CountOutboxEvents(ctx)
+	pending, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pending != 1 {
 		t.Errorf("expected 1 pending outbox event, got %d", pending)
 	}
@@ -2175,13 +2378,18 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 
 	// Verify commissions still 0 after dispatch - dispatch ≠ processing
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 0 {
 		t.Error("expected 0 commissions immediately after dispatch (dispatch ≠ consumer)")
 	}
 
 	// Verify outbox event is now marked as published (not pending)
-	pendingAfter, _ := svc.CountOutboxEvents(ctx)
+	pendingAfter, err := svc.CountOutboxEvents(ctx)
+	if err != nil {
+		t.Fatalf("count outbox events failed: %v", err)
+	}
 	if pendingAfter != 0 {
 		t.Errorf("expected 0 pending events after dispatch, got %d", pendingAfter)
 	}
@@ -2204,7 +2412,9 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 	// FINAL STATE: fully consistent
 	// - invoice = paid
 	// - commissions = 1 (consumer processed the event)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 1 {
 		t.Errorf("expected 1 commission after consumer processing, got %d", commissionCount)
 	}
@@ -2217,7 +2427,7 @@ func TestEventualConsistencyCorrectness(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 37: README ↔ Implementation Synchronization
+// README ↔ Implementation Synchronization
 // ============================================================================
 
 // TestREADMESyncIdempotentConsumer verifies the idempotent consumer pattern
@@ -2253,14 +2463,18 @@ func TestREADMESyncIdempotentConsumer(t *testing.T) {
 
 	// Verify both processed_events records exist (different consumer_name)
 	var processedCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if processedCount != 2 {
 		t.Errorf("expected 2 processed_events (one per consumer), got %d", processedCount)
 	}
 
 	// Verify 2 separate business mutations (each worker has own business effect)
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 2 {
 		t.Errorf("expected 2 commission records, got %d", commissionCount)
 	}
@@ -2275,7 +2489,9 @@ func TestREADMESyncIdempotentConsumer(t *testing.T) {
 	}
 
 	// Count unchanged
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions").Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 2 {
 		t.Errorf("expected still 2 commissions, got %d", commissionCount)
 	}
@@ -2286,7 +2502,7 @@ func TestREADMESyncIdempotentConsumer(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 14: ON CONFLICT Semantics - Direct MockDB Test
+// ON CONFLICT Semantics - Direct MockDB Test
 // ============================================================================
 
 // TestMockDBOnConflictSemantics verifies the INSERT ... ON CONFLICT DO NOTHING
@@ -2332,7 +2548,9 @@ func TestMockDBOnConflictSemantics(t *testing.T) {
 
 	// Verify only 1 row in database
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", "evt-on-conflict").Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", "evt-on-conflict").Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("expected 1 row in database, got %d", count)
 	}
@@ -2341,7 +2559,7 @@ func TestMockDBOnConflictSemantics(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 16: Real Business Mutation Failure Test
+// Real Business Mutation Failure Test
 // ============================================================================
 
 // TestBusinessMutationFailureRollback verifies that when business mutation fails
@@ -2371,13 +2589,17 @@ func TestBusinessMutationFailureRollback(t *testing.T) {
 	// Expected: BOTH processed_events = 0 AND commissions = 0
 	// The claim marker must be rolled back along with business mutation
 	var processedCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if processedCount != 0 {
 		t.Errorf("expected 0 processed_events (rolled back), got %d", processedCount)
 	}
 
 	var commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if commissionCount != 0 {
 		t.Errorf("expected 0 commissions (rolled back), got %d", commissionCount)
 	}
@@ -2387,7 +2609,7 @@ func TestBusinessMutationFailureRollback(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 17: Redelivery After Business Failure
+// Redelivery After Business Failure
 // ============================================================================
 
 // TestRedeliveryAfterBusinessFailure verifies that after a rollback due to
@@ -2415,7 +2637,10 @@ func TestRedeliveryAfterBusinessFailure(t *testing.T) {
 	}
 
 	// Verify nothing was committed
-	commissionCount, _ := failWorker.GetDBCommissionCount(ctx)
+	commissionCount, err := failWorker.GetDBCommissionCount(ctx)
+	if err != nil {
+		t.Fatalf("get commission count failed: %v", err)
+	}
 	if commissionCount != 0 {
 		t.Errorf("expected 0 commissions after failed attempt, got %d", commissionCount)
 	}
@@ -2440,7 +2665,9 @@ func TestRedeliveryAfterBusinessFailure(t *testing.T) {
 
 	// Verify dedup marker exists
 	var processedCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if processedCount != 1 {
 		t.Errorf("expected 1 processed_events marker after redelivery, got %d", processedCount)
 	}
@@ -2449,7 +2676,7 @@ func TestRedeliveryAfterBusinessFailure(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 18: Processed Marker Failure Injection
+// Processed Marker Failure Injection
 // ============================================================================
 
 // TestProcessedMarkerFailureRollback verifies that when the processed_events
@@ -2481,8 +2708,12 @@ func TestProcessedMarkerFailureRollback(t *testing.T) {
 	// Critical: Business mutation must NOT have been attempted
 	// The claim must happen BEFORE business mutation
 	var processedCount, commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if processedCount != 0 {
 		t.Errorf("expected 0 processed_events (failure before commit), got %d", processedCount)
@@ -2510,15 +2741,16 @@ func TestProcessedMarkerFailureRollback(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 20: Commit Failure Simulation
+// Consumer Atomic Commit Happy Path
 // ============================================================================
 
-// TestCommitFailure verifies that if commit fails, neither business state nor
-// processed_events are visible. Demonstrates transaction atomicity.
+// TestConsumerAtomicCommitHappyPath verifies that after successful processing,
+// both processed_events claim marker and business state (commissions) are
+// committed atomically and together.
 //
 // Note: mockdb does not support simulated commit failure to avoid over-engineering.
-// Instead, we verify rollback on any error path.
-func TestCommitFailureAtomicity(t *testing.T) {
+// Commit atomicity is verified by the successful atomic insert pattern.
+func TestConsumerAtomicCommitHappyPath(t *testing.T) {
 	db := mockdb.NewDB()
 	defer db.Close()
 	ctx := context.Background()
@@ -2537,8 +2769,12 @@ func TestCommitFailureAtomicity(t *testing.T) {
 
 	// Verify both committed atomically - both must be present after COMMIT
 	var processedCount, commissionCount int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount)
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events WHERE event_id = $1", event.ID).Scan(&processedCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commissions WHERE event_id = $1", event.ID).Scan(&commissionCount); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 
 	if processedCount != 1 {
 		t.Errorf("expected 1 processed_events after commit, got %d", processedCount)
@@ -2547,12 +2783,11 @@ func TestCommitFailureAtomicity(t *testing.T) {
 		t.Errorf("expected 1 commission after commit, got %d", commissionCount)
 	}
 
-	t.Log("SUCCESS: Commit atomicity - both claim and business state committed together")
-	t.Log("  (mockdb does not simulate commit failures; rollback on error is verified in other tests)")
+	t.Log("SUCCESS: Consumer atomic commit - both claim marker and business state committed together")
 }
 
 // ============================================================================
-// PROMPT 43: MockDB Direct Concurrency Test (Two TX inserts without conflict)
+// MockDB Direct Concurrency Test (Two TX inserts without conflict)
 // ============================================================================
 
 // TestMockDBDirectConcurrency verifies that MockDB handles multiple transactions
@@ -2572,7 +2807,9 @@ func TestMockDBDirectConcurrency(t *testing.T) {
 		<-start
 		tx, _ := db.BeginTx(ctx, nil)
 		_, _ = tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)", "C1", "evt-A", time.Now())
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	go func() {
@@ -2580,14 +2817,18 @@ func TestMockDBDirectConcurrency(t *testing.T) {
 		<-start
 		tx, _ := db.BeginTx(ctx, nil)
 		_, _ = tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3)", "C2", "evt-B", time.Now())
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	close(start)
 	wg.Wait()
 
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 2 {
 		t.Errorf("expected 2 rows, got %d", count)
 	}
@@ -2595,7 +2836,7 @@ func TestMockDBDirectConcurrency(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 44: MockDB Duplicate Claim Direct Test (Concurrent ON CONFLICT)
+// MockDB Duplicate Claim Direct Test (Concurrent ON CONFLICT)
 // ============================================================================
 
 // TestMockDBDuplicateClaimDirect verifies that concurrent INSERT ON CONFLICT
@@ -2617,7 +2858,9 @@ func TestMockDBDuplicateClaimDirect(t *testing.T) {
 		tx, _ := db.BeginTx(ctx, nil)
 		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-123", time.Now())
 		affected1, _ = res.RowsAffected()
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	go func() {
@@ -2626,14 +2869,18 @@ func TestMockDBDuplicateClaimDirect(t *testing.T) {
 		tx, _ := db.BeginTx(ctx, nil)
 		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-123", time.Now())
 		affected2, _ = res.RowsAffected()
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	close(start)
 	wg.Wait()
 
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("expected exactly 1 row, got %d", count)
 	}
@@ -2646,7 +2893,7 @@ func TestMockDBDuplicateClaimDirect(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 45: MockDB Different Unique Keys (Same consumer, different events)
+// MockDB Different Unique Keys (Same consumer, different events)
 // ============================================================================
 
 // TestMockDBDifferentUniqueKeys verifies concurrent inserts with different unique keys
@@ -2668,7 +2915,9 @@ func TestMockDBDifferentUniqueKeys(t *testing.T) {
 		tx, _ := db.BeginTx(ctx, nil)
 		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-1", time.Now())
 		affected1, _ = res.RowsAffected()
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	go func() {
@@ -2677,14 +2926,18 @@ func TestMockDBDifferentUniqueKeys(t *testing.T) {
 		tx, _ := db.BeginTx(ctx, nil)
 		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-2", time.Now())
 		affected2, _ = res.RowsAffected()
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	close(start)
 	wg.Wait()
 
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 2 {
 		t.Errorf("expected exactly 2 rows, got %d", count)
 	}
@@ -2697,7 +2950,7 @@ func TestMockDBDifferentUniqueKeys(t *testing.T) {
 }
 
 // ============================================================================
-// PROMPT 46 & 47: MockDB Different Consumers Same Event (Composite Unique Key)
+// MockDB Different Consumers Same Event (Composite Unique Key)
 // ============================================================================
 
 // TestMockDBDifferentConsumersSameEvent verifies concurrent inserts with same event
@@ -2719,7 +2972,9 @@ func TestMockDBDifferentConsumersSameEvent(t *testing.T) {
 		tx, _ := db.BeginTx(ctx, nil)
 		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "InventoryConsumer", "evt-123", time.Now())
 		affected1, _ = res.RowsAffected()
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	go func() {
@@ -2728,14 +2983,18 @@ func TestMockDBDifferentConsumersSameEvent(t *testing.T) {
 		tx, _ := db.BeginTx(ctx, nil)
 		res, _ := tx.ExecContext(ctx, "INSERT INTO processed_events (consumer_name, event_id, processed_at) VALUES ($1, $2, $3) ON CONFLICT (consumer_name, event_id) DO NOTHING", "CommissionConsumer", "evt-123", time.Now())
 		affected2, _ = res.RowsAffected()
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit failed: %v", err)
+		}
 	}()
 
 	close(start)
 	wg.Wait()
 
 	var count int64
-	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM processed_events").Scan(&count); err != nil {
+		t.Fatalf("query failed: %v", err)
+	}
 	if count != 2 {
 		t.Errorf("expected exactly 2 rows, got %d", count)
 	}

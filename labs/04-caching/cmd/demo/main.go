@@ -56,7 +56,7 @@ func runWithoutCache(ctx context.Context) {
 
 	// Direct repository calls - no caching
 	for i := 0; i < reqCount; i++ {
-		_, _ = repo.GetDashboard(ctx, 1, time.Now())
+		_, _ = repo.GetDashboard(ctx, 1, 1, time.Now())
 	}
 
 	fmt.Printf("\nResults:\n")

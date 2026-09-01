@@ -218,16 +218,15 @@ idempotent consumer
 - `TestConcurrentDifferentConsumersSameEvent` - different consumers, same event, concurrent
 - `TestConcurrentDifferentEvents` - concurrent different events, no lost update
 - `TestConcurrentSameEvent` - concurrent same consumer same event
-- `TestConsumerCrashRedelivery` - consumer restart/redelivery
-- `TestAtomicConsumerFlow` - business mutation failure rollback
-- `TestConsumerCrashAfterCommitBeforeAck` - separation of deliveries vs business rows (worker restart with persistence-backed dedup)
+- `TestSequentialRedeliveryIdempotency` - sequential retry (idempotent skip, not crash)
+- `TestAtomicConsumerFlow` - dedup + business state atomic commitment
+- `TestConsumerCrashAfterCommitBeforeAck` - separation of deliveries vs business rows (consumer restart with persistence-backed dedup)
 - `TestMockDBNoLostUpdates` - verify concurrency does not lose updates
 - `TestMockDBRollbackIsolation` - verify rollback isolation
-- `TestConsumerBusinessMutationFailure` - business mutation failure rollback
-- `TestBusinessMutationRollbackAtomicity` - rollback atomicity via injected failure
+- `TestBusinessMutationFailureRollback` - business mutation fails → full rollback
 - `TestRedeliveryAfterBusinessFailure` - redelivery succeeds after rollback clears state
 - `TestProcessedMarkerFailureRollback` - claim failure, no business mutation
-- `TestCommitFailureAtomicity` - commit atomicity (both state committed together)
+- `TestConsumerAtomicCommitHappyPath` - both claim + business state committed atomically
 - `TestMockDBOnConflictSemantics` - ON CONFLICT DO NOTHING returns correct RowsAffected
 - `TestConsumerRestartRedelivery` - consumer restart, redelivered event deduplicated
 - `TestEventualConsistencyCorrectness` - outbox eventual consistency flow
@@ -347,7 +346,7 @@ Setelah DB commit, downstream belum tentu up-to-date. Ini **normal**, bukan bug.
 
 ---
 
-## 15. Event Naming: Fact vs Command
+## 16. Event Naming: Fact vs Command
 
 | Tipe | Naming | Contoh |
 |------|--------|--------|
@@ -356,7 +355,7 @@ Setelah DB commit, downstream belum tentu up-to-date. Ini **normal**, bukan bug.
 
 ---
 
-## 16. Event-Driven Trade-offs
+## 17. Event-Driven Trade-offs
 
 ### Keuntungan (+)
 - **Resilience**: Proses dapat melanjutkan setelah crash
@@ -394,8 +393,12 @@ Untuk educational purposes, mockdb menggunakan **single write transaction at a t
 
 ### Concurrency Simulation
 
-Karena transaction serialized, "concurrent" test mengeksekusi goroutines yang **tertata secara acak** tetapi operasional DB-serialized. Ini secara otomatis menghasilkan:
-- Race condition detection
+Goroutines are concurrent at the application level, while MockDB intentionally serializes write transactions to provide deterministic educational transaction semantics. This verifies application-level logical race paths and atomic dedup behavior under the MockDB model.
+
+Ini secara otomatis memungkinkan:
+- Concurrent goroutine tests exercise concurrent application paths.
+- Go's `-race` flag detects shared-memory data races.
+- MockDB itself serializes database write transactions.
 - ON CONFLICT behavior verification
 - Rollback isolation verification
 
@@ -406,7 +409,7 @@ Karena transaction serialized, "concurrent" test mengeksekusi goroutines yang **
 | Category | Tests | Purpose |
 |----------|-------|---------|
 | **Local Transaction** | TestUnsafeLocalTransaction, TestSafeLocalTransaction | ACID verification |
-| **External Side Effects** | TestDistributedTransactionExternalSideEffectLimitation | 2PC limitation demo |
+| **External Side Effects** | TestDistributedTransactionExternalSideEffectLimitation | local DB transaction boundary / external side-effect rollback limitation |
 | **Dual-Write Problems** | TestDualWriteProblemEventLost, TestReverseDualWriteFailure | Atomicity window analysis |
 | **Transactional Outbox** | TestTransactionalOutboxPatternAtomicity, TestOutboxDispatcherPublishesPending | Outbox pattern |
 | **Idempotent Consumer** | TestIdempotentConsumerDeduplication, TestAtomicConsumerFlow | Deduplication key design |
@@ -417,7 +420,7 @@ Karena transaction serialized, "concurrent" test mengeksekusi goroutines yang **
 
 ---
 
-## 17. Ordering Problem
+## 18. Ordering Problem
 
 Queue/event processing juga memiliki ordering problem.
 
@@ -435,7 +438,7 @@ Consumer **tidak selalu** dapat mengasumsikan arrival order tanpa mechanism tert
 
 ---
 
-## 18. Event Versioning
+## 19. Event Versioning
 
 Event contract dapat berubah.
 
@@ -450,14 +453,14 @@ Event contract dapat berubah.
 
 **Consumers harus:**
 - Check `event_version` dan handle/ignore versi tidak dikenal
-- Backward compatible (versi baru dapat dibaca oleh consumer lama)
-- Forward compatible (versi lama tidak harus menghancurkan consumer baru)
+- **Backward compatibility**: new consumer can still read events produced by older producers.
+- **Forward compatibility**: older consumer can tolerate events produced by newer producers, usually by ignoring unknown optional fields.
 
 Tidak perlu implement schema registry di lab ini.
 
 ---
 
-## 19. Poison Message
+## 20. Poison Message
 
 **Permanent failure** biasanya menghasilkan poison message:
 
@@ -476,7 +479,7 @@ Ini **tidak membaik** hanya karena retry 100 kali.
 
 ---
 
-## 20. Replay Safety
+## 21. Replay Safety
 
 Event dari DLQ/outbox dapat di-replay, sehingga **consumer tetap harus idempotent**.
 
@@ -493,7 +496,7 @@ dlq.Replay(eventID) // mengambil event dari DLQ dan mengembalikannya ke queue
 
 ---
 
-## 21. Local vs External Inventory Clarification
+## 22. Local vs External Inventory Clarification
 
 ### Local inventory (di dalam DB transaction yang sama)
 
@@ -517,7 +520,7 @@ Jika transaction rollback → **inventory microservice tidak otomatis dikembalik
 
 ---
 
-## 22. Queue Publish Failure
+## 23. Queue Publish Failure
 
 ```
 [OUTBOX]
@@ -539,7 +542,7 @@ Jika transaction rollback → **inventory microservice tidak otomatis dikembalik
 
 ---
 
-## 23. Outbox Pending Recovery
+## 24. Outbox Pending Recovery
 
 ```
 publisher unavailable → event pending → process restart → publisher recovers → dispatcher retries → success
@@ -586,7 +589,7 @@ go test -v -count=1
 | `TestOutboxPendingRecovery` | Broker down → event pending → recovery | external.go |
 | `TestIdempotentConsumerDeduplication` | Idempotent deduplication | external.go |
 | `TestAtomicConsumerFlow` | Dedup + business state atomic | external.go |
-| `TestConsumerCrashRedelivery` | Crash/redelivery handled idempotently | external.go |
+| `TestSequentialRedeliveryIdempotency` | Sequential retry (idempotent skip) | external.go |
 | `TestConsumerCrashAfterCommitBeforeAck` | Separation of deliveries vs business rows | external.go |
 | `TestMockDBNoLostUpdates` | Mock DB no lost updates | external.go |
 | `TestMockDBRollbackIsolation` | Rollback isolation | external.go |
@@ -606,7 +609,7 @@ go test -v -count=1
 | `TestBusinessMutationFailureRollback` | Business mutation fails → full rollback | external.go |
 | `TestRedeliveryAfterBusinessFailure` | Redelivery after rollback succeeds | external.go |
 | `TestProcessedMarkerFailureRollback` | Claim insert fails → no business mutation | external.go |
-| `TestCommitFailureAtomicity` | Both claim+business commit together | external.go |
+| `TestConsumerAtomicCommitHappyPath` | Both claim+business commit atomically | external.go |
 | `TestMockDBOnConflictSemantics` | ON CONFLICT DO NOTHING RowsAffected=1,0 | mockdb.go |
 | `TestMockDBDirectConcurrency` | Two TX A+B insert concurrently both persist | mockdb.go |
 | `TestMockDBDuplicateClaimDirect` | Two TX duplicate claim only one succeeds | mockdb.go |

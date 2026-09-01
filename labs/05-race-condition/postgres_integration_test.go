@@ -63,7 +63,7 @@ func (r *PostgresAtomicRepository) DecrementStock(ctx context.Context, productID
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, fmt.Errorf("stock habis")
+			return 0, ErrOutOfStock
 		}
 		return 0, fmt.Errorf("decrement stock: %w", err)
 	}
@@ -98,16 +98,23 @@ func cleanupTestInventory(ctx context.Context, db *sql.DB, productID string) err
 	return err
 }
 
-// TestPostgresUnsafe_LostUpdate menguji lost update dengan PostgreSQL.
+// TestPostgresUnsafe_LostUpdate menguji lost update dengan PostgreSQL secara deterministik.
 //
-// Timeline:
-// T0: Transaction A membaca stock = 1
-// T1: Transaction B membaca stock = 1 (stale read)
-// T2: Transaction A menulis stock = 0
-// T3: Transaction B menulis stock = 0
+// Menggunakan barrier synchronization untuk memaksa interleaving tertentu:
+// A READ → B READ → A WRITE → B WRITE
 //
-// Result:successful_sales = 2, final_stock = 0
-// Broken invariant: 1 != 2 + 0
+// Timeline yang direproduksi:
+// T0: Transaction A  READ stock = 1
+// T1: Transaction B  READ stock = 1   (stale read — A belum WRITE)
+// T4: Transaction A  WRITE stock = 0
+// T5: Transaction B  WRITE stock = 0 (overwrite)
+//
+// Expected outcome:
+//   successful_sales = 2
+//   final_stock = 0
+//   1 != 2 + 0 (invariant terbroken)
+//
+// Test PASS ketika lost update berhasil direproduksi (membuktikan bahwa implementation unsafe bermasalah).
 func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -120,7 +127,7 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	defer db.Close()
 
 	productID := "unit-oli-mesin"
-	initialStock := 1
+	const initialStock = 1
 
 	// Setup
 	if err := setupTestInventory(ctx, db, productID, initialStock); err != nil {
@@ -129,46 +136,110 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	defer cleanupTestInventory(ctx, db, productID)
 
 	repo := NewPostgresUnsafeRepository(db)
-	service := NewInventoryService(repo)
+
+	// Channel barriers untuk sinkronisasi fase READ → WRITE
+	// aReadDone: A selesai READ, B boleh READ
+	// bReadDone: B selesai READ
+	// aWriteDone: A selesai WRITE, B boleh WRITE
+	aReadDone := make(chan struct{})
+	bReadDone := make(chan struct{})
+	aWriteDone := make(chan struct{})
 
 	var wg sync.WaitGroup
 	var successCount int
 	var mu sync.Mutex
 
-	wg.Add(2)
+	// Transaction A
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// Request A dan B
-	for _, name := range []string{"A", "B"} {
-		go func(reqName string) {
-			defer wg.Done()
+		// A: READ
+		stockA, err := repo.GetStock(ctx, productID)
+		if err != nil {
+			t.Errorf("Request A READ error: %v", err)
+			return
+		}
+		t.Logf("Request A: READ stock = %d", stockA)
+		close(aReadDone) // signal A selesai READ
 
-			// TrySell menggunakan check-then-act
-			err := service.TrySell(ctx, productID)
-			if err == nil {
-				mu.Lock()
-				successCount++
-				mu.Unlock()
-				t.Logf("Request %s: SUCCESS", reqName)
-			} else {
-				t.Logf("Request %s: FAILED (%v)", reqName, err)
+		// A: tunggu B selesai READ (barrier)
+		<-bReadDone
+
+		// A: CHECK + CALCULATE + WRITE
+		if stockA > 0 {
+			err := repo.SetStock(ctx, productID, stockA-1)
+			if err != nil {
+				t.Errorf("Request A WRITE error: %v", err)
+				return
 			}
-		}(name)
-	}
+			t.Logf("Request A: WRITE stock = %d", stockA-1)
+		}
+		close(aWriteDone) // signal A selesai WRITE
+		successCount++
+	}()
+
+	// Transaction B
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// B: tunggu A selesai READ
+		<-aReadDone
+
+		// B: READ
+		stockB, err := repo.GetStock(ctx, productID)
+		if err != nil {
+			t.Errorf("Request B READ error: %v", err)
+			return
+		}
+		t.Logf("Request B: READ stock = %d", stockB)
+		close(bReadDone)
+
+		// B: tunggu A selesai WRITE (barrier)
+		<-aWriteDone
+
+		// B: CHECK + CALCULATE + WRITE (baca stale value)
+		if stockB > 0 {
+			err := repo.SetStock(ctx, productID, stockB-1)
+			if err != nil {
+				t.Errorf("Request B WRITE error: %v", err)
+				return
+			}
+			t.Logf("Request B: WRITE stock = %d", stockB-1)
+		}
+		successCount++
+	}()
 
 	wg.Wait()
 
 	// Get final stock
-	finalStock, _ := repo.GetStock(ctx, productID)
-
-	t.Logf("=== POSTGRES UNSAFE RESULTS ===")
-	t.Logf("Initial stock: %d", initialStock)
-	t.Logf("Successful sales: %d", successCount)
-	t.Logf("Final stock: %d", finalStock)
-
-	// Verify lost update occurred
-	if successCount == 2 && finalStock == 0 {
-		t.Logf("❌ LOST UPDATE DETECTED via PostgreSQL: 2 sales, 0 final, 1 initial")
+	finalStock, err := repo.GetStock(ctx, productID)
+	if err != nil {
+		t.Fatalf("get final stock: %v", err)
 	}
+
+	t.Logf("\n=== POSTGRES UNSAFE RESULTS ===")
+	t.Logf("Initial stock: %d", initialStock)
+	t.Logf("Successful operations: %d", successCount)
+	t.Logf("Final stock: %d", finalStock)
+	t.Logf("Desired invariant: %d == %d + %d", initialStock, successCount, finalStock)
+
+	// ASSERTION: Lost update harus terjadi (invaiant rusak)
+	if successCount != 2 {
+		t.Fatalf("expected successful operations = 2, got %d", successCount)
+	}
+	if finalStock != 0 {
+		t.Fatalf("expected final_stock = 0, got %d", finalStock)
+	}
+
+	// Verify invariant is BROKEN (ini yang menjadi bukti bahwa implementation unsafe)
+	actualSum := successCount + finalStock
+	if actualSum == initialStock {
+		t.Fatalf("INVARIANT ERROR: expected invariant to be BROKEN but 2 + 0 == 1")
+	}
+	t.Logf("✅ LOST UPDATE CONFIRMED: %d != %d + %d (initial != success + final)",
+		initialStock, successCount, finalStock)
 }
 
 // TestPostgresAtomic_ConcurrentUpdate menguji atomic update dengan PostgreSQL.
@@ -243,7 +314,10 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 		t.Fatal("test timeout: potential goroutine leak or DB connection exhaustion")
 	}
 
-	finalStock, _ := repo.GetStock(ctx, productID)
+	finalStock, err := repo.GetStock(ctx, productID)
+	if err != nil {
+		t.Fatalf("get final stock: %v", err)
+	}
 
 	t.Logf("=== POSTGRES ATOMIC RESULTS ===")
 	t.Logf("Initial stock: %d", initialStock)
@@ -261,9 +335,10 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 	}
 
 	// Main invariant check
-	if successCount != initialStock {
-		t.Errorf("expected success = %d, got %d", initialStock, successCount)
+	if successCount+finalStock != initialStock {
+		t.Fatalf("INVARIANT ERROR: initial_stock (%d) != successful (%d) + final_stock (%d)", initialStock, successCount, finalStock)
 	}
+
 	if rejectedCount != 400 {
 		t.Errorf("expected rejected = 400, got %d", rejectedCount)
 	}
@@ -271,5 +346,5 @@ func TestPostgresAtomic_ConcurrentUpdate(t *testing.T) {
 		t.Errorf("expected final_stock = 0, got %d", finalStock)
 	}
 
-	t.Logf("✅ POSTGRES ATOMIC INTEGRATION TEST PASSED")
+	t.Logf("✅ POSTGRES ATOMIC INTEGRATION TEST PASSED: invariant holds")
 }

@@ -70,7 +70,10 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 
 	wg.Wait()
 
-	finalStock, _ := repo.GetStock(ctx, productID)
+	finalStock, err := repo.GetStock(ctx, productID)
+	if err != nil {
+		t.Fatalf("get final stock: %v", err)
+	}
 
 	t.Logf("=== ROW LOCK RESULTS ===")
 	t.Logf("Initial stock: %d", initialStock)
@@ -159,7 +162,10 @@ func TestPostgresRowLock_HighContention(t *testing.T) {
 		t.Fatal("test timeout: potential deadlock or DB connection exhaustion")
 	}
 
-	finalStock, _ := repo.GetStock(ctx, productID)
+	finalStock, err := repo.GetStock(ctx, productID)
+	if err != nil {
+		t.Fatalf("get final stock: %v", err)
+	}
 
 	t.Logf("=== ROW LOCK HIGH CONTENTION RESULTS ===")
 	t.Logf("Initial stock: %d", initialStock)

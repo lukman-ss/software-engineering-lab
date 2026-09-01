@@ -28,7 +28,6 @@ type CacheInterface interface {
 type LockInterface interface {
 	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	Get(ctx context.Context, key string) (string, error)
-	Del(ctx context.Context, key string) (bool, error)
 	// CompareAndDel atomically deletes key only if value matches (for safe release).
 	CompareAndDel(ctx context.Context, key, value string) (bool, error)
 }
