@@ -75,7 +75,16 @@ Dashboard workshop menampilkan statistik dilihat oleh banyak user. Tanpa cache, 
 | **Primary** | PostgreSQL | Durable, persistent, authoritative storage yang dapat digunakan untuk rebuild cache |
 | **Cache** | Redis | Derived data, TTL-bound, on-demand rebuild |
 
-**Prinsip Utama:** Cache correctness harus dibangun dengan asumsi cache dapat kosong atau di-flush kapan saja. Database selalu menjadi source of truth.
+**Prinsip Utama:** Dalam lab ini, PostgreSQL adalah source of truth untuk business data. Cache correctness harus dibangun dengan asumsi cache dapat kosong atau di-flush kapan saja.
+
+**General principle (beyond this lab):** Cache umumnya dapat berasal dari:
+- Database (authoritative source)
+- External API
+- Computation
+- Filesystem
+- Another service
+
+Yang penting: cache harus dapat direbuild atau divalidasi terhadap authoritative source sesuai architecture.
 
 ---
 
