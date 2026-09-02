@@ -163,7 +163,7 @@ Sebelum melakukan breaking change, Senior Engineer harus menanyakan:
 | Can they deploy independently? | Tidak — semua butuh backend update |
 | Are external partners involved? | Ya — 3 partner ERP pakai v1 |
 | How much V1 traffic remains? | ~15% di minggu pertama |
-| Which mobile versions still hit V1? | Android 8.0-10.0 (ter distribusi lemot) |
+| Which mobile versions still hit V1? | Android 8.0-10.0 (terdistribusi lambat) |
 
 > **API versioning tanpa mengetahui consumer lama tetap berbahaya.** Jangan buat V2 hanya karena "mau bangun".
 
