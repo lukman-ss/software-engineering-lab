@@ -512,6 +512,8 @@ Bukan kondisi yang boleh dianggap normal:
 | **observability** | Kemampuan memantau dan memdebug sistem melalui logs, metrics, tracing |
 | **unknown outcome** | Ketika timeout terjadi, kita tidak tahu apakah operasi berhasil atau tidak |
 
+> Event-driven architecture dapat coexist dengan synchronous HTTP/RPC dalam sistem yang sama. Keduanya dipilih berdasarkan kebutuhan interaction, consistency, latency, dan failure handling.
+
 ---
 
 ## 16. Failure Scenarios untuk Reviewer
