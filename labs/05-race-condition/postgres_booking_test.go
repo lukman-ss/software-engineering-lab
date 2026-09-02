@@ -195,10 +195,10 @@ func TestPostgres_Booking_MultipleBranches(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := setupBookingTable(ctx, db); err != nil {
+	if err := resetBookingTable(ctx, db); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
-	defer setupBookingTable(ctx, db)
+	defer resetBookingTable(ctx, db)
 
 	repo := NewPostgresBookingRepository(db)
 
