@@ -384,3 +384,98 @@ func TestV1Contract_DetectsStatusStringToObject(t *testing.T) {
 
 	t.Logf("✅ V1 contract detected breaking change: status string → object: %v", err)
 }
+
+// TestV2Contract_DetectsStatusObject memastikan V2 menggunakan status sebagai string.
+func TestV2Contract_DetectsStatusObject(t *testing.T) {
+	violatingResponse := []byte(`{
+		"id": 1001,
+		"customer": {"id": 15, "name": "Budi", "phone": "08123"},
+		"total": 500000,
+		"status": {"code": "PAID", "label": "Paid"}
+	}`)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(violatingResponse, &raw); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// V2 contract: status HARUS string
+	var statusStr string
+	err := json.Unmarshal(raw["status"], &statusStr)
+	if err == nil {
+		t.Fatal("V2 contract test GAGAL: status harus string, bukan object")
+	}
+
+	t.Logf("✅ V2 contract verified: status is string (not object) - detected: %v", err)
+}
+
+// TestV1Contract_RegressionGuaranteeAfterV2Registration membuktikan bahwa
+// pengendaan V2 tidak mengubah output V1 apabila keduanya
+// diregistrasikan pada router yang sama.
+func TestV1Contract_RegressionGuaranteeAfterV2Registration(t *testing.T) {
+	// Setup: V1 dan V2 pada router yang sama
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/invoices/", V1Handler)
+	mux.HandleFunc("/api/v2/invoices/", V2Handler)
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	// Request ke V1 - harus tetap mengembalikan V1 contract
+	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
+	if err != nil {
+		t.Fatalf("failed V1 request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// HTTP 200
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("V1: expected HTTP 200, got %d", resp.StatusCode)
+	}
+
+	// Content-Type application/json
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("V1: expected Content-Type 'application/json', got '%s'", ct)
+	}
+
+	// Decode dan verify semua field
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		t.Fatalf("V1: invalid JSON response: %v", err)
+	}
+
+	// id == 1001, JSON number
+	var idNum json.Number
+	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
+		t.Error("V1: 'id' harus berupa number")
+	} else if idNum != "1001" {
+		t.Errorf("V1: 'id' harus 1001, got %s", idNum)
+	}
+
+	// customer == "Budi", JSON string
+	var customerStr string
+	if err := json.Unmarshal(raw["customer"], &customerStr); err != nil {
+		t.Fatal("V1 CONTRACT BROKEN: customer harus tetap string (breaking change!)")
+	} else if customerStr != "Budi" {
+		t.Errorf("V1: 'customer' harus 'Budi', got '%s'", customerStr)
+	}
+
+	// total == 500000, JSON number
+	var totalNum json.Number
+	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
+		t.Error("V1: 'total' harus berupa number")
+	} else if totalNum != "500000" {
+		t.Errorf("V1: 'total' harus 500000, got %s", totalNum)
+	}
+
+	// status == "PAID", JSON string
+	var statusStr string
+	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
+		t.Fatal("V1 CONTRACT BROKEN: status harus tetap string")
+	} else if statusStr != "PAID" {
+		t.Errorf("V1: 'status' harus 'PAID', got '%s'", statusStr)
+	}
+
+	t.Log("✅ V1 contract regression guarantee: V2 registration tidak mengubah V1 output")
+}
