@@ -104,13 +104,23 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID,
 }
 
 // InvalidateDashboard invalidates cache for a branch and specific business date.
+//
+// LOW-LEVEL INVALIDATE METHOD:
+// This method can return error if cache DELETE fails (e.g., Redis down, network error).
+// Callers should be aware that this is a cache side-effect failure, NOT a transaction failure.
+//
+// BUSINESS MUTATION FLOW:
+// DB mutation → COMMIT success → cache invalidation attempt → if invalidation fails, record error but business write succeeded → TTL serves as safety net for stale cache
+//
+// The error return allows monitoring/debugging, but business operations must handle
+// cache errors as non-blocking side-effects, not transaction rollbacks.
 func (s *RobustDashboardService) InvalidateDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
 	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		s.metrics.IncError()
-		// Log errors other than cache miss, but don't fail the operation
-		// (invalidating an already missing key is fine)
+		// Log and return error - caller should handle as cache side-effect
+		// Business operation already succeeded if we're here
 		fmt.Printf("warn: failed to invalidate cache key %s: %v\n", key, err)
 		return fmt.Errorf("invalidate cache: %w", err)
 	}
