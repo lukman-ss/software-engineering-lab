@@ -169,13 +169,13 @@ func TestDistributedLockMutualExclusion(t *testing.T) {
 	key := "lock:item:999"
 	ttl := 5 * time.Second
 
-	holder1, value1 := caching.TryAcquireLock(ctx, locker, key, ttl)
-	if !holder1 {
+	holder1, value1, err := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if err != nil || !holder1 {
 		t.Fatal("first lock acquisition should succeed")
 	}
 
 	// Second holder should fail to acquire the same lock
-	holder2, value2 := caching.TryAcquireLock(ctx, locker, key, ttl)
+	holder2, value2, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
 	if holder2 {
 		t.Error("second lock acquisition should fail - mutual exclusion violated")
 	}
@@ -191,7 +191,7 @@ func TestDistributedLockMutualExclusion(t *testing.T) {
 	}
 
 	// After release, lock should be available again
-	holder3, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
+	holder3, _, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
 	if !holder3 {
 		t.Error("lock should be available after release")
 	}
