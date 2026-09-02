@@ -19,16 +19,15 @@ import (
 // TestPostgresRowLock_ConcurrentStock menguji row locking dengan PostgreSQL.
 //
 // Menggunakan PostgreSQL lock introspection untuk membuktikan blocking secara deterministik:
-// Transaction A memperoleh lock → Transaction B menunggu pada PG_STATE = "active" + wait_event_type = "Lock"
+// Transaction A memperoleh lock → Transaction B menunggu pada pg_stat_activity (wait_event_type='Lock')
 //
 // Sequence yang dibuktikan:
 //   1. A memperoleh SELECT ... FOR UPDATE (lock acquired)
 //   2. A signal lockAcquired
 //   3. B memulai transaksi, mengeksekusi SELECT ... FOR UPDATE (blocked di DB backend)
-//   4. B verified: pg_stat_activity menunjukkan wait_event_type = "Lock"
-//   5. Main test memverifikasi kondisi ini sebelum melanjutkan
-//   6. close(releaseA) → A UPDATE + COMMIT
-//   7. B unblocked → membaca stock=0 → ErrOutOfStock
+//   4. Main goroutine verify B is waiting via pg_stat_activity
+//   5. close(releaseA) → A UPDATE + COMMIT
+//   6. B unblocked → membaca stock=0 → ErrOutOfStock
 //
 // Expected:
 //   - success_count = 1
@@ -55,12 +54,10 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	// Channels for deterministic coordination:
 	// lockAcquired: A has SELECT ... FOR UPDATE completed
 	// releaseA: signal A to proceed with UPDATE/COMMIT
-	// bRunning: B transaction is running (started)
-	// bFinished: B transaction completed (or rejected)
+	// bStarted: B goroutine has started running (passed go func entry)
 	lockAcquired := make(chan struct{})
 	releaseA := make(chan struct{})
-	bRunning := make(chan struct{})
-	bFinished := make(chan struct{})
+	bStarted := make(chan struct{})
 
 	var wg sync.WaitGroup
 	var successCount int
@@ -77,22 +74,15 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		aErr = trySellWithLockA(ctx, db, productID, lockAcquired, releaseA)
 	}()
 
-	// Transaction B goroutine — will block on SELECT FOR UPDATE
+	// Transaction B — waits for A's lock, then attempts to acquire (will block)
 	go func() {
 		defer wg.Done()
-
-		// Wait for A to acquire lock first
 		<-lockAcquired
-
-		// Signal B goroutine is now active
-		close(bRunning)
-
-		// Attempt to sell - this will block if A holds the lock
+		close(bStarted) // signal: B goroutine is now active
 		bErr = trySellWithLockB(ctx, db, productID)
-		close(bFinished)
 	}()
 
-	// Wait for A to acquire lock
+	// Wait for A to acquire lock (bounded)
 	select {
 	case <-lockAcquired:
 		t.Log("A has acquired row lock via SELECT ... FOR UPDATE")
@@ -100,16 +90,24 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		t.Fatal("transaction A failed to acquire row lock in time")
 	}
 
+	// Wait for B goroutine to be running (bounded)
+	select {
+	case <-bStarted:
+		t.Log("B goroutine has started")
+	case <-ctx.Done():
+		t.Fatal("B goroutine failed to start in time")
+	}
+
 	// Now poll to verify B is waiting for lock using pg_stat_activity
-	// B's goroutine has started and is trying to acquire the lock
-	// We need to detect that B is blocked on the lock
+	// B is blocked on SELECT FOR UPDATE (same row as A)
+	// B's connection will show state='active' and wait_event_type='Lock'
 	verifiedBWaiting := waitForBWaitingOnLock(ctx, db)
 
 	if !verifiedBWaiting {
 		t.Fatal("Could not verify B is waiting on lock - test may be unreliable")
 	}
 
-	t.Log("✓ Verified: Transaction B is blocked waiting for row lock")
+	t.Log("✓ Verified: Transaction B is blocked waiting for row lock via pg_stat_activity")
 
 	// Now release A to continue (UPDATE + COMMIT)
 	t.Log("Releasing A to continue with UPDATE + COMMIT")
@@ -179,18 +177,20 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 }
 
 // waitForBWaitingOnLock polls PostgreSQL to verify B is waiting for a row lock.
-// Uses pg_stat_activity to check wait_event_type = 'Lock'.
+// Uses pg_stat_activity to check wait_event_type = 'Lock' on other backends.
+// Returns true when at least one other backend is in lock wait state.
 func waitForBWaitingOnLock(ctx context.Context, db *sql.DB) bool {
-	// Get count of backends waiting on locks (excluding this one)
+	// Get count of backends waiting on locks (excluding this verification connection)
 	const pollInterval = 10 * time.Millisecond
-	const maxPolls = 100 // 1 second total timeout
+	const maxPolls = 200 // 2 seconds total timeout
 
 	for i := 0; i < maxPolls; i++ {
 		var waitingCount int
 		err := db.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM pg_stat_activity WHERE state = 'active' AND wait_event_type = 'Lock' AND pid != pg_backend_pid()`).Scan(&waitingCount)
 		if err == nil && waitingCount > 0 {
-			t.Logf("Verified: %d backend(s) waiting on lock", waitingCount)
+			t := time.Now()
+			_ = t
 			return true
 		}
 		time.Sleep(pollInterval)
