@@ -410,7 +410,7 @@ func TestV2Contract_DetectsStatusObject(t *testing.T) {
 }
 
 // TestV1Contract_RegressionGuaranteeAfterV2Registration membuktikan bahwa
-// pengendaan V2 tidak mengubah output V1 apabila keduanya
+// pengendalan V2 tidak mengubah output V1 apabila keduanya
 // diregistrasikan pada router yang sama.
 func TestV1Contract_RegressionGuaranteeAfterV2Registration(t *testing.T) {
 	// Setup: V1 dan V2 pada router yang sama
