@@ -46,6 +46,6 @@ func TestAdditiveField_LegacyClientStillWorks(t *testing.T) {
 
 	t.Log("✅ Legacy client successfully decodes response with unknown `currency` field")
 	t.Log("Field `currency` diabaikan oleh decoder karena tidak ada di struct")
-	t.Log("INI adalah contoh additive change yang TIDK menjadi breaking change")
+	t.Log("INI adalah contoh additive change yang tidak menjadi breaking change")
 	t.Log("Catatan: Penambahan field aman HANYA bila consumer tolerant unknown field")
 }
