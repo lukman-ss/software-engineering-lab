@@ -327,7 +327,7 @@ Mengatasi stampede **multi-instance** menggunakan `SETNX` dengan TTL expiration 
 ## 11. TTL Jitter & Background Refresh
 
 ### TTL Jitter
-Tambahkan pengacak kecil ke TTL (misal: 60s ± 15s) agar batch cache keys tidak kadaluarsa tepat bersamaan.
+Tambahkan pengacak kecil ke TTL (misal: 60s ± 15s) agar batch cache keys tidak kadaluarsa hampir bersamaan.
 
 ### Background Refresh (Stale-While-Revalidate)
 Mem-refresh data secara background sebelum key expired. Client tetap dilayani dengan data cache.
