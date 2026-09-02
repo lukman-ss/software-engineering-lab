@@ -210,6 +210,16 @@ Hasil: Database = baru, Cache = lama (stale)
 2. **Explicit Delete** — DELETE key pasca-commit
 3. **Event-Driven Invalidation** — Publish event pasca-commit untuk memicu invalidasi (pub/sub)
 
+**Reliability Note:** Redis Pub/Sub bersifat ephemeral. Jika subscriber disconnect, event dapat hilang. Untuk cache invalidation biasa yang memiliki TTL safety net, loss event mungkin acceptable tergantung requirement.
+
+Jika invalidation harus reliable (miss-notice):
+- **Durable queue** (RabbitMQ, Bean MQ)
+- **Redis Streams** dengan consumer groups
+- **Kafka / NATS JetStream**
+- **Transactional outbox + CDC consumer**
+
+TTL tetap berguna sebagai recovery/safety net untuk event loss.
+
 ### Tag / Index-based Invalidation
 
 **Penting:** Redis core tidak menyediakan generic cache tagging abstraction. Banyak perbufet menyamakan SCAN+pattern delete dengan tag implementation. Mereka adalah hal yang berbeda.
