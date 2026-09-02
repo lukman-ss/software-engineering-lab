@@ -449,7 +449,7 @@ Lock pada Lab 04 digunakan untuk mengurangi duplicate cache rebuild, bukan sebag
 
 ### TTL Jitter
 Tambahkan pengacak kecil ke TTL (misal: 60s + random 0–15s) agar batch cache keys tidak kadaluarsa hampir bersamaan.
-Model implementasi menghasilkan TTL dalam rentang [base, base + maxJitter], tidak pernah lebih rendah dari base.
+Model implementasi menghasilkan TTL dalam rentang [base, base + maxJitter), tidak pernah lebih rendah dari base. Upper bound bersifat eksklusif.
 
 ### Background Refresh (Stale-While-Revalidate)
 Mem-refresh data secara background sebelum key expired. Client tetap dilayani dengan data cache.

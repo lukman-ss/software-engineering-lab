@@ -155,6 +155,46 @@ func TestCacheStampedeMitigation(t *testing.T) {
 	t.Log("Deterministic early refresh strategy validated")
 }
 
+// TestShouldRefreshEarlyEdgeCases tests all guard conditions and edge cases.
+func TestShouldRefreshEarlyEdgeCases(t *testing.T) {
+	baseTTL := 5 * time.Minute
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name        string
+		expiry      time.Time
+		originalTTL time.Duration
+		probability float64
+		randomValue float64
+		wantRefresh bool
+	}{
+		// Guard conditions
+		{name: "originalTTL <= 0", expiry: now.Add(5 * time.Minute), originalTTL: 0, probability: 0.5, randomValue: 0.1, wantRefresh: false},
+		{name: "expiry zero", expiry: time.Time{}, originalTTL: baseTTL, probability: 0.5, randomValue: 0.1, wantRefresh: false},
+		{name: "already expired", expiry: now.Add(-10 * time.Second), originalTTL: baseTTL, probability: 0.5, randomValue: 0.1, wantRefresh: false},
+		{name: "probability <= 0", expiry: now.Add(30 * time.Second), originalTTL: baseTTL, probability: 0, randomValue: 0.1, wantRefresh: false},
+		// Inside refresh window (remaining TTL <= 20% of original = 1 min)
+		{name: "probability>=1 inside window (30s remaining)", expiry: now.Add(30 * time.Second), originalTTL: baseTTL, probability: 1.0, randomValue: 0.1, wantRefresh: true},
+		{name: "probability>=1 at window boundary (60s remaining)", expiry: now.Add(60 * time.Second), originalTTL: baseTTL, probability: 1.0, randomValue: 0.9, wantRefresh: true},
+		{name: "probability>=1 just outside window (70s remaining)", expiry: now.Add(70 * time.Second), originalTTL: baseTTL, probability: 1.0, randomValue: 0.9, wantRefresh: false},
+		// With probability < 1
+		{name: "inside window random < probability (45s)", expiry: now.Add(45 * time.Second), originalTTL: baseTTL, probability: 0.5, randomValue: 0.1, wantRefresh: true},
+		{name: "inside window random >= probability (45s)", expiry: now.Add(45 * time.Second), originalTTL: baseTTL, probability: 0.5, randomValue: 0.9, wantRefresh: false},
+		// Outside refresh window (> 1 min remaining)
+		{name: "outside window (5 min)", expiry: now.Add(5 * time.Minute), originalTTL: baseTTL, probability: 0.5, randomValue: 0.1, wantRefresh: false},
+		{name: "outside window (2 min)", expiry: now.Add(2 * time.Minute), originalTTL: baseTTL, probability: 0.5, randomValue: 0.1, wantRefresh: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := caching.ShouldRefreshEarly(now, tt.expiry, tt.originalTTL, tt.probability, func() float64 { return tt.randomValue })
+			if got != tt.wantRefresh {
+				t.Errorf("ShouldRefreshEarly() = %v, want %v", got, tt.wantRefresh)
+			}
+		})
+	}
+}
+
 // Test 6: Distributed lock mutual exclusion
 func TestDistributedLockMutualExclusion(t *testing.T) {
 	locker := caching.NewMockRedisClient()

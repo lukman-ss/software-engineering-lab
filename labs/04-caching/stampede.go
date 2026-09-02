@@ -13,7 +13,8 @@ import (
 )
 
 // TTLWithJitter adds positive random jitter to prevent synchronized expiration (stampede).
-// Returns base + random(0..maxJitter). Never reduces TTL below base.
+// Returns base + random[0, maxJitter). Never reduces TTL below base.
+// Upper bound is exclusive: maxJitter is not included.
 func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
 	if maxJitter <= 0 {
 		return base

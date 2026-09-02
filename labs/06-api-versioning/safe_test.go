@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// performRequest adalah helper untuk melakukan request terhadap HTTP handler.
-// Mengembalikan ResponseRecorder untuk assertion.
-
 // assertV1WireContract adalah helper untuk verifikasi kontrak wire V1.
 // Menyimpan satu sumber kebenaran untuk V1 contract assertions.
 func assertV1WireContract(t *testing.T, body []byte) {
@@ -167,6 +164,9 @@ func assertV2NestedFieldExists(t *testing.T, obj map[string]json.RawMessage, fie
 		t.Fatalf("V2 contract broken: missing customer.%s", field)
 	}
 }
+
+// performRequest adalah helper untuk melakukan request terhadap HTTP handler.
+// Mengembalikan ResponseRecorder untuk assertion.
 func performRequest(handler http.Handler, method, path string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
 	w := httptest.NewRecorder()
@@ -176,10 +176,10 @@ func performRequest(handler http.Handler, method, path string) *httptest.Respons
 
 // TestSafeVersioning_LegacyClientSucceedsOnV1 membuktikan bahwa dengan API versioning,
 // kita dapat meluncurkan perubahan tanpa merusak client yang sudah ada.
+// Menggunakan legacy consumer model (LegacyInvoice) untuk bukti compatibility.
 func TestSafeVersioning_LegacyClientSucceedsOnV1(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -194,19 +194,30 @@ func TestSafeVersioning_LegacyClientSucceedsOnV1(t *testing.T) {
 		t.Fatalf("expected HTTP 200, got %d", resp.StatusCode)
 	}
 
-	// Legacy client berhasil decode ke struct V1
-	var legacyResponse InvoiceV1Response
-	err = json.NewDecoder(resp.Body).Decode(&legacyResponse)
+	// Baca body sekali untuk semua asserts
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	// Legacy client decode menggunakan model consumer lama
+	legacyResponse, err := ParseLegacyInvoice(body)
 	if err != nil {
 		t.Fatalf("legacy client SHOULD succeed on V1: %v", err)
 	}
 
-	// Verify response structure
+	// Assert exact business contract
+	if legacyResponse.ID != 1001 {
+		t.Errorf("ID: expected 1001, got %d", legacyResponse.ID)
+	}
 	if legacyResponse.Customer != "Budi" {
-		t.Errorf("expected Customer='Budi', got '%s'", legacyResponse.Customer)
+		t.Errorf("Customer: expected 'Budi', got '%s'", legacyResponse.Customer)
 	}
 	if legacyResponse.Total != 500000 {
-		t.Errorf("expected Total=500000, got %d", legacyResponse.Total)
+		t.Errorf("Total: expected 500000, got %d", legacyResponse.Total)
+	}
+	if legacyResponse.Status != "PAID" {
+		t.Errorf("Status: expected 'PAID', got '%s'", legacyResponse.Status)
 	}
 
 	t.Log("✅ Legacy client successfully reads from V1 API")
@@ -214,10 +225,10 @@ func TestSafeVersioning_LegacyClientSucceedsOnV1(t *testing.T) {
 
 // TestSafeVersioning_NewClientSucceedsOnV2 membuktikan client baru dapat
 // menggunakan V2 API dengan customer sebagai object.
+// Menggunakan typed response untuk bukti client-level success.
 func TestSafeVersioning_NewClientSucceedsOnV2(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
-
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -239,15 +250,24 @@ func TestSafeVersioning_NewClientSucceedsOnV2(t *testing.T) {
 		t.Fatalf("new client SHOULD succeed on V2: %v", err)
 	}
 
-	// Verify response structure
+	// Assert exact business contract
+	if v2Response.ID != 1001 {
+		t.Errorf("ID: expected 1001, got %d", v2Response.ID)
+	}
+	if v2Response.Customer.ID != 15 {
+		t.Errorf("Customer.ID: expected 15, got %d", v2Response.Customer.ID)
+	}
 	if v2Response.Customer.Name != "Budi" {
-		t.Errorf("expected Customer.Name='Budi', got '%s'", v2Response.Customer.Name)
+		t.Errorf("Customer.Name: expected 'Budi', got '%s'", v2Response.Customer.Name)
 	}
 	if v2Response.Customer.Phone != "08123" {
-		t.Errorf("expected Customer.Phone='08123', got '%s'", v2Response.Customer.Phone)
+		t.Errorf("Customer.Phone: expected '08123', got '%s'", v2Response.Customer.Phone)
 	}
 	if v2Response.Total != 500000 {
-		t.Errorf("expected Total=500000, got %d", v2Response.Total)
+		t.Errorf("Total: expected 500000, got %d", v2Response.Total)
+	}
+	if v2Response.Status != "PAID" {
+		t.Errorf("Status: expected 'PAID', got '%s'", v2Response.Status)
 	}
 
 	t.Log("✅ New client successfully reads from V2 API")
