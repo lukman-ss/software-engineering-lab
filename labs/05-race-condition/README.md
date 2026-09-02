@@ -548,13 +548,17 @@ go test -v -run Test500_ConcurrentBooking
 go test -v -run TestBooking_SameBranchDifferentBranch
 go test -v -run TestBooking_ErrorHandling
 ```
-> Menggunakan `MockBookingRepository` dengan `sync.RWMutex` - application-level unique constraint demo.
+> Menunjukkan application-level concurrency behavior menggunakan in-memory repository. Database PostgreSQL UNIQUE constraint dibuktikan secara terpisah oleh PostgreSQL integration test.
 
 ##### PostgreSQL Booking Unique Constraint Tests
 ```bash
 # 500 concurrent: 1 success, 499 SQLSTATE 23505 conflict
 go test -v -tags=integration -run TestPostgres_ConcurrentBooking
+
+# Same branch duplicate → rejected
 go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
+
+# Different branches may use same date/time slot independently
 go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
 ```
 
