@@ -94,4 +94,3 @@ func ShouldRefreshEarly(now time.Time, expiry time.Time, originalTTL time.Durati
 func DashboardCacheKey(tenantID, branchID int64, businessDate time.Time) string {
 	return NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 }
-

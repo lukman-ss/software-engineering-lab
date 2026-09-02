@@ -594,7 +594,7 @@ make lab-05-integration # Integration tests (requires PostgreSQL)
 
 ### 3. PostgreSQL Setup - Dua Working Directory yang Berbeda
 
-**Ingat:** Lab 05 adalah Go module terpisah. Perintah dari repository root akan menjadi *nothing*.
+**Ingat:** Perintah `go test ./...` yang dijalankan langsung dari repository root tidak mencakup test di `labs/05-race-condition`, karena Lab 05 adalah nested Go module dengan `go.mod` sendiri. Gunakan `make lab-05-test` dari repository root, atau masuk ke `labs/05-race-condition` lalu jalankan command Go dari sana.
 
 | Tujuan | Working Directory | Perintah |
 |--------|------------------|----------|
@@ -611,7 +611,7 @@ Prasyarat: PostgreSQL berjalan di `localhost:5432`, database `se_lab`.
 
 ```bash
 # Dari root repository
-docker-compose up -d postgres
+docker compose up -d postgres
 ```
 
 > **Penting:** Init script hanya berjalan pada **first database creation**. Jika volume lama sudah ada sebelum schema ditambahkan, reset dulu:

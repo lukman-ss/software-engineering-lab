@@ -116,26 +116,26 @@ func TestCacheStampedeMitigation(t *testing.T) {
 		{
 			name:        "Fresh cache (80% TTL not passed)",
 			expiry:      now.Add(4 * time.Minute), // Only 1 min passed, 4 min remaining (> 20% of 5m = 1m)
-			randomValue: 0.1,                        // Even with low random value
-			wantRefresh: false,                      // Shouldn't refresh
+			randomValue: 0.1,                      // Even with low random value
+			wantRefresh: false,                    // Shouldn't refresh
 		},
 		{
 			name:        "Near expiry + Random below threshold",
 			expiry:      now.Add(30 * time.Second), // 30s remaining (<= 20% of 5m = 1m)
 			randomValue: 0.1,                       // Random < 0.5
-			wantRefresh: true,                        // Should refresh!
+			wantRefresh: true,                      // Should refresh!
 		},
 		{
 			name:        "Near expiry + Random above threshold",
 			expiry:      now.Add(30 * time.Second), // 30s remaining
 			randomValue: 0.9,                       // Random >= 0.5
-			wantRefresh: false,                       // Shouldn't refresh
+			wantRefresh: false,                     // Shouldn't refresh
 		},
 		{
 			name:        "Already expired",
 			expiry:      now.Add(-10 * time.Second), // Expired 10s ago
-			randomValue: 0.1,                          // Even with low random
-			wantRefresh: false,                          // Shouldn't refresh (handled as normal miss)
+			randomValue: 0.1,                        // Even with low random
+			wantRefresh: false,                      // Shouldn't refresh (handled as normal miss)
 		},
 	}
 

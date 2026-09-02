@@ -69,14 +69,14 @@ func (m *CacheMetrics) Reset() {
 
 // --- COUNTERS ---
 
-func (m *CacheMetrics) IncHit()            { m.hits.Add(1) }
-func (m *CacheMetrics) IncMiss()           { m.misses.Add(1) }
-func (m *CacheMetrics) IncError()          { m.errors.Add(1) }
-func (m *CacheMetrics) IncRebuildAttempt() { m.rebuildAttempts.Add(1) }
-func (m *CacheMetrics) IncRebuildSuccess() { m.rebuildSuccesses.Add(1) }
-func (m *CacheMetrics) IncDBQuery()        { m.dbQueries.Add(1) }
-func (m *CacheMetrics) IncLockWait()       { m.lockWaits.Add(1) }
-func (m *CacheMetrics) IncDBFallback()     { m.dbFallbacks.Add(1) }
+func (m *CacheMetrics) IncHit()                    { m.hits.Add(1) }
+func (m *CacheMetrics) IncMiss()                   { m.misses.Add(1) }
+func (m *CacheMetrics) IncError()                  { m.errors.Add(1) }
+func (m *CacheMetrics) IncRebuildAttempt()         { m.rebuildAttempts.Add(1) }
+func (m *CacheMetrics) IncRebuildSuccess()         { m.rebuildSuccesses.Add(1) }
+func (m *CacheMetrics) IncDBQuery()                { m.dbQueries.Add(1) }
+func (m *CacheMetrics) IncLockWait()               { m.lockWaits.Add(1) }
+func (m *CacheMetrics) IncDBFallback()             { m.dbFallbacks.Add(1) }
 func (m *CacheMetrics) IncEvictedKey()             { m.evictedKeys.Add(1) }
 func (m *CacheMetrics) IncExpiredKey()             { m.expiredKeys.Add(1) }
 func (m *CacheMetrics) IncCacheSetError()          { m.cacheSetErrors.Add(1) }
@@ -95,17 +95,17 @@ func (m *CacheMetrics) RecordRebuildLatency(d time.Duration) { m.rebuildLatency.
 
 // --- GETTERS ---
 
-func (m *CacheMetrics) Hits() int64                   { return m.hits.Load() }
-func (m *CacheMetrics) Misses() int64                 { return m.misses.Load() }
-func (m *CacheMetrics) Errors() int64                   { return m.errors.Load() }
-func (m *CacheMetrics) RebuildAttempts() int64        { return m.rebuildAttempts.Load() }
-func (m *CacheMetrics) RebuildSuccesses() int64       { return m.rebuildSuccesses.Load() }
-func (m *CacheMetrics) DBQueries() int64              { return m.dbQueries.Load() }
-func (m *CacheMetrics) LockWaits() int64              { return m.lockWaits.Load() }
-func (m *CacheMetrics) DBFallbacks() int64            { return m.dbFallbacks.Load() }
-func (m *CacheMetrics) EvictedKeys() int64            { return m.evictedKeys.Load() }
-func (m *CacheMetrics) ExpiredKeys() int64            { return m.expiredKeys.Load() }
-func (m *CacheMetrics) CacheSetErrors() int64         { return m.cacheSetErrors.Load() }
+func (m *CacheMetrics) Hits() int64                    { return m.hits.Load() }
+func (m *CacheMetrics) Misses() int64                  { return m.misses.Load() }
+func (m *CacheMetrics) Errors() int64                  { return m.errors.Load() }
+func (m *CacheMetrics) RebuildAttempts() int64         { return m.rebuildAttempts.Load() }
+func (m *CacheMetrics) RebuildSuccesses() int64        { return m.rebuildSuccesses.Load() }
+func (m *CacheMetrics) DBQueries() int64               { return m.dbQueries.Load() }
+func (m *CacheMetrics) LockWaits() int64               { return m.lockWaits.Load() }
+func (m *CacheMetrics) DBFallbacks() int64             { return m.dbFallbacks.Load() }
+func (m *CacheMetrics) EvictedKeys() int64             { return m.evictedKeys.Load() }
+func (m *CacheMetrics) ExpiredKeys() int64             { return m.expiredKeys.Load() }
+func (m *CacheMetrics) CacheSetErrors() int64          { return m.cacheSetErrors.Load() }
 func (m *CacheMetrics) CacheInvalidationErrors() int64 { return m.cacheInvalidateErrors.Load() }
 func (m *CacheMetrics) CacheGetOps() int64             { return m.cacheGetOps.Load() }
 func (m *CacheMetrics) CacheSetOps() int64             { return m.cacheSetOps.Load() }
