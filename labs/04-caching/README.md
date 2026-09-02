@@ -527,8 +527,8 @@ Contoh: query < 1ms tidak selalu tidak layak di-cache. untuk request volume ting
 
 1. Berapa lama data boleh stale?
 2. Seberapa mahal mendapatkan/menghitung data vs cache overhead?
-3. At what cost is 5-30 detik delay acceptable?
-4. Bagaimana cache di-invalidasi?
+3. Seberapa besar dampak penundaan 5-30 detik?
+4. Bagaimana cache di-invalidiasi?
 5. Apakah benefit performanya lebih besar daripada complexity?
 
 ### Senior Level Ask:
