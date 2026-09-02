@@ -172,13 +172,23 @@ func (m *MockCacheWithStats) Misses() int {
 
 // MockRedisClient - implements LockInterface for distributed locking tests.
 type MockRedisClient struct {
-	data map[string]string
-	mu   sync.RWMutex
+	data     map[string]string
+	expiries map[string]time.Time
+	mu       sync.RWMutex
 }
 
 func NewMockRedisClient() *MockRedisClient {
 	return &MockRedisClient{
-		data: make(map[string]string),
+		data:     make(map[string]string),
+		expiries: make(map[string]time.Time),
+	}
+}
+
+// removeExpired cleans up expired keys. Not thread-safe, caller must hold lock.
+func (r *MockRedisClient) removeExpired(key string) {
+	if expiry, ok := r.expiries[key]; ok && time.Now().After(expiry) {
+		delete(r.data, key)
+		delete(r.expiries, key)
 	}
 }
 
@@ -187,20 +197,27 @@ func (r *MockRedisClient) SetNX(ctx context.Context, key, value string, ttl time
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.removeExpired(key)
+
 	if _, exists := r.data[key]; exists {
 		return false, nil // Key already exists
 	}
 
 	r.data[key] = value
-	// Note: True TTL is not strictly simulated in this simple mock
-	// because SetNX in this lab is only used for mutual exclusion proof.
+	if ttl > 0 {
+		r.expiries[key] = time.Now().Add(ttl)
+	} else {
+		delete(r.expiries, key)
+	}
 	return true, nil
 }
 
 // Get retrieves value (for lock token verification).
 func (r *MockRedisClient) Get(ctx context.Context, key string) (string, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock() // Write lock needed since removeExpired can mutate map
+	defer r.mu.Unlock()
+
+	r.removeExpired(key)
 
 	val, exists := r.data[key]
 	if !exists {
@@ -214,13 +231,25 @@ func (r *MockRedisClient) CompareAndDel(ctx context.Context, key, value string) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.removeExpired(key)
+
 	val, exists := r.data[key]
 	if !exists || val != value {
 		return false, nil // Key missing or value mismatch
 	}
 
 	delete(r.data, key)
+	delete(r.expiries, key)
 	return true, nil
+}
+
+// ForceExpire forces a key to expire immediately (for testing).
+func (r *MockRedisClient) ForceExpire(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.data[key]; ok {
+		r.expiries[key] = time.Now().Add(-1 * time.Minute)
+	}
 }
 
 // Ensure interfaces are satisfied
