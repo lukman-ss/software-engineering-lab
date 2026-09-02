@@ -472,7 +472,39 @@ Untuk immediate revocation: authoritative lookup, centralized policy service, at
 
 ---
 
-## 18. Query Optimization → Index → Cache
+## 18. Metrics / Observability
+
+Cache value harus dievaluasi bersama:
+- Avoided query cost
+- Cache latency
+- Memory cost
+- Invalidation complexity
+- Failure amplification
+
+**Hit ratio tinggi tidak otomatis berarti cache memberikan ROI tinggi.**
+
+Production implementation biasanya memakai:
+- Prometheus
+- OpenTelemetry
+- Redis monitoring commands (INFO, LATENCY)
+
+**Core Metrics yang Dibutuhkan:**
+
+| Metric | Tipe | Purpose |
+|--------|------|---------|
+| `cache_hit` | Counter | Hit rate calculation |
+| `cache_miss` | Counter | Miss rate, cold data detection |
+| `cache_error` | Counter | Backend issues (Redis down, timeout) |
+| `db_fallback` | Counter | Request served by DB directly |
+| `evicted_keys` | Counter | Memory pressure indicator |
+| `cache_get_latency` | Histogram/Latency | Cache performance |
+| `cache_set_latency` | Histogram/Latency | Write path cost |
+
+**Catatan:** Threshold alert (seperti hit_ratio < 50%) bersifat illustrative dan harus disesuaikan dengan baseline serta SLO service.
+
+---
+
+## 19. Query Optimization → Index → Cache
 
 Cache **bukan pengganti** database optimization.
 
