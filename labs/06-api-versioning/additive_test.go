@@ -75,39 +75,14 @@ func TestAdditiveField_LegacyClientStillWorks(t *testing.T) {
 	t.Log("INI adalah contoh additive change yang tidak menjadi breaking change")
 }
 
-// TestAdditiveHandler_MethodNotAllowed memastikan additive endpoint
-// mengembalikan HTTP 405 untuk method POST dengan Allow header.
-func TestAdditiveHandler_MethodNotAllowed(t *testing.T) {
-	handler := http.HandlerFunc(AdditiveHandler)
-	w := performRequest(handler, http.MethodPost, "/api/invoices/1001")
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected HTTP 405, got %d", w.Code)
-	}
-
-	// Verify Allow header
-	allow := w.Header().Get("Allow")
-	if allow != http.MethodGet {
-		t.Errorf("expected Allow header 'GET', got '%s'", allow)
-	}
-
-	// Verify Content-Type
-	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
-		t.Errorf("expected Content-Type application/json, got '%s'", ct)
-	}
-
-	t.Log("✅ AdditiveHandler returns HTTP 405 with Allow: GET for POST method")
-}
-
-// TestAdditiveHandler_WrongPrefixNotValid memastikan path dengan prefix salah
+// TestAdditiveHandler_WrongPrefixReturnsBadRequest memastikan path dengan prefix salah
 // tidak dianggap sebagai ID 0 yang valid.
-func TestAdditiveHandler_WrongPrefixNotValid(t *testing.T) {
+func TestAdditiveHandler_WrongPrefixReturnsBadRequest(t *testing.T) {
 	handler := http.HandlerFunc(AdditiveHandler)
 	w := performRequest(handler, http.MethodGet, "/wrong/path/1001")
 
-	if w.Code == http.StatusOK {
-		t.Error("BUG: wrong prefix path should NOT return HTTP 200")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected HTTP 400 for wrong prefix, got %d", w.Code)
 	}
-
-	t.Logf("✅ AdditiveHandler returns HTTP %d for wrong prefix path (not 200)", w.Code)
+	t.Logf("✅ AdditiveHandler returns HTTP 400 for wrong prefix path (not 200)")
 }

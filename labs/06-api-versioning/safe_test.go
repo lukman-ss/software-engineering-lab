@@ -593,3 +593,50 @@ func TestIDValidation_ValidButNotFound(t *testing.T) {
 	}
 	t.Logf("✅ V1 returns HTTP 404 for valid ID=9999 (not found)")
 }
+
+// TestHandlers_MethodNotAllowed memverifikasi semua handler mengembalikan
+// 405 Method Not Allowed dengan Allow: GET dan Content-Type: application/json
+// untuk method selain GET.
+func TestHandlers_MethodNotAllowed(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.Handler
+		path    string
+	}{
+		{"V1Handler", http.HandlerFunc(V1Handler), "/api/v1/invoices/1001"},
+		{"V2Handler", http.HandlerFunc(V2Handler), "/api/v2/invoices/1001"},
+		{"UnsafeHandler", http.HandlerFunc(UnsafeHandler), "/api/invoices/1001"},
+		{"AdditiveHandler", http.HandlerFunc(AdditiveHandler), "/api/invoices/1001"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := performRequest(tt.handler, http.MethodPost, tt.path)
+
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Errorf("expected HTTP 405, got %d", w.Code)
+			}
+
+			allow := w.Header().Get("Allow")
+			if allow != http.MethodGet {
+				t.Errorf("expected Allow header 'GET', got '%s'", allow)
+			}
+
+			ct := w.Header().Get("Content-Type")
+			if ct != "application/json" {
+				t.Errorf("expected Content-Type 'application/json', got '%s'", ct)
+			}
+
+			// Verify error JSON field exists
+			body := w.Body.Bytes()
+			var resp map[string]interface{}
+			if err := json.Unmarshal(body, &resp); err != nil {
+				t.Errorf("expected JSON error response, got: %s", string(body))
+			} else if _, ok := resp["error"]; !ok {
+				t.Errorf("expected JSON error field 'error', got: %v", resp)
+			}
+
+			t.Logf("✅ %s returns 405 + Allow: GET + Content-Type: application/json", tt.name)
+		})
+	}
+}

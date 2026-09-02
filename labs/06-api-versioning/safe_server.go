@@ -88,7 +88,9 @@ var repo InvoiceRepository = &mockInvoiceRepository{}
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(payload)
+	// Untuk lab ini encoding error sengaja tidak dikirim sebagai second HTTP
+	// response karena status/header sudah committed.
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 // writeJSONError menulis error response dalam format JSON konsisten.

@@ -105,25 +105,6 @@ func TestUnsafeHandler_GETExtraPath(t *testing.T) {
 	t.Logf("✅ UnsafeHandler returns HTTP 400 for extra path segment")
 }
 
-// TestUnsafeHandler_POSTMethodNotAllowed memastikan unsafe endpoint
-// mengembalikan HTTP 405 untuk method POST dengan Allow header.
-func TestUnsafeHandler_POSTMethodNotAllowed(t *testing.T) {
-	handler := http.HandlerFunc(UnsafeHandler)
-	w := performRequest(handler, http.MethodPost, "/api/invoices/1001")
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected HTTP 405, got %d", w.Code)
-	}
-
-	// Verify Allow header
-	allow := w.Header().Get("Allow")
-	if allow != http.MethodGet {
-		t.Errorf("expected Allow header 'GET', got '%s'", allow)
-	}
-
-	t.Logf("✅ UnsafeHandler returns HTTP 405 with Allow: GET for POST method")
-}
-
 // TestUnsafeHandler_WrongPrefixNeverFallsThrough memastikan path dengan prefix salah
 // tidak pernah dianggap sebagai ID 0 yang valid.
 func TestUnsafeHandler_WrongPrefixNeverFallsThrough(t *testing.T) {
