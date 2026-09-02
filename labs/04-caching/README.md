@@ -24,7 +24,7 @@ Setelah menyelesaikan lab ini, Anda akan memahami:
 14. Cache Failure
 15. Memory / Cardinality / Eviction
 16. Laravel Cache::remember Caveats
-17. Permission Caching
+17. Permission & Security Caching
 18. Query Optimization → Index → Cache
 19. Decision Framework / Rule of Thumb
 20. CMMS Examples
@@ -51,12 +51,12 @@ Dashboard workshop menampilkan statistik dilihat oleh banyak user. Tanpa cache, 
                      │               ✗ Latency ~50ms+
                      ▼
                      │
-               ┌─────┴─────┐
-               │   Redis   │  ← Cache
-               └───────────┘
+           ┌─────┴─────┐
+           │   Redis   │  ← Cache
+           └───────────┘
                      │
                      ▼
-                ~1ms latency
+                  ~1ms latency
 ```
 
 ---
@@ -100,13 +100,9 @@ Contoh: Stock display cache 3s untuk UI, tetapi validasi final ke DB dengan `SEL
 
 ---
 
-## 4. Cache Aside vs Read Through
+## 4. Cache Aside
 
-Lab ini menggunakan pattern **Cache Aside**. Penting untuk tidak menyamakannya dengan Read Through.
-
-### Cache Aside (Pola yang digunakan di lab ini)
-
-Aplikasi sendiri yang mengontrol orkestrasi antara cache dan database:
+Lab ini menggunakan pattern **Cache Aside**.
 
 ```
 [App: GET cache]
@@ -128,6 +124,7 @@ Aplikasi sendiri yang mengontrol orkestrasi antara cache dan database:
 ## 5. TTL & Staleness
 
 ### Apakah Stale Data Masalah?
+
 Pertanyaan kuncinya bukan "apakah data berubah?" tetapi **"berapa lama stale data dapat diterima?"**
 
 | Data | Max Staleness | Reasonable? |
@@ -136,19 +133,11 @@ Pertanyaan kuncinya bukan "apakah data berubah?" tetapi **"berapa lama stale dat
 | Stock display | 1–5s | ✅ Ya, untuk UI/UX saja |
 | Saldo wallet | 0s | ❌ Tidak, risiko audit |
 
-### Read-Your-Writes Problem
-Cache-aside sederhana tidak menjamin read-your-writes. User yang baru saja melakukan update mungkin melihat data lama.
-- Solusi: TTL sangat pendek, invalidate-on-write (dengan safety net TTL), atau write-through (dengan safety net TTL).
-
 ---
 
 ## 6. Cache Invalidation
 
-Invalidation adalah mekanisme untuk membersihkan atau mengganti stale data.
-
 ### Race Condition pada Invalidation (DELETE)
-
-Timeline yang benar untuk memahami risiko stale cache:
 
 **UNSAFE: DELETE cache sebelum DB COMMIT**
 
@@ -159,11 +148,8 @@ T2 Reader: cache MISS → baca DB (lama, belum committed)
 T3 Reader: SET nilai lama ke cache
 T4 Writer: DB COMMIT nilai baru
 
-Hasil:
-Database = nilai baru
-Cache = nilai lama (stale)
-
-ISNIH: Ini adalah STALE CACHE BUKAN DATA LOSS. Business data di DB tetap aman.
+Hasil: Database = nilai baru, Cache = nilai lama (stale)
+Catatan: Ini adalah STALE CACHE BUKAN DATA LOSS. Business data di DB tetap aman.
 ```
 
 **Lebih aman: COMMIT → DELETE**
@@ -187,18 +173,10 @@ T3 Writer: DB COMMIT nilai baru
 T4 Writer: DELETE cache
 T5 Reader: SET hasil lama ke cache
 
-Hasil:
-Database = baru
-Cache = lama (stale)
+Hasil: Database = baru, Cache = lama (stale)
 ```
 
-**Kesimpulan:**
-
-Cache-aside adalah **eventually-consistent optimization**, bukan strong consistency primitive.
-
-- **TTL adalah safety net** untuk menghapus stale entry yang terjebak akibat race condition.
-- **Correctness-critical operation tidak boleh bergantung pada cache freshness.**
-- Validasi akhir harus selalu ke database jika keakuratan data adalah prioritas utama.
+**Kesimpulan:** Cache-aside adalah **eventually-consistent optimization**, bukan strong consistency primitive.
 
 ### Strategi Invalidation
 
@@ -206,7 +184,7 @@ Cache-aside adalah **eventually-consistent optimization**, bukan strong consiste
 2. **Explicit Delete** — DELETE key pasca-commit
 3. **Event-Driven Invalidation** — Publish event pasca-commit untuk memicu invalidasi (pub/sub)
 
-### 4. Tag / Index-based Invalidation
+### Tag / Index-based Invalidation
 
 **Penting:** Redis core tidak menyediakan generic cache tagging abstraction. Banyak perbufet menyamakan SCAN+pattern delete dengan tag implementation. Mereka adalah hal yang berbeda.
 
@@ -224,11 +202,8 @@ DELETE / UNLINK
 - SCAN lebih production-friendly daripada KEYS
 - Tetap memiliki operational cost
 - **Bukan atomic operation** atas seluruh matching dataset
-- Waktu eksekusi tidak terprediksi
 
 #### Tag / Reverse Index Invalidation
-
-Aplikasi/framework maintain mapping manual:
 
 ```
 tag:product:123
@@ -238,81 +213,28 @@ products:list
 products:popular
 ```
 
-Saat product berubah:
-- Baca members dari tag index
-- Invalidate semua key yang terhubung
+Saat product berubah: baca members dari tag index, invalidate semua key yang terhubung.
 
 **Trade-off:**
 - Metadata tambahan yang harus dipelihara
-- Synchronization overhead antara data dan index
+- Synchronization overhead
 - Stale reverse index mungkin terjadi
-- Konsistensi index tidak otomatis
-
-#### Alternatif Lain
-
-- **Versioned namespace** — `product:123:v1` → `product:123:v2` (manual switch)
-- **Explicit dependency invalidation** — Invalidate key secara eksplisit sesuai dependency
-- **Event-driven invalidation** — Pub/sub untuk trigger invalidasi real-time
 
 ### Cache Key Versioning
 
-Versioning ada dua tujuan yang berbeda:
-
-#### 1. Schema/Deployment Versioning
-
+**Schema/Deployment Versioning:**
 ```
 product:v1:123  → format cache lama
 product:v2:123  → format cache baru (migration)
 ```
+- Gunakan untuk: serialization format berubah, schema cache berubah, deployment baru membutuhkan namespace terpisah
 
-**Digunakan ketika:**
-- Serialization format berubah
-- Schema cache berubah
-- Deployment baru membutuhkan namespace terpisah
-
-**Karakteristik:**
-- Manual deployment-level change
-- Tidak ada runtime dependency pada data change
-- Bisa flush v1 sekaligus tanpa menyentuh data produk
-
-#### 2. Data Revision/Version (Data Versioning)
-
+**Data Revision/Version (Data Versioning):**
 ```
 product:123:revision:42
 ```
-
-**Digunakan ketika:**
-- Revision authoritative berubah bersama state bisnis
-- Butuh cara mengetahui revision terbaru
-
-**Penting:** Data-revision cache membutuhkan cara mengetahui revision terbaru. Ini berarti:
-- Ada pointer/version metadata yang harus di-coordinasi
-- Jika metadata tidak tersinkronisasi, masih ada race window
+- Butuh cara mengetahui revision terbaru (metadata pointer)
 - Version bump TIDAK selalu atomic invalidation
-
-**Contoh implementasi:**
-```
-product:123:revision:{current_revision}
-```
-Dengan `current_revision` ditarik dari:
-- Database trigger + pub/sub
-- Event stream offset
-- Monotonically increasing version table
-
-**Bukan solusi pemanis:**
-- Version bump tidak menggantikan kebutuhan invalidation yang kompleks
-- Masih perlu TTL sebagai safety net untuk edge case
-
-### RememberForever Anti-Pattern
-
-Menyimpan cache tanpa batas waktu:
-```php
-Cache::rememberForever('product_123', fn() => ...); // atau TTL = 0
-```
-**Mengapa ini anti-pattern?**
-Jika developer lupa mendesain event-driven invalidation, data stale tidak akan pernah hilang. TTL memberikan safety net. Penggunaan ini hanya aman jika:
-- Data hampir immutable (mis: kode area).
-- Perubahan source data dijamin 100% selalu memicu invalidate cache.
 
 ---
 
@@ -332,26 +254,11 @@ Update Cache         ← Best-effort sync
    Return success
 ```
 
-Write-Through di sini berarti aplikasi meng-update DB dan Cache pada response path yang sama.
-
 ### Karakteristik & Risiko Partial Failure
 
-**Penting: Write-Through tidak memberikan atomicitas atau strong consistency secara otomatis.**
+**Tidak Atomic:** Database PostgreSQL dan Redis adalah sistem berbeda. Urutan DB COMMIT → Redis SET tidak atomic.
 
-Database PostgreSQL dan Redis adalah dua sistem berbeda. Tanpa distributed transaction/coordinated commit, urutan:
-
-```
-DB COMMIT
-↓
-Redis SET
-```
-
-**TIDAK atomic.**
-
-#### Failure Window yang Mungkin Terjadi:
-
-**Scenario A: Process Crash (Write Skew)**
-
+**Scenario A: Process Crash**
 ```
 DB COMMIT sukses
 ↓
@@ -363,62 +270,31 @@ cache lama masih tersimpan
 ```
 
 **Scenario B: Concurrent Writer Race Condition**
-
 ```
 Writer A commit value A
 Writer B commit value B
 Writer B Redis SET B
 Writer A terlambat Redis SET A
 
-Hasil:
-Database = B
-Cache = A (stale)
+Hasil: Database = B, Cache = A (stale)
 ```
 
-#### Kesimpulan yang Benar:
-
-- **Tidak Atomic**:Tidak ada guarantee urutan eksekusi DB→Cache.
-- **Tidak Strong Consistency**: Stale window tetap ada, bahkan setelah DB commit.
-- **Read-Your-Writes Tidak Garantir**: Concurrent readers mungkin melihat data stale.
-- **TTL Wajib sebagai Safety Net**: Untuk membersihkan stale data yang terjebak.
-
-**Write-Through dapat membantu:**
-- Mengurangi stale window dibanding Cache-Aside, namun tidak menghilangkan kebutuhan TTL/validation
-- Memungkinkan read-after-write pada happy path (bukan guarantee otomatis)
-- Mengurangi, tidak menghilangkan, kebutuhan invalidation manual
-
-**Tapi perlu:**
-- TTL sebagai fallback untuk semua failure mode
-- Version ordering atau mutex jika concurrent writes relevan
-- Desain error handling yang matang untuk partial failure
-
----
-
-## Tabel Perbandingan: Cache-Aside vs Write-Through
+### Perbandingan: Cache-Aside vs Write-Through
 
 | Aspek | Cache-Aside | Write-Through |
 |-------|-------------|---------------|
-| **Read Path** | App → Check cache → Miss → DB → SET cache | App → Check cache → HIT → Return |
-| **Write Path** | App → DB write → Explicit cache invalidation | App → DB write → Update cache (best-effort) |
-| **Stale Window** | Perlu (hingga invalidation TTL) | Lebih pendek, tapi tetap ada |
-| **Partial Failure Risk** | Low (DB write saja, cache optional) | Tinggi (cache tidak pernah diupdate mungkin) |
-| **Read-Your-Writes** | Tidak garantir tanpa invalidation | Garantir pada happy path, tidak otomatis |
-| **Write Amplification** | Tidak ada (lazy population) | Ya (write to both DB and cache) |
-| **Complexitas** | Sedang (invalidation logic diperlukan) | Sedang (failure handling diperlukan) |
-| **TTL Safety Net** | Wajib | Wajib |
-| **Use Case** | Read-heavy, write-rare, toleran stale | Read-heavy, write-moderate, butuh read-after-write |
+| Read Path | App → Check cache → Miss → DB → SET cache | App → Check cache → HIT → Return |
+| Write Path | App → DB write → Explicit cache invalidation | App → DB write → Update cache (best-effort) |
+| Stale Window | Perlu (hingga invalidation TTL) | Lebih pendek, tapi tetap ada |
+| Partial Failure Risk | Low (DB write saja, cache optional) | Tinggi (cache tidak pernah diupdate mungkin) |
+| TTL Safety Net | Wajib | Wajib |
+| Use Case | Read-heavy, write-rare, toleran stale | Read-heavy, write-moderate, butuh read-after-write |
 
-**Penting:** Tidak ada pola yang "universally better". Pilih berdasarkan:
-- Business consistency requirements
-- Write frequency
-- Failure tolerance
-- Operational complexity yang dapat diterima
+**Tidak ada pola yang "universally better".** Pilih berdasarkan business requirements.
 
 ---
 
 ## 8. Cache Stampede
-
-### Problem Flow
 
 ```
 cache expires
@@ -432,64 +308,46 @@ cache expires
 Database overload / crash
 ```
 
-Stampede terjadi ketika key populer expire dan traffic besar masuk di saat yang sama.
+Stampede terjadi ketika key populer expire dan traffic besar masuk bersamaan.
 
 ---
 
 ## 9. Singleflight
 
-Mengatasi stampede **dalam satu instance/process**.
-
-- Menggunakan `golang.org/x/sync/singleflight`.
-- Request concurrent ditahan, satu goroutine jalan ke DB, hasilnya dibagikan ke caller lain.
-- Gunakan `DoChan` agar mendukung context cancellation dan tidak deadlock.
-- **Batasan Penting:** Singleflight lokal tidak mencegah stampede lintas instance (multi-deployment).
+Mengatasi stampede **dalam satu instance/process** menggunakan `golang.org/x/sync/singleflight`.
 
 ---
 
 ## 10. Distributed Lock
 
-Mengatasi stampede **multi-instance**.
-
-Menggunakan `SETNX` (Set if Not Exists) untuk menahan instance lain saat satu instance rebuild cache.
-
-**Persyaratan keamanan lock:**
-- **Harus memiliki expiration (TTL):** Mencegah deadlock permanen jika lock holder mati (OOM/Crash).
-- **Menggunakan unique owner/token:** Menyimpan UUID saat memegang lock.
-- **Tidak sembarang delete:** Lock hanya dilepas jika token di Redis cocok dengan UUID holder (melalui Lua script / CompareAndDel).
+Mengatasi stampede **multi-instance** menggunakan `SETNX` dengan TTL expiration dan unique owner/token.
 
 ---
 
 ## 11. TTL Jitter & Background Refresh
 
 ### TTL Jitter
-Tambahkan pengacak kecil ke TTL (misal: 60s ± 15s) agar batch cache keys yang di-set bersamaan tidak kadaluarsa tepat di detik yang bersamaan.
+Tambahkan pengacak kecil ke TTL (misal: 60s ± 15s) agar batch cache keys tidak kadaluarsa tepat bersamaan.
 
 ### Background Refresh (Stale-While-Revalidate)
-Mem-refresh data secara background sebelum key benar-benar expired. Client tetap dilayani dengan data cache, tetapi menghindari delay synchronous hit.
+Mem-refresh data secara background sebelum key expired. Client tetap dilayani dengan data cache.
 
 ---
 
 ## 12. Cache Key Design / Multi-Tenant
 
-Format canonical untuk aplikasi B2B/CMMS:
-
-```
-{app}:{tenant}:{branch}:{resource}:{dimension}
-```
+Format canonical: `{app}:{tenant}:{branch}:{resource}:{dimension}`
 
 Contoh: `cmms:tenant:42:branch:7:dashboard:2026-09-01`
 
 **Dimensi yang Wajib Masuk Key:**
-- `tenant:42` — Isolasi data antar konsumen (hindari cross-tenant data leak).
-- `branch:7` — Resource scoping.
-- `date:2026-09-01` — Scope business date (harus timezone-aware, bukan UTC).
+- `tenant:42` — Isolasi data antar konsumen
+- `branch:7` — Resource scoping
+- `date:...` — Scope business date (timezone-aware)
 
 ---
 
 ## 13. Cache vs Session
-
-Redis dan database keduanya dapat digunakan untuk menyimpan data, tetapi **tujuan dan semantiknya berbeda total**.
 
 ### CACHE
 
@@ -497,12 +355,12 @@ Redis dan database keduanya dapat digunakan untuk menyimpan data, tetapi **tujua
 - Optimization / reuse
 - Menghindari computation / I/O berulang
 
-**Scope (bisa multiple):**
-- **Global** — Data yang sama untuk semua user (contoh: daftar cabang)
-- **Tenant scoped** — Isolasi antar konsumen (`tenant:42:*`)
-- **Branch scoped** — Berdasarkan resource bisnis (`branch:7:*`)
-- **User scoped** — Data khusus per-user (`user:123:*`)
-- **Query scoped** — Hasil query tertentu (`query:revenue:2026-09:01`)
+**Scope:**
+- **Global** — Data untuk semua user
+- **Tenant scoped** — `tenant:42:*`
+- **Branch scoped** — `branch:7:*`
+- **User scoped** — `user:123:*`
+- **Query scoped** — Hasil query tertentu
 
 **Contoh cache per-user yang VALID:**
 ```
@@ -510,94 +368,48 @@ cmms:tenant:42:user:123:permissions:revision:7
 ```
 
 **Syarat aman:**
-- Key isolation benar (tenant + user scope)
-- Invalidation benar (triggers saat role berubah)
-- Security requirement dipenuhi (access control di application layer)
-
----
+- Key isolation benar
+- Invalidation benar
+- Security requirement dipenuhi
 
 ### SESSION
 
 **Tujuan:**
-- Menyimpan state suatu user/session
+- Menyimpan state user/session
 - Lifecycle mengikuti login/session
 
-**Contoh:**
-- Login state (auth token, user_id, expiry)
-- CSRF token
-- Shopping cart server-side
-- Temporary preference (language, theme)
+**Contoh:** Login state, CSRF token, shopping cart server-side, temporary preference
 
-**Implementasi session store dapat menggunakan:**
-- Redis (populer untuk scalability)
-- Database
-- Memory (in-process, tidak scalable)
-- Cookie (client-side, terbatas ukuran)
-- Datastore lain (memcached, DynamoDB, dll)
-
-**Penting:** Session store tidak harus memiliki database sebagai source of truth. Implementasi tertentu mungkin menggunakan database untuk persistensi session, tapi itu adalah detail implementasi, bukan definisi semantik session.
-
----
+**Implementasi dapat menggunakan:** Redis, Database, Memory, Cookie, datastore lain.
 
 ### Perbedaan Utama
 
 | Aspek | Cache | Session |
 |-------|-------|---------|
-| **Tujuan Utama** | Performance optimization | State persistence |
-| **Allowed Data Types** | Query results, computed data, aggregations | Auth state, user preferences, shopping cart |
-| **Acceptable Staleness** | Bisa stal (detik-menit) | Harus konsisten |
-| **Failure Mode** | Degradasi performa | Login hilang / cart hilang |
-| **TTL/Expiration** | Singkat (detik-menit) | Panjang (jam-hari) |
+| Tujuan Utama | Performance optimization | State persistence |
+| Acceptable Staleness | Bisa stal (detik-menit) | Harus konsisten |
+| Failure Mode | Degradasi performa | Login hilang / cart hilang |
+| TTL | Singkat | Panjang |
 
 ---
 
-### Miskonsepsi Permission Cache di Redis
-
-**Miskonsepsi:** "Permission per-user di Redis shared tidak aman."
-
-**Fakta:** Masalahnya bukan Redis shared, tetapi biasanya:
-- Missing tenant scope
-- Missing user scope
-- Stale authorization
-- Revoke latency
-- Invalidation failure
-- Incorrect version/revision
-
-**Solusi yang benar:**
-- Key isolation (`tenant:42:user:123:permissions`)
-- Short TTL (5-10 detik) sebagai safety net
-- Active invalidation saat role berubah
-- Documented Security SLA
-
----
-
-## 14. Cache Failure & Redis Unavailable
+## 14. Cache Failure / Graceful Degradation
 
 Prinsip: **Cache adalah optimization layer, bukan dependency correctness utama.**
 
-**Flow Read Ideal:**
-```
-Redis Error (Timeout / Connection Refused)
-      ↓
-Fallback ke Database / Source of Truth
-      ↓
-Request tetap berjalan jika DB capacity memungkinkan
-```
+- **Degraded Performance:** Aplikasi harus tetap berfungsi meski lambat.
+- **Circuit Breaker:** Mencegah aplikasi stuck menunggu Redis Timeout.
+- **Observability:** Log `cache_miss` dan `cache_error` terpisah.
 
-- **Degraded Performance:** Aplikasi harus tetap berfungsi meskipun lambat.
-- **Circuit Breaker:** Mencegah aplikasi stuck menunggu Redis Timeout terus-menerus.
-- **Observability Pembedaan:** Pastikan `cache_miss` dan `cache_error` (backend error) dihitung di metric terpisah. Hit ratio tinggi saja tidak berarti cache berguna; bandingkan dengan query reduction di DB.
-
-**Catatan tentang Hit Ratio:**
-Hit ratio tidak universal. Contoh:
-- Hit ratio 30% untuk operation yang sangat mahal (100ms) masih sangat valuable
-- Hit ratio 99% untuk operation 0.1ms belum tentu worth complexity-nya
+**Catatan tentang Hit Ratio:** Hit ratio tidak universal:
+- Hit ratio 30% untuk operation 100ms masih valuable
+- Hit ratio 99% untuk operation 0.1ms belum tentu worth complexity
 
 ---
 
 ## 15. Memory / Cardinality / Eviction
 
-**Key Explosion: Cardinality Trade-off**
+### Key Explosion: Cardinality Trade-off
 
 ```
 ❌ Potensi masalah: cache:tenant:42:user:{user_id}:dashboard
@@ -605,52 +417,18 @@ Hit ratio tidak universal. Contoh:
 
 Jika 10.000 user membaca dashboard agregat yang identik per-cabang, key berbasis `user_id`:
 - Mengorbankan reuse yang tinggi
-- Membuat memory footprint menjadi mahal
 - Mempercepat eviction saat memory pressure
-
-Namun, key spesifik bukan selalu anti-pattern. Pertimbangkan:
-- Apakah data memang berbeda per-user?
-- Apakah kebutuhan isolation business?
-- Apa benefit reuse yang hilang?
 
 ```
 ✅ Baik: cache:tenant:42:branch:{branch_id}:dashboard
 ```
-Satu branch key bisa di-reuse 10.000 user.
 
 **Prinsip Cardinality:**
+- Semakin spesifik cache key = semakin kecil sharing/reuse = memory intensive
+- High-cardinality tidak otomatis anti-pattern
+- Key `products` tanpa tenant/filter bukan aman otomatis
 
-Semakin spesifik cache key = semakin kecil sharing/reuse = semakin memory intensive *jika tidak diperlukan*. Namun:
-- High-cardinality cache tidak otomatis anti-pattern
-- Key `products` tanpa tenant/filter bukan aman otomatis — bisa menyebabkan correctness bug
-- Personalized cache bisa diperlukan untuk isolasi data yang benar
-
-**Trade-off yang perlu dipertimbangkan:**
-> value gained vs memory footprint vs reuse vs operational complexity
-
-**Low Hit Ratio:**
-Low hit ratio bukan berarti key terlalu spesifik saja. Bisa disebabkan oleh:
-- Workload cold (jarang diakses)
-- TTL terlalu pendek
-- Poor reuse design
-- Cardinality tinggi
-- Aggressive invalidation
-- Workload memang tidak cache-friendly
-
-**TTL & Eviction:**
-- `evicted_keys > 0` tidak otomatis berarti TTL terlalu pendek
-- Eviction biasanya terjadi ketika Redis menghadapi memory pressure/maxmemory sesuai eviction policy
-- TTL terlalu pendek lebih mungkin menghasilkan: expiration meningkat, hit ratio turun, cache miss naik
-
-**Memory Utilization:**
-`used_memory_pct > 80%` bukan universal "critical" threshold. Nilai kritis tergantung:
-- maxmemory
-- fragmentation
-- replication
-- persistence
-- workload
-- eviction policy
-- operational headroom
+`evicted_keys > 0` tidak otomatis berarti TTL terlalu pendek.
 
 ---
 
@@ -660,131 +438,87 @@ Low hit ratio bukan berarti key terlalu spesifik saja. Bisa disebabkan oleh:
 Cache::remember('key', $ttl, fn () => ...);
 ```
 
-**Penting:** Helper ini praktis, namun memiliki batasan yang harus disadari oleh Senior Engineer.
+`Cache::remember()` tidak otomatis memberikan stampede protection. Beberapa concurrent request dapat menjalankan callback secara bersamaan pada saat miss.
 
-### Closure Concurrent Execution (Stampede)
-
-`Cache::remember()` tidak otomatis memberikan stampede protection. Beberapa concurrent request dapat menjalankan callback secara bersamaan pada saat miss. Protection harus dirancang secara eksplisit.
-
-### Fallback Failure
-
-Saat cache backend (Redis) down:
-- Cache GET dapat melempar exception
-- Callback mungkin tidak pernah dijalankan
-- Framework error bisa menggagalkan eksekusi
-
-Graceful degradation ke database harus didesain secara eksplisit dengan try-catch atau circuit breaker.
-
-### Pattern Locking Eksplisit (Cache::lock)
-
-Untuk perlindungan stampede, gunakan `Cache::lock(...)` secara manual:
+Untuk protection, gunakan `Cache::lock(...)` dengan pattern:
 
 ```
-[cache GET]
-   ↓
-miss
-   ↓
-[acquire lock]
-   ↓
-double-check cache
-   ↓
-[query DB]
-   ↓
-[populate cache]
-   ↓
-[release lock]
+[cache GET] → miss → [acquire lock] → double-check → [query DB] → [populate cache] → [release lock]
 ```
 
-**Jika lock gagal:**
-- Bounded wait/retry
-- Re-check cache (mungkin sudah ter-populate)
-- Fallback sesuai policy (DB query tanpa populate, atau return error)
-
-### Catatan Tambahan
-
-- Driver-dependent: behavior locking tidak konsisten di semua driver
-- Key mapping: key string harus merepresentasikan seluruh input variable
-- Framework modern Laravel: mendukung stale-while-revalidate / flexible caching sebagai alternatif
-
-### Tentang Library Predis
-
-Predis adalah client Redis untuk PHP. Library ini tidak otomatis memberikan stampede protection. Protection datang dari algorithm/locking yang dibangun di atasnya, bukan dari client library.
+**Jika lock gagal:** Bounded wait/retry, re-check cache, fallback sesuai policy.
 
 ---
 
-## 17. Permission Caching
+## 17. Permission & Security Caching
 
-Apakah Role/Permission boleh di-cache? Ya, tergantung requirement *revoke latency* dan threat model.
+Permission dapat di-cache jika security model mengizinkan:
 
-**Model yang Benar:**
-Permission dapat di-cache dengan:
-- Key terisolasi (scoped ke `tenant` dan `user`).
-- Active Invalidation (delete cache saat Admin mengubah role).
-- Short TTL (contoh: 5–10 detik) sebagai safety net revoke latency.
-- Documented Security SLA.
+- **Key isolation** (`tenant:42:user:123:permissions`)
+- **Active Invalidation** saat role berubah
+- **Short TTL** (contoh: 5–10 detik) sebagai safety net
+- **Documented Security SLA**
 
-```
-Key: cmms:tenant:42:user:123:permission:revision:17
-```
+**Miskonsepsi:** "Permission di shared Redis tidak aman."
 
-**Miskonsepsi:** "Permission di shared Redis selalu tidak aman."
-**Koreksi:** Yang tidak aman adalah missing tenant scope, stale authorization tanpa invalidation fallback, dan version mismatch. Jika sistem butuh *immediate revocation absolut*, gunakan authoritative lookup ke DB di setiap request (jangan cache untuk operasi transaksional kritikal).
+**Fakta:** Masalahnya biasanya:
+- Missing tenant scope
+- Stale authorization
+- Revoke latency
+- Invalidation failure
+- Version mismatch
+
+Untuk immediate revocation: authoritative lookup, centralized policy service, atau short-lived authorization credentials.
 
 ---
 
 ## 18. Query Optimization → Index → Cache
 
-Cache **bukan pengganti database optimization**.
+Cache **bukan pengganti** database optimization.
 
 **Urutan Diagnosis:**
-1. Ukur endpoint (Profile query).
-2. Cek N+1 query.
-3. Cek Execution Plan (EXPLAIN ANALYZE).
-4. Tambahkan atau optimalkan index.
-5. Kurangi column yang dibaca (jangan `SELECT *`).
-6. Optimalkan Join/Subquery.
-7. **Baru Evaluasi Caching** jika workload agregasi masih memakan I/O mahal dan repetitif.
+1. Ukur endpoint
+2. Cek N+1 query
+3. Cek Execution Plan
+4. Tambahkan/index optimalkan
+5. Kurangi column yang dibaca
+6. Optimalkan Join/Subquery
+7. **Baru Evaluasi Caching** jika workload membutuhkan
 
-Contoh: Query `SELECT * FROM branch` (12 baris, index PK) < 1ms tidak selalu layak di-cache. Untuk request volume tinggi (ratusan ribu per detik), overhead Redis cache hit bisa menurunkan throughput DB secara signifikan. Namun:
-- Query 2ms × 100,000 req/s dapat sangat layak di-cache
-- Perubahan desain (network latency, DB scaling) bisa mengubah trade-off ini
+Contoh: Query < 1ms tidak selalu tidak layak di-cache. Untuk request volume tinggi (100k+ req/s), overhead Redis bisa menurunkan throughput DB.
 
 ---
 
 ## 19. Decision Framework / Rule of Thumb
 
-### 5 Pertanyaan Rule of Thumb Sebelum Membuat Cache:
+### 5 Pertanyaan Sebelum Membuat Cache:
 
-1. Berapa lama data ini boleh stale?
-2. Seberapa mahal mendapatkan/menghitung data ini vs cache overhead?
-3. Apa dampaknya jika user melihat data 5-30 detik terlambat?
-4. Bagaimana cache di-invalidasi saat source berubah?
-5. Apakah manfaat performanya lebih besar daripada complexity tambahan?
+1. Berapa lama data boleh stale?
+2. Seberapa mahal mendapatkan/menghitung data vs cache overhead?
+3. At what cost is 5-30 detik delay acceptable?
+4. Bagaimana cache di-invalidasi?
+5. Apakah benefit performanya lebih besar daripada complexity?
 
-**Aturan Emas:** Jika Anda tidak bisa mendefinisikan strategi invalidation, JANGAN buru-buru menambahkan cache.
-
-### Pertanyaan Senior-Level Tambahan:
-- Apa source of truth data ini?
-- Apa behavior saat Redis unavailable?
-- Apakah cache key aman untuk multi-tenant?
-- Bagaimana observability (hit/miss) dirancang?
-- Apa risiko stampede?
-- Apa memory footprint/cardinality impact-nya?
+### Senior Level Ask:
+- Apa source of truth?
+- Behavior saat Redis unavailable?
+- Cache key aman untuk multi-tenant?
+- Observability (hit/miss) dirancang?
+- Risiko stampede?
+- Memory/cardinality impact?
 
 ---
 
 ## 20. CMMS Examples
 
-Tabel Keputusan Caching untuk Domain Bengkel:
-
 | Data | Cache? | Alasan & Acceptable Staleness | Invalidation Trigger |
 |------|--------|-------------------------------|----------------------|
-| Daftar Cabang | ✅ Ya | Read-heavy, rarely changes | Update master cabang |
-| Template Invoice | ✅ Ya | Static document format | Versi template berubah |
+| Daftar Cabang | ✅ Ya | Read-heavy, rarely changes | Update master |
+| Template Invoice | ✅ Ya | Static document | Version change |
 | Dashboard Revenue | ✅ Ya | Expensive aggregation | New payment |
-| Permission | ⚠️ Conditional | Security, but read-heavy | Revoke role, timeout TTL |
-| Saldo Kas | ❌ Tidak | Keuangan, butuh ACID | N/A (Always DB) |
-| Ketersediaan Stock | ⚠️ UI Only | Optimasi tampilan | Purchase part (Validasi transaksional tetap ke DB) |
+| Permission | ⚠️ Conditional | Read-heavy, security-bound | Revoke/TTL |
+| Saldo Kas | ❌ Tidak | Keuangan, butuh ACID | N/A |
+| Ketersediaan Stock | ⚠️ UI Only | Optimasi tampilan | Purchase part |
 
 ---
 
@@ -792,54 +526,35 @@ Tabel Keputusan Caching untuk Domain Bengkel:
 
 ### Design Exercise — Dashboard Bengkel
 
-Dashboard menampilkan: Jumlah Invoice, Pendapatan, Top Mekanik, Kendaraan Baru.
-
-**Soal:** Untuk setiap data di atas, jelaskan:
-1. Perlu cache atau tidak?
-2. Mengapa?
-3. TTL berapa dan asumsinya?
-4. Format Cache Key?
-5. Event penyebab invalidasi?
-6. Acceptable staleness?
-7. Behavior jika Redis down?
-8. Mencegah cache stampede?
-9. Mencegah tenant cross-reading?
-10. Metric monitoring?
-
-**Expected Reasoning:**
-- **Key:** Wajib `cmms:tenant:{id}:branch:{id}:metric`
-- **Stampede:** Gunakan In-Process Singleflight + Jitter
-- **Redis Down:** Fallback to DB (degraded performance)
-- **TTL:** Contoh: 10-30s untuk operational data (tergantung workload), bukan forever.
+TTL contoh: 10-30s untuk operational data (tergantung workload), bukan forever.
 
 ---
 
 ## Common Mistakes
 
-1. **Cache Everything** — Tidak mengukur cost vs benefit.
-2. **Missing Invalidation Strategy** — Remember forever anti-pattern.
-3. **Missing Isolation** — Global key bocor ke tenant lain.
-4. **Cache as Single Point of Failure** — Tidak mendesain database fallback saat Redis network timeout.
-5. **Key Explosion** — Menyimpan cache agregat berdasarkan per-user ID, padahal datanya identik per-cabang.
-6. **Assume Cache = Strong Consistency** — Menganggap write-through menyelesaikan concurrency.
+1. Cache Everything — Tidak mengukur cost vs benefit
+2. Missing Invalidation Strategy — Remember forever anti-pattern
+3. Missing Isolation — Global key bocor tenant
+4. Cache as Single Point of Failure — Tidak desain fallback DB
+5. Key Explosion — Cache berdasarkan per-user ID bila data identik
+6. Assume Cache = Strong Consistency — Write-through tidak selesai concurrency
 
 ---
 
 ## Senior Engineer Takeaways
 
-Cache yang baik mengurangi pekerjaan berulang tanpa menjadikan correctness sistem bergantung pada data yang mungkin stale.
+Cache yang baik mengurangi pekerjaan berulang tanpa bergantung pada data yang mungkin stale.
 
-**Mindset Junior:**
-> "Query lambat, cache saja."
+**Mindset Junior:** "Query lambat, cache saja."
 
 **Mindset Senior:**
-> 1. Ukur bottleneck (latency network vs DB cpu)
-> 2. Optimalkan query di level storage / index
-> 3. Pahami business consistency requirement
-> 4. Tentukan acceptable staleness
-> 5. Desain fallback & invalidation flow
-> 6. Hitung operational complexity
-> 7. Baru tambahkan cache jika benefit throughput sangat signifikan.
+1. Ukur bottleneck
+2. Optimalkan query/index
+3. Pahami business consistency
+4. Tentukan acceptable staleness
+5. Desain fallback/invalidation
+6. Hitung operational complexity
+7. Tambahkan cache jika benefit throughput signifikan
 
 ---
 
@@ -847,22 +562,24 @@ Cache yang baik mengurangi pekerjaan berulang tanpa menjadikan correctness siste
 
 ### Prerequisites
 - Go 1.22+
-- Docker Compose (untuk Redis)
+- Docker Compose
+
 ```bash
 docker compose up -d redis
-```
-
-### Run Tests
-```bash
 cd labs/04-caching
 go test -v -count=1 ./...
-```
 
-### Run Experiments
-```bash
+# Run Experiments
 go run ./cmd/demo -scenario=without-cache
 go run ./cmd/demo -scenario=cache-aside
 go run ./cmd/demo -scenario=stampede-unprotected
 go run ./cmd/demo -scenario=stampede-protected
 go run ./cmd/demo -scenario=write-through
 ```
+
+---
+
+## Navigation
+
+- **Previous:** [Lab 03 — Distributed Transaction](../03-distributed-transaction/)
+- **Next:** [Lab 05 — Race Condition](../05-race-condition/)

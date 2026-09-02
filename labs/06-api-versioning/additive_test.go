@@ -19,7 +19,7 @@ func TestAdditiveField_LegacyClientStillWorks(t *testing.T) {
 	defer server.Close()
 
 	// Legacy client tetap menggunakan struct lama yang tidak punya field `currency`
-	resp, err := http.Get(server.URL + "/?id=1001")
+	resp, err := http.Get(server.URL + "/api/invoices/1001")
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}

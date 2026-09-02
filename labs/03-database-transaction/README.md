@@ -421,7 +421,7 @@ Retry merupakan mekanisme umum untuk menangani transient failure pada distribute
 
 ---
 
-Eventually consistency berarti beberapa component dapat sementara melihat state yang berbeda, tetapi sistem memiliki mekanisme untuk menuju konsistensi.
+Eventual consistency berarti beberapa komponen dapat sementara melihat state yang berbeda, tetapi sistem memiliki mekanisme untuk membawa state tersebut menuju kondisi konsisten yang diharapkan.
 
 ### Timeline Contoh
 
@@ -436,7 +436,7 @@ Temporary inconsistency dapat menjadi kondisi normal pada eventual consistency j
 
 Eventual consistency != inconsistent selamanya.
 
-Retry, recovery, reconciliation, monitoring, dan manual intervention adalah mekanisme yang dapat ditunjukkan (sesuai criticality).
+Retry, recovery, reconciliation, monitoring, dan manual intervention adalah mekanisme yang dapat digunakan sesuai criticality dan consistency requirement.
 
 > **Penting**: Eventual consistency ≠ state boleh inconsistent selamanya.
 
