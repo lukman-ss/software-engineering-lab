@@ -286,11 +286,29 @@ Client melihat **TIMEOUT**, tetapi server sebenarnya: **SUCCESS**
 
 ### Unknown Outcome
 
-Karena timeout memberikan **unknown outcome**, integration yang critical harus memiliki mekanisme seperti:
-- Idempotency key
-- Query status endpoint
-- Reconciliation job
-- Event sourcing
+Karena timeout memberikan **unknown outcome**, integration yang critical harus memiliki mekanisme untuk:
+
+```
+mencegah duplicate execution
++
+mengetahui status operation
++
+menemukan inconsistency yang tertinggal
+```
+
+Contoh:
+
+**Idempotency-Key**
+→ mencegah duplicate side effect
+
+**Query/status endpoint**
+→ mengecek apakah operation sebenarnya berhasil
+
+**Reconciliation**
+→ mendeteksi state yang belum sinkron
+
+**Correlation/operation ID**
+→ menghubungkan request, retry, log, dan external operation
 
 > **Hubungkan ke Lab 01 Idempotency** untuk detail implementasinya.
 
