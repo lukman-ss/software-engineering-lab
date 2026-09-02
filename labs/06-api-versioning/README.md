@@ -94,7 +94,7 @@ Perubahan yang **pasti breaking**:
 | Remove | Consumer butuh data itu |
 | Change type | Deserialization error |
 | Change response shape | Struct mismatch |
-| Change semantics | Logika bisnis salah |
+| Change semantics | Logika bisnis berubah |
 
 ### API Versioning ≠ Every Change = V2
 
