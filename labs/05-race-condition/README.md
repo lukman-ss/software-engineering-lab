@@ -504,35 +504,71 @@ Mental model engineer:
 ### 1. Normal Unit Tests
 
 ```bash
-# Unit tests (in-memory, no DB)
+# Semua unit tests (in-memory/mock repository)
 go test ./...
 
-# With race detector for memory data race detection
+# Dengan race detector untuk memory data race
 go test -race ./...
 ```
 
 ### 2. PostgreSQL Integration Tests
 
 ```bash
-# Set up PostgreSQL (from repo root)
+# Set up PostgreSQL (dari root repository)
 docker-compose up -d postgres
 
-# Run integration tests (requires PostgreSQL)
+# Jalankan integration tests (requires PostgreSQL)
 go test -tags=integration ./...
+```
+
+#### 2.1 Detailed Integration Test Commands
+
+```bash
+# Lost Update detection (Unsafe pattern)
+go test -v -tags=integration -run TestPostgresUnsafe_LostUpdate
+
+# Atomic SQL Statement (Safe pattern)
+go test -v -tags=integration -run TestPostgresAtomic_ConcurrentUpdate
+
+# Pessimistic Row Lock (Safe pattern)
+go test -v -tags=integration -run TestPostgresRowLock_ConcurrentStock
+go test -v -tags=integration -run TestPostgresRowLock_HighContention
+
+# PostgreSQL UNIQUE constraint (Booking)
+go test -v -tags=integration -run TestPostgres_ConcurrentBooking
+go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
+go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
+```
+
+#### 2.2 Booking Race Condition Tests
+
+##### In-Memory Booking Concurrency Tests (Mock Repository)
+```bash
+go test -v -run Test500_ConcurrentBooking
+go test -v -run TestBooking_SameBranchDifferentBranch
+go test -v -run TestBooking_ErrorHandling
+```
+> Menggunakan `MockBookingRepository` dengan `sync.RWMutex` - application-level unique constraint demo.
+
+##### PostgreSQL Booking Unique Constraint Tests
+```bash
+# 500 concurrent: 1 success, 499 SQLSTATE 23505 conflict
+go test -v -tags=integration -run TestPostgres_ConcurrentBooking
+go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
+go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
 ```
 
 ### 3. Intentional Go Memory Race Demo (Educational)
 
 ```bash
-# Run race demo - EXPECTED TO REPORT DATA RACE
-# This demonstrates Go memory data race intentionally
-go test -race -tags=racedemo -run TestUnsafeCounter_Race
+# Run intentional race demo (EXPECTED TO FAIL under race detector)
+go test -race -v -tags=racedemo -run TestUnsafeCounter_Race
 
-# Normal validation WITHOUT the unsafe demo (should pass)
+# Normal validation (should pass - unsafe test excluded)
 go test -race ./...
 ```
 
-> **Catatan:** Intentional race demo dengan build tag `racedemo` **diusir** dari normal test suite sehingga `go test -race ./...` selalu PASS. Demo hanya untuk edukasi - jalankan secara eksplisit dengan `-tags=racedemo`.
+> **Catatan:** `TestUnsafeCounter_Race` ada di `datarace_unsafe_test.go` dengan build tag `//go:build racedemo`. Ini **diusir** dari normal test suite sehingga `go test -race ./...` selalu PASS. Demo hanya untuk edukasi - jalankan secara eksplisit dengan `-tags=racedemo`.
 
 ---
 
