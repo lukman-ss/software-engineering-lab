@@ -7,7 +7,7 @@ import (
 )
 
 // UnsafeHandler merepresentasikan anti-pattern ketika backend mengubah kontrak API
-// secara radung tanpa versioning. Response V2 dengan `customer` sebagai object
+// secara merusak tanpa versioning. Response V2 dengan `customer` sebagai object
 // akan membuat legacy client (yang mengharapkan string) gagal decode.
 //
 // Mental model: API adalah kontrak. Backend berhasil compile ≠ backward compatible.
