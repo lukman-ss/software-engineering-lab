@@ -140,12 +140,14 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	repo := NewPostgresUnsafeRepository(db)
 
 	// Channel barriers untuk sinkronisasi fase READ → WRITE
-	// aReadDone: A selesai READ, B boleh READ
-	// bReadDone: B selesai READ
-	// aWriteDone: A selesai WRITE, B boleh WRITE
-	aReadDone := make(chan struct{})
-	bReadDone := make(chan struct{})
-	aWriteDone := make(chan struct{})
+	// Use error channels for failure-safe communication
+	type phaseResult struct {
+		phase string
+		err   error
+	}
+	aReadDone := make(chan phaseResult)
+	bReadDone := make(chan phaseResult)
+	aWriteDone := make(chan phaseResult)
 
 	var wg sync.WaitGroup
 	var successCount int
@@ -156,17 +158,27 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		// A: READ
+		// A: READ - failure-safe wait
+		select {
+		case aReadDone <- phaseResult{phase: "A_READ_START"}:
+		case <-ctx.Done():
+			return
+		}
+
 		stockA, err := repo.GetStock(ctx, productID)
 		if err != nil {
 			t.Errorf("Request A READ error: %v", err)
 			return
 		}
 		t.Logf("Request A: READ stock = %d", stockA)
-		close(aReadDone) // signal A selesai READ
 
-		// A: tunggu B selesai READ (barrier)
-		<-bReadDone
+		// A: tunggu B selesai READ (barrier) - with timeout
+		select {
+		case <-bReadDone:
+		case <-ctx.Done():
+			t.Error("Timeout waiting for B to complete READ")
+			return
+		}
 
 		// A: CHECK + CALCULATE + WRITE
 		if stockA > 0 {
@@ -180,7 +192,13 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 			successCount++
 			mu.Unlock()
 		}
-		close(aWriteDone) // signal A selesai WRITE
+
+		// Signal A WRITE done - with timeout
+		select {
+		case aWriteDone <- phaseResult{phase: "A_WRITE_DONE"}:
+		case <-ctx.Done():
+			return
+		}
 	}()
 
 	// Transaction B
@@ -188,8 +206,16 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		// B: tunggu A selesai READ
-		<-aReadDone
+		// B: tunggu A selesai READ (barrier) - with timeout
+		select {
+		case res := <-aReadDone:
+			if res.err != nil {
+				t.Errorf("Request B: A read phase error: %v", res.err)
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
 
 		// B: READ
 		stockB, err := repo.GetStock(ctx, productID)
@@ -198,10 +224,20 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 			return
 		}
 		t.Logf("Request B: READ stock = %d", stockB)
-		close(bReadDone)
 
-		// B: tunggu A selesai WRITE (barrier)
-		<-aWriteDone
+		// Signal B READ done - with timeout
+		select {
+		case bReadDone <- phaseResult{phase: "B_READ_DONE"}:
+		case <-ctx.Done():
+			return
+		}
+
+		// B: tunggu A selesai WRITE (barrier) - with timeout
+		select {
+		case <-aWriteDone:
+		case <-ctx.Done():
+			return
+		}
 
 		// B: CHECK + CALCULATE + WRITE (baca stale value)
 		if stockB > 0 {
@@ -217,7 +253,18 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 		}
 	}()
 
-	wg.Wait()
+	// Use done channel for bounded wait
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("test timeout: deadlock in synchronization barriers")
+	}
 
 	// Get final stock
 	finalStock, err := repo.GetStock(ctx, productID)
@@ -231,7 +278,7 @@ func TestPostgresUnsafe_LostUpdate(t *testing.T) {
 	t.Logf("Final stock: %d", finalStock)
 	t.Logf("Desired invariant: %d == %d + %d", initialStock, successCount, finalStock)
 
-	// ASSERTION: Lost update harus terjadi (invaiant rusak)
+	// ASSERTION: Lost update harus terjadi (invariant rusak)
 	if successCount != 2 {
 		t.Fatalf("expected successful operations = 2, got %d", successCount)
 	}
