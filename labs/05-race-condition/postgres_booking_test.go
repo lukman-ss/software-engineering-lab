@@ -44,11 +44,11 @@ func TestPostgres_ConcurrentBooking(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := setupBookingTable(ctx, db); err != nil {
+	if err := resetBookingTable(ctx, db); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
 	defer func() {
-		if err := setupBookingTable(ctx, db); err != nil {
+		if err := resetBookingTable(ctx, db); err != nil {
 			t.Logf("cleanup warning: %v", err)
 		}
 	}()
