@@ -25,7 +25,7 @@ Ini adalah yang paling sering saya temui sebagai akar masalah di perusahaan: tim
 }
 ```
 
-### Developer Melakukan Refactor
+### Developer Melakukan Refactor (Breaking Change)
 
 ```json
 {
