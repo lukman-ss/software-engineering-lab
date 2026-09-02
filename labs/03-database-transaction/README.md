@@ -497,7 +497,7 @@ Bukan kondisi yang boleh dianggap normal:
 | **external side effect** | Aksi luar dari database (API call, notification) yang tidak ikut transaction |
 | **partial failure** | Beberapa langkah berhasil, beberapa gagal — tidak ada atomicity lintas sistem |
 | **distributed workflow** | Workflow yang melibatkan beberapa sistem/database |
-| **distributed consistency** | Menjamin state konsisten di beberapa sistem secara asynchronous |
+| **distributed consistency** | Strategi menjaga atau mencapai konsistensi state ketika workflow melibatkan beberapa independent resource atau system boundary |
 | **dual-write problem** | Masalah konsistensi saat mencoba menulis ke DB lalu publish event secara terpisah |
 | **event-driven** | Pola arsitektur di mana komponen menghasilkan dan/atau bereaksi terhadap event untuk mengomunikasikan perubahan state atau kejadian bisnis |
 | **retry** | Mencoba kembali operasi yang gagal |
