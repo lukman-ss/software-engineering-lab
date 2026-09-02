@@ -505,7 +505,7 @@ Bukan kondisi yang boleh dianggap normal:
 | **at-least-once** | Delivery model tempat event bisa dikirim berulang kali |
 | **eventual consistency** | State pada beberapa komponen dapat sementara berbeda, tetapi sistem dirancang agar pada akhirnya menuju kondisi konsisten yang diharapkan |
 | **Saga** | Pola untuk distributed transactions dengan kompensasi |
-| **compensation** | Aksi pengembalian untuk membatalkan efek operation sebelumnya |
+| **compensation** | Business operation baru yang mengoreksi, menetralisir, atau mengimbangi efek operation sebelumnya ketika rollback teknis tidak tersedia |
 | **Outbox** | Mekanisme untuk menyimpan event secara atomic bersama business state |
 | **DLQ** | Dead Letter Queue — menampung message yang gagal setelah retry maksimal |
 | **reconciliation** | Proses menemukan dan memperbaiki inconsistency yang lolos normal processing |
