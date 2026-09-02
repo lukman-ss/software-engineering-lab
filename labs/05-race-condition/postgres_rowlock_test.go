@@ -85,12 +85,9 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	// Transaction A — starts first, acquires lock, then waits for release signal
 	go func() {
 		defer func() {
-			// Report any error
-			var err error
-			if aErr := recover(); aErr != nil {
-				err = fmt.Errorf("panic in A: %v", aErr)
+			if r := recover(); r != nil {
+				resultsCh <- workerResult{name: "A", err: fmt.Errorf("panic in A: %v", r)}
 			}
-			resultsCh <- workerResult{name: "A", err: aErr}
 		}()
 		aErr := trySellWithLockA(ctx, db, productID, lockAcquired, releaseA)
 		resultsCh <- workerResult{name: "A", err: aErr}
@@ -99,12 +96,9 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	// Transaction B — gets wait of A's lock, then attempts to acquire (will block)
 	go func() {
 		defer func() {
-			// Report any error
-			var err error
-			if bErr := recover(); bErr != nil {
-				err = fmt.Errorf("panic in B: %v", bErr)
+			if r := recover(); r != nil {
+				resultsCh <- workerResult{name: "B", err: fmt.Errorf("panic in B: %v", r)}
 			}
-			resultsCh <- workerResult{name: "B", err: bErr}
 		}()
 		bErr := trySellWithLockBOnConn(ctx, connB, productID)
 		resultsCh <- workerResult{name: "B", err: bErr}
@@ -134,9 +128,10 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		if res.err == nil {
 			t.Fatal("B should NOT have completed yet - it should still be blocked on A's lock")
 		}
-		t.Logf("B goroutine completed early with error: %v", res.err)
+		t.Logf("A goroutine or B goroutine completed early with error: %v", res.err)
+		t.FailNow()
 	default:
-		// B is still blocked - this is the expected state
+		// Neither has finished - this is the expected state
 		t.Log("✓ Confirmed: B has NOT finished (still blocked)")
 	}
 
@@ -145,51 +140,27 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	close(releaseA)
 
 	// Wait for both workers with bounded timeout
-	type result struct {
-		name string
-		err  error
-	}
-	done := make(chan result, 2)
+	var aErr, bErr error
+	var gotA, gotB bool
 
-	go func() {
-		var res result
-		for r := range resultsCh {
-			res = r
-		}
-		done <- res
-	}()
-
-	// Use done channel pattern for bounded wait
-	doneCh := make(chan struct{})
-	go func() {
-		var aErr, bErr error
-		var gotA, gotB bool
-
-		// Drain results
-		for i := 0; i < 2; i++ {
-			select {
-			case res := <-resultsCh:
-				if res.name == "A" {
-					aErr = res.err
-					gotA = true
-				} else {
-					bErr = res.err
-					gotB = true
-				}
-			case <-ctx.Done():
-				doneCh <- struct{}{}
-				return
+	// Drain results
+	for i := 0; i < 2; i++ {
+		select {
+		case res := <-resultsCh:
+			if res.name == "A" {
+				aErr = res.err
+				gotA = true
+			} else {
+				bErr = res.err
+				gotB = true
 			}
+		case <-ctx.Done():
+			t.Fatal("test timeout: deadlock or goroutine leak waiting for results")
 		}
-		// Check results
-		t.Logf("Results: A err=%v, B err=%v", aErr, bErr)
-		close(doneCh)
-	}()
+	}
 
-	select {
-	case <-doneCh:
-	case <-ctx.Done():
-		t.Fatal("test timeout: deadlock or goroutine leak")
+	if !gotA || !gotB {
+		t.Fatal("failed to get results from both transactions")
 	}
 
 	repo := NewPostgresRowLockRepository(db)
@@ -201,18 +172,53 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	// Classify results
 	var successCount, outOfStockCount, unexpectedErrorCount int
 
-	// Re-run error classification for assertions
-	_ = successCount
-	_ = outOfStockCount
-	_ = unexpectedErrorCount
+	if aErr == nil {
+		successCount++
+	} else if errors.Is(aErr, ErrOutOfStock) {
+		outOfStockCount++
+	} else {
+		unexpectedErrorCount++
+	}
 
+	if bErr == nil {
+		successCount++
+	} else if errors.Is(bErr, ErrOutOfStock) {
+		outOfStockCount++
+	} else {
+		unexpectedErrorCount++
+	}
+
+	t.Logf("Request A: err=%v", aErr)
+	t.Logf("Request B: err=%v", bErr)
 	t.Logf("=== ROW LOCK RESULTS ===")
-	t.Logf("Result: A success, B ErrOutOfStock")
+	t.Logf("Initial stock: %d", initialStock)
+	t.Logf("Success: %d", successCount)
+	t.Logf("Out of stock: %d", outOfStockCount)
+	t.Logf("Unexpected errors: %d", unexpectedErrorCount)
 	t.Logf("Final stock: %d", finalStock)
 
 	// Assertions
+	if unexpectedErrorCount > 0 {
+		t.Errorf("expected 0 unexpected errors, got %d", unexpectedErrorCount)
+	}
+	if successCount != 1 {
+		t.Errorf("expected success = 1, got %d", successCount)
+	}
+	if outOfStockCount != 1 {
+		t.Errorf("expected out of stock = 1, got %d", outOfStockCount)
+	}
 	if finalStock != 0 {
 		t.Errorf("expected final_stock = 0, got %d", finalStock)
+	}
+
+	invariant := successCount + finalStock
+	if invariant != initialStock {
+		t.Errorf("INVARIANT BROKEN: %d + %d != %d", successCount, finalStock, initialStock)
+	}
+
+	// Ensure B was actually blocked until A committed (not just racing past)
+	if bErr == nil {
+		t.Error("B should have been rejected (stock=0 after A), but succeeded")
 	}
 
 	t.Logf("✅ ROW LOCK BLOCKING PROOF COMPLETE: A lock → B waiting → A release → B rejected")
@@ -226,11 +232,11 @@ func waitForBWaitingOnLock(ctx context.Context, db *sql.DB, backendPID int) bool
 	const maxPolls = 200 // 2 seconds total timeout
 
 	for i := 0; i < maxPolls; i++ {
-		var waitEventType string
+		var waitEventType sql.NullString
 		err := db.QueryRowContext(ctx,
-			`SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1`,
+			`SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1 AND state = 'active'`,
 			backendPID).Scan(&waitEventType)
-		if err == nil && waitEventType == "Lock" {
+		if err == nil && waitEventType.Valid && waitEventType.String == "Lock" {
 			return true
 		}
 		time.Sleep(pollInterval)
@@ -279,19 +285,17 @@ func TestPostgresRowLock_HighContention(t *testing.T) {
 
 			err := repo.TrySell(ctx, productID)
 			mu.Lock()
-			switch {
-			case err == nil:
+			if err == nil {
 				successCount++
-			case errors.Is(err, ErrOutOfStock):
+			} else if errors.Is(err, ErrOutOfStock) {
 				outOfStockCount++
-			default:
+			} else {
 				unexpectedErrorCount++
 			}
 			mu.Unlock()
 		}(i)
 	}
 
-	// Bounded wait pattern
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -329,7 +333,8 @@ func TestPostgresRowLock_HighContention(t *testing.T) {
 		t.Errorf("expected final_stock = 0, got %d", finalStock)
 	}
 
-	if successCount+finalStock != initialStock {
+	invariant := successCount + finalStock
+	if invariant != initialStock {
 		t.Errorf("INVARIANT BROKEN: %d + %d != %d", successCount, finalStock, initialStock)
 	}
 
