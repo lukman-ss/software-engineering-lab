@@ -16,13 +16,13 @@ func UnsafeHandler(w http.ResponseWriter, r *http.Request) {
 	// Endpoint: GET /api/invoices/:id
 	prefix := "/api/invoices/"
 	if len(r.URL.Path) <= len(prefix) || r.URL.Path[:len(prefix)] != prefix {
-		http.Error(w, `{"error": "invalid path"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
 	idStr := r.URL.Path[len(prefix):]
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, `{"error": "invalid id"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
 
@@ -39,7 +39,5 @@ func UnsafeHandler(w http.ResponseWriter, r *http.Request) {
 		"status": "PAID",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(invoice)
+	writeJSON(w, http.StatusOK, invoice)
 }
