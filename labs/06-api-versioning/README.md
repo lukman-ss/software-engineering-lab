@@ -385,9 +385,61 @@ Namun, perubahan berikut sering **backward compatible**:
 | Adding endpoint | tidak memengaruhi existing endpoint |
 | Adding optional query parameter | client tidak wajib pakai |
 
-**Penting:** Penambahan field **SELALU aman**? Tidak. Bergantung pada behavior consumer:
-- `json.Unmarshal` Go: abaikan unknown field → aman
-- JSON Schema strict: field baru bisa mismatch → tidak aman
+>**Catatan tentang Penambahan Field:**
+
+>Menambahkan optional response field biasanya backward-compatible untuk tolerant readers yang mengabaikan unknown fields. Namun **Tidak selalu aman!** Bergantung pada behavior consumer:
+>- `json.Unmarshal` Go: abaikan unknown field → aman
+>- JSON Schema strict: field baru bisa mismatch → tidak aman
+>- Generated client (OpenAPI codegen): tergantung konfigurasi `additionalProperties`
+>- Protobuf/JSON with strict parsing: field baru bisa cause error
+
+---
+
+## API Change Decision Rule
+
+**Backward-compatible change** → **pertahankan version yang sama**
+
+**Contract-breaking change** → **buat major API version baru**
+
+### Kapan Butuh Version Baru?
+
+| Perubahan Type | Contoh | Impact | Required Version |
+|----------------|--------|--------|------------------|
+| **Request-side** (client → server) | | | |
+| Required field menjadi required | `field: string → required string` | Client lupa field error | ✅ Major version |
+| Required field menjadi optional | `field: string → optional string` | Biasanya aman | ❌ Tidak perlu |
+| Optional field menjadi required | `field: string → required string` | Client lama gagal | ✅ Major version |
+| **Response-side** (server → client) | | | |
+| Field dihapus | `field` hilang | Client missing data | ✅ Major version |
+| Field rename | `name` → `full_name` | Consumer pakai nama lama | ✅ Major version |
+| Primitive type berubah | `price: number` → `price: string` | Deserialization error | ✅ Major version |
+| Object ↔ Primitive | `customer: "Budi"` → `customer: {id: 15, name: "Budi"}` | Struct mismatch | ✅ Major version |
+| Object ↔ Array | `customer: {...}` → `customer: [...]` | Parse error | ✅ Major version |
+| Date format berubah | `2024-01-01` → `01/01/2024` | Parsing error | ✅ Major version |
+| Nullability berubah | | | |
+| Non-nullable → nullable | `field: string` → `field: string | null` | **Request:** biasanya aman**<br>**Response:** breaking jika consumer tidak handle null | ✅ Major version |
+| Nullable → non-nullable | `field: string | null` → `field: string` | Response: breaking jika ada null | ✅ Major version |
+| **Semantic Changes** | | | |
+| Enum semantics berubah | `status: "ACTIVE"` berarti hal lain | Business logic salah | ✅ Major version |
+| HTTP status berubah artinya | `200 OK` → `201 Created` untuk update | Konsumen error handling | ✅ Major version |
+| Pagination berubah | `page`/`limit` → `page_number`/`size` | Consumer parsing | ✅ Major version |
+| Business meaning berubah | `/invoices` sekarang include draft | Logika bisnis berubah | ✅ Major version |
+
+---
+
+## Breaking Change ≠ Hanya JSON Structure
+
+Perubahan yang menjadi breaking change **bukan hanya** tentang struktur JSON. Juga termasuk:
+
+| Perubahan | Contoh | Penjelasan |
+|-----------|--------|------------|
+| Required → Optional (Request) | Field `authorization` menjadi optional | ✅ Aman - client tidak wajib kirim |
+| Non-nullable → Nullable (Response) | `status: "PAID"` → `status: null` | JSON type berubah, consumer error bila tidak handle null |
+| Optional → Required (Request) | `requestId` menjadi wajib di header | Client lama tidak kirim = 4xx error |
+| Authentication requirement | Endpoint butuh API key baru | Semua client lama gagal otorisasi |
+| Error response shape | `{error: "msg"}` → `{code: "ERR", message: "msg"}` | Error parser lama gagal |
+
+---
 
 ---
 
