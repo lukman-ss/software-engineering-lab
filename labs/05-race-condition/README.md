@@ -499,83 +499,6 @@ Mental model engineer:
 
 ---
 
-## Running the Lab
-
-### 1. Normal Unit Tests
-
-```bash
-# Semua unit tests (in-memory/mock repository)
-go test ./...
-
-# Dengan race detector untuk memory data race
-go test -race ./...
-```
-
-### 2. PostgreSQL Integration Tests
-
-```bash
-# Set up PostgreSQL (dari root repository)
-docker-compose up -d postgres
-
-# Jalankan integration tests (requires PostgreSQL)
-go test -tags=integration ./...
-```
-
-#### 2.1 Detailed Integration Test Commands
-
-```bash
-# Lost Update detection (Unsafe pattern)
-go test -v -tags=integration -run TestPostgresUnsafe_LostUpdate
-
-# Atomic SQL Statement (Safe pattern)
-go test -v -tags=integration -run TestPostgresAtomic_ConcurrentUpdate
-
-# Pessimistic Row Lock (Safe pattern)
-go test -v -tags=integration -run TestPostgresRowLock_ConcurrentStock
-go test -v -tags=integration -run TestPostgresRowLock_HighContention
-
-# PostgreSQL UNIQUE constraint (Booking)
-go test -v -tags=integration -run TestPostgres_ConcurrentBooking
-go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
-go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
-```
-
-#### 2.2 Booking Race Condition Tests
-
-##### In-Memory Booking Concurrency Tests (Mock Repository)
-```bash
-go test -v -run Test500_ConcurrentBooking
-go test -v -run TestBooking_SameBranchDifferentBranch
-go test -v -run TestBooking_ErrorHandling
-```
-> Menunjukkan application-level concurrency behavior menggunakan in-memory repository. Database PostgreSQL UNIQUE constraint dibuktikan secara terpisah oleh PostgreSQL integration test.
-
-##### PostgreSQL Booking Unique Constraint Tests
-```bash
-# 500 concurrent: 1 success, 499 SQLSTATE 23505 conflict
-go test -v -tags=integration -run TestPostgres_ConcurrentBooking
-
-# Same branch duplicate → rejected
-go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch
-
-# Different branches may use same date/time slot independently
-go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches
-```
-
-### 3. Intentional Go Memory Race Demo (Educational)
-
-```bash
-# Run intentional race demo (EXPECTED TO FAIL under race detector)
-go test -race -v -tags=racedemo -run TestUnsafeCounter_Race
-
-# Normal validation (should pass - unsafe test excluded)
-go test -race ./...
-```
-
-> **Catatan:** `TestUnsafeCounter_Race` ada di `datarace_unsafe_test.go` dengan build tag `//go:build racedemo`. Ini **diusir** dari normal test suite sehingga `go test -race ./...` selalu PASS. Demo hanya untuk edukasi - jalankan secara eksplisit dengan `-tags=racedemo`.
-
----
-
 ## Testing Best Practices (Lab Notes)
 
 ### Concurrency Test Methodology (Prompt 15)
@@ -638,61 +561,114 @@ Assertion: `unexpectedErrorCount == 0`.
 
 ## Running the Lab
 
-### Unit Tests (In-Memory)
+### 1. Unit Tests
 
 ```bash
-# Semua unit tests (in-memory/mock repository)
 go test ./...
+```
 
-# Dengan race detector untuk memory data race
+### 2. Memory Race Detector
+
+```bash
 go test -race ./...
 ```
 
-### PostgreSQL Integration Tests
+> Semua unit test harus PASS. `TestUnsafeCounter_Race` tidak termasuk (build tag `racedemo`) sehingga suite ini selalu PASS.
 
-Prasyarat: PostgreSQL sudah berjalan di `localhost:5432` dengan database `se_lab`.
+### 3. PostgreSQL Setup
+
+Prasyarat: PostgreSQL berjalan di `localhost:5432`, database `se_lab`.
+
+**Source of truth schema:** `schema.sql` — dimount oleh Docker ke `/docker-entrypoint-initdb.d/001-race-condition.sql` dan dieksekusi otomatis pada first database creation.
 
 #### Fresh Database Setup
 
-Schema otomatis di-init via Docker entrypoint pada first database creation:
-
 ```bash
-# Jalankan Docker Compose (dari root repository)
+# Dari root repository
 docker-compose up -d postgres
-
-# Schema auto-created pada fresh database dari:
-# ./labs/05-race-condition/schema.sql → /docker-entrypoint-initdb.d/001-race-condition.sql
 ```
 
-> **Penting:** Init script PostgreSQL hanya berjalan pada **first database creation**. Jika volume lama sudah pernah dibuat sebelum schema mount ditambahkan, lakukan reset volume:
+> **Penting:** Init script hanya berjalan pada **first database creation**. Jika volume lama sudah ada sebelum schema ditambahkan, reset dulu:
 
 ```bash
 # Reset fresh test database (HANYA untuk development lab)
 docker compose down -v
 docker compose up -d postgres
-
-# PERINGATAN: -v menghapus local Docker volume test database.
-# JANGAN lakukan ini ke production.
+# PERINGATAN: -v menghapus local Docker volume. JANGAN ke production.
 ```
 
-#### Run Tests
+`resetBookingTable` hanya membersihkan data test via `TRUNCATE TABLE service_bookings RESTART IDENTITY CASCADE`. Schema creation adalah tanggung jawab `schema.sql` melalui Docker init — bukan test helper.
+
+### 4. PostgreSQL Integration Tests
 
 ```bash
-# Set environment (opsional, default: postgres:5432, user=postgres, pass=postgres, db=se_lab)
-export POSTGRES_HOST=localhost
-export POSTGRES_PORT=5432
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=postgres
-export POSTGRES_DB=se_lab
+# Set environment (opsional — default: localhost:5432, postgres/postgres, db=se_lab)
+export POSTGRES_HOST=localhost POSTGRES_PORT=5432
+export POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres POSTGRES_DB=se_lab
 
-# Jalankan integration tests (build tag: integration)
+# Semua integration tests
 go test -v -tags=integration ./...
 ```
 
-Catatan:
-- Test akan `SKIP` bila PostgreSQL tidak tersedia.
-- Connection pool: `MaxOpenConns=25`, `MaxIdleConns=5` (dari `pkg/database`).
-- `setupTestInventory` membuat test fixture (INSERT/UPDATE), `setupBookingTable` memastikan table ada + TRUNCATE untuk isolation.
+> Test akan `SKIP` bila PostgreSQL tidak tersedia. Connection pool: `MaxOpenConns=25`, `MaxIdleConns=5`.
+
+#### Lost Update
+
+```bash
+go test -v -tags=integration -run TestPostgresUnsafe_LostUpdate ./...
+```
+
+Membuktikan bahwa tanpa protection, `initial_stock(1) != success(2) + final(0)`.
+
+#### Atomic Update
+
+```bash
+go test -v -tags=integration -run TestPostgresAtomic_ConcurrentUpdate ./...
+```
+
+500 goroutines, initial stock 100 → success=100, rejected=400, final=0. Invariant holds.
+
+#### Row Lock
+
+```bash
+go test -v -tags=integration -run TestPostgresRowLock_ConcurrentStock ./...
+go test -v -tags=integration -run TestPostgresRowLock_HighContention ./...
+```
+
+`ConcurrentStock`: sequence deterministik A→lock→B→wait→A→commit→B→ErrOutOfStock.
+`HighContention`: 500 goroutines, stock 100, invariant holds.
+
+#### Booking UNIQUE Constraint
+
+```bash
+# 500 concurrent: 1 created, 499 SQLSTATE 23505 conflict
+go test -v -tags=integration -run TestPostgres_ConcurrentBooking ./...
+
+# Same branch duplicate → rejected; different branch same slot → allowed
+go test -v -tags=integration -run TestPostgres_Booking_SameBranchDifferentBranch ./...
+go test -v -tags=integration -run TestPostgres_Booking_MultipleBranches ./...
+```
+
+Membuktikan `UNIQUE(branch_id, service_date, slot_time)` di level database. `ErrDuplicateKey` dipetakan dari SQLSTATE `23505`.
+
+In-memory booking concurrency (tanpa PostgreSQL):
+
+```bash
+go test -v -run Test500_ConcurrentBooking ./...
+go test -v -run TestBooking_SameBranchDifferentBranch ./...
+go test -v -run TestBooking_ErrorHandling ./...
+```
+
+> Menguji in-memory uniqueness/concurrency behavior menggunakan mock repository. Database UNIQUE constraint dibuktikan secara terpisah oleh PostgreSQL integration test di atas.
+
+### 5. Intentional Memory Race Demo
+
+```bash
+# EXPECTED TO FAIL — DATA RACE detected oleh Go race detector
+go test -race -v -tags=racedemo -run TestUnsafeCounter_Race ./...
+```
+
+> `TestUnsafeCounter_Race` (build tag `//go:build racedemo`) dikecualikan dari suite normal agar `go test -race ./...` selalu PASS. Demo ini hanya untuk tujuan edukasi — memperlihatkan bagaimana Go race detector mendeteksi memory data race.
 
 ---
 
@@ -715,21 +691,22 @@ Sebelum memilih concurrency control strategy, tanyakan diri sendiri:
 
 ## Files
 
-- `inventory.go`: Domain model dan Interfaces
-- `unsafe_inventory.go`: Implementasi Unsafe check-then-act
-- `atomic_inventory.go`: Implementasi Safe Atomic Conditional Update
-- `postgres_rowlock.go`: Implementasi Safe Pessimistic Row Locking
-- `lost_update_test.go`: Test Barrier Synchronization (Membuktikan Unsafe)
-- `atomic_update_test.go`: Test Safe Inventory (1 & 500 concurrent workers)
-- `booking_test.go`: Test Uniqueness Constraint (500 concurrent bookings)
-- `postgres_rowlock_test.go`: Test Integrasi PostgreSQL Pessimistic Lock
-- `postgres_integration_test.go`: Test Integrasi PostgreSQL Unsafe & Atomic
-- `postgres_booking.go`: Test Integrasi PostgreSQL Booking (unique constraint)
-- `postgres_booking_test.go`: Test Integrasi PostgreSQL Booking (unique constraint)
-- `schema.sql`: Skema Tabel Database (multi-branch booking)
-- `datarace.go`: UnsafeCounter (demo race), MutexCounter, AtomicCounter, ChannelCounter implementations
-- `datarace_test.go`: Safe counter tests (Mutex, Atomic, Channel)
-- `datarace_unsafe_test.go`: Build tag `racedemo` - intentional Go data race demo (EXPECTED TO FAIL under race detector)
+- `inventory.go`: Domain model dan interfaces (Inventory, Booking, errors)
+- `unsafe_inventory.go`: Implementasi Unsafe check-then-act (in-memory)
+- `atomic_inventory.go`: Implementasi Safe Atomic Conditional Update (in-memory)
+- `mock_inventory.go`: In-memory mock repository untuk unit test
+- `postgres_rowlock.go`: PostgreSQL repository — Safe Pessimistic Row Lock (`SELECT ... FOR UPDATE`)
+- `postgres_booking.go`: PostgreSQL repository — Booking dengan `UNIQUE(branch_id, service_date, slot_time)`
+- `datarace.go`: UnsafeCounter, MutexCounter, AtomicCounter, ChannelCounter implementations
+- `schema.sql`: **Source of truth** — skema tabel `inventory_products` dan `service_bookings` (multi-branch)
+- `lost_update_test.go`: Deterministic barrier test — membuktikan lost update pada unsafe implementation
+- `atomic_update_test.go`: In-memory atomic update test (1 unit & 500 concurrent workers)
+- `booking_test.go`: In-memory uniqueness/concurrency behavior test (500 concurrent bookings via mock)
+- `datarace_test.go`: Safe counter tests (Mutex, Atomic, Channel) — `go test -race` harus PASS
+- `datarace_unsafe_test.go`: Build tag `//go:build racedemo` — intentional Go memory data race demo (EXPECTED TO FAIL under race detector; dikecualikan dari normal suite)
+- `postgres_rowlock_test.go`: Integration test — PostgreSQL Pessimistic Row Lock (deterministik & high contention)
+- `postgres_integration_test.go`: Integration test — PostgreSQL Unsafe Lost Update & Atomic Concurrent Update
+- `postgres_booking_test.go`: Integration test — PostgreSQL database UNIQUE constraint proof (500 concurrent, SQLSTATE 23505)
 
 ---
 

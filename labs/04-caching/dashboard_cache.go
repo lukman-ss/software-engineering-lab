@@ -88,39 +88,39 @@ func (s *DashboardCacheService) InvalidateCurrentDashboard(ctx context.Context, 
 // --- REPRESENTATIVE MUTATION METHODS (Bagian 8) ---
 
 // CreateInvoice mensimulasikan pembuatan invoice baru (mutasi data).
-func (s *DashboardCacheService) CreateInvoice(ctx context.Context, branchID int64, amount float64) error {
+func (s *DashboardCacheService) CreateInvoice(ctx context.Context, tenantID, branchID int64, amount float64) error {
 	_ = amount
-	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
+	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
 }
 
 // PayInvoice mensimulasikan pembayaran invoice.
-func (s *DashboardCacheService) PayInvoice(ctx context.Context, branchID int64, invoiceID int64) error {
+func (s *DashboardCacheService) PayInvoice(ctx context.Context, tenantID, branchID int64, invoiceID int64) error {
 	_ = invoiceID
-	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
+	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
 }
 
 // FinishService mensimulasikan penyelesaian servis oleh mekanik.
-func (s *DashboardCacheService) FinishService(ctx context.Context, branchID int64, mechanicID int64) error {
+func (s *DashboardCacheService) FinishService(ctx context.Context, tenantID, branchID int64, mechanicID int64) error {
 	_ = mechanicID
-	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
+	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
 }
 
 // UseSparepart mensimulasikan penggunaan sparepart.
-func (s *DashboardCacheService) UseSparepart(ctx context.Context, branchID int64, partID int64) error {
+func (s *DashboardCacheService) UseSparepart(ctx context.Context, tenantID, branchID int64, partID int64) error {
 	_ = partID
-	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
+	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
 }
 
 // SaveCustomer mensimulasikan pembuatan/perubahan customer.
-func (s *DashboardCacheService) SaveCustomer(ctx context.Context, branchID int64, customerName string) error {
+func (s *DashboardCacheService) SaveCustomer(ctx context.Context, tenantID, branchID int64, customerName string) error {
 	_ = customerName
-	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
+	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
 }
 
 // CreateVehicle mensimulasikan pembuatan kendaraan baru.
-func (s *DashboardCacheService) CreateVehicle(ctx context.Context, branchID int64, plate string) error {
+func (s *DashboardCacheService) CreateVehicle(ctx context.Context, tenantID, branchID int64, plate string) error {
 	_ = plate
-	return s.InvalidateCurrentDashboard(ctx, 1, branchID)
+	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
 }
 
 func (s *DashboardCacheService) QueryCount() int64 {

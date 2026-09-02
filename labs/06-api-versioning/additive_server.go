@@ -2,7 +2,6 @@ package api_versioning
 
 import (
 	"net/http"
-	"strconv"
 )
 
 // AdditiveHandler mensimulasikan penambahan field baru pada backend
@@ -16,15 +15,15 @@ func AdditiveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prefix := "/api/invoices/"
-	if len(r.URL.Path) <= len(prefix) || r.URL.Path[:len(prefix)] != prefix {
-		writeJSONError(w, http.StatusBadRequest, "invalid path")
+	// Gunakan helper parseInvoiceID untuk konsistensi
+	id, isMissing, isInvalid, errMsg := parseInvoiceID(r.URL.Path, "/api/invoices/")
+
+	if isMissing {
+		writeJSONError(w, http.StatusBadRequest, errMsg)
 		return
 	}
-	idStr := r.URL.Path[len(prefix):]
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid id")
+	if isInvalid {
+		writeJSONError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 

@@ -159,10 +159,10 @@ func runStampedeProtected(ctx context.Context) {
 }
 
 // Scenario 5: write-through
-// Update product writes to BOTH DB and Cache. Read after write returns fresh data.
+// Happy path: DB update succeeds, then cache update succeeds.
 func runWriteThrough(ctx context.Context) {
 	fmt.Println("=== SCENARIO: write-through ===")
-	fmt.Println("Context: Update product price. Cache must reflect new value immediately (no stale window).")
+	fmt.Println("Context: Update product price. Demonstrates happy path where both DB and cache update succeed.")
 
 	cache := caching.NewMockCache()
 	db, mock, err := sqlmock.New()
@@ -171,9 +171,10 @@ func runWriteThrough(ctx context.Context) {
 	}
 	defer db.Close()
 
-	// Mock DB update success
-	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	// Mock DB update success with RETURNING (get authoritative value)
+	mock.ExpectQuery("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3 RETURNING id, name, price").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+			AddRow("demo-1", "Brake Pad", 250000))
 
 	svc := caching.NewWriteThroughService(db, cache)
 
@@ -182,7 +183,7 @@ func runWriteThrough(ctx context.Context) {
 		log.Fatalf("UpdateProduct: %v", err)
 	}
 
-	// Read back from cache (write-through guarantees cache is in sync)
+	// Read back from cache - shows fresh data was cached
 	key := caching.CacheKey("product", product.ID, 1)
 	cached, err := cache.Get(ctx, key)
 	if err != nil {
@@ -192,7 +193,14 @@ func runWriteThrough(ctx context.Context) {
 	fmt.Printf("\nResults:\n")
 	fmt.Printf("Updated product: ID=%s Name=%s Price=%.0f\n", product.ID, product.Name, product.Price)
 	fmt.Printf("Cache after write-through: %s\n", cached)
-	fmt.Printf("\nConclusion: Write Through keeps cache and DB in sync — no stale window after write.\n")
+	fmt.Printf(`
+Note: This is happy path only.
+- DB success + Redis failure → stale cache may persist until TTL
+- Process crash between DB commit and cache SET → stale cache
+
+Write-Through optimizes read performance but does NOT guarantee strong consistency.
+TTL and proper invalidation are still required safety nets.
+`)
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		log.Fatalf("unfulfilled mock expectations: %v", err)

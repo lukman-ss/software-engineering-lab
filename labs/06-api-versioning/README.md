@@ -67,6 +67,7 @@ Berikut contoh perubahan yang menjadi **breaking change**:
 | Business meaning endpoint berubah | `/invoices` sekarang mengembalikan draft juga |
 | Authentication requirement berubah | Endpoint butuh API key baru |
 | Error response shape berubah | `{error: "msg"}` ↔ `{code: "ERR", message: "msg"}` |
+| Required request header berubah | Endpoint tidak butuh `X-Tenant-ID`, kemudian header menjadi wajib. Client lama tanpa header akan gagal. |
 
 ---
 
@@ -105,7 +106,9 @@ Perubahan yang **pasti breaking**:
 ## API Change Decision Rule
 
 **Backward-compatible change** → **pertahankan version yang sama**  
-**Contract-breaking change** → **buat major API version baru**
+**Contract-breaking change** → **gunakan major API version baru atau compatibility/migration layer**
+
+> **Catatan:** Compatibility layer dapat digunakan jika contract lama masih perlu dipertahankan sementara consumer bermigrasi ke versi baru. Layer ini bertindak sebagai translator antara V1 dan V2 contract.
 
 ---
 
@@ -167,7 +170,7 @@ Sebelum melakukan breaking change, tanyakan:
 | Support period? | contoh: 90 hari |
 | Monitor old-version traffic? | Ya |
 | Compatibility test? | Automated di CI |
-| Deprecation communication? | Release notes |
+| Deprecation communication? | Notifikasi eksplisit ke consumer (bukan hanya release notes) |
 | Sunset criteria? | < 5% V1 traffic |
 
 > **API versioning tanpa mengetahui consumer lama tetap berbahaya.** Jangan buat V2 hanya karena "mau bangun".
@@ -188,15 +191,17 @@ Day 0: Release V2
 > **Android release terbaru ≠ semua user sudah upgrade.** Proses upgrade memakan waktu.
 
 Strategi:
-1. Keep V1 stable. (Jangan pernah ubah V1)
+1. V1 tidak boleh menerima breaking contract changes selama masih didukung. Backward-compatible fixes dan additive changes masih dapat dilakukan sesuai compatibility policy.
 2. Deploy V2.
 3. New Android uses V2.
 4. Old Android remains on V1.
 5. Monitor adoption.
 6. Monitor V1 traffic.
 7. Announce deprecation.
-8. Migrate remaining consumers.
-9. Sunset V1 after criteria are met.
+8. Consumer communication.
+9. Migration monitoring.
+10. V1 traffic monitoring.
+11. Sunset V1 after criteria are met.
 
 ---
 
@@ -209,6 +214,8 @@ V2 released
     ↓
 V1 deprecated
     ↓
+Consumer communication
+    ↓
 Migration monitoring
     ↓
 V1 traffic monitoring
@@ -217,6 +224,11 @@ Sunset criteria reached
     ↓
 V1 removed
 ```
+
+> **Consumer communication harus eksplisit** bukan hanya tersirat lewat release notes atau warning. Komunikasi ini mencakup:
+> - Notifikasi resmi ke semua pengguna endpoint V1
+> - Dokumentasi dengan timeline deprecasi
+> - Support channels untuk membantu migrasi
 
 >**INGAT:** 90 hari hanyalah **CONTOH**. Actual timeline bergantung pada:
 >- **SLA** — berapa lama service harus support?
@@ -377,7 +389,7 @@ mux.HandleFunc("/api/v2/invoices/", V2Handler)
 - **API adalah kontrak**, bukan teknologi. Perubahan harus dievaluasi dari perspective consumer.
 - **HTTP 200 ≠ compatible**. Selalu test decoding di sisi client.
 - **Versioning bukan untuk semua**. Hanya untuk breaking changes.
-- **V1 selalu stabil**. Setelah di-release, jangan pernah ubah lagi.
+- **V1 tidak boleh menerima breaking contract changes selama masih didukung**. Backward-compatible fixes dan additive changes masih dapat dilakukan sesuai compatibility policy.
 - **Contract test wajib**. Prevent breaking change yang terlewat.
 - **Consumer inventory penting**. Tanpa tahu siapa yang pakai, tidak ada cara upgrade yang aman.
 
@@ -403,14 +415,14 @@ go test -race -v ./...
 ```
 labs/06-api-versioning/
 ├── go.mod                  # Module go 1.22
-├── domain.go               # Model Invoice, Customer
-├── ParseLegacyInvoice()    # Helper untuk test legacy decode
-├── unsafe_server.go        # Anti-pattern: breaking change
-├── unsafe_test.go          # Test: legacy client fails
-├── safe_server.go          # V1/V2 DTO + mappers
-├── safe_test.go            # Contract regression tests
-├── additive_server.go      # Field tambahan currency
-├── additive_test.go        # Test: legacy tetap berhasil
+├── domain.go               # Model Invoice, Customer, LegacyInvoice, InvoiceRepository
+├── unsafe_server.go        # Anti-pattern: breaking change tanpa versioning
+├── unsafe_test.go          # Test: legacy client fails, unsafe route behavior
+├── safe_server.go          # V1/V2 DTO + mappers + parseInvoiceID helper
+├── safe_test.go            # Contract regression tests, V1/V2 semantic assertions
+├── additive_server.go      # Additive change: field currency tanpa breaking
+├── additive_test.go        # Test: legacy client tetap berhasil
+├── routing_test.go         # HTTP routing, 400/404/405, method validation
 └── README.md               # Panduan lengkap
 ```
 

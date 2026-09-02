@@ -130,7 +130,75 @@ func TestTTLWithJitter(t *testing.T) {
 	t.Log("✓ TTL jitter distribution validated")
 }
 
-// TestNegativeCache verifies negative caching for non-existent keys.
+// TestSingleflightLeaderCancelDoesNotKillRebuild verifies the bounded context fix:
+// When the leader (the goroutine that started the DB rebuild) cancels its own context,
+// the shared rebuild continues for other waiters (Caller B still gets a result).
+//
+// Behavior verified:
+// - Caller A becomes leader → starts DB rebuild
+// - Caller B joins the singleflight group as waiter
+// - Caller A cancels its own context
+// - Caller A returns context.Canceled
+// - DB rebuild continues (bounded rebuildCtx, not leader's ctx)
+// - Caller B receives success (not an error)
+// - DB was called exactly once
+func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
+	repo := caching.NewCounterRepository()
+	cache := caching.NewMockCache()
+	svc := caching.NewProtectedStampedeService(cache, repo)
+
+	// Block repo so we control timing deterministically
+	repo.Block()
+
+	ctxA, cancelA := context.WithCancel(context.Background())
+	ctxB := context.Background()
+
+	errA := make(chan error, 1)
+	errB := make(chan error, 1)
+
+	// A becomes leader (first caller)
+	go func() {
+		_, err := svc.GetData(ctxA, 200)
+		errA <- err
+	}()
+
+	// Give A time to enter singleflight and start DB call
+	time.Sleep(15 * time.Millisecond)
+
+	// B joins as waiter
+	go func() {
+		_, err := svc.GetData(ctxB, 200)
+		errB <- err
+	}()
+
+	// Give B time to register in singleflight
+	time.Sleep(5 * time.Millisecond)
+
+	// A cancels its context
+	cancelA()
+
+	// A should return context.Canceled
+	if err := <-errA; err != context.Canceled {
+		t.Errorf("expected Caller A to return context.Canceled, got: %v", err)
+	}
+
+	// Unblock repo so rebuild can complete
+	repo.Unblock()
+
+	// B should complete successfully (rebuild continued despite A cancel)
+	if err := <-errB; err != nil {
+		t.Errorf("expected Caller B to succeed, got: %v", err)
+	}
+
+	// DB must be called exactly once (singleflight deduplication)
+	if repo.CallCount() != 1 {
+		t.Errorf("expected 1 DB call, got %d", repo.CallCount())
+	}
+
+	t.Log("✓ Leader cancel does not kill shared rebuild - Caller B succeeded")
+	t.Log("✓ Bounded rebuildCtx isolates leader context from shared work")
+	t.Log("✓ DB called exactly once - singleflight deduplication maintained")
+}
 func TestNegativeCache(t *testing.T) {
 	cache := caching.NewMockCache()
 	repo := caching.NewFakeDashboardRepository()

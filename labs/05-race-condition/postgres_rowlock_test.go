@@ -93,13 +93,24 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		resultsCh <- workerResult{name: "A", err: aErr}
 	}()
 
-	// Transaction B — gets wait of A's lock, then attempts to acquire (will block)
+	// Transaction B — waits until A truly holds the row lock, then attempts to acquire (will block).
+	// Without this gate, B could race ahead before A's SELECT ... FOR UPDATE completes,
+	// making the test scheduler-dependent rather than deterministic.
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				resultsCh <- workerResult{name: "B", err: fmt.Errorf("panic in B: %v", r)}
 			}
 		}()
+
+		select {
+		case <-lockAcquired:
+			// A has completed SELECT ... FOR UPDATE and truly holds the row lock.
+		case <-ctx.Done():
+			resultsCh <- workerResult{name: "B", err: ctx.Err()}
+			return
+		}
+
 		bErr := trySellWithLockBOnConn(ctx, connB, productID)
 		resultsCh <- workerResult{name: "B", err: bErr}
 	}()
@@ -114,10 +125,8 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 
 	// Now poll to verify B is waiting for lock using pg_stat_activity
 	// B is blocked on SELECT FOR UPDATE (same row as A)
-	verifiedBWaiting := waitForBWaitingOnLock(ctx, db, backendPIDB)
-
-	if !verifiedBWaiting {
-		t.Fatal("Could not verify B is waiting on lock - test may be unreliable")
+	if err := waitForBWaitingOnLock(ctx, db, backendPIDB); err != nil {
+		t.Fatalf("Could not verify B is waiting on lock: %v", err)
 	}
 	t.Log("✓ Verified: Transaction B is blocked waiting for row lock via pg_stat_activity")
 
@@ -226,23 +235,47 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 
 // waitForBWaitingOnLock polls PostgreSQL to verify B is waiting for a row lock.
 // Uses pg_stat_activity to check wait_event_type = 'Lock' for the specific backend PID.
-// Returns true when the backend with PID is in lock wait state.
-func waitForBWaitingOnLock(ctx context.Context, db *sql.DB, backendPID int) bool {
-	const pollInterval = 10 * time.Millisecond
-	const maxPolls = 200 // 2 seconds total timeout
+// Returns nil when the backend with PID is in lock wait state, or returns error on timeout/unexpected failure.
+func waitForBWaitingOnLock(
+	parent context.Context,
+	db *sql.DB,
+	backendPID int,
+) error {
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
+	defer cancel()
 
-	for i := 0; i < maxPolls; i++ {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
 		var waitEventType sql.NullString
-		err := db.QueryRowContext(ctx,
-			`SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1 AND state = 'active'`,
-			backendPID).Scan(&waitEventType)
-		if err == nil && waitEventType.Valid && waitEventType.String == "Lock" {
-			return true
-		}
-		time.Sleep(pollInterval)
-	}
 
-	return false
+		err := db.QueryRowContext(
+			ctx,
+			`
+			SELECT wait_event_type
+			FROM pg_stat_activity
+			WHERE pid = $1
+			  AND state = 'active'
+			`,
+			backendPID,
+		).Scan(&waitEventType)
+
+		if err == nil && waitEventType.Valid && waitEventType.String == "Lock" {
+			return nil
+		}
+
+		// Unexpected error (not ErrNoRows means real DB problem)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("query pg_stat_activity: %w", err)
+		}
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return fmt.Errorf("transaction B was not observed waiting on PostgreSQL lock: %w", ctx.Err())
+		}
+	}
 }
 
 // TestPostgresRowLock_HighContention menguji row locking dengan 500 concurrent requests.

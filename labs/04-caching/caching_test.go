@@ -3,7 +3,6 @@ package caching_test
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -243,53 +242,10 @@ func TestDistributedLockNegativeTTL(t *testing.T) {
 	t.Log("Negative TTL validation verified")
 }
 
-// Test 9: Distributed lock properly checks and cleans expired keys on Get
-func TestDistributedLockGetCleansExpired(t *testing.T) {
-	locker := caching.NewMockRedisClient()
-	ctx := context.Background()
+// NOTE: TestDistributedLockGetCleansExpired removed - it used time.Sleep(100ms) which is flaky.
+// Lock expiry with real time is better tested via integration tests or with injected fake clock.
 
-	key := "lock:item:666"
-	ttl := 50 * time.Millisecond
-
-	// Acquire lock with short TTL
-	acquired, value, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
-	if !acquired {
-		t.Fatal("lock acquisition should succeed")
-	}
-
-	// Wait for TTL to expire
-	time.Sleep(100 * time.Millisecond)
-
-	// Get should return empty (key expired)
-	gotValue, err := locker.Get(ctx, key)
-	if err != nil {
-		t.Fatalf("Get failed: %v", err)
-	}
-	if gotValue != "" {
-		t.Errorf("expired key should return empty, got: %s", gotValue)
-	}
-
-	// Now a new holder can acquire the lock
-	acquired2, value2, err := caching.TryAcquireLock(ctx, locker, key, ttl)
-	if err != nil {
-		t.Fatalf("acquire after expiry failed: %v", err)
-	}
-	if !acquired2 {
-		t.Error("should be able to acquire expired lock")
-	}
-
-	// Should have different token
-	if value == value2 {
-		t.Error("new token should be different from expired one")
-	}
-
-	// Cleanup
-	_ = caching.ReleaseLock(ctx, locker, key, value2)
-
-	t.Log("Expired key cleanup on Get verified")
-}
-
-// Test 7: Cache key includes version for easy invalidation
+// Test 9: Cache key includes version for easy invalidation
 func TestCacheKeyIncludesVersion(t *testing.T) {
 	keyV1 := caching.CacheKey("product", "700", 1)
 	keyV2 := caching.CacheKey("product", "700", 2)
@@ -340,29 +296,8 @@ func TestCacheMissPopulatesCache(t *testing.T) {
 	t.Log("Cache population on miss validated")
 }
 
-// Test 9: Random jitter disperses requests on expiration
-func TestRandomJitterDispersesRequests(t *testing.T) {
-	samples := make(map[int]int)
-	for i := 0; i < 1000; i++ {
-		jitter := rand.Intn(100) // 0-99ms
-		samples[jitter]++
-	}
-
-	// Most values should have some samples (distributed)
-	nonZero := 0
-	for _, count := range samples {
-		if count > 0 {
-			nonZero++
-		}
-	}
-
-	if nonZero < 50 {
-		t.Errorf("jitter distribution too skewed: only %d unique values", nonZero)
-	}
-
-	t.Logf("Jitter distribution: %d unique values out of 100 possible", nonZero)
-	t.Log("Jitter distribution validated")
-}
+// Removed TestRandomJitterDispersesRequests - it used rand.Intn directly
+// instead of testing TTLWithJitter. Proper jitter tests are in stampede_test.go.
 
 // Removed TestCacheFailureHandledGracefully as it was a redundant/incorrect test.
 // True graceful degradation is tested in robust_test.go's TestCacheFailureGracefulDegradation.

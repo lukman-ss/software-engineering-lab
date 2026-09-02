@@ -2,7 +2,6 @@ package api_versioning
 
 import (
 	"net/http"
-	"strconv"
 )
 
 // UnsafeHandler merepresentasikan anti-pattern ketika backend mengubah kontrak API
@@ -11,17 +10,26 @@ import (
 //
 // Mental model: API adalah kontrak. Backend berhasil compile ≠ backward compatible.
 // HTTP 200 ≠ backward compatible.
+//
+// Endpoint: GET /api/invoices/:id
+// Hanya menerima GET method. Method lain mengembalikan 405.
 func UnsafeHandler(w http.ResponseWriter, r *http.Request) {
-	// Endpoint: GET /api/invoices/:id
-	prefix := "/api/invoices/"
-	if len(r.URL.Path) <= len(prefix) || r.URL.Path[:len(prefix)] != prefix {
-		writeJSONError(w, http.StatusBadRequest, "invalid path")
+	// HTTP method validation - hanya GET yang diizinkan
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	idStr := r.URL.Path[len(prefix):]
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid id")
+
+	// Gunakan helper parseInvoiceID untuk konsistensi dengan V1/V2
+	id, isMissing, isInvalid, errMsg := parseInvoiceID(r.URL.Path, "/api/invoices/")
+
+	if isMissing {
+		writeJSONError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+	if isInvalid {
+		writeJSONError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 

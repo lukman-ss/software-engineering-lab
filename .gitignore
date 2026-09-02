@@ -77,3 +77,6 @@ tmp/
 # Makefile artifacts
 .make/
 .maker/
+
+# Lab binaries (specific)
+/labs/04-caching/demo

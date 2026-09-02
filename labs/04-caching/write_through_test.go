@@ -10,7 +10,7 @@ import (
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
-// TestWriteThroughSuccess memverifikasi update DB diikuti update cache.
+// TestWriteThroughSuccess memverifikasi update DB dengan RETURNING diikuti update cache.
 func TestWriteThroughSuccess(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -24,10 +24,11 @@ func TestWriteThroughSuccess(t *testing.T) {
 
 	p := caching.Product{ID: "100", Name: "Updated Product", Price: 15.0}
 
-	// Expect DB update
-	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
+	// Expect DB update with RETURNING
+	mock.ExpectQuery("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3 RETURNING id, name, price").
 		WithArgs(p.Name, p.Price, p.ID).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+			AddRow(p.ID, p.Name, p.Price))
 
 	err = svc.UpdateProduct(ctx, p)
 	if err != nil {
@@ -54,7 +55,7 @@ func TestWriteThroughSuccess(t *testing.T) {
 		t.Errorf("unfulfilled expectations: %v", err)
 	}
 
-	t.Log("✓ Write Through success flow validated")
+	t.Log("✓ Write Through success flow validated (RETURNING guarantees authoritative value)")
 }
 
 // TestWriteThroughCacheFailure memverifikasi jika DB sukses tapi Cache gagal,
@@ -73,10 +74,11 @@ func TestWriteThroughCacheFailure(t *testing.T) {
 
 	p := caching.Product{ID: "101", Name: "Failure Test", Price: 10.0}
 
-	// Expect DB update (succeeds)
-	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
+	// Expect DB update with RETURNING (succeeds)
+	mock.ExpectQuery("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3 RETURNING id, name, price").
 		WithArgs(p.Name, p.Price, p.ID).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+			AddRow(p.ID, p.Name, p.Price))
 
 	// Operation still succeeds because DB (Source of Truth) succeeded
 	err = svc.UpdateProduct(ctx, p)
@@ -106,7 +108,7 @@ func TestWriteThroughDBFailure(t *testing.T) {
 	p := caching.Product{ID: "102", Name: "DB Failure Test", Price: 10.0}
 
 	// Expect DB update (fails)
-	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
+	mock.ExpectQuery("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3 RETURNING id, name, price").
 		WithArgs(p.Name, p.Price, p.ID).
 		WillReturnError(fmt.Errorf("db connection error"))
 
@@ -139,10 +141,10 @@ func TestWriteThroughProductNotFound(t *testing.T) {
 
 	p := caching.Product{ID: "103", Name: "Not Found Test", Price: 10.0}
 
-	// Expect DB update (succeeds but 0 rows affected)
-	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
+	// Expect DB update (no rows = sql.ErrNoRows)
+	mock.ExpectQuery("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3 RETURNING id, name, price").
 		WithArgs(p.Name, p.Price, p.ID).
-		WillReturnResult(sqlmock.NewResult(0, 0))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"})) // empty rows → ErrNoRows
 
 	// Operation must fail with "product not found"
 	err = svc.UpdateProduct(ctx, p)
@@ -158,9 +160,8 @@ func TestWriteThroughProductNotFound(t *testing.T) {
 	}
 }
 
-// TestWriteThroughSerializationError memverifikasi error dari input serialization
-// terjadi sebelum mutasi database
-func TestWriteThroughSerializationError(t *testing.T) {
+// TestWriteThroughEmptyIDValidation memverifikasi validasi ID kosong sebelum DB
+func TestWriteThroughEmptyIDValidation(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("failed to create mock db: %v", err)
@@ -203,24 +204,17 @@ func TestWriteThroughCacheAndFallbackFailure(t *testing.T) {
 
 	p := caching.Product{ID: "104", Name: "All Cache Failures", Price: 20.0}
 
-	// Expect DB update (succeeds)
-	mock.ExpectExec("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3").
+	// Expect DB update with RETURNING (succeeds)
+	mock.ExpectQuery("UPDATE products SET name = \\$1, price = \\$2 WHERE id = \\$3 RETURNING id, name, price").
 		WithArgs(p.Name, p.Price, p.ID).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+			AddRow(p.ID, p.Name, p.Price))
 
 	// Operation still succeeds because DB (Source of Truth) succeeded
 	// even though both cache SET and DELETE operations failed
 	err = svc.UpdateProduct(ctx, p)
 	if err != nil {
 		t.Fatalf("UpdateProduct should succeed even if both cache SET and DELETE fail: %v", err)
-	}
-
-	// Verify: stale cache still exists (because Set never succeeded, Delete failed)
-	// It will expire after TTL (safety net)
-	key := caching.CacheKey("product", p.ID, 1)
-	_, err = cache.Get(ctx, key)
-	if err != caching.ErrCacheMiss {
-		t.Logf("Cache still has stale data (as expected when Set+Delete both fail)")
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

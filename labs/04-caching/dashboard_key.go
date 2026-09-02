@@ -7,6 +7,10 @@ import (
 
 // DashboardKeyBuilder creates standardized cache keys for dashboard statistics.
 // Standard format: cmms:dashboard:v1:tenant:{tenantID}:branch:{branchID}:date:{YYYY-MM-DD}
+//
+// IMPORTANT: Business date MUST come from tenant/branch timezone, not system UTC.
+// Cache key date semantics must match the business day being reported.
+// Using time.Now().UTC() as default is for convenience only - NOT production-ready.
 type DashboardKeyBuilder struct {
 	tenantID     int64
 	branchID     int64
@@ -14,17 +18,21 @@ type DashboardKeyBuilder struct {
 	version      int
 }
 
-// NewDashboardKey creates a new dashboard key builder with default v1.
+// NewDashboardKey creates a new dashboard key builder with defaults.
+// WARNING: Default businessDate is today in UTC - this is for convenience only.
+// Production calls MUST set explicit date via WithDate() with proper timezone handling.
+// Business date should be: now.In(tenantTimezone).Truncate(24h)
 func NewDashboardKey(branchID int64) *DashboardKeyBuilder {
 	return &DashboardKeyBuilder{
-		tenantID:     1, // default tenant
+		tenantID:     1, // default tenant - MUST override in multi-tenant
 		branchID:     branchID,
-		businessDate: time.Now().UTC(),
+		businessDate: time.Now().UTC(), // DEFAULT: convenience only, not timezone-aware business date
 		version:      1,
 	}
 }
 
 // WithTenant sets the tenant ID for multi-tenant isolation.
+// REQUIRED: Must call this in multi-tenant deployments.
 func (b *DashboardKeyBuilder) WithTenant(tenantID int64) *DashboardKeyBuilder {
 	b.tenantID = tenantID
 	return b
@@ -36,7 +44,12 @@ func (b *DashboardKeyBuilder) WithBranch(branchID int64) *DashboardKeyBuilder {
 	return b
 }
 
-// WithDate sets the business date (timezone-aware).
+// WithDate sets the business date from tenant/branch timezone.
+// CRITICAL: Caller must convert current instant to the tenant's business timezone
+// before extracting the calendar date. Example:
+//
+//	businessDate := time.Now().In(loc).Truncate(24 * time.Hour)
+//	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 func (b *DashboardKeyBuilder) WithDate(date time.Time) *DashboardKeyBuilder {
 	b.businessDate = date
 	return b

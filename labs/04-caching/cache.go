@@ -38,23 +38,50 @@ func CacheKey(entity, id string, version int) string {
 }
 
 // ShouldRefreshEarly analyzes whether a cached item should be refreshed early to prevent stampede.
-// It returns whether refresh should happen, the remaining TTL, and whether the entry is expired.
+// Returns true if refresh should happen, false otherwise.
 //
 // The function uses probabilistic early refresh when remaining TTL falls within the refresh window.
 // Refresh window is 20% of the original TTL (configurable via probability).
+//
+// Guard conditions:
+// - originalTTL <= 0 → false (invalid TTL)
+// - probability <= 0 → false (no refresh chance)
+// - probability >= 1 → true if within refresh window (always refresh)
+// - expiry zero → false (unknown expiry)
+// - expired → false (handled as cache miss)
 func ShouldRefreshEarly(now time.Time, expiry time.Time, originalTTL time.Duration, probability float64, randomFloat func() float64) bool {
+	// Guard: invalid TTL
+	if originalTTL <= 0 {
+		return false
+	}
+
+	// Guard: zero expiry means unknown/undefined expiry
 	if expiry.IsZero() {
 		return false
 	}
 
 	rem := expiry.Sub(now)
+
+	// Guard: already expired - handled as cache miss elsewhere
 	if rem < 0 {
-		// Already expired - handled as cache miss elsewhere
+		return false
+	}
+
+	// Guard: negative or zero probability
+	if probability <= 0 {
+		return false
+	}
+
+	// Guard: probability >= 1 means always refresh within window
+	if probability >= 1 {
+		if rem <= originalTTL/5 { // 20% of TTL
+			return true
+		}
 		return false
 	}
 
 	// Refresh window is 20% of TTL
-	refreshWindow := originalTTL - (originalTTL * 80 / 100) // = 20% of TTL
+	refreshWindow := originalTTL / 5 // = 20% of TTL
 
 	if rem <= refreshWindow {
 		return randomFloat() < probability
@@ -68,26 +95,3 @@ func DashboardCacheKey(tenantID, branchID int64, businessDate time.Time) string 
 	return NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 }
 
-// extractID mengambil segment ID dari cache key format "entity:id[:...]".
-func extractID(key string) string {
-	parts := splitKey(key)
-	if len(parts) >= 2 {
-		return parts[1]
-	}
-	return key
-}
-
-// splitKey memisahkan key berdasarkan karakter ':'.
-func splitKey(key string) []string {
-	var parts []string
-	current := ""
-	for _, c := range key {
-		if c == ':' {
-			parts = append(parts, current)
-			current = ""
-		} else {
-			current += string(c)
-		}
-	}
-	return append(parts, current)
-}

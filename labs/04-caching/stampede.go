@@ -12,7 +12,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// TTLWithJitter adds random jitter to prevent synchronized expiration (stampede).
+// TTLWithJitter adds positive random jitter to prevent synchronized expiration (stampede).
+// Returns base + random(0..maxJitter). Never reduces TTL below base.
 func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
 	if maxJitter <= 0 {
 		return base
@@ -175,8 +176,16 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 			}
 		}
 
+		// Create bounded context for shared rebuild:
+		// - context.WithoutCancel strips the leader's cancellation
+		// - Individual callers can still cancel their own wait via ctx.Done()
+		// - Shared rebuild continues even if leader cancels
+		// - Timeout added so rebuild doesn't run forever
+		rebuildCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+
 		// Only one goroutine reaches here - it fetches from DB
-		d, err := s.repo.GetDashboard(ctx, 1, branchID, time.Now())
+		d, err := s.repo.GetDashboard(rebuildCtx, 1, branchID, time.Now())
 		if err != nil {
 			return Dashboard{}, err
 		}
@@ -192,7 +201,7 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 		return d, nil
 	})
 
-	// 3. Wait with context awareness
+	// 3. Wait with context awareness - caller can cancel waiting independently
 	select {
 	case <-ctx.Done():
 		return Dashboard{}, ctx.Err()

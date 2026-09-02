@@ -43,3 +43,80 @@ func TestBreakingChange_LegacyClientFails(t *testing.T) {
 	t.Log("Server returns HTTP 200 with valid JSON, but client cannot parse it")
 	t.Log("This demonstrates: HTTP 200 != backward compatible")
 }
+
+// TestUnsafeHandler_GETValidInvoice memastikan unsafe endpoint
+// mengembalikan HTTP 200 untuk invoice yang valid.
+func TestUnsafeHandler_GETValidInvoice(t *testing.T) {
+	handler := http.HandlerFunc(UnsafeHandler)
+	w := performRequest(handler, http.MethodGet, "/api/invoices/1001")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected HTTP 200, got %d", w.Code)
+	}
+
+	// Verify Content-Type
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type 'application/json', got '%s'", ct)
+	}
+
+	t.Logf("✅ UnsafeHandler returns HTTP 200 for GET /api/invoices/1001")
+}
+
+// TestUnsafeHandler_GETInvalidID memastikan unsafe endpoint
+// mengembalikan HTTP 400 untuk ID non-numeric.
+func TestUnsafeHandler_GETInvalidID(t *testing.T) {
+	handler := http.HandlerFunc(UnsafeHandler)
+	w := performRequest(handler, http.MethodGet, "/api/invoices/abc")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400, got %d", w.Code)
+	}
+
+	t.Logf("✅ UnsafeHandler returns HTTP 400 for non-numeric ID")
+}
+
+// TestUnsafeHandler_GETMissingID memastikan unsafe endpoint
+// mengembalikan HTTP 400 untuk path tanpa ID.
+func TestUnsafeHandler_GETMissingID(t *testing.T) {
+	handler := http.HandlerFunc(UnsafeHandler)
+	w := performRequest(handler, http.MethodGet, "/api/invoices/")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400, got %d", w.Code)
+	}
+
+	t.Logf("✅ UnsafeHandler returns HTTP 400 for missing ID")
+}
+
+// TestUnsafeHandler_GETExtraPath memastikan unsafe endpoint
+// mengembalikan HTTP 400 untuk path dengan extra segment.
+func TestUnsafeHandler_GETExtraPath(t *testing.T) {
+	handler := http.HandlerFunc(UnsafeHandler)
+	w := performRequest(handler, http.MethodGet, "/api/invoices/1001/extra")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400, got %d", w.Code)
+	}
+
+	t.Logf("✅ UnsafeHandler returns HTTP 400 for extra path segment")
+}
+
+// TestUnsafeHandler_POSTMethodNotAllowed memastikan unsafe endpoint
+// mengembalikan HTTP 405 untuk method POST dengan Allow header.
+func TestUnsafeHandler_POSTMethodNotAllowed(t *testing.T) {
+	handler := http.HandlerFunc(UnsafeHandler)
+	w := performRequest(handler, http.MethodPost, "/api/invoices/1001")
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected HTTP 405, got %d", w.Code)
+	}
+
+	// Verify Allow header
+	allow := w.Header().Get("Allow")
+	if allow != http.MethodGet {
+		t.Errorf("expected Allow header 'GET', got '%s'", allow)
+	}
+
+	t.Logf("✅ UnsafeHandler returns HTTP 405 with Allow: GET for POST method")
+}

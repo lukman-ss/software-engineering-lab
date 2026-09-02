@@ -131,7 +131,7 @@ OTP/token sekali pakai **bukan cache** tetapi sering cocok disimpan di Redis seb
 | Lock Backend | Coordination state |
 | Queue | Messaging state |
 
-OTP tetap tidak boleh diperlukan sebagai **stale reusable cache** atau data yang aman direplay.
+OTP tetap tidak boleh digunakan sebagai **stale reusable cache** atau data yang aman direplay untuk retry.
 
 ---
 
@@ -202,16 +202,20 @@ Hasil: Database = baru, Cache = baru
 
 ```
 Timeline:
-T1 Reader: cache MISS → baca DB lama
-T2 Reader: SET nilai lama ke cache
+T1 Reader: cache MISS
+T2 Reader: baca DB lama, tetapi belum menulis cache
 T3 Writer: DB COMMIT nilai baru
 T4 Writer: DELETE cache
-T5 Reader: SET hasil lama ke cache
+T5 Reader: SET hasil DB lama ke cache
 
-Hasil: Database = baru, Cache = lama (stale)
+Hasil: Database = nilai baru, Cache = nilai lama (stale)
 ```
 
-**Kesimpulan:** Cache-aside adalah **eventually-consistent optimization**, bukan strong consistency primitive.
+**Kesimpulan:** Urutan `COMMIT → DELETE` lebih aman daripada `DELETE → COMMIT` karena
+menghapus cache *setelah* nilai baru committed, sehingga mengurangi window stale write.
+Namun, cache-aside tetap **eventually-consistent optimization**, bukan strong consistency primitive.
+TTL tetap menjadi safety net untuk window residual di mana reader sempat mengambil nilai lama
+sebelum DELETE tereksekusi.
 
 ### Invalidation Strategies
 
@@ -221,8 +225,8 @@ Hasil: Database = baru, Cache = lama (stale)
 
 **Reliability Note:** Redis Pub/Sub bersifat ephemeral. Jika subscriber disconnect, event dapat hilang. Untuk cache invalidation biasa yang memiliki TTL safety net, loss event mungkin acceptable tergantung requirement.
 
-Jika invalidation harus reliable (miss-notice):
-- **Durable queue** (RabbitMQ, Bean MQ)
+Jika invalidation harus reliable (lost invalidation event):
+- **Durable queue** (RabbitMQ)
 - **Redis Streams** dengan consumer groups
 - **Kafka / NATS JetStream**
 - **Transactional outbox + CDC consumer**
@@ -231,7 +235,7 @@ TTL tetap berguna sebagai recovery/safety net untuk event loss.
 
 ### Tag / Index-based Invalidation
 
-**Penting:** Redis core tidak menyediakan generic cache tagging abstraction. Banyak perbufet menyamakan SCAN+pattern delete dengan tag implementation. Mereka adalah hal yang berbeda.
+**Penting:** Redis core tidak menyediakan generic cache tagging abstraction. Banyak penyedia menyamakan SCAN+pattern delete dengan tag implementation. Mereka adalah hal yang berbeda.
 
 #### Pattern Invalidation (SCAN-based)
 
@@ -430,7 +434,8 @@ Lock pada Lab 04 digunakan untuk mengurangi duplicate cache rebuild, bukan sebag
 ## 11. TTL Jitter & Background Refresh
 
 ### TTL Jitter
-Tambahkan pengacak kecil ke TTL (misal: 60s ± 15s) agar batch cache keys tidak kadaluarsa hampir bersamaan.
+Tambahkan pengacak kecil ke TTL (misal: 60s + random 0–15s) agar batch cache keys tidak kadaluarsa hampir bersamaan.
+Model implementasi menghasilkan TTL dalam rentang [base, base + maxJitter], tidak pernah lebih rendah dari base.
 
 ### Background Refresh (Stale-While-Revalidate)
 Mem-refresh data secara background sebelum key expired. Client tetap dilayani dengan data cache.
@@ -466,17 +471,18 @@ Key isolation merupakan fondasi keamanan multi-tenant. tanpa isolation yang bena
 |--------|-------|---------|
 | **Purpose** | Optimization / reuse, menghindari computation / I/O berulang | State persistence, merepresentasikan user/session lifecycle |
 | **Ownership/Scope** | Bisa global, tenant-scoped, user-scoped, query-scoped | Per-user / per-session |
-| **Reconstructability** | **Derived/reconstructable** - dapat di-rebuild dari source of truth | **Authoritative** - state penting yang tidak boleh hilang |
+| **Data Semantics** | Biasanya derived/reconstructable dari source of truth | Bisa authoritative untuk state session, bukan selalu business data |
 | **Lifecycle** | Data-dependen, expired berdasarkan data relevance | Login/session-bound, clear pada logout/expiry |
-| **Failure Impact** | Degradasi performa (DB di-hantam) | Logout / cart hilang / state hilang |
+| **Failure Impact** | Degradasi performa (DB di-hantam) | Logout / cart hilang / state workflow reset |
 | **Typical TTL** | Workload-dependent (detik sampai hari) | Policy-dependent (menit sampai jam/hari) |
-| **Stale Allowed** | Ya, tergantung business requirement | Tidak, state harus konsisten |
 
 ### Semantik yang Penting
 
-**CACHE:** Data derived dan dapat direconstruct dari source of truth. Cache correctness harus dibangun dengan asumsi cache dapat kosong/kadaluarsa kapan saja.
+**CACHE:** Tujuan utama optimization/reuse. Data biasanya derived/reconstructable dari source of truth. Cache dapat global, tenant-scoped, user-scoped, atau query-scoped. Cache correctness harus dibangun dengan asumsi cache dapat kosong/kadaluarsa kapan saja.
 
-**SESSION:** State yang merepresentasikan suatu user/session. State ini penting untuk workflow user dan tidak boleh hilang tanpa alasan yang tepat.
+**SESSION:** Merepresentasikan state lifecycle session/user. Session storage sendiri dapat menjadi authoritative untuk state session (seperti shopping cart), bukan selalu authoritative business data. Kehilangan session biasanya menyebabkan logout/reset workflow, bukan corruption business data.
+
+**Perbedaan utama** adalah semantics (tujuan data) dan lifecycle, bukan sekadar stale-allowed vs tidak-stale-allowed. Session pun dapat memiliki stale data tergantung implementasinya.
 
 ### OTP & Ephemeral State
 
@@ -555,8 +561,16 @@ Permission dapat di-cache jika security model mengizinkan:
 
 - **Key isolation** (`tenant:42:user:123:permissions`)
 - **Active Invalidation** saat role berubah
-- **Short TTL** (contoh: 5–10 detik) sebagai safety net revoke latency
+- **Short TTL** (contoh: beberapa detik) sebagai safety net revoke latency
 - **Documented Security SLA**
+
+TTL permission harus ditentukan berdasarkan:
+- **Security SLA**: seberapa cepat revoke harus effective?
+- **Revoke latency requirement**: berapa lama window approve untuk privilege escalation?
+- **Threat model**: risk dari stale authorization?
+- **Invalidation reliability**: apakah invalidation reliable atau perlu TTL?
+
+Contoh 5–10 detik hanyalah illustrative. Beberapa skenario memerlukan TTL lebih pendek (0-1 detik), yang lain dapat bertahan lebih lama dengan durable invalidation.
 
 Untuk immediate revocation, pertimbangkan:
 - Authoritative lookup
@@ -613,7 +627,7 @@ Cache **bukan pengganti** database optimization.
 1. Berapa lama data boleh stale?
 2. Seberapa mahal mendapatkan/menghitung data vs cache overhead?
 3. Seberapa besar dampak penundaan 5-30 detik?
-4. Bagaimana cache di-invalidiasi?
+4. Bagaimana cache di-invalidasi?
 5. Apakah benefit performanya lebih besar daripada complexity?
 
 ### Senior Level Ask:
@@ -630,25 +644,25 @@ Cache **bukan pengganti** database optimization.
 
 | Data | Cache? | Alasan | Contoh TTL | Acceptable Staleness | Invalidation Trigger |
 |------|--------|--------|------------|---------------------|----------------------|
-| Daftar Cabang | ✅ Ya | Read-heavy, rarely changes | Beberapa menit | Menit | Update master |
-| Daftar Mekanik | ✅ Ya | Read-heavy, role-based | 5–10 detik | Detik-menit | Role berubah |
-| Daftar Sparepart | ⚠️ Conditional | Bisa di-cache display, tapi checkout harus DB exact | 1–5 detik | Detik | Purchase part |
-| Jenis Service | ✅ Ya | Static lookup | Long-lived | Menit-pertama | Versi baru |
+| Daftar Cabang | ✅ Ya | Read-heavy master data, relatif jarang berubah | Beberapa menit | Menit | Update master |
+| Daftar Mekanik | ✅ Ya | Read-heavy master data, tidak secara otomatis role-based | 5–10 detik | Detik-menit | Mechanic master berubah |
+| Daftar Sparepart | ⚠️ Conditional | Read-heavy master data, display UI boleh cache | 1–5 detik | Detik | Sparepart master berubah |
+| Jenis Service | ✅ Ya | Static lookup, benar-benar tidak berubah | Long-lived | Menit-pertama | Versi baru |
 | Master Supplier | ✅ Ya | Infrequent update | 5–15 menit | Menit | Update supplier |
 | Konfigurasi Pajak | ⚠️ Conditional | Butuh akurat untuk transaksi | 10–30 detik | Detik | Update konfigurasi |
 | Template Invoice | ✅ Ya | Static document | Versi-tag | Versi | Versi template berubah |
 | Permission | ⚠️ Conditional | Read-heavy, security-bound | 5–10 detik | Detik | Revoke role |
 | Dashboard Revenue | ✅ Ya | Expensive aggregation | 10–30 detik | Detik | New payment |
 | Top Mekanik | ✅ Ya | Aggregation heavy | 30 detik | Detik | Job completion |
-| Top Sparepart | ✅ Ya | Aggregation heavy | 30 detik | Detik | Stock change |
-| Status Service | ⚠️ Conditional | Caching boleh untuk UI, tapi validation transaksi harus DB | 5 detik | Detik | Service update |
-| Invoice Baru | ❌ Tidak | Butuh strong consistency | N/A | 0s | N/A |
-| Status Pembayaran | ❌ Tidak | Butuh strong consistency | N/A | 0s | N/A |
-| Saldo Kas | ❌ Tidak | Butuh ACID | N/A | 0s | N/A |
-| Saldo Wallet | ❌ Tidak | Butuh strong consistency | N/A | 0s | N/A |
-| Stock Sparepart | ⚠️ Conditional | Display UI boleh, validation final harus DB + concurrency control | 1–5 detik | Detik | Purchase part |
+| Top Sparepart | ⚠️ Conditional | Aggregation heavy, ranking berasal dari transaksi | 30 detik | Detik | Invoice/service part line posted, transaction completed |
+| Status Service | ⚠️ Conditional | Caching boleh untuk UI display, tapi validation transaksi harus DB | 5 detik | Detik | Service update |
+| Invoice Baru | ⚠️ Conditional | Bisa cache read projection untuk UI, tapi tidak untuk authoritative state | 1–5 detik | Detik | Invoice status berubah |
+| Status Pembayaran | ⚠️ Conditional | Bisa cache read projection untuk UI, tapi tidak untuk authoritative state | 1–5 detik | Detik | Payment status berubah |
+| Saldo Kas | ⚠️ Conditional | Bisa cache read projection untuk display, tapi tidak untuk transactional operation | 1 detik | Detik | Transaction completed |
+| Saldo Wallet | ⚠️ Conditional | Bisa cache read projection untuk UI, tapi tidak untuk transactional operation | 1–5 detik | Detik | Transaction completed |
+| Stock Sparepart | ⚠️ Conditional | Display UI boleh, validation final harus DB + concurrency control | 1–5 detik | Detik | Purchase part, invoice/service part line posted |
 
-**Nuance:** Cache? bukan sekadar YES/NO; beberapa kasus adalah conditional dengan trade-off yang complex.
+**Nuance:** Cache? bukan sekadar YES/NO; beberapa kasus adalah conditional dengan trade-off yang complex. Beberapa entri `❌ Tidak` sebenarnya dapat menggunakan **read projection cache** untuk UI display, selama tidak digunakan untuk transaction authorization.
 
 ---
 
@@ -718,6 +732,37 @@ Untuk setiap data:
 6. **Assume Cache = Strong Consistency** — Write-through tidak menghilangkan race condition
 7. **Ignoring Double-Check Pattern** — Bisa miss optimization opportunity
 
+### Anti-Pattern: Cache::rememberForever
+
+```php
+Cache::rememberForever('key', fn () => ...);
+```
+
+**Masalah:** Tanpa TTL, stale data tidak pernah autoreset.
+
+```
+Admin update harga
+↓
+Database = harga baru
+Redis = harga lama
+↓
+tidak ada TTL
+↓
+user terus melihat harga lama
+```
+
+**Remember forever bukan selalu salah** — Ia dapat digunakan jika:
+- **Deterministic invalidation tersedia**: setiap mutation yang mempengaruhi result memicu invalidation
+- **Cache memang layak long-lived**: data yang benar-benar static atau perubahan sangat jarang
+- **Reliable delivery guarantee**: event invalidation dikirim via durable queue (RabbitMQ, Kafka), bukan fire-and-forget pub/sub
+
+**Tanpa invalidation yang reliable, rememberForever adalah high-risk pattern** karena:
+- Loss event = data stale selamanya
+- Debugging stale data bisa berjam-jam
+- Biasanya better dipilih TTL pendek dengan cache-then-refresh strategy
+
+**Better alternative:** gunakan TTL dengan short duration + background refresh / proactive invalidation.
+
 ---
 
 ## 25. Senior Engineer Takeaways
@@ -743,18 +788,47 @@ Cache yang baik mengurangi pekerjaan berulang tanpa bergantung pada data yang mu
 - Go 1.22+
 - Docker Compose
 
+### From Repository Root
+
 ```bash
+# Start infrastructure (Redis)
 docker compose up -d redis
+
+# Run tests
+make lab-04-test
+make lab-04-test-race
+make lab-04-vet
+make lab-04-demo
+make lab-04-integration
+```
+
+### Manual Commands
+
+```bash
+# Start Redis (from repo root)
+docker compose up -d redis
+
+# Navigate to lab directory
 cd labs/04-caching
+
+# Run unit tests
 go test -v -count=1 ./...
 
-# Run Experiments
+# Run tests with race detector
+go test -race -count=1 ./...
+
+# Run vet/lint
+go vet ./...
+
+# Run demo scenarios
 go run ./cmd/demo -scenario=without-cache
 go run ./cmd/demo -scenario=cache-aside
 go run ./cmd/demo -scenario=stampede-unprotected
 go run ./cmd/demo -scenario=stampede-protected
 go run ./cmd/demo -scenario=write-through
 ```
+
+Catatan: `docker compose` dijalankan dari repository root, bukan di dalam `labs/04-caching`.
 
 ---
 
