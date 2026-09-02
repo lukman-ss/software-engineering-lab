@@ -21,22 +21,22 @@ func NewDashboardNaiveService(db *sql.DB) *DashboardNaiveService {
 
 // GetDashboard mengembalikan statistik dashboard tanpa caching.
 // Setiap pemanggilan menghitung ulang dari database.
-// Note: Uses PostgreSQL range comparison for SARGability on created_at index.
-// Pass business day boundaries from application layer.
-func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64) (Dashboard, error) {
+// Production-ready: pass business day boundaries explicitly from application layer.
+func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64, dayStart, dayEnd, activePeriodStart time.Time) (Dashboard, error) {
 	// Track query count untuk demonstration
 	s.queryCounter.Add(1)
 
 	// Combine semua query menjadi satu transaction untuk kompleksitas yang realistis
 	var d Dashboard
 	d.BranchID = branchID
-	d.Date = Today()
+	// Date format for the key - use dayStart's date in UTC or from application timezone
+	d.Date = dayStart.Format("2006-01-02")
 
-	// Business date boundaries (passed from application for SARGability)
-	// Today: 2026-08-29 00:00:00 UTC to 2026-08-29 23:59:59.999 UTC
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	tomorrow := today.Add(24 * time.Hour)
-	thirtyDaysAgo := today.Add(-30 * 24 * time.Hour)
+	// Use explicitly passed business day boundaries
+	// This ensures timezone correctness and SARGability
+	today := dayStart
+	tomorrow := dayEnd
+	thirtyDaysAgo := activePeriodStart
 
 	// Query 1: Invoice count hari ini
 	// SARGable: created_at >= $2 AND created_at < $3 uses index on created_at

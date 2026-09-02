@@ -81,46 +81,60 @@ func (s *DashboardCacheService) InvalidateDashboard(ctx context.Context, tenantI
 }
 
 // InvalidateCurrentDashboard invalidates cache for today using the injected clock.
+// WARNING: Convenience only - uses UTC. NOT production-ready for multi-tenant timezones.
+// Production calls should use InvalidateDashboard with explicit businessDate.
 func (s *DashboardCacheService) InvalidateCurrentDashboard(ctx context.Context, tenantID, branchID int64) error {
 	return s.InvalidateDashboard(ctx, tenantID, branchID, defaultClock.Now().UTC())
+}
+
+// InvalidateDashboardForDate invalidates cache for a specific business date.
+// Production-ready method - caller provides timezone-aware business date.
+func (s *DashboardCacheService) InvalidateDashboardForDate(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 // --- REPRESENTATIVE MUTATION METHODS (Bagian 8) ---
 
 // CreateInvoice mensimulasikan pembuatan invoice baru (mutasi data).
-func (s *DashboardCacheService) CreateInvoice(ctx context.Context, tenantID, branchID int64, amount float64) error {
+// Production-ready: requires businessDate from application layer.
+func (s *DashboardCacheService) CreateInvoice(ctx context.Context, tenantID, branchID int64, businessDate time.Time, amount float64) error {
 	_ = amount
-	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 // PayInvoice mensimulasikan pembayaran invoice.
-func (s *DashboardCacheService) PayInvoice(ctx context.Context, tenantID, branchID int64, invoiceID int64) error {
+// Production-ready: requires businessDate from application layer.
+func (s *DashboardCacheService) PayInvoice(ctx context.Context, tenantID, branchID int64, businessDate time.Time, invoiceID int64) error {
 	_ = invoiceID
-	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 // FinishService mensimulasikan penyelesaian servis oleh mekanik.
-func (s *DashboardCacheService) FinishService(ctx context.Context, tenantID, branchID int64, mechanicID int64) error {
+// Production-ready: requires businessDate from application layer.
+func (s *DashboardCacheService) FinishService(ctx context.Context, tenantID, branchID int64, businessDate time.Time, mechanicID int64) error {
 	_ = mechanicID
-	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 // UseSparepart mensimulasikan penggunaan sparepart.
-func (s *DashboardCacheService) UseSparepart(ctx context.Context, tenantID, branchID int64, partID int64) error {
+// Production-ready: requires businessDate from application layer.
+func (s *DashboardCacheService) UseSparepart(ctx context.Context, tenantID, branchID int64, businessDate time.Time, partID int64) error {
 	_ = partID
-	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 // SaveCustomer mensimulasikan pembuatan/perubahan customer.
-func (s *DashboardCacheService) SaveCustomer(ctx context.Context, tenantID, branchID int64, customerName string) error {
+// Production-ready: requires businessDate from application layer.
+func (s *DashboardCacheService) SaveCustomer(ctx context.Context, tenantID, branchID int64, businessDate time.Time, customerName string) error {
 	_ = customerName
-	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 // CreateVehicle mensimulasikan pembuatan kendaraan baru.
-func (s *DashboardCacheService) CreateVehicle(ctx context.Context, tenantID, branchID int64, plate string) error {
+// Production-ready: requires businessDate from application layer.
+func (s *DashboardCacheService) CreateVehicle(ctx context.Context, tenantID, branchID int64, businessDate time.Time, plate string) error {
 	_ = plate
-	return s.InvalidateCurrentDashboard(ctx, tenantID, branchID)
+	return s.InvalidateDashboard(ctx, tenantID, branchID, businessDate)
 }
 
 func (s *DashboardCacheService) QueryCount() int64 {

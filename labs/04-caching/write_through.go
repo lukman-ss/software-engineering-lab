@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -18,6 +19,7 @@ import (
 type WriteThroughService struct {
 	db        *sql.DB
 	cache     CacheInterface
+	metrics   *CacheMetrics
 	ttl       time.Duration
 	jitterTTL time.Duration
 }
@@ -27,6 +29,21 @@ func NewWriteThroughService(db *sql.DB, cache CacheInterface) *WriteThroughServi
 	return &WriteThroughService{
 		db:        db,
 		cache:     cache,
+		metrics:   NewCacheMetrics(),
+		ttl:       5 * time.Minute,
+		jitterTTL: 15 * time.Second,
+	}
+}
+
+// NewWriteThroughServiceWithMetrics membuat service dengan metrics yang sudah ada.
+func NewWriteThroughServiceWithMetrics(db *sql.DB, cache CacheInterface, metrics *CacheMetrics) *WriteThroughService {
+	if metrics == nil {
+		metrics = NewCacheMetrics()
+	}
+	return &WriteThroughService{
+		db:        db,
+		cache:     cache,
+		metrics:   metrics,
 		ttl:       5 * time.Minute,
 		jitterTTL: 15 * time.Second,
 	}
@@ -67,7 +84,10 @@ func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) erro
 	// 2. Serialize authoritative value
 	data, err := json.Marshal(authoritativeProduct)
 	if err != nil {
-		// Marshal error = data tidak valid untuk cache, tapi write DB sukses
+		// Marshal error = cache serialization failed, bukan business error.
+		// DB write sudah sukses, business operation tetap success.
+		// Catat error untuk observability.
+		s.metrics.IncError()
 		return nil
 	}
 
@@ -76,12 +96,13 @@ func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) erro
 	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
 	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
 		// Cache set gagal - DB sudah sukses, business operation tetap success
-		// Log error, bukan return error
-
+		// Catat error untuk observability
+		s.metrics.IncCacheSetError()
 		// Best-effort: delete stale key sebagai safety fallback
 		// INI BUKAN guaranteed - stale cache masih mungkin bertahan sampai TTL
 		if delErr := s.cache.Delete(ctx, key); delErr != nil {
-			// stale cache persists until TTL
+			// Catat error cache invalidation juga
+			s.metrics.IncCacheInvalidationError()
 		}
 	}
 
@@ -100,13 +121,25 @@ func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) 
 	// 1. Check cache
 	key := CacheKey("product", productID, 1)
 	cached, err := s.cache.Get(ctx, key)
-	if err == nil && cached != "" {
+
+	// Klasifikasi error cache:
+	switch {
+	case err == nil && cached != "":
+		// Cache HIT
 		var p Product
-		if err := json.Unmarshal([]byte(cached), &p); err == nil {
-			return p, nil // cache hit
+		if unmarshalErr := json.Unmarshal([]byte(cached), &p); unmarshalErr == nil {
+			return p, nil
 		}
-		// Unmarshal gagal → corrupt cache, delete
+		// Unmarshal gagal → corrupt cache
+		s.metrics.IncError()
 		_ = s.cache.Delete(ctx, key)
+		// Fall through to DB read
+	case errors.Is(err, ErrCacheMiss):
+		// Normal miss - no error cost
+	default:
+		// Cache backend error (down, network, timeout)
+		s.metrics.IncError()
+		s.metrics.IncDBFallback()
 	}
 
 	// 2. Cache miss → query DB
@@ -120,9 +153,17 @@ func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) 
 	// 3. Populate cache (best-effort)
 	data, err := json.Marshal(p)
 	if err != nil {
-		return p, fmt.Errorf("marshal product: %w", err) // return data but log error
+		// Marshal error = cache serialization failed.
+		// DB read berhasil, business read success.
+		// Return Product, record cache-side error.
+		s.metrics.IncError()
+		return p, nil
 	}
-	_ = s.cache.Set(ctx, key, string(data), s.ttl) // log but don't fail
+
+	if setErr := s.cache.Set(ctx, key, string(data), s.ttl); setErr != nil {
+		// Cache set gagal - catat error, bukan fail business read
+		s.metrics.IncCacheSetError()
+	}
 
 	return p, nil
 }

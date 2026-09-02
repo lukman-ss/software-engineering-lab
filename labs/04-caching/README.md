@@ -289,6 +289,13 @@ product:123:revision:42
 
 ## 7. Write-Through Strategy
 
+**Terminologi:** Dalam lab ini istilah "Write-Through" digunakan sebagai simplifikasi untuk _application-managed update-on-write_. Ini berbeda dari formal cache-managed write-through architecture di mana cache layer secara sinkron persist ke backing store.
+
+Flow implementation kami:
+```
+DB update (RETURNING) → get authoritative value → best-effort cache update
+```
+
 Write-Through di sini berarti aplikasi meng-update DB dan Cache pada urutan yang sama setelah DB commit sukses.
 
 ### Flow
@@ -402,12 +409,19 @@ Mengatasi stampede **dalam satu instance/process** menggunakan `golang.org/x/syn
 
 Mengatasi stampede **multi-instance**.
 
-**Double-check pattern:**
+**Primitive (implemented in source code):**
+```
+WithLock() = try-once lock primitive (no retry/backoff)
+```
+
+**Production cache-regeneration strategy (conceptual pattern):**
 ```
 [cache GET] → miss → [acquire distributed lock] → [check cache lagi] → query DB → populate cache → [safe release]
 
 NON-HOLDER: buffered wait/retry → re-check cache
 ```
+
+**Nota:** Diagram di atas menunjukkan pattern konseptual untuk cache regeneration. Implementasi `WithLock()` hanya menyediakan try-once primitive. Untuk pola non-holder bounded wait/retry, dibutuhkan coordinator khusus yang belum diimplementasikan.
 
 **Lock Requirements:**
 - Menggunakan unique token/owner
@@ -448,10 +462,21 @@ Format canonical: `{app}:{tenant}:{branch}:{resource}:{dimension}`
 
 Contoh: `cmms:tenant:42:branch:7:dashboard:2026-09-01`
 
-**Dimensi yang Wajib Masuk Key:**
+**Prinsip utama:** Cache key harus mencakup semua input/dimensi yang mempengaruhi result.
+
+**Dimensi pada contoh Dashboard:**
 - `tenant:42` — Isolasi data antar konsumen
-- `branch:7` — Resource scoping
+- `branch:7` — Resource scoping  
 - `date:...` — Scope business date (timezone-aware)
+
+**Contoh lain:**
+
+| Entity | Key Dimensions |
+|--------|----------------|
+| Product global | product ID + schema version |
+| Product tenant-specific | tenant + product ID + version |
+| Permission | tenant + user + permission revision |
+| Session | user ID + session ID |
 
 ---
 
@@ -502,7 +527,28 @@ Pemakaian Redis tidak otomatis berarti tersebut adalah cache.
 
 Prinsip: **Cache adalah optimization layer, bukan dependency correctness utama.**
 
-- **Degraded Performance:** Aplikasi harus tetap berfungsi meski lambat.
+Jika cache backend gagal, aplikasi dapat fallback ke authoritative DB selama:
+- DB tersedia
+- capacity masih mencukupi
+- timeout/backpressure policy mengizinkan
+
+**Peringatan:** Cache outage bisa menyebabkan:
+
+```
+traffic yang sebelumnya diserap Redis
+      ↓
+langsung masuk DB
+      ↓
+load spike / cache-failure amplification
+```
+
+Graceful degradation harus mempertimbangkan:
+- Redis timeout pendek
+- DB capacity
+- request timeout
+- circuit breaker jika relevan
+
+**Degraded Performance:** Aplikasi harus tetap berfungsi meski lambat.
 - **Circuit Breaker:** Mencegah aplikasi stuck menunggu Redis Timeout.
 - **Observability:** Log `cache_miss` dan `cache_error` terpisah.
 
@@ -645,13 +691,13 @@ Cache **bukan pengganti** database optimization.
 | Data | Cache? | Alasan | Contoh TTL | Acceptable Staleness | Invalidation Trigger |
 |------|--------|--------|------------|---------------------|----------------------|
 | Daftar Cabang | ✅ Ya | Read-heavy master data, relatif jarang berubah | Beberapa menit | Menit | Update master |
-| Daftar Mekanik | ✅ Ya | Read-heavy master data, tidak secara otomatis role-based | 5–10 detik | Detik-menit | Mechanic master berubah |
-| Daftar Sparepart | ⚠️ Conditional | Read-heavy master data, display UI boleh cache | 1–5 detik | Detik | Sparepart master berubah |
-| Jenis Service | ✅ Ya | Static lookup, benar-benar tidak berubah | Long-lived | Menit-pertama | Versi baru |
+| Daftar Mekanik | ✅ Ya | Read-heavy master data, biasanya stable | 5–15 menit (illustrative) | Detik-menit | Mechanic master berubah / active invalidation |
+| Daftar Sparepart | ⚠️ Conditional | Read-heavy master data, display UI boleh cache | 1–5 detik (illustrative) | Detik | Sparepart master berubah |
+| Jenis Service | ✅ Ya | Relatively stable master/reference data | Long-lived (illustrative) | Menit-pertama | Versi baru / deployment |
 | Master Supplier | ✅ Ya | Infrequent update | 5–15 menit | Menit | Update supplier |
 | Konfigurasi Pajak | ⚠️ Conditional | Butuh akurat untuk transaksi | 10–30 detik | Detik | Update konfigurasi |
 | Template Invoice | ✅ Ya | Static document | Versi-tag | Versi | Versi template berubah |
-| Permission | ⚠️ Conditional | Read-heavy, security-bound | 5–10 detik | Detik | Revoke role |
+| Permission | ⚠️ Conditional | Read-heavy, security-bound | 5–10 detik (illustrative) | Detik | Revoke role |
 | Dashboard Revenue | ✅ Ya | Expensive aggregation | 10–30 detik | Detik | New payment |
 | Top Mekanik | ✅ Ya | Aggregation heavy | 30 detik | Detik | Job completion |
 | Top Sparepart | ⚠️ Conditional | Aggregation heavy, ranking berasal dari transaksi | 30 detik | Detik | Invoice/service part line posted, transaction completed |
@@ -662,7 +708,9 @@ Cache **bukan pengganti** database optimization.
 | Saldo Wallet | ⚠️ Conditional | Bisa cache read projection untuk UI, tapi tidak untuk transactional operation | 1–5 detik | Detik | Transaction completed |
 | Stock Sparepart | ⚠️ Conditional | Display UI boleh, validation final harus DB + concurrency control | 1–5 detik | Detik | Purchase part, invoice/service part line posted |
 
-**Nuance:** Cache? bukan sekadar YES/NO; beberapa kasus adalah conditional dengan trade-off yang complex. Beberapa entri `❌ Tidak` sebenarnya dapat menggunakan **read projection cache** untuk UI display, selama tidak digunakan untuk transaction authorization.
+**Nuance:** Cache? bukan sekadar YES/NO; beberapa kasus adalah conditional dengan trade-off yang complex. Semua entri dapat menggunakan read projection cache untuk UI display, selama tidak digunakan untuk transaction authorization.
+
+**Catatan TTL:** Nilai TTL pada contoh hanyalah illustrative. TTL yang sebenarnya bergantung pada business requirement dan invalidation mechanism yang tersedia. Active invalidation yang reliable dapat memungkinkan TTL jauh lebih panjang untuk master data.
 
 ---
 
@@ -753,15 +801,18 @@ user terus melihat harga lama
 
 **Remember forever bukan selalu salah** — Ia dapat digunakan jika:
 - **Deterministic invalidation tersedia**: setiap mutation yang mempengaruhi result memicu invalidation
-- **Cache memang layak long-lived**: data yang benar-benar static atau perubahan sangat jarang
-- **Reliable delivery guarantee**: event invalidation dikirim via durable queue (RabbitMQ, Kafka), bukan fire-and-forget pub/sub
+- **Cache memang layak long-lived**: data yang relatif stable/master/reference data
+- **Invalidation reliability sesuai requirement**: bisa berupa synchronous delete, versioned namespace, revision-based key, atau durable event
+
+Rule yang benar: `rememberForever` aman hanya jika freshness requirement dan invalidation mechanism memiliki reliability yang sesuai.
 
 **Tanpa invalidation yang reliable, rememberForever adalah high-risk pattern** karena:
 - Loss event = data stale selamanya
 - Debugging stale data bisa berjam-jam
-- Biasanya better dipilih TTL pendek dengan cache-then-refresh strategy
 
-**Better alternative:** gunakan TTL dengan short duration + background refresh / proactive invalidation.
+Bounded TTL sering menjadi safety net yang lebih forgiving jika perfect invalidation sulit dijamin, tidak harus "better = short TTL" secara universal.
+
+**Better alternative:** gunakan TTL dengan duration yang sesuai business requirement + background refresh / proactive invalidation.
 
 ---
 

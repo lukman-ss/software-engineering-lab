@@ -14,16 +14,20 @@ Tim backend sering menganggap "backend OK" berarti "semua client masih dapat". P
 
 ## Problem: Customer String → Customer Object
 
+API lama:
+
 ```json
-// API Lama
 {
   "id": 1001,
   "customer": "Budi",
   "total": 500000,
   "status": "PAID"
 }
+```
 
-// Breaking Change
+Breaking change:
+
+```json
 {
   "id": 1001,
   "customer": {
@@ -49,7 +53,7 @@ Berikut contoh perubahan yang menjadi **breaking change**:
 | Perubahan | Contoh |
 |-----------|--------|
 | Rename field | `name` → `full_name` |
-| Remove field | hapus `phone` |
+| Remove field | hapus `phone` (breaking karena contract berubah) |
 | Primitive type berubah | `price:number` → `price:string` |
 | string ↔ object | `customer: "Budi"` ↔ `customer: {id: 15, name: "Budi"}` |
 | object ↔ array | `customer: {...}` ↔ `customer: [...]` |
@@ -127,8 +131,11 @@ Dipilih untuk lab karena:
 - **Debuggable** — easy to test with curl
 - **Easy to document** — clear URL pattern
 - **Easy to route** — `http.ServeMux` handles ini
+- **Cache key natural berbeda** — URL berbeda = cache key berbeda otomatis
 
 >**Catatan penting:** Versi di URL **tidak** menentukan apakah endpoint idempotent. Idempotency ditentukan oleh semantics HTTP (GET, PUT, DELETE) dan business operation, bukan lokasi version identifier.
+
+>**Trade-off:** URL versioning lebih eksplisit dan mudah di-observe, namun membuat URL lebih panjang. Header versioning memberi URL resource yang bersih, namun routing/observability lebih tersembunyi dan cache/CDN harus aware terhadap version header. Pilihan tergantung prioritas observability vs. clean resource naming.
 
 ### Header Versioning (Alternatif)
 
@@ -144,13 +151,22 @@ GET /api/invoices/1001
 API-Version: 2
 ```
 
-Keuntungan:
-- URL resource tetap stabil (memungkinkan caching & routing yang konsisten)
+Karakteristik:
+- URL resource tetap stabil
+- Version selection berada di representation metadata
+- Routing/observability lebih tersembunyi namun lebih bersih
 - Memungkinkan multiple versions dalam satu endpoint
 
-Kerugian:
+Tantangan:
 - Kurang visibilitas di logs/network traces
 - Membutuhkan middleware parsing header
+- Caching/CDN harus aware terhadap version header
+
+>**Penting untuk Caching:** Jika representasi berbeda berdasarkan version header (Accept atau API-Version), infrastructure/cache harus memasukkan versi ke cache key atau menggunakan `Vary` header yang sesuai. Contoh:
+>```http
+>Vary: Accept
+>```
+>Jika tidak, client dapat menerima representation dari API version yang salah.
 
 ---
 
@@ -348,16 +364,20 @@ mux.HandleFunc("/api/v2/invoices/", V2Handler)
 
 ## Exercise
 
+API lama:
+
 ```json
-// API Lama
 {
   "id": 1001,
   "customer": "Budi",
   "total": 500000,
   "status": "PAID"
 }
+```
 
-// Breaking Change
+Breaking change:
+
+```json
 {
   "id": 1001,
   "customer": {
@@ -388,7 +408,7 @@ mux.HandleFunc("/api/v2/invoices/", V2Handler)
 
 - **API adalah kontrak**, bukan teknologi. Perubahan harus dievaluasi dari perspective consumer.
 - **HTTP 200 ≠ compatible**. Selalu test decoding di sisi client.
-- **Versioning bukan untuk semua**. Hanya untuk breaking changes.
+- **Versioning bukan untuk semua**. Major API version biasanya diperlukan ketika perubahan tidak dapat dipertahankan secara backward-compatible.
 - **V1 tidak boleh menerima breaking contract changes selama masih didukung**. Backward-compatible fixes dan additive changes masih dapat dilakukan sesuai compatibility policy.
 - **Contract test wajib**. Prevent breaking change yang terlewat.
 - **Consumer inventory penting**. Tanpa tahu siapa yang pakai, tidak ada cara upgrade yang aman.

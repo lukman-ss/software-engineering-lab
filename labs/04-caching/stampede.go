@@ -151,7 +151,7 @@ func NewProtectedStampedeService(cache CacheInterface, repo *CounterRepository) 
 func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) (Dashboard, error) {
 	key := fmt.Sprintf("dash:%d", branchID)
 
-	// 1. First cache check
+	// 1. First cache check (caller's context)
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
 		var d Dashboard
@@ -165,10 +165,19 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 	// DoChan returns a channel that delivers the result, allowing
 	// callers to also select on ctx.Done() for proper cancellation.
 	ch := s.flight.DoChan(key, func() (interface{}, error) {
-		// Double-check cache inside singleflight gate
+		// Create bounded context for shared rebuild FIRST:
+		// - created before any cache/DB operations to ensure all use same bounded context
+		// - context.WithoutCancel strips the leader's cancellation
+		// - Individual callers can still cancel their own wait via ctx.Done()
+		// - Shared rebuild and cache operations continue even if leader cancels
+		// - Timeout added so rebuild doesn't run forever
+		rebuildCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+
+		// Double-check cache inside singleflight gate using rebuildCtx
 		// This handles the window where another goroutine may have populated cache
 		// between our first check and acquiring the singleflight slot
-		cached, err := s.cache.Get(ctx, key)
+		cached, err := s.cache.Get(rebuildCtx, key)
 		if err == nil && cached != "" {
 			var d Dashboard
 			if unmarshalErr := json.Unmarshal([]byte(cached), &d); unmarshalErr == nil {
@@ -176,26 +185,19 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 			}
 		}
 
-		// Create bounded context for shared rebuild:
-		// - context.WithoutCancel strips the leader's cancellation
-		// - Individual callers can still cancel their own wait via ctx.Done()
-		// - Shared rebuild continues even if leader cancels
-		// - Timeout added so rebuild doesn't run forever
-		rebuildCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		defer cancel()
-
-		// Only one goroutine reaches here - it fetches from DB
+		// Only one goroutine reaches here - it fetches from DB using rebuildCtx
 		d, err := s.repo.GetDashboard(rebuildCtx, 1, branchID, time.Now())
 		if err != nil {
 			return Dashboard{}, err
 		}
 
-		// Populate cache
+		// Populate cache using rebuildCtx (not leader's ctx)
+		// This ensures cache SET succeeds even if leader cancelled
 		data, err := json.Marshal(d)
 		if err != nil {
 			return Dashboard{}, fmt.Errorf("marshal: %w", err)
 		}
-		if setErr := s.cache.Set(ctx, key, string(data), s.ttl); setErr != nil {
+		if setErr := s.cache.Set(rebuildCtx, key, string(data), s.ttl); setErr != nil {
 			fmt.Printf("warn: cache set failed: %v\n", setErr)
 		}
 		return d, nil

@@ -2,7 +2,8 @@
 	infra-up infra-down migrate-up migrate-down \
 	lab-02-setup lab-02-seed lab-02-baseline lab-02-indexes \
 	lab-02-explain lab-02-benchmark lab-02-clean lab-02-verify \
-	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration
+	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration \
+	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost
@@ -20,15 +21,15 @@ run: fmt vet
 	@go run ./cmd/api
 
 # Run tests
-test: lab-04-test
+test: lab-04-test lab-05-test
 	@echo "Running unit tests..."
 	@go test ./... -v
 
-test-race: lab-04-test-race
+test-race: lab-04-test-race lab-05-test-race
 	@echo "Running tests with race detector..."
 	@go test ./... -race -v
 
-lint: lab-04-vet
+lint: lab-04-vet lab-05-vet
 	@echo "Running linter..."
 	@go vet ./...
 
@@ -36,8 +37,9 @@ fmt:
 	@echo "Formatting code..."
 	@go fmt ./...
 	@cd labs/04-caching && go fmt ./...
+	@cd labs/05-race-condition && go fmt ./...
 
-vet: lab-04-vet
+vet: lab-04-vet lab-05-vet
 	@echo "Running go vet..."
 	@go vet ./...
 
@@ -127,3 +129,25 @@ lab-04-demo:
 lab-04-integration:
 	@echo "=== Testing Lab 04 (Integration) ==="
 	@cd labs/04-caching && go test -tags=integration -count=1 ./...
+
+# ==================== Lab 05: Race Condition ====================
+
+lab-05-test:
+	@echo "=== Testing Lab 05: Race Condition ==="
+	@cd labs/05-race-condition && go test -count=1 ./...
+
+lab-05-test-race:
+	@echo "=== Testing Lab 05 (Race Detector) ==="
+	@cd labs/05-race-condition && go test -race -count=1 ./...
+
+lab-05-vet:
+	@echo "=== Vet Lab 05 ==="
+	@cd labs/05-race-condition && go vet ./...
+
+lab-05-fmt:
+	@echo "=== Formatting Lab 05 ==="
+	@cd labs/05-race-condition && go fmt ./...
+
+lab-05-integration:
+	@echo "=== Testing Lab 05 (Integration) ==="
+	@cd labs/05-race-condition && go test -tags=integration -count=1 ./...

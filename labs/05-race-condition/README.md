@@ -561,21 +561,47 @@ Assertion: `unexpectedErrorCount == 0`.
 
 ## Running the Lab
 
+> **Working Directory**: Semua perintah Go dijalankan dari direktori `labs/05-race-condition/`.
+
 ### 1. Unit Tests
 
 ```bash
+cd labs/05-race-condition
 go test ./...
 ```
 
 ### 2. Memory Race Detector
 
 ```bash
+cd labs/05-race-condition
 go test -race ./...
 ```
 
 > Semua unit test harus PASS. `TestUnsafeCounter_Race` tidak termasuk (build tag `racedemo`) sehingga suite ini selalu PASS.
 
-### 3. PostgreSQL Setup
+### Alternative: Using Root Makefile
+
+Anda juga dapat menjalankan semua target dari root repository:
+
+```bash
+# From repository root
+make lab-05-test        # Unit tests
+make lab-05-test-race   # Race detector
+make lab-05-vet         # Go vet
+make lab-05-fmt         # Format check
+make lab-05-integration # Integration tests (requires PostgreSQL)
+```
+
+### 3. PostgreSQL Setup - Dua Working Directory yang Berbeda
+
+**Ingat:** Lab 05 adalah Go module terpisah. Perintah dari repository root akan menjadi *nothing*.
+
+| Tujuan | Working Directory | Perintah |
+|--------|------------------|----------|
+| Infrastructure | Repository root | `docker compose up -d postgres` <br> atau `make infra-up` |
+| Go Test Commands | Lab 05 module | `cd labs/05-race-condition` <br> `go test ./...` |
+
+**⚠️ Penting:** Jangan jalankan `go test` dari root repository. Perintah `go test ./...` di root **tidak** akan menjalankan test Lab 05 karena itu merupakan module terpisah.
 
 Prasyarat: PostgreSQL berjalan di `localhost:5432`, database `se_lab`.
 
@@ -601,7 +627,19 @@ docker compose up -d postgres
 
 ### 4. PostgreSQL Integration Tests
 
+Prasyarat: PostgreSQL berjalan. Gunakan salah satu cara berikut:
+
+**Option A: Docker Compose (recommended)**
 ```bash
+# From root repository
+docker compose up -d postgres
+make lab-05-integration
+```
+
+**Option B: Manual dari Lab directory**
+```bash
+cd labs/05-race-condition
+
 # Set environment (opsional — default: localhost:5432, postgres/postgres, db=se_lab)
 export POSTGRES_HOST=localhost POSTGRES_PORT=5432
 export POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres POSTGRES_DB=se_lab

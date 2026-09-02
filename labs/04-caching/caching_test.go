@@ -6,28 +6,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
-// Test 1: Without cache, every request would hit DB directly (naive pattern)
-func TestNaiveNoCache(t *testing.T) {
+// TestCacheFailureFallback verifies: when cache fails, service falls back to DB.
+// Each request hits DB because cache is unavailable.
+func TestCacheFailureFallback(t *testing.T) {
 	repo := caching.NewFakeDashboardRepository()
-	// Using a failing cache simulates no-cache
+	// Using a failing cache simulates cache outage
 	cache := caching.NewFailingMockCache()
 	metrics := caching.NewCacheMetrics()
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// 5 requests
+	// 5 requests - all should hit DB due to cache failure
 	for i := 0; i < 5; i++ {
 		_, _ = svc.GetDashboard(ctx, 1)
 	}
 
 	if repo.CallCount() != 5 {
-		t.Fatalf("expected 5 DB queries, got %d", repo.CallCount())
+		t.Fatalf("expected 5 DB queries (cache down), got %d", repo.CallCount())
 	}
 
-	t.Log("✓ Naive pattern demonstrates DB query on every request")
+	t.Log("✓ Cache failure fallback: all requests hit DB when cache is unavailable")
 }
 
 // Test 2: Cache aside pattern - miss then hit
@@ -287,6 +289,130 @@ func TestCacheMissPopulatesCache(t *testing.T) {
 	}
 
 	t.Log("Cache population on miss validated")
+}
+
+// TestCacheAsideServiceMetricsClassification verifies correct metric classification:
+// - ErrCacheMiss → IncMiss()
+// - ErrCacheDown → IncError() + IncDBFallback()
+// - Hit → IncHit()
+// - Corrupt JSON → IncError() (then DB fallback)
+func TestCacheAsideServiceMetricsClassification(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create mock db: %v", err)
+	}
+	defer db.Close()
+
+	metrics := caching.NewCacheMetrics()
+
+	// Test 1: ErrCacheMiss → Misses +1, Errors = 0
+	t.Run("ErrCacheMiss", func(t *testing.T) {
+		cache := caching.NewMockCache()
+		svc := caching.NewCacheAsideService(db, cache, metrics)
+		ctx := context.Background()
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("prod-1").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("prod-1", "Test Product", 10.0))
+
+		result, err := svc.GetProduct(ctx, "prod-1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.ID != "prod-1" {
+			t.Errorf("expected product ID prod-1, got %s", result.ID)
+		}
+
+		if metrics.Misses() != 1 {
+			t.Errorf("expected 1 miss, got %d", metrics.Misses())
+		}
+		if metrics.Errors() != 0 {
+			t.Errorf("expected 0 errors for cache miss, got %d", metrics.Errors())
+		}
+		if metrics.DBFallbacks() != 0 {
+			t.Errorf("expected 0 dbfallbacks for cache miss, got %d", metrics.DBFallbacks())
+		}
+	})
+
+	// Test 2: ErrCacheDown → Errors +2 (GET error + SET error), DBFallbacks +1
+	t.Run("ErrCacheDown", func(t *testing.T) {
+		metrics.Reset()
+		cache := caching.NewFailingMockCache()
+		svc := caching.NewCacheAsideService(db, cache, metrics)
+		ctx := context.Background()
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("prod-2").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("prod-2", "Test Product 2", 20.0))
+
+		_, err := svc.GetProduct(ctx, "prod-2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// 1 cache GET error + 1 cache SET error = 2 errors
+		if metrics.Errors() != 2 {
+			t.Errorf("expected 2 errors for cache down (GET + SET), got %d", metrics.Errors())
+		}
+		if metrics.DBFallbacks() != 1 {
+			t.Errorf("expected 1 dbfallback for cache down, got %d", metrics.DBFallbacks())
+		}
+		if metrics.Misses() != 0 {
+			t.Errorf("expected 0 misses for cache error, got %d", metrics.Misses())
+		}
+	})
+
+	// Test 3: Cache hit
+	t.Run("CacheHit", func(t *testing.T) {
+		metrics.Reset()
+		cache := caching.NewMockCache()
+		svc := caching.NewCacheAsideService(db, cache, metrics)
+		ctx := context.Background()
+
+		// Pre-populate cache
+		product := caching.Product{ID: "prod-3", Name: "Cached Product", Price: 30.0}
+		data, _ := json.Marshal(product)
+		cache.Set(ctx, caching.CacheKey("product", "prod-3", 1), string(data), time.Minute)
+
+		_, err := svc.GetProduct(ctx, "prod-3")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if metrics.Hits() != 1 {
+			t.Errorf("expected 1 hit, got %d", metrics.Hits())
+		}
+		if metrics.Misses() != 0 {
+			t.Errorf("expected 0 misses for hit, got %d", metrics.Misses())
+		}
+	})
+
+	// Test 4: Corrupt JSON → Errors +1, then DB fallback
+	t.Run("CorruptJSON", func(t *testing.T) {
+		metrics.Reset()
+		cache := caching.NewMockCache()
+		svc := caching.NewCacheAsideService(db, cache, metrics)
+		ctx := context.Background()
+
+		// Set corrupt JSON
+		cache.Set(ctx, caching.CacheKey("product", "prod-corrupt", 1), `{invalid json`, time.Minute)
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("prod-corrupt").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("prod-corrupt", "Repaired Product", 40.0))
+
+		_, err := svc.GetProduct(ctx, "prod-corrupt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if metrics.Errors() < 1 {
+			t.Errorf("expected at least 1 error for corrupt JSON, got %d", metrics.Errors())
+		}
+	})
 }
 
 // Removed TestRandomJitterDispersesRequests - it used rand.Intn directly

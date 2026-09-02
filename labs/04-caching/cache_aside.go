@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -38,12 +39,23 @@ func NewCacheAsideService(db *sql.DB, cache CacheInterface, metrics *CacheMetric
 // GetProduct menggunakan cache-aside pattern untuk membaca produk.
 // API menerima productID langsung, bukan cache key (menghindari coupling yang rapuh).
 // Key dibuat menggunakan canonical key builder di dalam service.
+//
+// Metric classification:
+//   - hit: cache returned valid value
+//   - miss: cache returned ErrCacheMiss (key absent / expired)
+//   - error: cache returned backend error (Redis down, network) OR corrupt JSON
+//   - db_fallback: only recorded when cache returned a backend error
 func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product, error) {
 	key := CacheKey("product", id, 1)
 
-	// 1. Check cache
+	// 1. Check cache with latency measurement
+	startGet := time.Now()
 	cached, err := s.cache.Get(ctx, key)
-	if err == nil && cached != "" {
+	s.metrics.IncCacheGetOp()
+	s.metrics.RecordCacheGetLatency(time.Since(startGet))
+
+	switch {
+	case err == nil && cached != "":
 		// Cache HIT - return data
 		var p Product
 		if err := json.Unmarshal([]byte(cached), &p); err == nil {
@@ -53,16 +65,15 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 		// Cache CORRUPT - unmarshal gagal
 		s.metrics.IncError()
 		_ = s.cache.Delete(ctx, key) // attempt cleanup, but don't fail read
-		// Note: In production, log structured error for observability
-	} else if err != nil {
-		// Cache ERROR (Redis down, network, timeout)
-		// Bukan cache miss - error teknis
+	case errors.Is(err, ErrCacheMiss):
+		// Normal cache miss - bukan error
+		s.metrics.IncMiss()
+	case err != nil:
+		// Cache backend error (Redis down, network, timeout)
 		s.metrics.IncError()
 		s.metrics.IncDBFallback()
-		// TODO: Use structured logging instead of fmt.Printf
-		// fmt.Printf("cache error on GET %s: %v\n", key, err)
-	} else {
-		// Cache MISS - key tidak ada
+	default:
+		// Empty value without error - treat as miss per empty-value policy
 		s.metrics.IncMiss()
 	}
 
@@ -78,18 +89,19 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 	// 3. Populate cache (best-effort)
 	data, err := json.Marshal(p)
 	if err != nil {
-		// Marshal error = data tidak valid untuk cache, bukan error bisnis
-		// Return data saja, log error
-		// fmt.Printf("warn: marshal product failed for cache: %v\n", err)
+		// Marshal error = cache side error, bukan business error.
+		// DB read sukses, business operation tetap success.
+		s.metrics.IncError()
 		return p, nil
 	}
 
 	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
+	s.metrics.IncCacheSetOp()
 	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
 		// Cache SET failed - DB success, data tersedia
-		// Log error, bukan fail business read
+		// Record cache-side error, bukan fail business read
 		s.metrics.IncError()
-		// fmt.Printf("warn: cache set failed for %s: %v\n", key, err)
+		s.metrics.IncCacheSetError()
 	}
 
 	return p, nil

@@ -102,7 +102,7 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 // WHY: menghindari slicing path mentah yang rapuh dan menyediakan validasi terpusat.
 func parseInvoiceID(path, prefix string) (int, bool, bool, string) {
 	if !strings.HasPrefix(path, prefix) {
-		return 0, false, false, "invalid path"
+		return 0, false, true, "invalid path"
 	}
 
 	idStr := strings.TrimPrefix(path, prefix)
@@ -118,6 +118,10 @@ func parseInvoiceID(path, prefix string) (int, bool, bool, string) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		return 0, false, true, "invalid ID: must be numeric"
+	}
+
+	if id <= 0 {
+		return 0, false, true, "invalid ID: must be positive"
 	}
 
 	return id, false, false, ""

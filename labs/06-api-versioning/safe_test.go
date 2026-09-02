@@ -2,6 +2,7 @@ package api_versioning
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,163 @@ import (
 
 // performRequest adalah helper untuk melakukan request terhadap HTTP handler.
 // Mengembalikan ResponseRecorder untuk assertion.
+
+// assertV1WireContract adalah helper untuk verifikasi kontrak wire V1.
+// Menyimpan satu sumber kebenaran untuk V1 contract assertions.
+func assertV1WireContract(t *testing.T, body []byte) {
+	t.Helper()
+
+	// Decode ke raw message untuk semantic contract assertion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("V1: invalid JSON response: %v", err)
+	}
+
+	// Field existence checks
+	assertV1FieldExists(t, raw, "id")
+	assertV1FieldExists(t, raw, "customer")
+	assertV1FieldExists(t, raw, "total")
+	assertV1FieldExists(t, raw, "status")
+
+	// 1. id = JSON number = 1001
+	var idNum json.Number
+	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
+		t.Error("V1: 'id' harus berupa JSON number")
+	} else if idNum != "1001" {
+		t.Errorf("V1: 'id' harus 1001, got %s", idNum)
+	}
+
+	// 2. customer = JSON string = "Budi" (BREAKING if accidentally becomes object)
+	var customerStr string
+	if err := json.Unmarshal(raw["customer"], &customerStr); err != nil {
+		t.Error("V1: 'customer' HARUS tetap string (breaking change detected!)")
+		t.Error("Jika customer menjadi object, legacy client akan gagal parse")
+	} else if customerStr != "Budi" {
+		t.Errorf("V1: 'customer' harus 'Budi', got '%s'", customerStr)
+	}
+
+	// 3. total = JSON number = 500000
+	var totalNum json.Number
+	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
+		t.Error("V1: 'total' harus berupa JSON number")
+	} else if totalNum != "500000" {
+		t.Errorf("V1: 'total' harus 500000, got %s", totalNum)
+	}
+
+	// 4. status = JSON string = "PAID"
+	var statusStr string
+	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
+		t.Error("V1: 'status' harus berupa JSON string")
+	} else if statusStr != "PAID" {
+		t.Errorf("V1: 'status' harus 'PAID', got '%s'", statusStr)
+	}
+}
+
+// assertV1FieldExists memastikan field ada di response V1
+func assertV1FieldExists(t *testing.T, raw map[string]json.RawMessage, field string) {
+	t.Helper()
+	if _, ok := raw[field]; !ok {
+		t.Fatalf("V1 contract broken: missing field '%s'", field)
+	}
+}
+
+// assertV2WireContract adalah helper untuk verifikasi kontrak wire V2.
+// Menyimpan satu sumber kebenaran untuk V2 contract assertions.
+func assertV2WireContract(t *testing.T, body []byte) {
+	t.Helper()
+
+	// Decode ke raw message untuk semantic contract assertion
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("V2: invalid JSON response: %v", err)
+	}
+
+	// Field existence checks
+	assertV2FieldExists(t, raw, "id")
+	assertV2FieldExists(t, raw, "customer")
+	assertV2FieldExists(t, raw, "total")
+	assertV2FieldExists(t, raw, "status")
+
+	// Check customer object exists
+	customerRaw, ok := raw["customer"]
+	if !ok {
+		t.Fatalf("V2 contract broken: missing customer")
+	}
+	var customerObj map[string]json.RawMessage
+	if err := json.Unmarshal(customerRaw, &customerObj); err != nil {
+		t.Fatal("V2: 'customer' harus berupa JSON object")
+	}
+
+	// Nested customer field existence checks
+	assertV2NestedFieldExists(t, customerObj, "id")
+	assertV2NestedFieldExists(t, customerObj, "name")
+	assertV2NestedFieldExists(t, customerObj, "phone")
+
+	// 1. id = JSON number = 1001
+	var idNum json.Number
+	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
+		t.Error("V2: 'id' harus berupa JSON number")
+	} else if idNum != "1001" {
+		t.Errorf("V2: 'id' harus 1001, got %s", idNum)
+	}
+
+	// 2. customer = JSON object
+	// 3. customer.id = JSON number = 15
+	var cidNum json.Number
+	if err := json.Unmarshal(customerObj["id"], &cidNum); err != nil {
+		t.Error("V2: 'customer.id' harus berupa JSON number")
+	} else if cidNum != "15" {
+		t.Errorf("V2: 'customer.id' harus 15, got %s", cidNum)
+	}
+
+	// 4. customer.name = JSON string = "Budi"
+	var cname string
+	if err := json.Unmarshal(customerObj["name"], &cname); err != nil {
+		t.Error("V2: 'customer.name' harus berupa JSON string")
+	} else if cname != "Budi" {
+		t.Errorf("V2: 'customer.name' harus 'Budi', got '%s'", cname)
+	}
+
+	// 5. customer.phone = JSON string = "08123"
+	var cphone string
+	if err := json.Unmarshal(customerObj["phone"], &cphone); err != nil {
+		t.Error("V2: 'customer.phone' harus berupa JSON string")
+	} else if cphone != "08123" {
+		t.Errorf("V2: 'customer.phone' harus '08123', got '%s'", cphone)
+	}
+
+	// 6. total = JSON number = 500000
+	var totalNum json.Number
+	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
+		t.Error("V2: 'total' harus berupa JSON number")
+	} else if totalNum != "500000" {
+		t.Errorf("V2: 'total' harus 500000, got %s", totalNum)
+	}
+
+	// 7. status = JSON string = "PAID"
+	var statusStr string
+	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
+		t.Error("V2: 'status' harus berupa JSON string")
+	} else if statusStr != "PAID" {
+		t.Errorf("V2: 'status' harus 'PAID', got '%s'", statusStr)
+	}
+}
+
+// assertV2FieldExists memastikan field ada di response V2
+func assertV2FieldExists(t *testing.T, raw map[string]json.RawMessage, field string) {
+	t.Helper()
+	if _, ok := raw[field]; !ok {
+		t.Fatalf("V2 contract broken: missing field '%s'", field)
+	}
+}
+
+// assertV2NestedFieldExists memastikan nested field ada di object customer
+func assertV2NestedFieldExists(t *testing.T, obj map[string]json.RawMessage, field string) {
+	t.Helper()
+	if _, ok := obj[field]; !ok {
+		t.Fatalf("V2 contract broken: missing customer.%s", field)
+	}
+}
 func performRequest(handler http.Handler, method, path string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
 	w := httptest.NewRecorder()
@@ -152,22 +310,22 @@ func TestVersionedRoutes_CanRunSideBySide(t *testing.T) {
 	t.Log("✅ Both versions co-exist safely with different contracts")
 }
 
-// TestRequiredHeaderBreakingChange menyimulasikan breaking change ketika
-// endpoint yang sebelumnya tidak membutuhkan header menjadi wajib.
-func TestRequiredHeaderBreakingChange(t *testing.T) {
+// TestV1Contract_DoesNotIntroduceRequiredTenantHeader membuktikan bahwa
+// V1 tidak secara tidak sengaja memperkenalkan X-Tenant-ID sebagai required header.
+func TestV1Contract_DoesNotIntroduceRequiredTenantHeader(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	// Request tanpa X-Tenant-ID header (yang seharusnya tidak diperlukan untuk V1)
+	// Request tanpa X-Tenant-ID header - legacy client tidak mengirim header ini
 	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// V1 tidak membutuhkan header khusus - harus success
+	// V1 tidak membutuhkan header khusus - harus success (backward compatible)
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("V1: expected HTTP 200 without X-Tenant-ID, got %d", resp.StatusCode)
 	}
@@ -204,77 +362,16 @@ func TestV1Contract_RegressionGuaranteeAfterV2Registration(t *testing.T) {
 		t.Errorf("V1: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
-	// Decode dan verify semua field
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		t.Fatalf("V1: invalid JSON response: %v", err)
+	// Baca body sekali untuk semua asserts
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("V1: failed to read body: %v", err)
 	}
 
-	// 1. id == 1001, JSON number
-	var idNum json.Number
-	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
-		t.Error("V1: 'id' harus berupa number")
-	} else if idNum != "1001" {
-		t.Errorf("V1: 'id' harus 1001, got %s", idNum)
-	}
-
-	// 2. customer == "Budi", JSON string (BREAKING jika jadi object)
-	var customerStr string
-	if err := json.Unmarshal(raw["customer"], &customerStr); err != nil {
-		t.Fatal("V1 CONTRACT BROKEN: customer harus tetap string (breaking change!)")
-	} else if customerStr != "Budi" {
-		t.Errorf("V1: 'customer' harus 'Budi', got '%s'", customerStr)
-	}
-
-	// 3. total == 500000, JSON number
-	var totalNum json.Number
-	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
-		t.Error("V1: 'total' harus berupa number")
-	} else if totalNum != "500000" {
-		t.Errorf("V1: 'total' harus 500000, got %s", totalNum)
-	}
-
-	// 4. status == "PAID", JSON string
-	var statusStr string
-	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
-		t.Fatal("V1 CONTRACT BROKEN: status harus tetap string")
-	} else if statusStr != "PAID" {
-		t.Errorf("V1: 'status' harus 'PAID', got '%s'", statusStr)
-	}
+	// Use helper untuk semua V1 contract assertions including field existence
+	assertV1WireContract(t, body)
 
 	t.Log("✅ V1 contract regression guarantee: V2 registration tidak mengubah V1 output")
-}
-
-// TestAdditiveChangeDoesNotBreakV1Contract memastikan penambahan field
-// pada V1 tidak merusak backward compatibility.
-func TestAdditiveChangeDoesNotBreakV1Contract(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	// Request ke V1
-	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed V1 request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Decode ke LegacyInvoice (tanpa field yang mungkin ditambah)
-	var legacyResponse LegacyInvoice
-	if err := json.NewDecoder(resp.Body).Decode(&legacyResponse); err != nil {
-		t.Fatalf("V1: legacy client gagal decode: %v", err)
-	}
-
-	// Verifikasi field yang diketahui
-	if legacyResponse.Customer != "Budi" {
-		t.Errorf("V1: customer=%s, expected 'Budi'", legacyResponse.Customer)
-	}
-	if legacyResponse.Total != 500000 {
-		t.Errorf("V1: total=%d, expected 500000", legacyResponse.Total)
-	}
-
-	t.Log("✅ Additive change pada V1 tidak memecah legacy client")
 }
 
 // TestV1Contract_RemainsBackwardCompatible melindungi kontrak V1 agar tidak
@@ -291,55 +388,25 @@ func TestV1Contract_RemainsBackwardCompatible(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// 1. HTTP 200 requirement
+	// HTTP 200 requirement
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("V1: expected HTTP 200, got %d", resp.StatusCode)
 	}
 
-	// 2. Content-Type application/json
+	// Content-Type application/json
 	ct := resp.Header.Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("V1: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
-	// Decode ke raw message dulu untuk validasi schema
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		t.Fatalf("V1: invalid JSON response: %v", err)
+	// Baca body sekali untuk semua asserts
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("V1: failed to read body: %v", err)
 	}
 
-	// 3. id = number, id == 1001
-	var idNum json.Number
-	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
-		t.Error("V1: 'id' harus berupa number")
-	} else if idNum != "1001" {
-		t.Errorf("V1: 'id' harus 1001, got %s", idNum)
-	}
-
-	// 4. customer = string, customer == "Budi" (BREAKING if accidentally becomes object)
-	var customerStr string
-	if err := json.Unmarshal(raw["customer"], &customerStr); err != nil {
-		t.Error("V1: 'customer' HARUS tetap string (breaking change detected!)")
-		t.Error("Jika customer menjadi object, legacy client akan gagal parse")
-	} else if customerStr != "Budi" {
-		t.Errorf("V1: 'customer' harus 'Budi', got '%s'", customerStr)
-	}
-
-	// 5. total = number, total == 500000
-	var totalNum json.Number
-	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
-		t.Error("V1: 'total' harus berupa number")
-	} else if totalNum != "500000" {
-		t.Errorf("V1: 'total' harus 500000, got %s", totalNum)
-	}
-
-	// 6. status = string, status == "PAID"
-	var statusStr string
-	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
-		t.Error("V1: 'status' harus berupa string")
-	} else if statusStr != "PAID" {
-		t.Errorf("V1: 'status' harus 'PAID', got '%s'", statusStr)
-	}
+	// Use helper untuk semua V1 contract assertions
+	assertV1WireContract(t, body)
 
 	t.Log("✅ V1 contract protected: customer remains string")
 }
@@ -355,7 +422,7 @@ func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/api/v2/invoices/1001")
 	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
+		t.Fatalf("V2: failed to connect: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -370,109 +437,139 @@ func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 		t.Errorf("V2: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
-	// 3. Decode ke raw message untuk semantic contract assertion
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		t.Fatalf("V2: invalid JSON response: %v", err)
+	// Baca body sekali untuk semua assertions
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("V2: failed to read body: %v", err)
 	}
 
-	// 4. id = JSON number = 1001
-	var idNum json.Number
-	if err := json.Unmarshal(raw["id"], &idNum); err != nil {
-		t.Error("V2: 'id' harus berupa JSON number")
-	} else if idNum != "1001" {
-		t.Errorf("V2: 'id' harus 1001, got %s", idNum)
-	}
+	// Use helper untuk semua V2 contract assertions including field existence
+	assertV2WireContract(t, body)
 
-	// 5. customer = JSON object (bukan string)
-	customerRaw := raw["customer"]
-	var customerObj map[string]json.RawMessage
-	if err := json.Unmarshal(customerRaw, &customerObj); err != nil {
-		t.Fatal("V2 CONTRACT BROKEN: customer harus object, bukan string")
-	}
-
-	// 6. customer.id = JSON number = 15
-	var cidNum json.Number
-	if err := json.Unmarshal(customerObj["id"], &cidNum); err != nil {
-		t.Error("V2: 'customer.id' harus berupa JSON number")
-	} else if cidNum != "15" {
-		t.Errorf("V2: 'customer.id' harus 15, got %s", cidNum)
-	}
-
-	// 7. customer.name = JSON string = "Budi"
-	var cname string
-	if err := json.Unmarshal(customerObj["name"], &cname); err != nil {
-		t.Error("V2: 'customer.name' harus berupa JSON string")
-	} else if cname != "Budi" {
-		t.Errorf("V2: 'customer.name' harus 'Budi', got '%s'", cname)
-	}
-
-	// 8. customer.phone = JSON string = "08123"
-	var cphone string
-	if err := json.Unmarshal(customerObj["phone"], &cphone); err != nil {
-		t.Error("V2: 'customer.phone' harus berupa JSON string")
-	} else if cphone != "08123" {
-		t.Errorf("V2: 'customer.phone' harus '08123', got '%s'", cphone)
-	}
-
-	// 9. total = JSON number = 500000
-	var totalNum json.Number
-	if err := json.Unmarshal(raw["total"], &totalNum); err != nil {
-		t.Error("V2: 'total' harus berupa JSON number")
-	} else if totalNum != "500000" {
-		t.Errorf("V2: 'total' harus 500000, got %s", totalNum)
-	}
-
-	// 10. status = JSON string = "PAID"
-	var statusStr string
-	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
-		t.Error("V2: 'status' harus berupa JSON string")
-	} else if statusStr != "PAID" {
-		t.Errorf("V2: 'status' harus 'PAID', got '%s'", statusStr)
-	}
-
-	// Tambahan: verify decode ke struct V2 tetap berhasil (new client compatibility)
+	// Additional: verify decode ke struct V2 tetap berhasil (new client compatibility)
 	var v2Resp InvoiceV2Response
-	resp.Body.Close() // close previous body
-	resp2, _ := http.Get(server.URL + "/api/v2/invoices/1001")
-	defer resp2.Body.Close()
-	if err := json.NewDecoder(resp2.Body).Decode(&v2Resp); err != nil {
+	if err := json.Unmarshal(body, &v2Resp); err != nil {
 		t.Fatalf("V2 struct decode failed: %v", err)
 	}
 
 	t.Log("✅ V2 contract verified: customer is object with id, name, phone")
 }
 
-// TestV2Contract_DetectsStatusObject memastikan V2 menggunakan status sebagai string
-// pada real HTTP handler.
-func TestV2Contract_DetectsStatusObject(t *testing.T) {
+// TestV1Handler_WrongPrefixReturnsBadRequest memastikan V1Handler
+// tidak menerima request dengan prefix yang salah.
+func TestV1Handler_WrongPrefixReturnsBadRequest(t *testing.T) {
+	handler := http.HandlerFunc(V1Handler)
+
+	// GET /api/v2/invoices/1001 ketika dipanggil langsung ke V1Handler
+	w := performRequest(handler, http.MethodGet, "/api/v2/invoices/1001")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for wrong prefix to V1Handler, got %d", w.Code)
+	}
+	t.Logf("✅ V1Handler returns HTTP 400 for wrong prefix path")
+}
+
+// TestV2Handler_WrongPrefixReturnsBadRequest memastikan V2Handler
+// tidak menerima request dengan prefix yang salah.
+func TestV2Handler_WrongPrefixReturnsBadRequest(t *testing.T) {
+	handler := http.HandlerFunc(V2Handler)
+
+	// GET /api/v1/invoices/1001 ketika dipanggil langsung ke V2Handler
+	w := performRequest(handler, http.MethodGet, "/api/v1/invoices/1001")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for wrong prefix to V2Handler, got %d", w.Code)
+	}
+	t.Logf("✅ V2Handler returns HTTP 400 for wrong prefix path")
+}
+
+// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash
+// tidak mengembalikan data invoice yang valid (harus 400/404, bukan 200).
+func TestTrailingSlash_NoSlashReturnsBadRequest(t *testing.T) {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/invoices/", V1Handler)
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
+
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	// Request ke V2 endpoint - real HTTP
-	resp, err := http.Get(server.URL + "/api/v2/invoices/1001")
+	// GET /api/v1/invoices (tanpa trailing slash)
+	// http.ServeMux dengan pattern "/api/v1/invoices/" akan redirect atau
+	// menjalankan handler tergantung konfigurasi.
+	// Namun penting: tidak boleh return 200 dengan id=0.
+	resp, err := http.Get(server.URL + "/api/v1/invoices")
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}
 	defer resp.Body.Close()
 
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		t.Fatalf("V2: invalid JSON response: %v", err)
+	// Pastikan tidak pernah return 200 untuk path tanpa ID
+	if resp.StatusCode == http.StatusOK {
+		t.Errorf("BUG: path without trailing slash should NOT return HTTP 200")
 	}
+	t.Logf("✅ Route /api/v1/invoices (no slash) returns HTTP %d, not 200", resp.StatusCode)
 
-	// V2 contract: status HARUS string (bukan object)
-	var statusStr string
-	if err := json.Unmarshal(raw["status"], &statusStr); err != nil {
-		t.Fatalf("✅ V2 contract detected breaking change: status harus string, got error: %v", err)
+	// GET /api/v2/invoices tanpa trailing slash
+	resp2, err := http.Get(server.URL + "/api/v2/invoices")
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
 	}
+	defer resp2.Body.Close()
 
-	// Harus "PAID"
-	if statusStr != "PAID" {
-		t.Errorf("V2 status berubah: expected 'PAID', got '%s'", statusStr)
+	if resp2.StatusCode == http.StatusOK {
+		t.Errorf("BUG: V2 path without trailing slash should NOT return HTTP 200")
 	}
+	t.Logf("✅ Route /api/v2/invoices (no slash) returns HTTP %d, not 200", resp2.StatusCode)
+}
 
-	t.Logf("✅ V2 contract: status tetap string '%s'", statusStr)
+// TestIDValidation_ZeroAndNegativeIDs memastikan ID nol dan negatif
+// dianggap invalid (400 Bad Request), bukan 404 Not Found.
+func TestIDValidation_ZeroAndNegativeIDs(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/invoices/", V1Handler)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	// ID 0 → 400 (invalid ID: must be positive)
+	resp, err := http.Get(server.URL + "/api/v1/invoices/0")
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for ID=0, got %d", resp.StatusCode)
+	}
+	t.Logf("✅ V1 returns HTTP 400 for ID=0 (invalid: must be positive)")
+
+	// ID negatif → 400 (invalid ID: must be positive)
+	resp2, err := http.Get(server.URL + "/api/v1/invoices/-1")
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for ID=-1, got %d", resp2.StatusCode)
+	}
+	t.Logf("✅ V1 returns HTTP 400 for ID=-1 (invalid: must be positive)")
+}
+
+// TestIDValidation_ValidButNotFound memastikan ID valid positif
+// yang tidak ditemukan mengembalikan 404, bukan 400.
+func TestIDValidation_ValidButNotFound(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/invoices/", V1Handler)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	// ID 9999 (valid positive, but not in mock)
+	resp, err := http.Get(server.URL + "/api/v1/invoices/9999")
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected HTTP 404 for valid-but-not-found ID, got %d", resp.StatusCode)
+	}
+	t.Logf("✅ V1 returns HTTP 404 for valid ID=9999 (not found)")
 }

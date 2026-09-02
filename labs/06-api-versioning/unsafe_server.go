@@ -34,7 +34,11 @@ func UnsafeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Simulasi: backend pernah punya customer="Budi", sekarang jadi object
-	// Ini adalah contoh BREAKING CHANGE yang tidak terdeteksi unit test
+	// Ini mensimulasikan breaking change yang dapat lolos bila hanya server-side
+	// success/HTTP status yang diuji tanpa consumer contract regression test.
+	//
+	// IMPORTANT: TestBreakingChange_LegacyClientFails dan TestV1Contract_RemainsBackwardCompatible
+	// di repo ini MANUAL detect breaking change ini melalui test regression contract.
 	invoice := map[string]interface{}{
 		"id": id,
 		"customer": map[string]interface{}{ // BREAKING: sebelumnya string "Budi"

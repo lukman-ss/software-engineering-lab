@@ -13,16 +13,14 @@ import (
 func startGate(n int) (ready chan struct{}, release chan struct{}) {
 	ready = make(chan struct{}, n)
 	release = make(chan struct{})
+
 	go func() {
 		for i := 0; i < n; i++ {
-			select {
-			case <-ready:
-			case <-time.After(5 * time.Second):
-				return // safety: gate not filled
-			}
+			<-ready
 		}
 		close(release)
 	}()
+
 	return ready, release
 }
 

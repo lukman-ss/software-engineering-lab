@@ -37,6 +37,7 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
 
 	// 1. Check cache
+	s.metrics.IncCacheGetOp()
 	cached, err := s.cache.Get(ctx, key)
 	if err != nil {
 		// Categorize error
@@ -78,27 +79,33 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID,
 
 	// Query repository for real data - use tenant-aware method for proper isolation
 	s.metrics.IncDBQuery() // Ensure DBQuery metric increments exactly when repo is called
+	startDB := time.Now()
 	d, err := s.repo.GetDashboard(ctx, tenantID, branchID, businessDate)
 	if err != nil {
 		return Dashboard{}, fmt.Errorf("repo get: %w", err)
 	}
+	s.metrics.RecordRebuildLatency(time.Since(startDB))
 
 	// Rebuild cache
+	startSet := time.Now()
 	data, marshalErr := json.Marshal(d)
 	if marshalErr != nil {
 		// Log but don't fail - we have the data
 		fmt.Printf("warn: failed to marshal dashboard for cache: %v\n", marshalErr)
+		s.metrics.IncError()
 	} else {
 		// Add jitter to prevent synchronized cache expiration across branches
 		jitteredTTL := TTLWithJitter(30*time.Second, 10*time.Second)
 		if setErr := s.cache.Set(ctx, key, string(data), jitteredTTL); setErr != nil {
 			// Log cache set error but don't fail the request
 			s.metrics.IncError()
+			s.metrics.IncCacheSetError()
 			fmt.Printf("warn: cache set failed: %v\n", setErr)
 		} else {
 			s.metrics.IncRebuildSuccess()
 		}
 	}
+	s.metrics.RecordCacheSetLatency(time.Since(startSet))
 
 	return d, nil
 }

@@ -30,7 +30,10 @@ func TestBreakingChange_LegacyClientFails(t *testing.T) {
 	}
 
 	// Decode JSON body seperti legacy client menggunakan helper
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
 	_, err = ParseLegacyInvoice(body)
 
 	// ASSERTION: Decode HARUS gagal karena `customer` sudah bukan string
@@ -119,4 +122,22 @@ func TestUnsafeHandler_POSTMethodNotAllowed(t *testing.T) {
 	}
 
 	t.Logf("✅ UnsafeHandler returns HTTP 405 with Allow: GET for POST method")
+}
+
+// TestUnsafeHandler_WrongPrefixNeverFallsThrough memastikan path dengan prefix salah
+// tidak pernah dianggap sebagai ID 0 yang valid.
+func TestUnsafeHandler_WrongPrefixNeverFallsThrough(t *testing.T) {
+	handler := http.HandlerFunc(UnsafeHandler)
+
+	// GET /wrong/path/1001 - prefix bukan "/api/invoices/"
+	w := performRequest(handler, http.MethodGet, "/wrong/path/1001")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for wrong prefix, got %d", w.Code)
+	}
+	t.Logf("✅ UnsafeHandler returns HTTP 400 for wrong prefix path")
+
+	// Pastikan tidak pernah mengembalikan 200 untuk path yang salah
+	if w.Code == http.StatusOK {
+		t.Error("BUG: wrong prefix path should NOT return HTTP 200")
+	}
 }
