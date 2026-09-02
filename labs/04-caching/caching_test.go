@@ -243,6 +243,52 @@ func TestDistributedLockNegativeTTL(t *testing.T) {
 	t.Log("Negative TTL validation verified")
 }
 
+// Test 9: Distributed lock properly checks and cleans expired keys on Get
+func TestDistributedLockGetCleansExpired(t *testing.T) {
+	locker := caching.NewMockRedisClient()
+	ctx := context.Background()
+
+	key := "lock:item:666"
+	ttl := 50 * time.Millisecond
+
+	// Acquire lock with short TTL
+	acquired, value, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if !acquired {
+		t.Fatal("lock acquisition should succeed")
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(100 * time.Millisecond)
+
+	// Get should return empty (key expired)
+	gotValue, err := locker.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if gotValue != "" {
+		t.Errorf("expired key should return empty, got: %s", gotValue)
+	}
+
+	// Now a new holder can acquire the lock
+	acquired2, value2, err := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if err != nil {
+		t.Fatalf("acquire after expiry failed: %v", err)
+	}
+	if !acquired2 {
+		t.Error("should be able to acquire expired lock")
+	}
+
+	// Should have different token
+	if value == value2 {
+		t.Error("new token should be different from expired one")
+	}
+
+	// Cleanup
+	_ = caching.ReleaseLock(ctx, locker, key, value2)
+
+	t.Log("Expired key cleanup on Get verified")
+}
+
 // Test 7: Cache key includes version for easy invalidation
 func TestCacheKeyIncludesVersion(t *testing.T) {
 	keyV1 := caching.CacheKey("product", "700", 1)
