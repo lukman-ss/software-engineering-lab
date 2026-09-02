@@ -36,10 +36,8 @@ func NewCacheAsideService(db *sql.DB, cache CacheInterface, metrics *CacheMetric
 }
 
 // GetProduct menggunakan cache-aside pattern untuk membaca produk.
-// Catatan Observability:
-// - Cache-hit/cache-miss dicatat terpisah
-// - Cache error (Redis down/network) di-categorize, bukan sama dengan miss
-// - Corrupt cache di-log sebagai error untuk debugging
+// API menerima productID langsung, bukan cache key (menghindari coupling yang rapuh).
+// Key dibuat menggunakan canonical key builder di dalam service.
 func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product, error) {
 	key := CacheKey("product", id, 1)
 
@@ -57,11 +55,12 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 		_ = s.cache.Delete(ctx, key) // attempt cleanup, but don't fail read
 		// Note: In production, log structured error for observability
 	} else if err != nil {
-		// Cache ERROR (Redis down, network, timeout, corrupt value)
+		// Cache ERROR (Redis down, network, timeout)
 		// Bukan cache miss - error teknis
 		s.metrics.IncError()
-		// NOTE: In production, use structured logging. This is for demo only.
-		fmt.Printf("cache error on GET %s: %v\n", key, err)
+		s.metrics.IncDBFallback()
+		// TODO: Use structured logging instead of fmt.Printf
+		// fmt.Printf("cache error on GET %s: %v\n", key, err)
 	} else {
 		// Cache MISS - key tidak ada
 		s.metrics.IncMiss()
@@ -81,7 +80,7 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 	if err != nil {
 		// Marshal error = data tidak valid untuk cache, bukan error bisnis
 		// Return data saja, log error
-		fmt.Printf("warn: marshal product failed for cache: %v\n", err)
+		// fmt.Printf("warn: marshal product failed for cache: %v\n", err)
 		return p, nil
 	}
 
@@ -90,8 +89,7 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 		// Cache SET failed - DB success, data tersedia
 		// Log error, bukan fail business read
 		s.metrics.IncError()
-		fmt.Printf("warn: cache set failed for %s: %v\n", key, err)
-		// NOTE: In production, use structured logging. This is for demo only.
+		// fmt.Printf("warn: cache set failed for %s: %v\n", key, err)
 	}
 
 	return p, nil
