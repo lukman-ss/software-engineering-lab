@@ -517,7 +517,7 @@ Cache **bukan pengganti** database optimization.
 6. Optimalkan Join/Subquery
 7. **Baru Evaluasi Caching** jika workload membutuhkan
 
-Contoh: Query < 1ms tidak selalu tidak layak di-cache. Untuk request volume tinggi (100k+ req/s), overhead Redis bisa menurunkan throughput DB.
+Contoh: query < 1ms tidak selalu tidak layak di-cache. untuk request volume tinggi (100k+ req/s), overhead Redis bisa menurunkan throughput DB.
 
 ---
 
