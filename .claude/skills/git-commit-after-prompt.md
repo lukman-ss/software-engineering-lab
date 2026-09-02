@@ -14,7 +14,7 @@ The skill comes with a configured `PostToolUse` hook that triggers after `Write`
 
 1. The hook is already configured in `.claude/settings.local.json`
 2. It checks for uncommitted changes after edits
-3. Automatically runs `git add -A && git commit -m "Auto-commit from Claude Code"` when changes exist
+3. Auto-generate commit message: `git add <file> && git commit -m "Commit Claude Code: <filename>; <HH:MM:SS>"`
 
 To customize the commit message, edit the hint in the hook configuration.
 
