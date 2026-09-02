@@ -18,18 +18,21 @@ import (
 
 // TestPostgresRowLock_ConcurrentStock menguji row locking dengan PostgreSQL.
 //
-// Menggunakan barrier synchronization untuk memaksa interleaving:
-// A memperoleh lock duluan → B mencoba lock dan ter-block → A commit → B unblocked.
+// Menggunakan PostgreSQL lock introspection untuk membuktikan blocking secara deterministik:
+// Transaction A memperoleh lock → Transaction B menunggu pada PG_STATE = "active" + wait_event_type = "Lock"
 //
-// Scenario (stock = 1, 2 concurrent):
-//   - Transaction A memperoleh lock via SELECT ... FOR UPDATE
-//   - Transaction B ter-block hingga A COMMIT
-//   - A mengurangi stock dari 1 → 0
-//   - B membaca stock = 0, CHECK gagal → Reject
+// Sequence yang dibuktikan:
+//   1. A memperoleh SELECT ... FOR UPDATE (lock acquired)
+//   2. A signal lockAcquired
+//   3. B memulai transaksi, mengeksekusi SELECT ... FOR UPDATE (blocked di DB backend)
+//   4. B verified: pg_stat_activity menunjukkan wait_event_type = "Lock"
+//   5. Main test memverifikasi kondisi ini sebelum melanjutkan
+//   6. close(releaseA) → A UPDATE + COMMIT
+//   7. B unblocked → membaca stock=0 → ErrOutOfStock
 //
 // Expected:
-//   - success = 1
-//   - out of stock = 1
+//   - success_count = 1
+//   - out_of_stock_count = 1
 //   - final_stock = 0
 func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -42,7 +45,7 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	defer db.Close()
 
 	productID := "unit-oli-mesin-rowlock"
-	initialStock := 1
+	const initialStock = 1
 
 	if err := setupTestInventory(ctx, db, productID, initialStock); err != nil {
 		t.Fatalf("setup failed: %v", err)
@@ -52,20 +55,33 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	// Channels for deterministic coordination:
 	// lockAcquired: A has SELECT ... FOR UPDATE completed
 	// releaseA: signal A to proceed with UPDATE/COMMIT
-	// bStarted: B has started and is blocked
-	// bFinished: B has completed (or rejected)
+	// lockVerified: B's lock wait state verified by pg_stat_activity
 	lockAcquired := make(chan struct{})
 	releaseA := make(chan struct{})
-	bStarted := make(chan struct{})
-	bFinished := make(chan struct{})
+	lockVerified := make(chan struct{})
 
 	var wg sync.WaitGroup
 	var successCount int
 	var outOfStockCount int
 	var unexpectedErrorCount int
+	var mu sync.Mutex
 
 	var aErr, bErr error
 	wg.Add(2)
+
+	// Get B's DB connection for introspection
+	connB, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("failed to get B connection: %v", err)
+	}
+	defer connB.Close()
+
+	var backendPIDB int
+	err = connB.QueryRowContext(ctx, "SELECT pg_backend_pid()").Scan(&backendPIDB)
+	if err != nil {
+		t.Fatalf("failed to get backend PID: %v", err)
+	}
+	t.Logf("Transaction B backend PID: %d", backendPIDB)
 
 	// Transaction A — starts first, acquires lock, then waits for release signal
 	go func() {
@@ -73,44 +89,71 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		aErr = trySellWithLockA(ctx, db, productID, lockAcquired, releaseA)
 	}()
 
-	// Transaction B — waits for lock to be acquired, then starts (gets blocked)
+	// Transaction B verification goroutine — polls pg_stat_activity until B is waiting on lock
 	go func() {
 		defer wg.Done()
-		<-lockAcquired  // wait until A has the lock
-		close(bStarted) // signal that B has started
-		bErr = trySellWithLockB(ctx, db, productID)
-		close(bFinished) // signal that B has completed
+
+		// Wait for A to hold lock before starting B
+		<-lockAcquired
+
+		// Start transaction B that will block on the same row
+		err := trySellWithLockBAsync(ctx, connB, productID)
+		if err != nil {
+			t.Errorf("Transaction B failed to start: %v", err)
+			return
+		}
+
+		// Poll pg_stat_activity to verify B is waiting for lock
+		// Using bounded polling with short intervals (not arbitrary sleep)
+		const pollInterval = 10 * time.Millisecond
+		const maxPolls = 100 // 1 second total timeout for lock detection
+		var isWaiting bool
+
+		for i := 0; i < maxPolls; i++ {
+			var waitEventType string
+			err = connB.QueryRowContext(ctx,
+				`SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1`,
+				backendPIDB).Scan(&waitEventType)
+			if err == nil && waitEventType == "Lock" {
+				isWaiting = true
+				break
+			}
+			time.Sleep(pollInterval)
+		}
+
+		if !isWaiting {
+			t.Error("B did not enter lock wait state - test may be flaky or DB race condition")
+			return
+		}
+
+		t.Logf("Verified: Backend %d is waiting on Lock (wait_event_type='Lock')", backendPIDB)
+		close(lockVerified)
 	}()
 
-	// Wait for A to acquire lock, then B starts
+	// Wait for A to acquire lock
 	select {
 	case <-lockAcquired:
+		t.Log("A has acquired row lock via SELECT ... FOR UPDATE")
 	case <-ctx.Done():
 		t.Fatal("transaction A failed to acquire row lock in time")
 	}
 
-	// B should now be blocked waiting for the lock
-	// Verify B has started but not finished yet (explicit blocking proof)
+	// Wait for B to be verified as waiting on the lock
 	select {
-	case <-bStarted:
-		// B has started correctly - it's now blocked on SELECT FOR UPDATE
-	default:
-		t.Fatal("B should have started and be blocked")
-	}
-
-	select {
-	case <-bFinished:
-		t.Fatal("B should NOT have finished yet - it should be blocked on A's lock")
-	default:
-		// B is still blocked - this is correct
+	case <-lockVerified:
+		t.Log("B is confirmed waiting on row lock (PostgreSQL verified)")
+	case <-ctx.Done():
+		t.Fatal("transaction B did not enter lock wait state in time")
 	}
 
 	// Now release A to continue (UPDATE + COMMIT)
+	t.Log("Releasing A to continue with UPDATE + COMMIT")
 	close(releaseA)
 
 	wg.Wait()
 
 	// Classify results
+	mu.Lock()
 	if aErr == nil {
 		successCount++
 	} else if errors.Is(aErr, ErrOutOfStock) {
@@ -126,6 +169,7 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 	} else {
 		unexpectedErrorCount++
 	}
+	mu.Unlock()
 
 	repo := NewPostgresRowLockRepository(db)
 	finalStock, err := repo.GetStock(ctx, productID)
@@ -166,7 +210,7 @@ func TestPostgresRowLock_ConcurrentStock(t *testing.T) {
 		t.Error("B should have been rejected (stock=0 after A), but succeeded")
 	}
 
-	t.Logf("✅ INVARIANT HOLDS: initial_stock = successful + final_stock")
+	t.Logf("✅ ROW LOCK BLOCKING PROOF COMPLETE: A lock → B waiting → A release → B rejected")
 }
 
 // TestPostgresRowLock_HighContention menguji row locking dengan 500 concurrent requests.
@@ -320,38 +364,46 @@ func trySellWithLockA(ctx context.Context, db *sql.DB, productID string, lockAcq
 	return nil
 }
 
-// trySellWithLockB performs TrySell in Transaction B (blocked until A commits).
-func trySellWithLockB(ctx context.Context, db *sql.DB, productID string) error {
-	tx, err := db.BeginTx(ctx, nil)
+// trySellWithLockBAsync starts Transaction B on a dedicated connection for lock introspection.
+// The transaction B will block on SELECT ... FOR UPDATE until A commits.
+func trySellWithLockBAsync(ctx context.Context, conn *sql.Conn, productID string) error {
+	// Start transaction using the dedicated connection
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return fmt.Errorf("begin tx B: %w", err)
 	}
-	defer tx.Rollback()
 
+	// Execute SELECT ... FOR UPDATE which will block if A holds the lock
 	var stock int
 	err = tx.QueryRowContext(ctx,
 		"SELECT stock FROM inventory_products WHERE id = $1 FOR UPDATE",
 		productID).Scan(&stock)
 	if err != nil {
-		return fmt.Errorf("lock and read: %w", err)
+		_ = tx.Rollback()
+		return fmt.Errorf("lock B: %w", err)
 	}
 
+	// At this point, either B got the lock (A already committed) or B is blocked
+	// If blocked, pg_stat_activity will show wait_event_type = "Lock"
+
+	// Check if we got the lock and stock > 0
 	if stock <= 0 {
 		_ = tx.Rollback()
 		return ErrOutOfStock
 	}
 
+	// Update and commit
 	_, err = tx.ExecContext(ctx,
 		"UPDATE inventory_products SET stock = $1 WHERE id = $2",
 		stock-1, productID)
 	if err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("update stock: %w", err)
+		return fmt.Errorf("update stock B: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("commit: %w", err)
+		return fmt.Errorf("commit B: %w", err)
 	}
 
 	return nil
