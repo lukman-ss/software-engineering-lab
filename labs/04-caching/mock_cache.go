@@ -243,15 +243,6 @@ func (r *MockRedisClient) CompareAndDel(ctx context.Context, key, value string) 
 	return true, nil
 }
 
-// ForceExpire forces a key to expire immediately (for testing).
-func (r *MockRedisClient) ForceExpire(key string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.data[key]; ok {
-		r.expiries[key] = time.Now().Add(-1 * time.Minute)
-	}
-}
-
 // Ensure interfaces are satisfied
 var _ CacheInterface = (*MockCache)(nil)
 var _ CacheInterface = (*MockCacheWithStats)(nil)
