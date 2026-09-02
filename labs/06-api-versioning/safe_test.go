@@ -210,7 +210,8 @@ func TestV1Contract_RemainsBackwardCompatible(t *testing.T) {
 	t.Log("✅ V1 contract protected: customer remains string")
 }
 
-// TestV2Contract_UsesNestedCustomer memastikan V2 menggunakan customer sebagai object.
+// TestV2Contract_UsesNestedCustomer memastikan V2 menggunakan customer sebagai object
+// dengan semua field yang tepat.
 func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
@@ -223,9 +224,15 @@ func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// HTTP 200
+	// 1. HTTP Status = 200
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("V2: expected HTTP 200, got %d", resp.StatusCode)
+	}
+
+	// 2. Content-Type = application/json
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("V2: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
 	var v2Resp InvoiceV2Response
@@ -233,19 +240,47 @@ func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 		t.Fatalf("V2 decode failed: %v", err)
 	}
 
-	// customer = object (bukan string)
-	if v2Resp.Customer.Name == "" {
-		t.Error("V2: customer.name tidak boleh kosong")
+	// 3. id == 1001, id JSON number
+	if v2Resp.ID != 1001 {
+		t.Errorf("V2: expected ID=1001, got %d", v2Resp.ID)
 	}
 
-	// customer.id = number
+	// 4. customer JSON object
+	// 5. customer.id == 15, customer.id JSON number
+	if v2Resp.Customer.ID != 15 {
+		t.Errorf("V2: expected customer.ID=15, got %d", v2Resp.Customer.ID)
+	}
 	if v2Resp.Customer.ID <= 0 {
 		t.Error("V2: customer.id harus berupa number positif")
 	}
 
-	// customer.phone = string
+	// 6. customer.name == "Budi", customer.name JSON string
+	if v2Resp.Customer.Name != "Budi" {
+		t.Errorf("V2: expected customer.Name='Budi', got '%s'", v2Resp.Customer.Name)
+	}
+	if v2Resp.Customer.Name == "" {
+		t.Error("V2: customer.name tidak boleh kosong")
+	}
+
+	// 7. customer.phone == "08123", customer.phone JSON string
+	if v2Resp.Customer.Phone != "08123" {
+		t.Errorf("V2: expected customer.Phone='08123', got '%s'", v2Resp.Customer.Phone)
+	}
 	if v2Resp.Customer.Phone == "" {
 		t.Error("V2: customer.phone tidak boleh kosong")
+	}
+
+	// 8. total == 500000, total JSON number
+	if v2Resp.Total != 500000 {
+		t.Errorf("V2: expected Total=500000, got %d", v2Resp.Total)
+	}
+
+	// 9. status == "PAID", status JSON string
+	if v2Resp.Status != "PAID" {
+		t.Errorf("V2: expected Status='PAID', got '%s'", v2Resp.Status)
+	}
+	if v2Resp.Status == "" {
+		t.Error("V2: status tidak boleh kosong")
 	}
 
 	t.Log("✅ V2 contract verified: customer is object with id, name, phone")
