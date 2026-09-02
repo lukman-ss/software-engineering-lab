@@ -96,7 +96,6 @@ Contoh: Dashboard operasional, laporan agregasi, master supplier, katalog jenis 
 Data yang **butuh strong consistency** atau berubah **sangat cepat**:
 - Saldo wallet / kas
 - Status pembayaran
-- OTP / Token sekali pakai
 
 **Nuance:** Data real-time **bisa** menggunakan cache sebagai optimization layer asalkan:
 - Database tetap source of truth
@@ -104,6 +103,26 @@ Data yang **butuh strong consistency** atau berubah **sangat cepat**:
 - TTL sangat pendek
 
 Contoh: Stock display cache 3s untuk UI, tetapi validasi final ke DB dengan `SELECT FOR UPDATE` saat transaksi checkout.
+
+### OTP & Ephemeral State
+
+OTP/token sekali pakai **bukan cache** tetapi sering cocok disimpan di Redis sebagai **ephemeral state store**:
+- TTL native
+- Fast lookup
+- Atomic commands
+- Ephemeral lifecycle (expire setelah use/expiry)
+
+**Penting:** Redis ≠ cache. Redis adalah datastore/technology. "Cache" adalah semantic pattern.
+
+| Semantic | Redis Usage |
+|----------|-------------|
+| Cache | Derived/reconstructable optimization |
+| Session Store | User/session state |
+| OTP Store | Security-sensitive ephemeral state |
+| Lock Backend | Coordination state |
+| Queue | Messaging state |
+
+OTP tetap tidak boleh diperlukan sebagai **stale reusable cache** atau data yang aman direplay.
 
 ---
 
