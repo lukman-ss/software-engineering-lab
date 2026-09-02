@@ -304,7 +304,7 @@ Agar API versioning berhasil, dokumentasi penting banget:
 | Migration guide | Panduan untuk consumer upgrade |
 | Deprecation notice | Pengumuman V1 deprecated + timeline |
 | Version lifecycle | Aturan create/deprecate/sunset |
-| Owner/contact | Siapa harmoni bila ada edge case |
+| Owner/contact | Siapa yang bisa dihubungi bila ada edge case |
 
 > **Tidak perlu Swagger dependency** untuk lab ini. Cukup dokumentasi di README + komentar kode.
 
