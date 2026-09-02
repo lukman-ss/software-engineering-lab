@@ -151,7 +151,7 @@ func TestPostgres_Booking_SameBranchDifferentBranch(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := setupBookingTable(ctx, db); err != nil {
+	if err := resetBookingTable(ctx, db); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
 
