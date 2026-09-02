@@ -441,30 +441,35 @@ Key isolation merupakan fondasi keamanan multi-tenant. tanpa isolation yang bena
 
 ## 14. Cache vs Session
 
-### CACHE
-**Tujuan:** Optimization / reuse, menghindari computation / I/O berulang
+### Perbedaan Fundamental
 
-**Semantic:** Data derived dan dapat direconstruct dari source of truth
+| Aspect | Cache | Session |
+|--------|-------|---------|
+| **Purpose** | Optimization / reuse, menghindari computation / I/O berulang | State persistence, merepresentasikan user/session lifecycle |
+| **Ownership/Scope** | Bisa global, tenant-scoped, user-scoped, query-scoped | Per-user / per-session |
+| **Reconstructability** | **Derived/reconstructable** - dapat di-rebuild dari source of truth | **Authoritative** - state penting yang tidak boleh hilang |
+| **Lifecycle** | Data-dependen, expired berdasarkan data relevance | Login/session-bound, clear pada logout/expiry |
+| **Failure Impact** | Degradasi performa (DB di-hantam) | Logout / cart hilang / state hilang |
+| **Typical TTL** | Workload-dependent (detik sampai hari) | Policy-dependent (menit sampai jam/hari) |
+| **Stale Allowed** | Ya, tergantung business requirement | Tidak, state harus konsisten |
 
-### SESSION
-**Tujuan:** Menyimpan state user/session, lifecycle mengikuti login
+### Semantik yang Penting
 
-**Semantic:** State yang harus konsisten selama session aktif
+**CACHE:** Data derived dan dapat direconstruct dari source of truth. Cache correctness harus dibangun dengan asumsi cache dapat kosong/kadaluarsa kapan saja.
 
-### OTP SEBUH BUKAN SESSION
-OTP adalah **security-sensitive ephemeral state** yang:
-- Memerlukan TTL yang sangat pendek
-- Bisa disimpan di Redis karena native TTL dan fast lookup
-- TAPI bukan "cache derived data" - OTP adalah state yang harus divalidasi secara tepat
+**SESSION:** State yang merepresentasikan suatu user/session. State ini penting untuk workflow user dan tidak boleh hilang tanpa alasan yang tepat.
 
-**Perbedaan Redis Usage:**
-- **Cache**: READ optimization, data dapat stale
-- **Session Store**: State persistence, harus konsisten
-- **OTP Store**: Security-sensitive state, cepat expire
-- **Distributed Lock**: Coordination state, TTL penting
-- **Queue**: Messaging state, ordering penting
+### OTP & Ephemeral State
 
-Redis adalah datastore/technology. "Cache" adalah semantic/pattern.
+OTP/token sekali pakai **bukan cache** tetapi sering cocok disimpan di Redis sebagai **ephemeral state store**:
+- TTL native
+- Fast lookup
+- Atomic commands
+- Ephemeral lifecycle (expire setelah use/expiry)
+
+Redis adalah **datastore/technology**. "Cache" adalah **semantic/pattern**.
+
+Pemakaian Redis tidak otomatis berarti tersebut adalah cache.
 
 ---
 
