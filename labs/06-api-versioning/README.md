@@ -58,7 +58,7 @@ Berikut adalah contoh-perubahan yang menjadi **breaking change**:
 | string → object | `customer: "Budi"` → `customer: {id: 15, name: "Budi"}` |
 | object → array | `customer: {...}` → `customer: [...]` |
 | Change date format | `2026-07-25` → `25/07/2026` |
-| Change incompatible nullability | field wajib → optional (atau sebaliknya) |
+| Nullability berubah | `field: string` → `field: string | null` | Response-side breaking; Request-side biasanya aman |
 
 ### Semantic Changes
 
