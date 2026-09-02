@@ -197,6 +197,98 @@ func TestDistributedLockMutualExclusion(t *testing.T) {
 	}
 }
 
+// Test 7: Distributed lock TTL/lease expiry
+func TestDistributedLockLeaseExpiry(t *testing.T) {
+	locker := caching.NewMockRedisClient()
+	ctx := context.Background()
+
+	key := "lock:item:999"
+	ttl := 100 * time.Millisecond // Very short TTL for testing
+
+	// Holder 1 acquires lock
+	holder1, value1, err := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if err != nil || !holder1 {
+		t.Fatal("first lock acquisition should succeed")
+	}
+
+	// Force expire the lock to simulate TTL expiry
+	locker.(*caching.MockRedisClient).ForceExpire(key)
+
+	// Give a tiny moment for expiry to take effect
+	time.Sleep(time.Millisecond)
+
+	// Holder 2 should now be able to acquire the expired lock
+	holder2, value2, err := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if err != nil {
+		t.Fatalf("should be able to acquire expired lock, got error: %v", err)
+	}
+	if !holder2 {
+		t.Error("expired lock should be available to new holder")
+	}
+	if value2 == "" {
+		t.Error("new holder should receive a token")
+	}
+
+	// Holder 1's old token should NOT release Holder 2's lock
+	released, err := caching.ReleaseLock(ctx, locker, key, value1)
+	if err == nil && released {
+		t.Error("old token should NOT release lock held by new owner")
+	}
+
+	// Holder 2's token should release the lock
+	if err := caching.ReleaseLock(ctx, locker, key, value2); err != nil {
+		t.Errorf("new token should release lock: %v", err)
+	}
+
+	t.Log("Lock lease expiry and token ownership verified")
+}
+
+// Test 8: Wrong token cannot release another holder's lock
+func TestDistributedLockWrongTokenCannotRelease(t *testing.T) {
+	locker := caching.NewMockRedisClient()
+	ctx := context.Background()
+
+	key := "lock:item:888"
+	ttl := 5 * time.Second
+
+	holder1, value1, _ := caching.TryAcquireLock(ctx, locker, key, ttl)
+	if !holder1 {
+		t.Fatal("first lock acquisition should succeed")
+	}
+
+	// Create a fake "other" token
+	otherToken := "fake-token-that-doesnt-match"
+
+	// Attempt to release with wrong token
+	released, err := caching.ReleaseLock(ctx, locker, key, otherToken)
+	if err != nil || released {
+		t.Error("wrong token should NOT release lock")
+	}
+
+	// Original holder can still release
+	if err := caching.ReleaseLock(ctx, locker, key, value1); err != nil {
+		t.Errorf("original token should release lock: %v", err)
+	}
+
+	t.Log("Wrong token rejection verified")
+}
+
+// Test 9: Negative TTL should fail
+func TestDistributedLockNegativeTTL(t *testing.T) {
+	locker := caching.NewMockRedisClient()
+	ctx := context.Background()
+
+	key := "lock:item:777"
+	negativeTTL := -1 * time.Second
+
+	_, _, err := caching.TryAcquireLock(ctx, locker, key, negativeTTL)
+	if err == nil {
+		t.Error("negative TTL should fail to acquire lock")
+	}
+
+	t.Log("Negative TTL validation verified")
+}
+
 // Test 7: Cache key includes version for easy invalidation
 func TestCacheKeyIncludesVersion(t *testing.T) {
 	keyV1 := caching.CacheKey("product", "700", 1)
