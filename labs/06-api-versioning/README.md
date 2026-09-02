@@ -8,7 +8,7 @@ API bukan sekadar endpoint yang menghasilkan HTTP 200. API adalah **kontrak** an
 
 > **HTTP 200 ≠ backward compatible**
 
-Ini adalah yang paling sering saya temui sebagai akar masalah di perusahaan: tim backend menganggap "backend OK" sudah berarti "semua client masih kann". Padahal, perubahan pada representasi data (JSON/XML) sering merusak client yang sudah ada.
+Ini adalah yang paling sering saya temui sebagai akar masalah di perusahaan: tim backend menganggap "backend OK" sudah berarti "semua client masih dapat". Padahal, perubahan pada representasi data (JSON/XML) sering merusak client yang sudah ada.
 
 ---
 
