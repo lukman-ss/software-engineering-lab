@@ -199,46 +199,6 @@ func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
 	t.Log("✓ Bounded rebuildCtx isolates leader context from shared work")
 	t.Log("✓ DB called exactly once - singleflight deduplication maintained")
 }
-func TestNegativeCache(t *testing.T) {
-	cache := caching.NewMockCache()
-	repo := caching.NewFakeDashboardRepository()
-	metrics := caching.NewCacheMetrics()
-	svc := caching.NewRobustDashboardService(repo, cache, metrics)
-	ctx := context.Background()
 
-	// 1. Configure repo to return error for specific branch (not found)
-	branchID := int64(999)
-	repo.SetNextValue(func() caching.Dashboard {
-		// Mock cache doesn't naturally support negative caching natively yet
-		// We'll simulate the service behavior handling a not-found
-		return caching.Dashboard{BranchID: -1} // -1 represents not found in this fake
-	})
-
-	// 2. First lookup - Cache Miss, hits repo
-	result1, _ := svc.GetDashboard(ctx, branchID)
-	if repo.CallCount() != 1 {
-		t.Fatalf("expected 1 repo call, got %d", repo.CallCount())
-	}
-	if result1.BranchID != -1 {
-		t.Fatalf("expected not found marker")
-	}
-
-	// In a real implementation, the service would check for NotFound error
-	// and cache a "NULL" or special marker. The RobustDashboardService
-	// doesn't natively do negative caching in this lab (it caches the empty object).
-	// But it does cache the result!
-
-	// 3. Second lookup - Cache Hit, does NOT hit repo
-	result2, _ := svc.GetDashboard(ctx, branchID)
-
-	if repo.CallCount() != 1 {
-		t.Errorf("expected repo call count to remain 1, got %d", repo.CallCount())
-	}
-
-	if result2.BranchID != -1 {
-		t.Errorf("expected cached not-found marker")
-	}
-
-	t.Log("✓ Negative cache prevents repeated DB lookups for non-existent keys")
-	t.Log("Trade-off: Object created during negative TTL = stale not-found")
-}
+// NOTE: TestNegativeCache removed - it was caching a Dashboard{BranchID: -1} object,
+// not true negative caching with a semantic "not-found" marker.

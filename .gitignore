@@ -80,3 +80,4 @@ tmp/
 
 # Lab binaries (specific)
 /labs/04-caching/demo
+/labs/04-caching/*.test

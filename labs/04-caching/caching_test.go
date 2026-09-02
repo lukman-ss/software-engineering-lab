@@ -99,13 +99,6 @@ func TestCacheStaleRead(t *testing.T) {
 	t.Log("✓ Stale read verified: Cache returns old data until invalidated")
 }
 
-// Test 4: Single Flight Pattern - dedupes concurrent DB queries
-func TestSingleFlightConcurrentRequests(t *testing.T) {
-	// Replaced by TestStampedeProtectedVersion and TestConcurrentCacheMissProtectedBySingleflight
-	// which test this properly with sync barriers and robust implementations.
-	t.Log("✓ Legacy test removed. Singleflight concurrency is thoroughly tested in stampede_test.go and cache_integration_test.go")
-}
-
 // Test 5: Probabilistic early refresh mitigates stampede
 func TestCacheStampedeMitigation(t *testing.T) {
 	now := time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
