@@ -322,3 +322,30 @@ func TestV1Contract_DetectsTotalNumberToString(t *testing.T) {
 
 	t.Fatal("V1 contract test GAGAL mendeteksi: total berubah dari number ke string (breaking change terlewat!)")
 }
+
+// TestV1Contract_DetectsStatusStringToObject memastikan contract test V1
+// akan mendeteksi bila `status` berubah dari string menjadi object.
+// Tujuan: regression guard untuk breaking change tipe data.
+func TestV1Contract_DetectsStatusStringToObject(t *testing.T) {
+	// Response hipotetis yang melanggar V1 contract (status jadi object)
+	violatingResponse := []byte(`{
+		"id": 1001,
+		"customer": "Budi",
+		"total": 500000,
+		"status": {"code": "PAID", "label": "Paid"}
+	}`)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(violatingResponse, &raw); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// V1 contract: status HARUS string
+	var statusStr string
+	err := json.Unmarshal(raw["status"], &statusStr)
+	if err == nil {
+		t.Fatal("V1 contract test GAGAL mendeteksi: status berubah dari string ke object (breaking change terlewat!)")
+	}
+
+	t.Logf("✅ V1 contract detected breaking change: status string → object: %v", err)
+}
