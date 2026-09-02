@@ -499,7 +499,7 @@ Bukan kondisi yang boleh dianggap normal:
 | **distributed workflow** | Workflow yang melibatkan beberapa sistem/database |
 | **distributed consistency** | Menjamin state konsisten di beberapa sistem secara asynchronous |
 | **dual-write problem** | Masalah konsistensi saat mencoba menulis ke DB lalu publish event secara terpisah |
-| **event-driven** | Pola di mana sistem bereaksi terhadap event, bukan synchronous RPC |
+| **event-driven** | Pola arsitektur di mana komponen menghasilkan dan/atau bereaksi terhadap event untuk mengomunikasikan perubahan state atau kejadian bisnis |
 | **retry** | Mencoba kembali operasi yang gagal |
 | **idempotency** | Operasi yang dapat dipanggil berulang kali tanpa efek samping tambahan |
 | **at-least-once** | Delivery model tempat event bisa dikirim berulang kali |
