@@ -28,12 +28,12 @@ type workerResult struct {
 // Transaction A memperoleh lock → Transaction B menunggu pada pg_stat_activity (wait_event_type='Lock')
 //
 // Sequence yang dibuktikan:
-//   1. A BEGIN, SELECT ... FOR UPDATE, acquires row lock
-//   2. A closes lockAcquired channel (signal)
-//   3. B gets dedicated connection, starts transaction, tries SELECT ... FOR UPDATE (blocked)
-//   4. Main verifies B is waiting via pg_stat_activity (wait_event_type = 'Lock')
-//   5. close(releaseA) → A UPDATE + COMMIT
-//   6. B unblocked → reads stock=0 → ErrOutOfStock
+//  1. A BEGIN, SELECT ... FOR UPDATE, acquires row lock
+//  2. A closes lockAcquired channel (signal)
+//  3. B gets dedicated connection, starts transaction, tries SELECT ... FOR UPDATE (blocked)
+//  4. Main verifies B is waiting via pg_stat_activity (wait_event_type = 'Lock')
+//  5. close(releaseA) → A UPDATE + COMMIT
+//  6. B unblocked → reads stock=0 → ErrOutOfStock
 //
 // Expected:
 //   - success_count = 1
