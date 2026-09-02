@@ -1,9 +1,8 @@
 {
-  "hooks": {
-    "notification": [
-      {
-        "command": "sh -c 'if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then git add -A && git -c user.name=\"Claude\" -c user.email=\"claude@local\" commit -m \"Auto: $(date +%H:%M)\" 2>/dev/null; fi'"
-      }
-    ]
-  }
+  "Notification": [
+    {
+      "command": "sh -c 'if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then git add -A && git -c user.name=\"Claude\" -c user.email=\"claude@local\" commit -m \"Auto: $(date +%H:%M)\" 2>/dev/null; fi'",
+      "matcher": "*"
+    }
+  ]
 }
