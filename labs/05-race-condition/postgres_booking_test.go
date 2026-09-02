@@ -15,26 +15,14 @@ import (
 	"github.com/lukman-ss/software-engineering-lab/pkg/database"
 )
 
-// setupBookingTable ensures the table exists and is clean for testing.
-func setupBookingTable(ctx context.Context, db *sql.DB) error {
-	// Create table if not exists (schema source of truth)
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS service_bookings (
-			id SERIAL PRIMARY KEY,
-			branch_id VARCHAR(50) NOT NULL,
-			customer_id VARCHAR(50) NOT NULL,
-			service_date DATE NOT NULL,
-			slot_time TIME NOT NULL,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			CONSTRAINT uq_service_bookings_slot UNIQUE (branch_id, service_date, slot_time)
-		)
-	`)
+// resetBookingTable truncates the service_bookings table for test isolation.
+// Schema creation is handled by schema.sql via Docker PostgreSQL init.
+func resetBookingTable(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx, "TRUNCATE TABLE service_bookings RESTART IDENTITY CASCADE")
 	if err != nil {
-		return err
+		return fmt.Errorf("reset service_bookings failed; ensure schema.sql has been initialized via docker compose up -d postgres: %w", err)
 	}
-	// Clean for test
-	_, err = db.ExecContext(ctx, `TRUNCATE TABLE service_bookings RESTART IDENTITY CASCADE`)
-	return err
+	return nil
 }
 
 // TestPostgres_ConcurrentBooking menguji 500 concurrent requests booking exclusive slot dengan DB asli.
