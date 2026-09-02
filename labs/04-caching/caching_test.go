@@ -65,7 +65,7 @@ func TestCacheAsideHit(t *testing.T) {
 	t.Log("✓ Cache aside pattern validated using robust service")
 }
 
-// Test 3: Stale read is possible with cache TTL
+// Test 4: Stale read is possible with cache TTL
 func TestCacheStaleRead(t *testing.T) {
 	repo := caching.NewFakeDashboardRepository()
 	cache := caching.NewMockCache()
@@ -240,7 +240,7 @@ func TestDistributedLockNegativeTTL(t *testing.T) {
 // NOTE: TestDistributedLockGetCleansExpired removed - it used time.Sleep(100ms) which is flaky.
 // Lock expiry with real time is better tested via integration tests or with injected fake clock.
 
-// Test 9: Cache key includes version for easy invalidation
+// Test 9: Cache key versioning for schema/deployment namespace migration
 func TestCacheKeyIncludesVersion(t *testing.T) {
 	keyV1 := caching.CacheKey("product", "700", 1)
 	keyV2 := caching.CacheKey("product", "700", 2)
