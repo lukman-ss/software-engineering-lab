@@ -469,49 +469,49 @@ func TestSingleflightContextCancellation(t *testing.T) {
 	cache := caching.NewMockCache()
 	repo := caching.NewCounterRepository()
 	svc := caching.NewProtectedStampedeService(cache, repo)
-	
+
 	// Create two contexts: one will be cancelled, one will complete
 	ctx1 := context.Background()
 	ctx2, cancel := context.WithCancel(context.Background())
-	
+
 	// Create channels to track results
 	errCh := make(chan error, 2)
-	
+
 	// Lock the repository so requests block
 	repo.Block()
-	
+
 	// Launch first request
 	go func() {
 		_, err := svc.GetData(ctx1, 99)
 		errCh <- err
 	}()
-	
+
 	// Wait a tiny bit to ensure req 1 establishes the singleflight
 	time.Sleep(10 * time.Millisecond)
-	
+
 	// Launch second request (will wait on singleflight)
 	go func() {
 		_, err := svc.GetData(ctx2, 99)
 		errCh <- err
 	}()
-	
+
 	// Cancel second request while it's waiting
 	cancel()
-	
+
 	// Second request should return context cancelled immediately
 	err2 := <-errCh
 	if err2 != context.Canceled {
 		t.Errorf("Expected context.Canceled for second request, got: %v", err2)
 	}
-	
+
 	// Release repository block
 	repo.Unblock()
-	
+
 	// First request should complete successfully
 	err1 := <-errCh
 	if err1 != nil {
 		t.Errorf("First request should complete successfully, got error: %v", err1)
 	}
-	
+
 	t.Log("✓ Context cancellation during singleflight wait validated")
 }

@@ -3,11 +3,11 @@ package caching_test
 import (
 	"context"
 	"encoding/json"
-	"testing"
 	"fmt"
+	"testing"
 
-	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 	"github.com/DATA-DOG/go-sqlmock"
+	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
 // TestWriteThroughSuccess memverifikasi update DB diikuti update cache.
