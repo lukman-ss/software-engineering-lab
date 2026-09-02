@@ -1,6 +1,10 @@
 package api_versioning
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+	"errors"
+)
 
 // Invoice adalah model internal domain untuk invoicing sistem bengkel CMMS.
 // Ini adalah model single source of truth yang tidak terhubung langsung dengan HTTP contract.
@@ -36,7 +40,11 @@ func ParseLegacyInvoice(body []byte) (LegacyInvoice, error) {
 	return inv, err
 }
 
+// ErrInvoiceNotFound adalah error sentinel untuk invoice yang tidak ditemukan.
+var ErrInvoiceNotFound = errors.New("invoice not found")
+
 // InvoiceRepository mendefinisikan interface untuk mengakses data invoice.
+// Menggunakan context.Context untuk cancellation dan timeout.
 type InvoiceRepository interface {
-	GetInvoiceByID(ctx any, id int) (Invoice, error)
+	GetInvoiceByID(ctx context.Context, id int) (Invoice, error)
 }
