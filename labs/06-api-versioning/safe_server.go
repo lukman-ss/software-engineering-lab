@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -56,16 +57,6 @@ func mapToV2(domain Invoice) InvoiceV2Response {
 		Total:  domain.Total,
 		Status: domain.Status,
 	}
-}
-
-// ErrInvoiceNotFound adalah error sentinel untuk invoice yang tidak ditemukan.
-// WHY: memungkinkan handler menerjemahkan ke HTTP 404.
-var ErrInvoiceNotFound = errors.New("invoice not found")
-
-// InvoiceRepository mendefinisikan interface untuk mengakses data invoice.
-// Menggunakan context.Context untuk cancellation dan timeout.
-type InvoiceRepository interface {
-	GetInvoiceByID(ctx context.Context, id int) (Invoice, error)
 }
 
 // mockInvoiceRepository simulasi repository untuk testing.
