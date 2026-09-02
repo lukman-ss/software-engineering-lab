@@ -1,7 +1,6 @@
 package api_versioning
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 )
