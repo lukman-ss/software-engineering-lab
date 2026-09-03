@@ -126,13 +126,14 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | 07 | Observability |
 | 08 | Database Isolation Level: non-repeatable read, phantom read, serializable conflict, SELECT FOR UPDATE deadlock prevention |
 | 09 | Code Review: identifying bugs before production |
-| 10 | Rate Limiting: token bucket, client limits, resource protection |
+| 10 | Project Estimation: breakdown, uncertainty, risk, spikes, ranges, effort vs duration, and contingency |
 | 11 | Lock contention causing delays |
 | 12 | Optimistic locking for concurrent updates |
 | 13 | Deadlocks hanging the system |
 | 14 | Outbox Pattern: transactional outbox deep dive, retry, DLQ, idempotency, recovery |
 | 15 | Retry storms amplifying failures |
 | 16 | Circuit Breaker: cascading failures from downstream |
+| 17 | Rate Limiting: token bucket, client limits, resource protection |
 
 ## How to Run
 
@@ -211,15 +212,16 @@ make lint          # go vet
 - [x] 05 Race Condition
 - [x] 06 API Versioning
 - [x] 07 Observability
-- [ ] 08 Database Isolation Level
-- [ ] 09 Code Review
-- [ ] 10 Rate Limiting
-- [ ] 11 Pessimistic Locking
-- [ ] 12 Optimistic Locking
+- [x] 08 Database Isolation Level
+- [x] 09 Code Review
+- [ ] 10 Project Estimation
+- [x] 11 Pessimistic Locking
+- [x] 12 Optimistic Locking
 - [x] 13 Deadlock
-- [ ] 14 Outbox Pattern
-- [ ] 15 Retry
-- [ ] 16 Circuit Breaker
+- [x] 14 Outbox Pattern
+- [x] 15 Retry
+- [x] 16 Circuit Breaker
+- [x] 17 Rate Limiting
 
 ### Phase 2: Extended Topics
 - Bulkhead pattern

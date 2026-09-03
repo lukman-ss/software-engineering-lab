@@ -98,4 +98,4 @@ if errors.Is(err, breaker.ErrCircuitOpen) {
 ## Navigasi
 
 - **Previous**: [Lab 15 — Retry](../15-retry/)
-- **Next**: None
+- **Next**: [Lab 17 — Rate Limiting](../17-rate-limiting/)

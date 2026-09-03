@@ -511,15 +511,18 @@ func TestImprovedCheckout_SameKeyConcurrentRequestsWithBarrier(t *testing.T) {
 	idem := codereview.NewMockIdempotencyRepository()
 	txManager := codereview.NewMockTransactionManager(products, repo)
 
-	var barrier sync.WaitGroup
-	barrier.Add(2)
+	var claimedCount atomic.Int32
+	bothAttempted := make(chan struct{})
+
 	idem.SetClaimHook(func(key string) {
-		barrier.Done()
-		barrier.Wait()
+		if claimedCount.Add(1) == 2 {
+			close(bothAttempted)
+		} else {
+			<-bothAttempted
+		}
 	})
 
 	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
-
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
 
 	var wg sync.WaitGroup

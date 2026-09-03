@@ -66,7 +66,7 @@ func (tb *TokenBucket) Use(n float64) (bool, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	now := time.Now()
+	now := tb.clock.Now()
 
 	// Refill tokens based on elapsed time
 	elapsed := now.Sub(tb.lastRefill).Seconds()
@@ -76,7 +76,7 @@ func (tb *TokenBucket) Use(n float64) (bool, error) {
 	if tb.tokens > tb.capacity {
 		tb.tokens = tb.capacity
 	}
-	tb.lastRefill = now()
+	tb.lastRefill = now
 
 	// Check if we have enough tokens
 	if tb.tokens >= n {

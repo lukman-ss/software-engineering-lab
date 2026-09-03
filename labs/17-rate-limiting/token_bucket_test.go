@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/10-rate-limiting"
+	"github.com/lukman-ss/software-engineering-lab/labs/17-rate-limiting"
 )
 
 func TestTokenBucketAllowsWhenFull(t *testing.T) {

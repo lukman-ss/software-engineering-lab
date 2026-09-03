@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/10-rate-limiting"
+	"github.com/lukman-ss/software-engineering-lab/labs/17-rate-limiting"
 )
 
 func TestRedisRateLimiterConcept(t *testing.T) {
-	limiter := ratelimit.NewRedisRateLimiter(100, 60) // 100 req/min
+	_ = ratelimit.NewRedisRateLimiter(100, 60) // 100 req/min
 
 	// The Lua script ensures atomicity across multiple app instances
 

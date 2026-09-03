@@ -266,3 +266,10 @@ go test -v -race ./...
 3. **Transaction tidak cukup** - transaction menjamin atomicity, concurrency control tetap diperlukan
 4. **Idempotency penting untuk distributed system** - retry bukan workaround, harus dirancang
 5. **Business invariant harus selalu dipertahankan** - stock >= 0 adalah invariant kritikal
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 08 — Database Isolation Level](../08-database-isolation-level/)
+- **Next**: [Lab 10 — Project Estimation](../10-project-estimation/)

@@ -22,5 +22,5 @@ Holding a pessimistic lock for too long (e.g., executing slow queries, HTTP call
 
 ## Navigasi
 
-- **Previous**: [Lab 10 — Rate Limiting](../10-rate-limiting/)
+- **Previous**: [Lab 10 — Project Estimation](../10-project-estimation/)
 - **Next**: [Lab 12 — Optimistic Locking](../12-optimistic-locking/)

@@ -1,17 +1,18 @@
 package ratelimit
 
 import (
-	"errors"
 	"sync"
+	"time"
 )
 
 // PerClientLimiter implements rate limiting per logical client.
 type PerClientLimiter struct {
-	mu          sync.RWMutex
-	buckets     map[string]*TokenBucket
-	globalLimit float64 // Global rate limit across all clients
-	globalMu    sync.Mutex
-	globalCount float64 // Tokens used recently
+	mu             sync.RWMutex
+	buckets        map[string]*TokenBucket
+	globalLimit    float64 // Global rate limit across all clients
+	globalCapacity float64
+	globalMu       sync.Mutex
+	globalCount    float64 // Tokens used recently
 }
 
 // PerClientConfig holds configuration for per-client rate limiting.
@@ -25,9 +26,10 @@ type PerClientConfig struct {
 // NewPerClientLimiter creates a new per-client rate limiter.
 func NewPerClientLimiter(cfg PerClientConfig) *PerClientLimiter {
 	return &PerClientLimiter{
-		buckets:     make(map[string]*TokenBucket),
-		globalLimit: cfg.GlobalRate,
-		globalCount: 0,
+		buckets:        make(map[string]*TokenBucket),
+		globalLimit:    cfg.GlobalRate,
+		globalCapacity: cfg.GlobalCapacity,
+		globalCount:    0,
 	}
 }
 

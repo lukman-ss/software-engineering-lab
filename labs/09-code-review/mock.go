@@ -304,10 +304,15 @@ func (r *MockIdempotencyRepository) SetClaimHook(hook func(key string)) {
 }
 
 func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error) {
+	hook := r.claimHook
+	if hook != nil {
+		hook(key)
+	}
+
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	existing, exists := r.records[key]
 	if exists {
-		r.mu.Unlock()
 		if existing.RequestHash != hash {
 			return "", nil, ErrIdempotencyConflict
 		}
@@ -320,12 +325,6 @@ func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash 
 	r.records[key] = &IdempotencyRecord{
 		RequestHash: hash,
 		Status:      IdempotencyStatusProcessing,
-	}
-	hook := r.claimHook
-	r.mu.Unlock()
-
-	if hook != nil {
-		hook(key)
 	}
 
 	return IdempotencyStatusProcessing, nil, nil

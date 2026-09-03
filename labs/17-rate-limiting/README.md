@@ -1,4 +1,4 @@
-# Lab 10: Rate Limiting Patterns
+# Lab 17: Rate Limiting Patterns
 
 Rate limiting is essential for protecting services from abuse and overload.
 
@@ -116,7 +116,7 @@ Using Redis Lua ensures atomicity:
 ## Running Tests
 
 ```bash
-go test ./labs/10-rate-limiting/... -v
+go test ./labs/17-rate-limiting/... -v
 ```
 
 ## Production Considerations
@@ -131,5 +131,4 @@ go test ./labs/10-rate-limiting/... -v
 
 ## Navigasi
 
-- **Previous**: [Lab 09 — Code Review](../09-code-review/)
-- **Next**: [Lab 11 — Pessimistic Locking](../11-pessimistic-locking/)
+- **Previous**: [Lab 16 — Circuit Breaker](../16-circuit-breaker/)
