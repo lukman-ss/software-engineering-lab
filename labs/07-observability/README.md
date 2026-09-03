@@ -112,7 +112,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
    - Traffic: `lab07_http_requests_total{method="POST",route="/invoices/{id}/process",status_class="2xx"}`
    - Latency: `lab07_http_request_duration_seconds` & `lab07_dependency_duration_seconds`
    - Errors: `lab07_http_request_errors_total` & `lab07_dependency_errors_total`
-   - Saturation: `lab07_http_in_flight_requests`
+   - Saturation proxy: `lab07_http_in_flight_requests`
 3. **Structured Slog Correlation**:
    ```json
    {
@@ -138,7 +138,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 - **Latency**: Waktu yang dibutuhkan untuk melayani request (`lab07_http_request_duration_seconds`, `lab07_dependency_duration_seconds`).
 - **Traffic**: Ukuran beban pada sistem (`lab07_http_requests_total`).
 - **Errors**: Tingkat kegagalan request (`lab07_http_request_errors_total`, `lab07_dependency_errors_total`).
-- **Saturation**: Seberapa penuh kapasitas layanan (`lab07_http_in_flight_requests`).
+- **Saturation proxy**: Seberapa penuh kapasitas layanan diestimasi melalui concurrency pressure (`lab07_http_in_flight_requests`). Catatan: di production, resource saturation yang sebenarnya biasanya dilihat dari metrik seperti *database connection pool utilization*, *queue depth*, *worker/goroutine utilization*, atau *CPU throttling*.
 
 ---
 
@@ -217,9 +217,13 @@ Operasi simulasi menggunakan timer yang dapat dihentikan (`time.NewTimer` + `def
 
 ## Cara Menjalankan dengan Docker
 
+Jalankan perintah berikut dari root repository:
+
 ```bash
 docker compose up -d
 ```
+
+*(Atau jika Anda sedang berada di dalam direktori `labs/07-observability`, gunakan: `docker compose -f ../../docker-compose.yml up -d`)*
 
 ### Endpoints Layanan
 - **Lab 07 API**: `http://localhost:8087`

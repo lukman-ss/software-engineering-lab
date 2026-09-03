@@ -25,15 +25,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func initTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
+func resolveServiceName() string {
+	serviceName := os.Getenv("OTEL_SERVICE_NAME")
+	if serviceName == "" {
+		return "lab07-observability"
+	}
+	return serviceName
+}
+
+func initTracerProvider(ctx context.Context, serviceName string) (*sdktrace.TracerProvider, error) {
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "localhost:4317" // Default Jaeger OTLP gRPC port
-	}
-
-	serviceName := os.Getenv("OTEL_SERVICE_NAME")
-	if serviceName == "" {
-		serviceName = "lab07-observability"
 	}
 
 	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint), otlptracegrpc.WithInsecure())
@@ -135,8 +138,10 @@ func main() {
 	reg := prometheus.NewRegistry()
 	collector := observability.NewPrometheusCollector(reg)
 
+	serviceName := resolveServiceName()
+
 	// OTel TracerProvider
-	tp, err := initTracerProvider(context.Background())
+	tp, err := initTracerProvider(context.Background(), serviceName)
 	if err != nil {
 		logger.Error("failed to initialize tracer provider", "error", err)
 		os.Exit(1)
@@ -148,7 +153,7 @@ func main() {
 			logger.Error("tracer provider shutdown failed", "error", err)
 		}
 	}()
-	tracer := otel.Tracer(os.Getenv("OTEL_SERVICE_NAME"))
+	tracer := otel.Tracer(serviceName)
 
 	// Notification client endpoint for simulated downstream service
 	notifURL := os.Getenv("NOTIFICATION_SERVICE_URL")
