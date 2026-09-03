@@ -4,19 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 )
 
 var (
-	ErrInvalidRange        = errors.New("invalid estimate range: min must be <= most likely and most likely <= max")
-	ErrNegativeEstimate    = errors.New("estimate values cannot be negative")
-	ErrInvalidAvailability = errors.New("availability must be between 0.0 (exclusive) and 1.0 (inclusive)")
-	ErrNegativeContingency = errors.New("contingency rate cannot be negative")
-	ErrEmptyProject        = errors.New("project must have at least one task or feature")
-	ErrUnknownRiskNoSpike  = errors.New("task with unknown risk cannot have zero effort without a spike or explicit range")
-	ErrInvalidRiskLevel    = errors.New("invalid risk level")
+	ErrInvalidRange         = errors.New("invalid estimate range: min must be <= most likely and most likely <= max")
+	ErrNegativeEstimate     = errors.New("estimate values cannot be negative")
+	ErrInvalidAvailability  = errors.New("availability must be between 0.0 (exclusive) and 1.0 (inclusive)")
+	ErrNegativeContingency  = errors.New("contingency rate cannot be negative")
+	ErrEmptyProject         = errors.New("project must have at least one task or feature")
+	ErrUnknownRiskNoSpike   = errors.New("task with unknown risk must have SpikeDays > 0")
+	ErrInvalidRiskLevel     = errors.New("invalid risk level")
+	ErrInvalidEngineerCount = errors.New("engineer count must be at least 1")
 )
 
-// RiskLevel represents the technical uncertainty or complexity risk of a task.
 type RiskLevel string
 
 const (
@@ -26,7 +27,6 @@ const (
 	RiskUnknown RiskLevel = "Unknown"
 )
 
-// ConfidenceLevel represents the overall project estimation confidence.
 type ConfidenceLevel string
 
 const (
@@ -35,14 +35,12 @@ const (
 	ConfidenceLow    ConfidenceLevel = "Low"
 )
 
-// EstimateRange models effort range using 3-point estimation (Min, MostLikely, Max).
 type EstimateRange struct {
 	Min        float64
 	MostLikely float64
 	Max        float64
 }
 
-// Validate checks domain invariants for estimate ranges.
 func (r EstimateRange) Validate() error {
 	if r.Min < 0 || r.MostLikely < 0 || r.Max < 0 {
 		return ErrNegativeEstimate
@@ -53,12 +51,14 @@ func (r EstimateRange) Validate() error {
 	return nil
 }
 
-// Expected returns the PERT expected effort: (Min + 4*MostLikely + Max) / 6.
 func (r EstimateRange) Expected() float64 {
 	return (r.Min + 4.0*r.MostLikely + r.Max) / 6.0
 }
 
-// Task represents a discrete piece of work.
+func (r EstimateRange) String() string {
+	return fmt.Sprintf("[%.1f–%.1f]", r.Min, r.Max)
+}
+
 type Task struct {
 	Name        string
 	Estimate    EstimateRange
@@ -67,7 +67,6 @@ type Task struct {
 	Assumptions []string
 }
 
-// Validate ensures task data invariants are met.
 func (t Task) Validate() error {
 	if err := t.Estimate.Validate(); err != nil {
 		return fmt.Errorf("task %q: %w", t.Name, err)
@@ -78,68 +77,100 @@ func (t Task) Validate() error {
 	if t.Risk != RiskLow && t.Risk != RiskMedium && t.Risk != RiskHigh && t.Risk != RiskUnknown {
 		return fmt.Errorf("task %q: %w", t.Name, ErrInvalidRiskLevel)
 	}
-	if t.Risk == RiskUnknown && t.SpikeDays == 0 && t.Estimate.Max == 0 {
+	if t.Risk == RiskUnknown && t.SpikeDays == 0 {
 		return fmt.Errorf("task %q: %w", t.Name, ErrUnknownRiskNoSpike)
 	}
 	return nil
 }
 
-// Feature groups multiple tasks across activities (Backend, Frontend, Testing, etc.).
 type Feature struct {
 	Name  string
 	Tasks []Task
 }
 
-// Project represents the full project scope with estimation parameters.
 type Project struct {
-	Name             string
-	Features         []Feature
-	Tasks            []Task
-	EngineerCount    int
-	Availability     float64 // e.g., 0.70 for 70% productive project allocation
-	ContingencyRate  float64 // e.g., 0.15 for 15% contingency buffer (0 = auto-calculated from risk)
-	AutoContingency  bool    // if true, calculates contingency dynamically based on project risk profile
-	Assumptions      []string
+	Name            string
+	Features        []Feature
+	Tasks           []Task
+	EngineerCount   int
+	Availability    float64
+	ContingencyRate float64
+	AutoContingency bool
+	Assumptions     []string
 }
 
-// EffortBreakdown summarizes calculated effort across ranges.
+type EffortRange struct {
+	MinDays      float64
+	ExpectedDays float64
+	MaxDays      float64
+}
+
+func (r EffortRange) Validate() error {
+	if r.MinDays > r.ExpectedDays || r.ExpectedDays > r.MaxDays {
+		return errors.New("effort range validation error: min <= expected <= max")
+	}
+	return nil
+}
+
+func (r EffortRange) String() string {
+	return fmt.Sprintf("%.1f–%.1f engineer-days", r.MinDays, r.MaxDays)
+}
+
+type DurationRange struct {
+	MinDays      float64
+	ExpectedDays float64
+	MaxDays      float64
+}
+
+func (r DurationRange) Weeks() (min, expected, max float64) {
+	return r.MinDays / 5.0, r.ExpectedDays / 5.0, r.MaxDays / 5.0
+}
+
+func (r DurationRange) String() string {
+	minW, _, maxW := r.Weeks()
+	return fmt.Sprintf("%.0f–%.0f working days (%.1f–%.1f weeks)", r.MinDays, r.MaxDays, minW, maxW)
+}
+
 type EffortBreakdown struct {
-	MinDays        float64
-	ExpectedDays   float64
-	MaxDays        float64
-	SpikeDays      float64
-	BaseEffort     float64 // expected implementation + spike
-	ContingencyDays float64
-	TotalEffortDays float64 // BaseEffort + ContingencyDays
+	ImplementationEffort EffortRange
+	SpikeEffort          EffortRange
+	BaseEffort           EffortRange
+	ContingencyEffort    float64
+	FinalEffort          EffortRange
 }
 
-// DurationBreakdown summarizes calendar time based on availability and engineering capacity.
 type DurationBreakdown struct {
-	CalendarDays  float64
-	CalendarWeeks float64
+	CalendarDuration DurationRange
 }
 
-// EstimationResult is the comprehensive result of structured project estimation.
 type EstimationResult struct {
-	ProjectName       string
-	Effort            EffortBreakdown
-	Duration          DurationBreakdown
-	OverallRisk       RiskLevel
-	Confidence        ConfidenceLevel
-	RequiredSpikes    []string
-	AllAssumptions    []string
-	TotalTaskCount    int
+	ProjectName    string
+	Effort         EffortBreakdown
+	Duration       DurationBreakdown
+	OverallRisk    RiskLevel
+	Confidence     ConfidenceLevel
+	RequiredSpikes []SpikeInfo
+	AllAssumptions []string
+	TotalTaskCount int
+	EngineerCount  int
+	Availability   float64
 }
 
-// NaiveEstimator implements a simplistic, single-point calculation for demonstration.
-// Junior mental model: 10 pages * 1 day = 10 days (ignores risk, uncertainty, activities, availability).
+type SpikeInfo struct {
+	TaskName string
+	Days     float64
+}
+
+func (s SpikeInfo) String() string {
+	return fmt.Sprintf("%s (%.1f days spike)", s.TaskName, s.Days)
+}
+
 func EstimateByPageCount(pageCount int) int {
 	return pageCount * 1
 }
 
-// Estimate calculates a comprehensive, risk-aware project estimate.
 func (p Project) Estimate() (*EstimationResult, error) {
-	allTasks := make([]Task, 0, len(p.Tasks))
+	allTasks := make([]Task, 0, len(p.Tasks)+len(p.Features)*5)
 	allTasks = append(allTasks, p.Tasks...)
 	for _, f := range p.Features {
 		allTasks = append(allTasks, f.Tasks...)
@@ -157,21 +188,20 @@ func (p Project) Estimate() (*EstimationResult, error) {
 		return nil, ErrNegativeContingency
 	}
 
-	engineerCount := p.EngineerCount
-	if engineerCount <= 0 {
-		engineerCount = 1
+	if p.EngineerCount < 1 {
+		return nil, ErrInvalidEngineerCount
 	}
 
 	var (
-		minSum        float64
-		expectedSum   float64
-		maxSum        float64
-		spikeSum      float64
-		highRiskCount int
+		implMinSum      float64
+		implExpectedSum float64
+		implMaxSum      float64
+		spikeSum        float64
+		highRiskCount   int
 		mediumRiskCount int
-		unknownCount  int
-		requiredSpikes []string
-		assumptions   []string
+		unknownCount    int
+		requiredSpikes  []SpikeInfo
+		assumptions     []string
 	)
 
 	assumptions = append(assumptions, p.Assumptions...)
@@ -181,17 +211,19 @@ func (p Project) Estimate() (*EstimationResult, error) {
 			return nil, err
 		}
 
-		minSum += task.Estimate.Min
-		expectedSum += task.Estimate.Expected()
-		maxSum += task.Estimate.Max
+		implMinSum += task.Estimate.Min
+		implExpectedSum += task.Estimate.Expected()
+		implMaxSum += task.Estimate.Max
 		spikeSum += task.SpikeDays
 
 		if task.SpikeDays > 0 {
-			requiredSpikes = append(requiredSpikes, fmt.Sprintf("%s (%.1f days spike)", task.Name, task.SpikeDays))
+			requiredSpikes = append(requiredSpikes, SpikeInfo{
+				TaskName: task.Name,
+				Days:     task.SpikeDays,
+			})
 		}
 
 		assumptions = append(assumptions, task.Assumptions...)
-
 		switch task.Risk {
 		case RiskHigh:
 			highRiskCount++
@@ -202,69 +234,91 @@ func (p Project) Estimate() (*EstimationResult, error) {
 		}
 	}
 
-	// Calculate overall project risk
 	overallRisk := RiskLow
 	totalTasks := len(allTasks)
 	if unknownCount > 0 {
 		overallRisk = RiskHigh
-	} else if float64(highRiskCount)/float64(totalTasks) >= 0.3 {
+	} else if totalTasks > 0 && float64(highRiskCount)/float64(totalTasks) >= 0.3 {
 		overallRisk = RiskHigh
 	} else if highRiskCount > 0 || mediumRiskCount > 0 {
 		overallRisk = RiskMedium
 	}
 
-	// Calculate Contingency
 	contingencyRate := p.ContingencyRate
-	if p.AutoContingency || contingencyRate == 0 {
+	useAutoContingency := p.AutoContingency
+	if useAutoContingency && contingencyRate == 0 {
 		switch overallRisk {
 		case RiskHigh:
-			contingencyRate = 0.25 // 25% for high risk / unknown projects
+			contingencyRate = 0.25
 		case RiskMedium:
-			contingencyRate = 0.15 // 15% standard buffer
+			contingencyRate = 0.15
 		case RiskLow:
-			contingencyRate = 0.10 // 10% minimal buffer
+			contingencyRate = 0.10
 		}
 	}
 
-	baseEffort := expectedSum + spikeSum
-	contingencyDays := baseEffort * contingencyRate
-	totalEffortDays := baseEffort + contingencyDays
+	implRange := EffortRange{
+		MinDays:      math.Round(implMinSum*100) / 100,
+		ExpectedDays: math.Round(implExpectedSum*100) / 100,
+		MaxDays:      math.Round(implMaxSum*100) / 100,
+	}
 
-	// Calendar duration = Total Effort / (Engineers * Availability)
-	effectiveDailyCapacity := float64(engineerCount) * p.Availability
-	calendarDays := totalEffortDays / effectiveDailyCapacity
-	calendarWeeks := calendarDays / 5.0 // 5 working days per week
+	spikeRange := EffortRange{
+		MinDays:      spikeSum,
+		ExpectedDays: spikeSum,
+		MaxDays:      spikeSum,
+	}
 
-	// Determine confidence level
+	baseRange := EffortRange{
+		MinDays:      math.Round((implRange.MinDays+spikeRange.MinDays)*100) / 100,
+		ExpectedDays: math.Round((implRange.ExpectedDays+spikeRange.ExpectedDays)*100) / 100,
+		MaxDays:      math.Round((implRange.MaxDays+spikeRange.MaxDays)*100) / 100,
+	}
+
+	contingencyDays := baseRange.ExpectedDays * contingencyRate
+
+	finalRange := EffortRange{
+		MinDays:      math.Round((baseRange.MinDays*(1+contingencyRate))*100) / 100,
+		ExpectedDays: math.Round((baseRange.ExpectedDays+contingencyDays)*100) / 100,
+		MaxDays:      math.Round((baseRange.MaxDays*(1+contingencyRate))*100) / 100,
+	}
+
+	effectiveDailyCapacity := float64(p.EngineerCount) * p.Availability
+	calendarDuration := DurationRange{
+		MinDays:      math.Round(finalRange.MinDays/effectiveDailyCapacity*10) / 10,
+		ExpectedDays: math.Round(finalRange.ExpectedDays/effectiveDailyCapacity*10) / 10,
+		MaxDays:      math.Round(finalRange.MaxDays/effectiveDailyCapacity*10) / 10,
+	}
+
 	confidence := ConfidenceHigh
 	if unknownCount > 0 || overallRisk == RiskHigh || len(assumptions) == 0 {
 		confidence = ConfidenceLow
 	} else if overallRisk == RiskMedium || contingencyRate > 0.15 {
 		confidence = ConfidenceMedium
 	}
-	if overallRisk == RiskMedium && mediumRiskCount >= 3 {
-		confidence = ConfidenceMedium
-	}
 
 	return &EstimationResult{
 		ProjectName: p.Name,
 		Effort: EffortBreakdown{
-			MinDays:         math.Round(minSum*100) / 100,
-			ExpectedDays:    math.Round(expectedSum*100) / 100,
-			MaxDays:         math.Round(maxSum*100) / 100,
-			SpikeDays:       math.Round(spikeSum*100) / 100,
-			BaseEffort:      math.Round(baseEffort*100) / 100,
-			ContingencyDays: math.Round(contingencyDays*100) / 100,
-			TotalEffortDays: math.Round(totalEffortDays*100) / 100,
+			ImplementationEffort: implRange,
+			SpikeEffort:          spikeRange,
+			BaseEffort:           baseRange,
+			ContingencyEffort:    contingencyDays,
+			FinalEffort:          finalRange,
 		},
 		Duration: DurationBreakdown{
-			CalendarDays:  math.Round(calendarDays*10) / 10,
-			CalendarWeeks: math.Round(calendarWeeks*10) / 10,
+			CalendarDuration: calendarDuration,
 		},
 		OverallRisk:    overallRisk,
 		Confidence:     confidence,
 		RequiredSpikes: requiredSpikes,
 		AllAssumptions: assumptions,
 		TotalTaskCount: totalTasks,
+		EngineerCount:  p.EngineerCount,
+		Availability:   p.Availability,
 	}, nil
+}
+
+func (r EstimateRange) FormatWithUnit() string {
+	return strconv.FormatFloat(r.Min, 'f', 1, 64) + "–" + strconv.FormatFloat(r.Max, 'f', 1, 64) + " days"
 }

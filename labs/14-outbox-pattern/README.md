@@ -70,10 +70,6 @@ Both operations are in the same transaction - atomic!
 - `CreateOrder()` uses a single transaction for both inserts
 - Either both succeed or both rollback
 
-## Navigasi
-
-- **Previous**: [Lab 13 — Deadlock](../13-deadlock/)
-
 ---
 
 ## Key Differences

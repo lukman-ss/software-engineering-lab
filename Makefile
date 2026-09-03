@@ -1,15 +1,20 @@
 .PHONY: all run test test-race lint fmt vet clean \
 	infra-up infra-down migrate-up migrate-down \
+	lab-01-test lab-01-test-race lab-01-vet \
 	lab-02-setup lab-02-seed lab-02-baseline lab-02-indexes \
 	lab-02-explain lab-02-benchmark lab-02-clean lab-02-verify \
-	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration \
+	lab-03-test lab-03-test-race lab-03-vet \
+	lab-04-test lab-04-test-race lab-04-vet lab-04-fmt lab-04-integration \
 	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration \
+	lab-06-test lab-06-test-race lab-06-vet \
 	lab-07-test lab-07-test-race lab-07-vet lab-07-fmt lab-07-demo \
 	lab-08-test lab-08-test-race lab-08-vet \
 	lab-09-test lab-09-test-race lab-09-vet \
+	lab-10-project-estimation-test lab-10-project-estimation-test-race lab-10-project-estimation-vet \
 	lab-14-test lab-14-test-race lab-14-vet \
 	lab-15-test lab-15-test-race lab-15-vet \
-	lab-16-test lab-16-test-race lab-16-vet
+	lab-16-test lab-16-test-race lab-16-vet \
+	lab-17-test lab-17-test-race lab-17-vet
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost
@@ -27,17 +32,17 @@ run: fmt vet
 	@go run ./cmd/api
 
 # Run tests
-test: lab-04-test lab-05-test
+test: lab-08-test lab-09-test lab-14-test lab-15-test lab-16-test lab-17-test
 	@echo "Running unit tests..."
-	@go test ./... -v
+	@go test ./... -short
 
-test-race: lab-04-test-race lab-05-test-race
+test-race: lab-05-test-race lab-08-test-race lab-09-test-race lab-14-test-race lab-15-test-race lab-16-test-race lab-17-test-race
 	@echo "Running tests with race detector..."
-	@go test ./... -race -v
+	@go test -race ./... -short
 
-lint: lab-04-vet lab-05-vet
+lint: lab-08-vet lab-09-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
 	@echo "Running linter..."
-	@go vet ./...
+	@go vet ./... -short
 
 fmt:
 	@echo "Formatting code..."
@@ -45,7 +50,7 @@ fmt:
 	@cd labs/04-caching && go fmt ./...
 	@cd labs/05-race-condition && go fmt ./...
 
-vet: lab-04-vet lab-05-vet
+vet: lab-03-vet lab-04-vet lab-05-vet lab-07-vet lab-08-vet lab-09-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
 	@echo "Running go vet..."
 	@go vet ./...
 
@@ -68,6 +73,18 @@ migrate-up:
 migrate-down:
 	@echo "Running migrations down..."
 	@go run ./scripts/migrate main down
+
+lab-01-test:
+	@echo "=== Testing Lab 01: Idempotency ==="
+	@cd labs/01-idempotency && go test -count=1 ./...
+
+lab-01-test-race:
+	@echo "=== Testing Lab 01 (Race Detector) ==="
+	@cd labs/01-idempotency && go test -race -count=1 ./...
+
+lab-01-vet:
+	@echo "=== Vet Lab 01 ==="
+	@cd labs/01-idempotency && go vet ./...
 
 # ==================== Lab 02: Database Index ====================
 # Requires a running PostgreSQL (use: make infra-up)
@@ -114,6 +131,22 @@ lab-02-verify:
 	@./labs/02-database-index/scripts/verify_lab.sh
 	@echo "=== Verification Complete ==="
 
+lab-03-test:
+	@echo "=== Testing Lab 03: Database Transaction ==="
+	@cd labs/03-database-transaction && go test -count=1 ./...
+
+lab-03-test-race:
+	@echo "=== Testing Lab 03 (Race Detector) ==="
+	@cd labs/03-database-transaction && go test -race -count=1 ./...
+
+lab-03-vet:
+	@echo "=== Vet Lab 03 ==="
+	@cd labs/03-database-transaction && go vet ./...
+
+lab-03-demo:
+	@echo "=== Running Lab 03 Demo ==="
+	@go run ./labs/03-database-transaction/cmd/demo
+
 # ==================== Lab 04: Caching ====================
 
 lab-04-test:
@@ -157,6 +190,18 @@ lab-05-fmt:
 lab-05-integration:
 	@echo "=== Testing Lab 05 (Integration) ==="
 	@cd labs/05-race-condition && go test -tags=integration -count=1 ./...
+
+lab-06-test:
+	@echo "=== Testing Lab 06: API Versioning ==="
+	@cd labs/06-api-versioning && go test -count=1 ./...
+
+lab-06-test-race:
+	@echo "=== Testing Lab 06 (Race Detector) ==="
+	@cd labs/06-api-versioning && go test -race -count=1 ./...
+
+lab-06-vet:
+	@echo "=== Vet Lab 06 ==="
+	@cd labs/06-api-versioning && go vet ./...
 
 # ==================== Lab 07: Observability ====================
 
@@ -249,3 +294,31 @@ lab-16-test-race:
 lab-16-vet:
 	@echo "=== Vet Lab 16 ==="
 	@cd labs/16-circuit-breaker && go vet ./...
+
+# ==================== Lab 10: Project Estimation (root module, no nested go.mod) ====================
+
+lab-10-project-estimation-test:
+	@echo "=== Testing Lab 10: Project Estimation ==="
+	@cd labs/10-project-estimation && go test -v -count=1 ./...
+
+lab-10-project-estimation-test-race:
+	@echo "=== Testing Lab 10 (Race Detector) ==="
+	@cd labs/10-project-estimation && go test -race -v -count=1 ./...
+
+lab-10-project-estimation-vet:
+	@echo "=== Vet Lab 10 ==="
+	@cd labs/10-project-estimation && go vet ./...
+
+# ==================== Lab 17: Rate Limiting ====================
+
+lab-17-test:
+	@echo "=== Testing Lab 17: Rate Limiting ==="
+	@cd labs/17-rate-limiting && go test -count=1 ./...
+
+lab-17-test-race:
+	@echo "=== Testing Lab 17 (Race Detector) ==="
+	@cd labs/17-rate-limiting && go test -race -v -count=1 ./...
+
+lab-17-vet:
+	@echo "=== Vet Lab 17 ==="
+	@cd labs/17-rate-limiting && go vet ./...

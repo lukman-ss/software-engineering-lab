@@ -109,6 +109,8 @@ UAT
 | **High** | Dependencies kunci, high cost of failure | Database migration besar, cache strategy |
 | **Unknown** | Belum pernah dibuat, teknologi baru | Payment gateway baru, API vendor |
 
+> **Unknown berarti ada sesuatu yang belum cukup dipahami untuk dipercaya sebagai implementation estimate final. Spike adalah mekanisme eksplisit untuk mengurangi uncertainty.**
+
 ---
 
 ## Unknown != Zero
@@ -183,18 +185,31 @@ func (r EstimateRange) Expected() float64 {
 Bedakan effort dengan durasi kalender.
 
 ```
-Effort = 20 engineer-days
+Effort: 18–24 engineer-days
 ↓
-Availability = 70% (0.70)
+Spike: 2.5 days
 ↓
-Engineer Count = 1
+Base Effort: 20.5–26.5 engineer-days
+↓
+Contingency: 15%
+↓
+Final Effort: 23–30 engineer-days
 
-Calendar Duration = 20 / (1 × 0.70) = 28.6 hari
+1 engineer
+70% productivity
+
+Calendar Duration: 33–43 working days (~7–9 weeks)
 ```
 
 ```go
-effectiveDailyCapacity := float64(engineerCount) * availability
-calendarDays := totalEffortDays / effectiveDailyCapacity
+type DurationRange struct {
+    MinDays      float64
+    ExpectedDays float64
+    MaxDays      float64
+}
+
+// Calendar Duration = Effort / (Engineers × Availability)
+calendarDays = finalEffort / (engineerCount * availability)
 ```
 
 **Jangan menyamakan effort dengan tanggal selesai!**
@@ -209,25 +224,14 @@ Buffer berdasarkan risiko project.
 
 | Risk Level | Contingency |
 |------------|-------------|
-| High       | 25%         |
+| High/Unkown| 25%         |
 | Medium     | 15%         |
 | Low        | 10%         |
 
-```go
-result.Effort.TotalEffortDays = result.Effort.BaseEffort + result.Effort.ContingencyDays
+**Perbedaan Auto vs Manual Contingency:**
 
-calendarDays = TotalEffortDays / (Engineers × Availability)
-```
-
-Buffer dapat dikonfigurasi:
-
-```go
-project := Project{
-    ContingencyRate: 0.20, // 20% custom
-    // atau
-    AutoContingency: true, // otomatis dari risk profile
-}
-```
+- `AutoContingency = true`: derive otomatis dari risk level
+- `AutoContingency = false` + `ContingencyRate = 0`: NO buffer (intentional)
 
 ---
 
@@ -238,7 +242,7 @@ Estimasi tanpa assumptions akan punya confidence rendah.
 ```go
 project := Project{
     Assumptions: []string{
-        "UI final by sprint 1",
+        "UI design final",
         "Vendor sandbox API accessible",
         "1 engineer dedicated with 70% allocation",
         "No major requirement changes",
@@ -271,7 +275,10 @@ project := Project{
 | 7 | Negative contingency | Error |
 | 8 | Empty project | Error |
 | 9 | Invalid risk level (e.g., "Critical") | Error |
-| 10 | Unknown risk without spike | Error |
+| 10 | Unknown risk without SpikeDays > 0 | Error |
+| 11 | EngineerCount = 0 | Error |
+| 12 | EngineerCount < 0 | Error |
+| 13 | Unknown risk with SpikeDays = 0 but implementation estimate > 0 | **Allowed** - spike reduces uncertainty |
 
 ---
 
@@ -288,19 +295,20 @@ go test -v ./...
 
 ```
 Project: Aplikasi Booking Servis
-Effort: Min=17.0, Expected=30.3, Max=49.0 engineer-days
-Total Effort (with contingency): 41.0 engineer-days
-Calendar Duration: 58.6 days (11.7 weeks)
+Implementation Effort: 17.0–49.0 engineer-days
+Spike Effort: 2.5 days
+Base Effort: 19.5–51.5 engineer-days
+Contingency: 8.2 days
+Final Effort: 24.4–64.4 engineer-days
+Calendar Duration: 35–92 working days (7.0–18.4 weeks)
 Risk: High, Confidence: Low
 ```
 
-Semua test PASS:
+Semua test PASS (27 tests):
 
 ```
 === RUN   TestNaiveEstimator
 --- PASS: TestNaiveEstimator (0.00s)
-=== RUN   TestSimpleLowRiskProject
---- PASS: TestSimpleLowRiskProject (0.00s)
 ... (semua test passing)
 PASS
 ```
@@ -312,11 +320,13 @@ PASS
 1. **Estimasi bukan prediction, tapi range-based analysis** - Selalu berikan batas bawah, yang paling mungkin, dan batas atas
 2. **Unknown != 0** - Jika tidak yakin, buat spike dulu
 3. **Effort ≠ Calendar Duration** - Account availability (70% productivity is realistic)
-4. **Risk profile menentu contingency** - High risk = 25% buffer, bukan guesswork
-5. **Assumptions are first-class citizens** - Estimasi tanpa assumptions punya confidence rendah
+4. **Risk profile menentu contingency** - High/Unknown = 25%, Medium = 15%, Low = 10%
+5. **AutoContingency vs Manual** - 0 = intentional no-buffer, not magic value
 6. **Range ordering matter** - Min ≤ Expected ≤ Max (PERT formula)
 7. **Validation is explicit** - Invalid inputs return errors, not silent failures
-8. **Deterministic testing** - Core estimation logic tidak perlu network atau DB
+8. **EngineerCount must be ≥ 1** - Invalid planning input = explicit error
+9. **Unknown with SpikeDays = 0 + non-zero estimate = VALID** - Spike helps, but implementation estimate can exist
+10. **Deterministic testing** - Core estimation logic tidak perlu network atau DB
 
 ---
 
