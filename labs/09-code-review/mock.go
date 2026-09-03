@@ -171,7 +171,7 @@ func (r *MockOrderRepository) FailNextCreate(err error) {
 	r.failErr = err
 }
 
-func (r *MockOrderRepository) CreateOrder(ctx context.Context, order *Order) error {
+func (r *MockOrderRepository) consumeCreateError() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.failErr != nil {
@@ -179,6 +179,15 @@ func (r *MockOrderRepository) CreateOrder(ctx context.Context, order *Order) err
 		r.failErr = nil
 		return err
 	}
+	return nil
+}
+
+func (r *MockOrderRepository) CreateOrder(ctx context.Context, order *Order) error {
+	if err := r.consumeCreateError(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.orders[order.ID] = order
 	return nil
 }
@@ -250,11 +259,8 @@ func (tx *mockTx) ReserveStock(ctx context.Context, productID string, quantity i
 }
 
 func (tx *mockTx) CreateOrder(ctx context.Context, order *Order) error {
-	tx.parent.orders.mu.RLock()
-	failErr := tx.parent.orders.failErr
-	tx.parent.orders.mu.RUnlock()
-	if failErr != nil {
-		return failErr
+	if err := tx.parent.orders.consumeCreateError(); err != nil {
+		return err
 	}
 	tx.orderMut = order
 	return nil
@@ -288,19 +294,26 @@ func (tx *mockTx) commit(ctx context.Context) error {
 }
 
 type MockIdempotencyRepository struct {
-	mu        sync.RWMutex
-	records   map[string]*IdempotencyRecord
-	claimHook func(key string)
+	mu           sync.RWMutex
+	records      map[string]*IdempotencyRecord
+	markErr      error
+	releaseError error
 }
 
 func NewMockIdempotencyRepository() *MockIdempotencyRepository {
 	return &MockIdempotencyRepository{records: make(map[string]*IdempotencyRecord)}
 }
 
-func (r *MockIdempotencyRepository) SetClaimHook(hook func(key string)) {
+func (r *MockIdempotencyRepository) SetMarkError(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.claimHook = hook
+	r.markErr = err
+}
+
+func (r *MockIdempotencyRepository) SetReleaseError(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.releaseError = err
 }
 
 func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error) {
@@ -329,6 +342,9 @@ func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash 
 func (r *MockIdempotencyRepository) MarkCompleted(ctx context.Context, key string, resp *CheckoutResponse) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.markErr != nil {
+		return r.markErr
+	}
 	if rec, exists := r.records[key]; exists {
 		rec.Status = IdempotencyStatusCompleted
 		rec.Response = resp
@@ -339,6 +355,9 @@ func (r *MockIdempotencyRepository) MarkCompleted(ctx context.Context, key strin
 func (r *MockIdempotencyRepository) Release(ctx context.Context, key string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.releaseError != nil {
+		return r.releaseError
+	}
 	delete(r.records, key)
 	return nil
 }

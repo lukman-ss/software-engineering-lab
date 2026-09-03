@@ -183,8 +183,10 @@ Lihat `checkout_improved.go` untuk implementasi yang sudah direview dengan:
 2. **Atomic Idempotency Claim** - `Claim` dengan state (PROCESSING/COMPLETED), conflict check via hash, auto-release pada error
 3. **Transaction Boundary & Rollback** - unit of work `TransactionManager` memastikan stock reservation dan `CreateOrder` atomic (rollback jika salah satu gagal)
 4. **Conditional Atomic Stock Operation** - validasi dan pemotongan stock berada dalam critical section transaksional (invarian `stock >= 0` terjaga)
-5. **Good error propagation** - mengembalikan error yang sesuai tanpa merusak state idempotency
+5. **Good error propagation** - mengembalikan error yang sesuai tanpa merusak state idempotency; infra error tidak disamakan dengan domain error
 6. **Notification setelah transaction** - side effect dijalankan di luar transaksi setelah commit sukses, failure notification dicatat tanpa rollback order
+7. **Idempotency finalization** - `MarkCompleted` error di-log dan dikembalikan sebagai `ErrIdempotencyFinalize` tanpa rollback business transaction yang sudah committed
+8. **Release error handling** - `Release` error digabungkan dengan error asal via `errors.Join`
 
 ## Transaction Boundary
 
@@ -235,19 +237,7 @@ Pada error, record di-release agar retry memungkinkan.
 
 ## Deterministic Concurrency Test
 
-Test konkurensi memakai barrier (`sync.WaitGroup`) untuk memaksa interleaving yang sama tiap run, sehingga bug dapat direproduksi secara deterministik.
-
-```go
-var claimedCount atomic.Int32
-bothAttempted := make(chan struct{})
-idem.SetClaimHook(func(key string) {
-    if claimedCount.Add(1) == 2 {
-        close(bothAttempted)
-    } else {
-        <-bothAttempted
-    }
-})
-```
+Test konkurensi (seperti `TestImprovedCheckout_ConcurrentSameIdempotencyKeyRunsOnce`) memakai coordinated concurrent start dengan `sync.WaitGroup` (`startGate`) untuk mensimulasikan concurrent requests diwaktu bersamaan. Sedangkan test yang mendemostrasikan race condition pada naive implementation (`TestNaiveCheckout_DeterministicallyDemonstratesOverselling`) memakai hook dengan read/write barrier exact interleaving (`sync.WaitGroup`) untuk memaksakan overselling secara deterministic.
 
 ## Rollback Demonstration
 

@@ -589,6 +589,85 @@ func TestImprovedCheckout_ConcurrentSameIdempotencyKeyRunsOnce(t *testing.T) {
 	}
 }
 
+func TestImprovedCheckout_IdempotencyFinalizeFailureAfterCommit(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	idem.SetMarkError(errors.New("redis unavailable"))
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+		CartOwnerID:    "user1",
+		IdempotencyKey: "finalize-fail-key",
+	})
+
+	if err == nil {
+		t.Fatal("Expected error due to idempotency finalize failure")
+	}
+	if !errors.Is(err, codereview.ErrIdempotencyFinalize) {
+		t.Errorf("Expected ErrIdempotencyFinalize, got: %v", err)
+	}
+
+	stock, _ := products.GetStock(context.Background(), "p1")
+	if stock != 8 {
+		t.Errorf("Stock should be deducted because business tx committed, got %d", stock)
+	}
+	if len(repo.GetOrders(context.Background())) != 1 {
+		t.Errorf("Order should be created because business tx committed, got %d", len(repo.GetOrders(context.Background())))
+	}
+	if len(notify.GetSent()) != 0 {
+		t.Error("Notification should not be sent on finalize failure")
+	}
+
+	record, _ := idem.Get(context.Background(), "checkout:user1:finalize-fail-key")
+	if record != nil && record.Status == codereview.IdempotencyStatusCompleted {
+		t.Error("Idempotency record should not be marked as COMPLETED")
+	}
+}
+
+func TestImprovedCheckout_ReleaseFailureIsNotIgnored(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	// Make transaction fail to trigger release
+	repo.FailNextCreate(errors.New("db error"))
+	// Make release fail
+	releaseErr := errors.New("redis error during release")
+	idem.SetReleaseError(releaseErr)
+
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+		CartOwnerID:    "user1",
+		IdempotencyKey: "release-fail-key",
+	})
+
+	if err == nil {
+		t.Fatal("Expected error")
+	}
+	// Error should contain both transaction error and release error
+	if !errors.Is(err, releaseErr) {
+		t.Errorf("Error should wrap release error, got: %v", err)
+	}
+
+	stock, _ := products.GetStock(context.Background(), "p1")
+	if stock != 10 {
+		t.Errorf("Stock should remain 10, got %d", stock)
+	}
+}
+
 func TestImprovedCheckout_IdempotencyKeyConflict(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10})

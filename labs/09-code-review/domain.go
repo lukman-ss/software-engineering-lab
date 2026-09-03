@@ -14,6 +14,7 @@ var (
 	ErrIdempotencyConflict = errors.New("idempotency key conflict: request payload mismatch")
 	ErrDuplicateRequest    = errors.New("request already processed or in progress")
 	ErrForbidden           = errors.New("forbidden: user does not own this cart")
+	ErrIdempotencyFinalize = errors.New("idempotency finalize failed but business transaction was committed")
 )
 
 type Principal struct {

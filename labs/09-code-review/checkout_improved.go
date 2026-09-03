@@ -83,7 +83,10 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 
 	productsMap, err := c.products.GetProducts(ctx, productIDs)
 	if err != nil {
-		_ = c.idempotency.Release(ctx, scopedKey)
+		if relErr := c.idempotency.Release(ctx, scopedKey); relErr != nil {
+			c.logger.Error(ctx, "failed to release idempotency after load products failure", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", relErr.Error())
+			err = errors.Join(err, relErr)
+		}
 		c.logger.Error(ctx, "load products failed", "userID", principal.UserID, "error", err.Error())
 		if errors.Is(err, ErrProductNotFound) {
 			return nil, ErrProductNotFound
@@ -96,7 +99,9 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	for _, item := range cartItems {
 		product, exists := productsMap[item.ProductID]
 		if !exists {
-			_ = c.idempotency.Release(ctx, scopedKey)
+			if relErr := c.idempotency.Release(ctx, scopedKey); relErr != nil {
+				c.logger.Error(ctx, "failed to release idempotency after missing product in batch", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", relErr.Error())
+			}
 			c.logger.Error(ctx, "product missing in batch", "userID", principal.UserID, "productID", item.ProductID)
 			return nil, ErrProductNotFound
 		}
@@ -134,7 +139,10 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	})
 
 	if txErr != nil {
-		_ = c.idempotency.Release(ctx, scopedKey)
+		if relErr := c.idempotency.Release(ctx, scopedKey); relErr != nil {
+			c.logger.Error(ctx, "failed to release idempotency after transaction failure", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", relErr.Error(), "originalError", txErr.Error())
+			txErr = errors.Join(txErr, relErr)
+		}
 		c.logger.Error(ctx, "checkout transaction failed", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", txErr.Error())
 		if errors.Is(txErr, ErrInsufficientStock) || errors.Is(txErr, ErrProductNotFound) || errors.Is(txErr, ErrInvalidQuantity) {
 			return nil, txErr
@@ -143,7 +151,10 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	}
 
 	resp := &CheckoutResponse{Success: true, OrderID: orderID, Total: total}
-	_ = c.idempotency.MarkCompleted(ctx, scopedKey, resp)
+	if err := c.idempotency.MarkCompleted(ctx, scopedKey, resp); err != nil {
+		c.logger.Error(ctx, "failed to finalize idempotency record; business transaction was committed", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", err.Error())
+		return nil, fmt.Errorf("%w: %v", ErrIdempotencyFinalize, err)
+	}
 
 	// Notification after successful transaction (fire-and-forget)
 	if err := c.notify.SendOrderConfirmation(ctx, principal.UserID, orderID); err != nil {
