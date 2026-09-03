@@ -311,6 +311,7 @@ func (tx *mockTx) commit(ctx context.Context) error {
 type MockIdempotencyRepository struct {
 	mu           sync.RWMutex
 	records      map[string]*IdempotencyRecord
+	claimErr     error
 	markErr      error
 	releaseError error
 }
@@ -319,19 +320,62 @@ func NewMockIdempotencyRepository() *MockIdempotencyRepository {
 	return &MockIdempotencyRepository{records: make(map[string]*IdempotencyRecord)}
 }
 
-func (r *MockIdempotencyRepository) SetMarkError(err error) {
+func (r *MockIdempotencyRepository) FailNextClaim(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.claimErr = err
+}
+
+func (r *MockIdempotencyRepository) FailNextMarkCompleted(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.markErr = err
 }
 
-func (r *MockIdempotencyRepository) SetReleaseError(err error) {
+func (r *MockIdempotencyRepository) FailNextRelease(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.releaseError = err
 }
 
+func (r *MockIdempotencyRepository) consumeClaimError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.claimErr != nil {
+		err := r.claimErr
+		r.claimErr = nil
+		return err
+	}
+	return nil
+}
+
+func (r *MockIdempotencyRepository) consumeMarkError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.markErr != nil {
+		err := r.markErr
+		r.markErr = nil
+		return err
+	}
+	return nil
+}
+
+func (r *MockIdempotencyRepository) consumeReleaseError() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.releaseError != nil {
+		err := r.releaseError
+		r.releaseError = nil
+		return err
+	}
+	return nil
+}
+
 func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error) {
+	if err := r.consumeClaimError(); err != nil {
+		return "", nil, err
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -355,11 +399,12 @@ func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash 
 }
 
 func (r *MockIdempotencyRepository) MarkCompleted(ctx context.Context, key string, resp *CheckoutResponse) error {
+	if err := r.consumeMarkError(); err != nil {
+		return err
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.markErr != nil {
-		return r.markErr
-	}
 	if rec, exists := r.records[key]; exists {
 		rec.Status = IdempotencyStatusCompleted
 		rec.Response = resp
@@ -368,11 +413,12 @@ func (r *MockIdempotencyRepository) MarkCompleted(ctx context.Context, key strin
 }
 
 func (r *MockIdempotencyRepository) Release(ctx context.Context, key string) error {
+	if err := r.consumeReleaseError(); err != nil {
+		return err
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.releaseError != nil {
-		return r.releaseError
-	}
 	delete(r.records, key)
 	return nil
 }

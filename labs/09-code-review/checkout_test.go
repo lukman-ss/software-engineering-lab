@@ -589,6 +589,42 @@ func TestImprovedCheckout_ConcurrentSameIdempotencyKeyRunsOnce(t *testing.T) {
 	}
 }
 
+func TestImprovedCheckout_IdempotencyClaimFailure(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	claimErr := errors.New("redis timeout during claim")
+	idem.FailNextClaim(claimErr)
+
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+		CartOwnerID:    "user1",
+		IdempotencyKey: "claim-fail-key",
+	})
+
+	if err == nil {
+		t.Fatal("Expected error when claim fails")
+	}
+	if !errors.Is(err, claimErr) {
+		t.Errorf("Expected claim error %v, got %v", claimErr, err)
+	}
+
+	stock, _ := products.GetStock(context.Background(), "p1")
+	if stock != 10 {
+		t.Errorf("Stock should remain 10, got %d", stock)
+	}
+	if len(repo.GetOrders(context.Background())) != 0 {
+		t.Error("Order should not be created")
+	}
+}
+
 func TestImprovedCheckout_IdempotencyFinalizeFailureAfterCommit(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
@@ -598,7 +634,7 @@ func TestImprovedCheckout_IdempotencyFinalizeFailureAfterCommit(t *testing.T) {
 	idem := codereview.NewMockIdempotencyRepository()
 	txManager := codereview.NewMockTransactionManager(products, repo)
 
-	idem.SetMarkError(errors.New("redis unavailable"))
+	idem.FailNextMarkCompleted(errors.New("redis unavailable"))
 	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
 
@@ -644,7 +680,7 @@ func TestImprovedCheckout_ReleaseFailureIsNotIgnored(t *testing.T) {
 	repo.FailNextCreate(errors.New("db error"))
 	// Make release fail
 	releaseErr := errors.New("redis error during release")
-	idem.SetReleaseError(releaseErr)
+	idem.FailNextRelease(releaseErr)
 
 	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)

@@ -132,12 +132,12 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 
 	txErr := c.txManager.WithinTransaction(ctx, func(tx CheckoutTx) error {
 		for _, item := range cartItems {
-			if err := tx.ReserveStock(ctx, item.ProductID, item.Quantity); err != nil {
-				return err
+			if reserveErr := tx.ReserveStock(ctx, item.ProductID, item.Quantity); reserveErr != nil {
+				return reserveErr
 			}
 		}
-		if err := tx.CreateOrder(ctx, order); err != nil {
-			return err
+		if createErr := tx.CreateOrder(ctx, order); createErr != nil {
+			return createErr
 		}
 		return nil
 	})
@@ -155,14 +155,14 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	}
 
 	resp := &CheckoutResponse{Success: true, OrderID: orderID, Total: total}
-	if err := c.idempotency.MarkCompleted(ctx, scopedKey, resp); err != nil {
-		c.logger.Error(ctx, "failed to finalize idempotency record; business transaction was committed", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", err.Error())
-		return nil, fmt.Errorf("%w: %v", ErrIdempotencyFinalize, err)
+	if markErr := c.idempotency.MarkCompleted(ctx, scopedKey, resp); markErr != nil {
+		c.logger.Error(ctx, "failed to finalize idempotency record; business transaction was committed", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", markErr.Error())
+		return nil, fmt.Errorf("%w: %v", ErrIdempotencyFinalize, markErr)
 	}
 
 	// Notification after successful transaction (fire-and-forget)
-	if err := c.notify.SendOrderConfirmation(ctx, principal.UserID, orderID); err != nil {
-		c.logger.Error(ctx, "send order confirmation failed", "userID", principal.UserID, "orderID", orderID, "error", err.Error())
+	if notifyErr := c.notify.SendOrderConfirmation(ctx, principal.UserID, orderID); notifyErr != nil {
+		c.logger.Error(ctx, "send order confirmation failed", "userID", principal.UserID, "orderID", orderID, "error", notifyErr.Error())
 	}
 
 	c.logger.Info(ctx, "checkout completed", "userID", principal.UserID, "orderID", orderID, "total", total)
