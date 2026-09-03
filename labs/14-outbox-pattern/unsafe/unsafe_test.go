@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -74,9 +75,8 @@ func TestDualWriteProblem(t *testing.T) {
 	defer db.Close()
 
 	// Create a publisher that fails after first successful publish
-	publisher := &unsafe.MockEventPublisher{
-		FailAfter: 0, // Fail immediately on first publish
-	}
+	publisher := &unsafe.MockEventPublisher{}
+	publisher.SetFailAfter(0) // Fail immediately on first publish
 
 	service := unsafe.NewUnsafeOrderService(nil, publisher, db)
 

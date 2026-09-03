@@ -1,3 +1,3 @@
 module github.com/lukman/01-idempotency
 
-go 1.26.7
+go 1.25.0

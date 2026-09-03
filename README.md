@@ -139,7 +139,7 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.25+
 - Docker and Docker Compose
 - `make`
 

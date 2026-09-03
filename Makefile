@@ -239,6 +239,10 @@ lab-08-vet:
 	@echo "=== Vet Lab 08 ==="
 	@cd labs/08-database-isolation-level && go vet ./...
 
+lab-08-integration:
+	@echo "=== Testing Lab 08 (Integration) ==="
+	@cd labs/08-database-isolation-level && REQUIRE_POSTGRES=1 go test -v -count=1 ./...
+
 # ==================== Lab 14: Outbox Pattern ====================
 
 lab-14-test:

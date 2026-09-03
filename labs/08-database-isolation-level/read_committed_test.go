@@ -53,6 +53,9 @@ func getTestDB(t *testing.T) *sql.DB {
 
 	db, err := database.Connect(ctx, cfg)
 	if err != nil {
+		if os.Getenv("REQUIRE_POSTGRES") == "1" {
+			t.Fatalf("PostgreSQL required but unavailable: %v", err)
+		}
 		t.Skipf("PostgreSQL not available: %v. Skipping integration test.", err)
 	}
 
