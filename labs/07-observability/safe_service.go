@@ -48,10 +48,10 @@ func writeJSONSuccess(w http.ResponseWriter, invoiceID, requestID string) {
 }
 
 type SafeInvoiceService struct {
-	Deps         Dependencies
-	Logger       *slog.Logger
-	Tracer       trace.Tracer
-	Collector    *PrometheusCollector
+	Deps      Dependencies
+	Logger    *slog.Logger
+	Tracer    trace.Tracer
+	Collector *PrometheusCollector
 }
 
 func NewSafeInvoiceService(
@@ -67,10 +67,10 @@ func NewSafeInvoiceService(
 		logger = slog.Default()
 	}
 	return &SafeInvoiceService{
-		Deps:         deps,
-		Logger:       logger,
-		Tracer:       tracer,
-		Collector:    collector,
+		Deps:      deps,
+		Logger:    logger,
+		Tracer:    tracer,
+		Collector: collector,
 	}
 }
 
