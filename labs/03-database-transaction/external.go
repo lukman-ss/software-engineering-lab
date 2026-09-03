@@ -27,7 +27,7 @@ var (
 
 type FailureMode struct {
 	// Outbox/Dispatcher related
-	FailAfterDBCommit bool // Simulate crash after DB commit but before publish
+	FailAfterDBCommit   bool // Simulate crash after DB commit but before publish
 	FailExternalService bool
 }
 

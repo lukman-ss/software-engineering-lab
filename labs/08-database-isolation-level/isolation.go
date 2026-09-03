@@ -20,9 +20,9 @@ type Account struct {
 }
 
 type Invoice struct {
-	ID        int       `json:"id"`
-	Amount    int64     `json:"amount"`
-	Status    string    `json:"status"`
+	ID     int    `json:"id"`
+	Amount int64  `json:"amount"`
+	Status string `json:"status"`
 }
 
 type IsolationLevel string
