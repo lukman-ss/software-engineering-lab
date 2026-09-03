@@ -4,11 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/unsafe"
 	_ "github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/unsafe/order"
@@ -126,9 +125,8 @@ func TestDualWriteProblemPartialFailure(t *testing.T) {
 	defer db.Close()
 
 	// Publisher fails after 2 successful publishes
-	publisher := &unsafe.MockEventPublisher{
-		FailAfter: 2,
-	}
+	publisher := &unsafe.MockEventPublisher{}
+	publisher.SetFailAfter(2)
 
 	service := unsafe.NewUnsafeOrderService(nil, publisher, db)
 
@@ -142,7 +140,7 @@ func TestDualWriteProblemPartialFailure(t *testing.T) {
 	}
 
 	successCount := 0
-	for i, order := range orders {
+	for _, order := range orders {
 		_, err := service.CreateOrder(ctx, order)
 		if err != nil {
 			t.Logf("Order %s failed: %v", order.ID, err)
@@ -220,9 +218,8 @@ func TestDualWriteProblemWithRetry(t *testing.T) {
 	defer db.Close()
 
 	// Publisher that always fails
-	publisher := &unsafe.MockEventPublisher{
-		FailAfter: -1, // Always fail
-	}
+	publisher := &unsafe.MockEventPublisher{}
+	publisher.SetFailAfter(-1) // Always fail
 
 	service := unsafe.NewUnsafeOrderService(nil, publisher, db)
 

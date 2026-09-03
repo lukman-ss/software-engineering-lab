@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 )
 
 var (
@@ -16,6 +15,7 @@ var (
 	ErrUnknownRiskNoSpike   = errors.New("task with unknown risk must have SpikeDays > 0")
 	ErrInvalidRiskLevel     = errors.New("invalid risk level")
 	ErrInvalidEngineerCount = errors.New("engineer count must be at least 1")
+	ErrEmptyTaskName        = errors.New("task name cannot be empty")
 )
 
 type RiskLevel string
@@ -55,10 +55,6 @@ func (r EstimateRange) Expected() float64 {
 	return (r.Min + 4.0*r.MostLikely + r.Max) / 6.0
 }
 
-func (r EstimateRange) String() string {
-	return fmt.Sprintf("[%.1f–%.1f]", r.Min, r.Max)
-}
-
 type Task struct {
 	Name        string
 	Estimate    EstimateRange
@@ -68,6 +64,9 @@ type Task struct {
 }
 
 func (t Task) Validate() error {
+	if t.Name == "" {
+		return ErrEmptyTaskName
+	}
 	if err := t.Estimate.Validate(); err != nil {
 		return fmt.Errorf("task %q: %w", t.Name, err)
 	}
@@ -162,11 +161,14 @@ type SpikeInfo struct {
 }
 
 func (s SpikeInfo) String() string {
-	return fmt.Sprintf("%s (%.1f days spike)", s.TaskName, s.Days)
+	return fmt.Sprintf("%s (%.1f days)", s.TaskName, s.Days)
 }
 
 func EstimateByPageCount(pageCount int) int {
-	return pageCount * 1
+	if pageCount <= 0 {
+		return 0
+	}
+	return pageCount
 }
 
 func (p Project) Estimate() (*EstimationResult, error) {
@@ -245,8 +247,7 @@ func (p Project) Estimate() (*EstimationResult, error) {
 	}
 
 	contingencyRate := p.ContingencyRate
-	useAutoContingency := p.AutoContingency
-	if useAutoContingency && contingencyRate == 0 {
+	if p.AutoContingency && contingencyRate == 0 {
 		switch overallRisk {
 		case RiskHigh:
 			contingencyRate = 0.25
@@ -270,17 +271,17 @@ func (p Project) Estimate() (*EstimationResult, error) {
 	}
 
 	baseRange := EffortRange{
-		MinDays:      math.Round((implRange.MinDays+spikeRange.MinDays)*100) / 100,
-		ExpectedDays: math.Round((implRange.ExpectedDays+spikeRange.ExpectedDays)*100) / 100,
-		MaxDays:      math.Round((implRange.MaxDays+spikeRange.MaxDays)*100) / 100,
+		MinDays:      math.Round((implRange.MinDays + spikeRange.MinDays) * 100) / 100,
+		ExpectedDays: math.Round((implRange.ExpectedDays + spikeRange.ExpectedDays) * 100) / 100,
+		MaxDays:      math.Round((implRange.MaxDays + spikeRange.MaxDays) * 100) / 100,
 	}
 
 	contingencyDays := baseRange.ExpectedDays * contingencyRate
 
 	finalRange := EffortRange{
-		MinDays:      math.Round((baseRange.MinDays*(1+contingencyRate))*100) / 100,
-		ExpectedDays: math.Round((baseRange.ExpectedDays+contingencyDays)*100) / 100,
-		MaxDays:      math.Round((baseRange.MaxDays*(1+contingencyRate))*100) / 100,
+		MinDays:      math.Round((baseRange.MinDays * (1 + contingencyRate)) * 100) / 100,
+		ExpectedDays: math.Round((baseRange.ExpectedDays + contingencyDays) * 100) / 100,
+		MaxDays:      math.Round((baseRange.MaxDays * (1 + contingencyRate)) * 100) / 100,
 	}
 
 	effectiveDailyCapacity := float64(p.EngineerCount) * p.Availability
@@ -290,15 +291,10 @@ func (p Project) Estimate() (*EstimationResult, error) {
 		MaxDays:      math.Round(finalRange.MaxDays/effectiveDailyCapacity*10) / 10,
 	}
 
-	confidence := ConfidenceHigh
-	if unknownCount > 0 || overallRisk == RiskHigh || len(assumptions) == 0 {
-		confidence = ConfidenceLow
-	} else if overallRisk == RiskMedium || contingencyRate > 0.15 {
-		confidence = ConfidenceMedium
-	}
+	confidence := calculateConfidence(overallRisk, unknownCount, len(assumptions), contingencyRate)
 
 	return &EstimationResult{
-		ProjectName: p.Name,
+		ProjectName:    p.Name,
 		Effort: EffortBreakdown{
 			ImplementationEffort: implRange,
 			SpikeEffort:          spikeRange,
@@ -319,6 +315,18 @@ func (p Project) Estimate() (*EstimationResult, error) {
 	}, nil
 }
 
-func (r EstimateRange) FormatWithUnit() string {
-	return strconv.FormatFloat(r.Min, 'f', 1, 64) + "–" + strconv.FormatFloat(r.Max, 'f', 1, 64) + " days"
+func calculateConfidence(overallRisk RiskLevel, unknownCount, assumptionCount int, contingencyRate float64) ConfidenceLevel {
+	if unknownCount > 0 || overallRisk == RiskHigh {
+		return ConfidenceLow
+	}
+	if assumptionCount == 0 {
+		if overallRisk == RiskMedium {
+			return ConfidenceMedium
+		}
+		return ConfidenceLow
+	}
+	if overallRisk == RiskMedium {
+		return ConfidenceMedium
+	}
+	return ConfidenceHigh
 }

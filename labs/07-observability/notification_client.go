@@ -18,21 +18,30 @@ type HTTPNotificationClient struct {
 
 func NewHTTPNotificationClient(baseURL string, client *http.Client) *HTTPNotificationClient {
 	if client == nil {
-		client = &http.Client{
-			Timeout:   5 * time.Second,
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
-		}
-	} else if client.Transport == nil {
-		client.Transport = otelhttp.NewTransport(http.DefaultTransport)
-	} else {
-		// Wrap existing transport if not already wrapped
-		if _, ok := client.Transport.(*otelhttp.Transport); !ok {
-			client.Transport = otelhttp.NewTransport(client.Transport)
+		return &HTTPNotificationClient{
+			BaseURL: baseURL,
+			HTTPClient: &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: otelhttp.NewTransport(http.DefaultTransport),
+			},
 		}
 	}
+
+	clientCopy := *client
+	transport := http.DefaultTransport
+	if clientCopy.Transport != nil {
+		transport = clientCopy.Transport
+	}
+	if _, ok := transport.(*otelhttp.Transport); !ok {
+		clientCopy.Transport = otelhttp.NewTransport(transport)
+	}
+	if clientCopy.Timeout == 0 {
+		clientCopy.Timeout = 5 * time.Second
+	}
+
 	return &HTTPNotificationClient{
 		BaseURL:    baseURL,
-		HTTPClient: client,
+		HTTPClient: &clientCopy,
 	}
 }
 

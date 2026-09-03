@@ -2,12 +2,10 @@ package safe_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/safe"
 )

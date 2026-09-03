@@ -3,7 +3,6 @@ package safe_test
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 	"time"
 

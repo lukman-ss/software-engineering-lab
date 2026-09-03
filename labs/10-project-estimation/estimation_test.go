@@ -13,6 +13,20 @@ func TestNaiveEstimator(t *testing.T) {
 	}
 }
 
+func TestNaiveEstimatorZeroPages(t *testing.T) {
+	days := estimation.EstimateByPageCount(0)
+	if days != 0 {
+		t.Errorf("naive estimator: expected 0 days for 0 pages, got %d", days)
+	}
+}
+
+func TestNaiveEstimatorNegativePages(t *testing.T) {
+	days := estimation.EstimateByPageCount(-5)
+	if days != 0 {
+		t.Errorf("naive estimator: expected 0 days for negative pages, got %d", days)
+	}
+}
+
 func TestSimpleLowRiskProject(t *testing.T) {
 	project := estimation.Project{
 		Name: "Simple Feature",
@@ -454,6 +468,18 @@ func TestUnknownRiskWithoutSpikeRejected(t *testing.T) {
 
 	if err := task.Validate(); err == nil {
 		t.Error("expected error for unknown risk without spike")
+	}
+}
+
+func TestEmptyTaskNameRejected(t *testing.T) {
+	task := estimation.Task{
+		Name:    "",
+		Estimate: estimation.EstimateRange{Min: 1, MostLikely: 2, Max: 3},
+		Risk:    estimation.RiskLow,
+	}
+
+	if err := task.Validate(); err == nil {
+		t.Error("expected error for empty task name")
 	}
 }
 

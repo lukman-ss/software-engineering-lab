@@ -3,7 +3,6 @@ package safe_test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +17,6 @@ func TestConcurrentOutboxWorkers(t *testing.T) {
 
 	// Create multiple orders
 	orderCount := 10
-	var mu sync.Mutex
 	orderIDs := make([]string, orderCount)
 
 	for i := 0; i < orderCount; i++ {

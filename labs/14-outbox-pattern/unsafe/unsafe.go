@@ -66,6 +66,10 @@ func (p *MockEventPublisher) GetPublishCount() int64 {
 	return atomic.LoadInt64(&p.failCount)
 }
 
+func (p *MockEventPublisher) SetFailAfter(n int) {
+	p.failAfter = n
+}
+
 // OrderRepository handles order persistence.
 type OrderRepository interface {
 	Create(ctx context.Context, order Order) error

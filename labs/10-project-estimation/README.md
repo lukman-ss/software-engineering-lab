@@ -19,27 +19,47 @@ Hasil: Estimasi tidak pernah akurat, deadline sering terlewat, tim frustrasi.
 
 ---
 
-## Cara Berpikir Junior
+## Perbandingan: Naive vs Structured Estimation
 
-```go
-// Mental model: 10 halaman * 1 hari = 10 hari
-func EstimateByPageCount(pageCount int) int {
-    return pageCount * 1
-}
-```
+### Naive (Junior Mindset)
 
-```
-10 halaman dokumentasi
+```text
+10 halaman
 × 1 hari per halaman
 = 10 hari
 
-Tidak ada kalkulasi:
+Yang diabaikan:
 - Risk
 - Uncertainty
 - Multiple engineer
 - Availability
 - Contingency
 ```
+
+### Structured (Senior Mindset)
+
+```text
+Requirement Analysis          → 2 engineer-days
+Backend/API Design            → 3 engineer-days
+Frontend Implementation       → 4 engineer-days
+Validation & Testing          → 2 engineer-days
+Code Review                   → 1 engineer-day
+Deployment                    → 1 engineer-day
+UAT                           → 1 engineer-day
+Risk Buffer                   → 1.5 engineer-days (25%)
+Spike for Unknown API         → 1 engineer-day
+
+Implementation Effort: 14–18 engineer-days
+Spike: 1 engineer-day
+Contingency: 4 engineer-days
+
+Final Effort: 19–23 engineer-days
+
+1 engineer at 70% availability:
+Calendar Duration: 27–33 working days (~5–7 weeks)
+```
+
+> Perhatikan: jumlah halaman bukan proxy untuk complexity. Struktur proyek memandu total effort.
 
 ---
 
@@ -193,12 +213,12 @@ Base Effort: 20.5–26.5 engineer-days
 ↓
 Contingency: 15%
 ↓
-Final Effort: 23–30 engineer-days
+Final Effort: 22–30 engineer-days
 
 1 engineer
 70% productivity
 
-Calendar Duration: 33–43 working days (~7–9 weeks)
+Calendar Duration: 31–43 working days (~6–9 weeks)
 ```
 
 ```go
@@ -258,7 +278,10 @@ project := Project{
 |------------|------------|
 | **High**   | Semua task low/medium risk, assumptions documented, no unknown dependencies |
 | **Medium** | Ada task medium risk, contingency dihitung, beberapa assumptions |
-| **Low**    | Ada unknown risk, tidak ada spike, assumptions tidak lengkap |
+| **Low**    | Ada unknown risk, atau tidak ada assumptions |
+
+**Confidence adalah communication aid, bukan probabilitas statistik.** 
+Gunakan untuk mengkomunikasikan seberapa handal estimasi kita.
 
 ---
 
@@ -278,7 +301,8 @@ project := Project{
 | 10 | Unknown risk without SpikeDays > 0 | Error |
 | 11 | EngineerCount = 0 | Error |
 | 12 | EngineerCount < 0 | Error |
-| 13 | Unknown risk with SpikeDays = 0 but implementation estimate > 0 | **Allowed** - spike reduces uncertainty |
+| 13 | Empty task name | Error |
+| 14 | Unknown risk with SpikeDays = 0 but non-zero implementation estimate | **Allowed** - spike reduces uncertainty |
 
 ---
 
@@ -294,21 +318,49 @@ go test -v ./...
 ## Expected Result
 
 ```
-Project: Aplikasi Booking Servis
-Implementation Effort: 17.0–49.0 engineer-days
-Spike Effort: 2.5 days
-Base Effort: 19.5–51.5 engineer-days
-Contingency: 8.2 days
-Final Effort: 24.4–64.4 engineer-days
-Calendar Duration: 35–92 working days (7.0–18.4 weeks)
-Risk: High, Confidence: Low
+Project Estimate
+
+Implementation Effort:
+17–49 engineer-days
+
+Spike:
+2.5 engineer-days
+
+Contingency:
+8.2 engineer-days
+
+Final Effort:
+24.4–64.4 engineer-days
+
+Calendar Duration:
+35–92 working days (7.0–18.4 weeks)
+
+Technical Risk:
+High
+
+Confidence:
+Low
+
+Spikes Required:
+- Payment Gateway API (1.5 days)
+- WhatsApp Provider API (0.5 days)
+
+Assumptions:
+- UI design final
+- Payment sandbox available
+- 1 engineer at 70% allocation
+- No major requirement changes
 ```
 
-Semua test PASS (27 tests):
+Semua test PASS (29 tests):
 
 ```
 === RUN   TestNaiveEstimator
 --- PASS: TestNaiveEstimator (0.00s)
+=== RUN   TestNaiveEstimatorZeroPages
+--- PASS: TestNaiveEstimatorZeroPages (0.00s)
+=== RUN   TestNaiveEstimatorNegativePages
+--- PASS: TestNaiveEstimatorNegativePages (0.00s)
 ... (semua test passing)
 PASS
 ```
@@ -325,8 +377,9 @@ PASS
 6. **Range ordering matter** - Min ≤ Expected ≤ Max (PERT formula)
 7. **Validation is explicit** - Invalid inputs return errors, not silent failures
 8. **EngineerCount must be ≥ 1** - Invalid planning input = explicit error
-9. **Unknown with SpikeDays = 0 + non-zero estimate = VALID** - Spike helps, but implementation estimate can exist
-10. **Deterministic testing** - Core estimation logic tidak perlu network atau DB
+9. **Empty TaskName is invalid** - Every task must have a name for communication
+10. **Confidence is communication aid** - Not statistical probability
+11. **Deterministic testing** - Core estimation logic tidak perlu network atau DB
 
 ---
 

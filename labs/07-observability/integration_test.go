@@ -156,6 +156,24 @@ func TestIntegration_RequestID_Validation_And_Generation(t *testing.T) {
 	}
 }
 
+func TestIntegration_HTTPNotificationClient_Immutability(t *testing.T) {
+	originalClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	newClient := NewHTTPNotificationClient("http://localhost:8087", originalClient)
+
+	if originalClient.Transport != nil {
+		t.Errorf("original client transport was mutated: %v", originalClient.Transport)
+	}
+	if originalClient.Timeout != 10*time.Second {
+		t.Errorf("original client timeout was mutated: %v", originalClient.Timeout)
+	}
+	if newClient.HTTPClient == originalClient {
+		t.Errorf("expected new HTTP client instance, got same pointer")
+	}
+}
+
 func TestIntegration_NotificationClient_Cancellation(t *testing.T) {
 	reqReceived := make(chan bool, 1)
 	downstreamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
