@@ -85,6 +85,9 @@ func (r *PostgresWalletRepo) GetBalance(ctx context.Context, tx *sql.Tx, account
 // TransferNaive: READ COMMITTED without FOR UPDATE
 // Vulnerable to lost update / race condition when multiple transfers read stale balance
 func (r *PostgresWalletRepo) TransferNaive(ctx context.Context, fromID, toID int, amount int64) error {
+	if fromID == toID {
+		return ErrSameAccountTransfer
+	}
 	if amount <= 0 {
 		return ErrNegativeTransferAmount
 	}
@@ -136,6 +139,9 @@ func (r *PostgresWalletRepo) TransferNaive(ctx context.Context, fromID, toID int
 // TransferWithLock: READ COMMITTED + SELECT ... FOR UPDATE
 // Acquires locks in deterministic order (smaller ID first) to prevent deadlock
 func (r *PostgresWalletRepo) TransferWithLock(ctx context.Context, fromID, toID int, amount int64) error {
+	if fromID == toID {
+		return ErrSameAccountTransfer
+	}
 	if amount <= 0 {
 		return ErrNegativeTransferAmount
 	}
@@ -238,6 +244,9 @@ func IsSerializationError(err error) bool {
 
 // TransferRepeatableRead: REPEATABLE READ transaction
 func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID, toID int, amount int64) error {
+	if fromID == toID {
+		return ErrSameAccountTransfer
+	}
 	if amount <= 0 {
 		return ErrNegativeTransferAmount
 	}
