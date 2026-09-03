@@ -12,6 +12,8 @@ import (
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
+var robustFixedDate = time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+
 // PartialFailingMockCache is a mock that allows configuring which operations fail
 type PartialFailingMockCache struct {
 	*caching.MockCache
@@ -50,7 +52,7 @@ func TestCacheSetFailureMetrics(t *testing.T) {
 	ctx := context.Background()
 
 	// Initial request - cache miss -> repo hit -> cache set fails
-	_, err := svc.GetDashboard(ctx, 1)
+	_, err := svc.GetDashboardWithTenant(ctx, 1, 1, robustFixedDate)
 
 	// Request should succeed
 	if err != nil {
@@ -85,23 +87,35 @@ func TestCacheDeleteFailureMetrics(t *testing.T) {
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// Populate cache first
-	_, _ = svc.GetDashboard(ctx, 1)
+	// Populate cache first with robustFixedDate
+	_, err := svc.GetDashboardWithTenant(ctx, 1, 1, robustFixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error populating cache: %v", err)
+	}
 
 	// Now make delete fail
 	cache.FailDelete = true
 
 	// Invalidate cache
-	err := svc.InvalidateDashboard(ctx, 1, 1, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
+	err = svc.InvalidateDashboard(ctx, 1, 1, robustFixedDate)
 
 	// Should return error
 	if err == nil {
 		t.Fatal("expected invalidation to return error")
 	}
 
-	// Verify error metric
+	// Verify error metrics
 	if metrics.Errors() != 1 {
 		t.Errorf("expected 1 cache error (from delete failure), got %d", metrics.Errors())
+	}
+	if metrics.CacheInvalidationErrors() != 1 {
+		t.Errorf("expected 1 CacheInvalidationError, got %d", metrics.CacheInvalidationErrors())
+	}
+	if metrics.CacheInvalidateOps() != 1 {
+		t.Errorf("expected 1 CacheInvalidateOp, got %d", metrics.CacheInvalidateOps())
+	}
+	if metrics.CacheOperationErrors() != 1 {
+		t.Errorf("expected 1 CacheOperationError, got %d", metrics.CacheOperationErrors())
 	}
 
 	t.Log("✓ Cache delete failure triggers error metric")
@@ -116,7 +130,7 @@ func TestCacheFailureGracefulDegradation(t *testing.T) {
 	ctx := context.Background()
 
 	// Request should succeed via fallback
-	result, err := svc.GetDashboard(ctx, 1)
+	result, err := svc.GetDashboardWithTenant(ctx, 1, 1, robustFixedDate)
 	if err != nil {
 		t.Fatalf("expected fallback to succeed, got error: %v", err)
 	}
@@ -202,9 +216,6 @@ func TestDashboardKeyVersioning(t *testing.T) {
 	t.Log("Key versioning for migration validated")
 }
 
-// Removed TestCorruptCacheHandling as it was redundant/incorrect.
-// True handling of corrupt cache is tested in cache_integration_test.go's TestCorruptCacheFallsBackAppropriately.
-
 // TestSerializationSafety ensures JSON marshal/unmarshal errors are handled
 func TestSerializationSafety(t *testing.T) {
 	// Normal case
@@ -266,18 +277,21 @@ func TestSourceOfTruth(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(1)
+	key := caching.DashboardCacheKey(1, branchID, robustFixedDate)
 
 	// Step 1: Initial request - repo returns InvoiceCountToday=42
 	repo.Reset()
-	_, _ = svc.GetDashboard(ctx, branchID)
+	_, err := svc.GetDashboardWithTenant(ctx, 1, branchID, robustFixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if repo.CallCount() != 1 {
 		t.Fatalf("expected 1 repo call, got %d", repo.CallCount())
 	}
 
 	// Step 2: Verify cache has been populated
-	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
-	_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, fixedDate))
+	_, err = cache.Get(ctx, key)
 	if err != nil {
 		t.Fatalf("expected cache to be populated: %v", err)
 	}
@@ -285,14 +299,14 @@ func TestSourceOfTruth(t *testing.T) {
 	// Step 3: Modify repo to return different value (simulate DB update)
 	repo.Reset()
 	repo.SetNextValue(func() caching.Dashboard {
-		return caching.Dashboard{BranchID: branchID, InvoiceCountToday: 99}
+		return caching.Dashboard{BranchID: branchID, InvoiceCountToday: 99, Date: "2026-09-03"}
 	})
 
 	// Step 4: Invalidate cache (simulates commit -> invalidate)
-	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, branchID, fixedDate))
+	_ = cache.Delete(ctx, key)
 
 	// Step 5: Next request should get fresh data from repo
-	result, err := svc.GetDashboard(ctx, branchID)
+	result, err := svc.GetDashboardWithTenant(ctx, 1, branchID, robustFixedDate)
 	if err != nil {
 		t.Fatalf("expected request to succeed after invalidation: %v", err)
 	}
