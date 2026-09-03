@@ -196,6 +196,18 @@ go test -v -run TestSerializable_ConcurrentUpdate_SerializationFailure ./...
 | **Repeatable Read** | Snapshot konsisten tanpa lock | Memerlukan handling conflict `40001` pada concurrent update |
 | **Serializable (SSI)** | Menjamin serial execution equivalent, bebas anomali write skew | Abort rate tinggi pada skenario high contention, wajib retry handling |
 
+### Panduan Pemilihan Isolation Strategy
+Tidak ada isolation level yang otomatis benar hanya karena domain-nya financial. Tentukan business invariant terlebih dahulu sebelum memilih.
+
+| Scenario | Strategy |
+|---|---|
+| CRUD umum | `Read Committed` |
+| Dashboard / agregasi statistik sederhana | `Read Committed` |
+| Consistent report snapshot (multi-table cross-section) | `Repeatable Read` / explicit reporting snapshot |
+| Wallet transfer dengan high contention | `Read Committed` + `SELECT ... FOR UPDATE` (Pessimistic) |
+| Concurrent update dengan snapshot statis | `Repeatable Read` + retry (Optimistic) |
+| Complex multi-row invariant / Pencegahan Write Skew | `Serializable` + retry (SSI) |
+
 ## Senior Engineer Checklist
 - [ ] Apakah business invariant telah didefinisikan secara eksplisit sebelum memilih solusi?
 - [ ] Apakah transaksi yang melibatkan multi-row lock sudah menggunakan urutan deterministik (misal `MIN(id)` lalu `MAX(id)`)?
