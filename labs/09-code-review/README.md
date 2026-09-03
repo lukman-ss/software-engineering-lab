@@ -104,14 +104,53 @@ func (c *CheckoutNaive) Checkout(ctx context.Context, userID string) (*CheckoutR
 - Stock >= 0 (tidak boleh negatif)
 - Order hanya dibuat jika semua validasi lolos
 
+## Advanced Review Finding — Atomicity Gap Between Business Transaction and Idempotency Finalization
+
+Saat proses multi-step, sering terjadi failure window antara penyelesaian transaksi database dengan persistensi record idempotency (misal ke Redis).
+
+Flow:
+1. `BEGIN TRANSACTION`
+2. `ReserveStock()`
+3. `CreateOrder()`
+4. `COMMIT`
+5. ↓ **CRASH/NETWORK ERROR**
+6. `MarkCompleted(idempotency)` gagal
+
+Jika langkah ke-6 gagal, *business transaction sudah sukses*, namun *idempotency record masih PROCESSING*. Jika client retry, server mungkin merespons dengan error `ErrDuplicateRequest` atau memproses ulang jika TTL expired. 
+
+**Opsi Production:**
+- Simpan record idempotency ke dalam satu *transactional boundary* yang sama dengan business transaction (seperti pola Outbox).
+- Gunakan *durable reconciliation* via worker.
+- Terapkan *unique business constraint* di database (misalnya `idempotency_key` menjadi `UNIQUE` column di table orders) untuk mencegah duplikasi sejati, mengizinkan recovery *stale* PROCESSING record secara aman.
+
+Dalam lab ini, error ini didemonstrasikan dengan mengembalikan error khusus: `ErrIdempotencyFinalize`.
+
 ## Concurrency Review
 
 ### [ ] Apakah concurrent request aman?
 
-Run test: `go test -race ./...` untuk mendeteksi race condition.
+Run test: `go test -race ./...` untuk mendeteksi data race (concurrent memory access tanpa sinkronisasi yang benar).
 
-**Naive:** Tidak aman - dapat overselling
-**Improved:** Atomic stock update, satu request berhasil satu gagal
+**Penting:** Go `race` detector **tidak** secara otomatis mendeteksi logical/business race condition (seperti dua checkout sukses padahal stock cuma satu). Data race vs Logical Race Condition:
+- **Data Race**: Dua goroutine read/write *memory address* yang sama di saat bersamaan. Terdeteksi oleh `go test -race`.
+- **Logical Race Condition**: Interleaving urutan eksekusi merusak *business invariant* (contoh: Overselling). Tidak terdeteksi oleh data race detector, **harus** diuji menggunakan *concurrency/invariant test* khusus yang memastikan invarian bisnis dipertahankan.
+
+**Naive:** Tidak aman - dapat overselling.
+**Improved:** Aman - transaksi terisolasi dan atomic stock reservation menjaga invarian.
+
+### [ ] Keterbatasan MockTransactionManager
+
+Mock transaksi dalam lab ini menggunakan Global Mutex, yang secara efektif men-serialize eksekusi di test. Ini dilakukan untuk tujuan **demonstrasi yang deterministic**. 
+
+**Di Production:** Database memiliki Concurrency Control (MVCC) untuk mencapai atomicity. Jangan menganggap bahwa "berada dalam DB Transaction" otomatis mencegah race condition. Untuk safe stock reservation di production:
+
+```sql
+UPDATE products
+SET stock = stock - $1
+WHERE id = $2
+  AND stock >= $1;
+```
+Lalu program mengecek *affected rows*. Jika 0, maka stock tidak cukup. Pendekatan lain adalah dengan `SELECT ... FOR UPDATE` (Pessimistic Locking).
 
 ## Security Review
 
@@ -189,8 +228,10 @@ Lihat `checkout_improved.go` untuk implementasi yang sudah direview dengan:
 4. **Conditional Atomic Stock Operation** - validasi dan pemotongan stock berada dalam critical section transaksional (invarian `stock >= 0` terjaga)
 5. **Good error propagation** - mengembalikan error yang sesuai tanpa merusak state idempotency; infra error tidak disamakan dengan domain error
 6. **Notification setelah transaction** - side effect dijalankan di luar transaksi setelah commit sukses, failure notification dicatat tanpa rollback order
-7. **Idempotency finalization** - `MarkCompleted` error di-log dan dikembalikan sebagai `ErrIdempotencyFinalize` tanpa rollback business transaction yang sudah committed
-8. **Release error handling** - `Release` error digabungkan dengan error asal via `errors.Join`
+7. **Idempotency finalization failure di-handle** - `MarkCompleted` error dikembalikan sebagai `ErrIdempotencyFinalize` untuk indikasi atomicity gap.
+8. **Idempotency payload hashing yang benar** - Hash dibuat dari request payload (CheckoutCommand), bukan dari mutable state seperti cart content.
+9. **Validasi idempotency key** - Menolak key kosong atau whitespace.
+10. **Release error handling** - `Release` error digabungkan dengan error asal via `errors.Join`
 
 ## Transaction Boundary
 
@@ -238,6 +279,10 @@ State idempotency berkembang melalui state yang jelas:
 - **COMPLETED**: request sukses, response tersimpan untuk replay
 
 Pada error, record di-release agar retry memungkinkan.
+
+**Catatan: Idempotency Terhadap Mutable State**
+Sangat penting bahwa Hash Idempotency dan verifikasinya **hanya bergantung pada payload asli dari client**, bukan pada mutable state internal (seperti isi Cart yang diambil dari DB pada saat request).
+Jika hash dibuat dari state Cart, dan kemudian client mengosongkan/mengubah Cart-nya sebelum melakukan retry (karena timeout), hash-nya akan berubah dan sistem keliru menganggapnya sebagai request berbeda (atau terjadi conflict), alih-alih mengembalikan cache response original yang sudah sukses! Dalam `ImprovedCheckout`, pengecekan dilakukan _sebelum_ memuat cart, dan yang di-hash adalah `CheckoutCommand` (client payload).
 
 ## Deterministic Concurrency Test
 

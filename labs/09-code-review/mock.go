@@ -427,7 +427,9 @@ func (r *MockIdempotencyRepository) Get(ctx context.Context, key string) (*Idemp
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if rec, exists := r.records[key]; exists {
-		return rec, nil
+		// Return copy to prevent data races on read/write of record fields
+		copyRec := *rec
+		return &copyRec, nil
 	}
 	return nil, nil
 }

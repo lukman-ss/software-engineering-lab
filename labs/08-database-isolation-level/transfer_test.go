@@ -10,7 +10,54 @@ import (
 
 	_ "github.com/lib/pq"
 	isolation "github.com/lukman-ss/software-engineering-lab/labs/08-database-isolation-level"
+	"errors"
 )
+
+func TestTransfer_SelfTransferRejected(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := isolation.NewPostgresWalletRepo(db)
+
+	ctx := context.Background()
+	resetTestState(t, ctx, db, repo, 1000, 1000, 1000)
+
+	strategies := []struct {
+		name string
+		fn   func(ctx context.Context, fromID, toID int, amount int64) error
+	}{
+		{"Naive", repo.TransferNaive},
+		{"WithLock", repo.TransferWithLock},
+		{"RepeatableRead", repo.TransferRepeatableRead},
+		{"Serializable", repo.TransferSerializable},
+	}
+
+	for _, s := range strategies {
+		t.Run(s.name, func(t *testing.T) {
+			err := s.fn(ctx, 1, 1, 100)
+			if !errors.Is(err, isolation.ErrSameAccountTransfer) {
+				t.Errorf("expected ErrSameAccountTransfer, got %v", err)
+			}
+			
+			// Verify audit log empty
+			var auditCount int
+			err = db.QueryRow("SELECT COUNT(*) FROM isolation_transfer_audit").Scan(&auditCount)
+			if err != nil {
+				t.Fatalf("count audit: %v", err)
+			}
+			if auditCount != 0 {
+				t.Errorf("expected 0 audit records, got %d", auditCount)
+			}
+			// Verify balance unchanged
+			alice, err := repo.GetAccount(ctx, 1)
+			if err != nil {
+				t.Fatalf("get alice: %v", err)
+			}
+			if alice.Balance != 1000 {
+				t.Errorf("expected balance 1000, got %d", alice.Balance)
+			}
+		})
+	}
+}
 
 // TestNaiveTransfer_LostUpdate demonstrates the classic double-spend / lost-update bug:
 // Alice has 1,000,000.

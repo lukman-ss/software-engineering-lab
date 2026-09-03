@@ -391,7 +391,9 @@ func RetryTransaction(
 				delayUpper = float64(policy.MaxDelay)
 			}
 			delay := time.Duration(delayUpper * policy.RandSrc())
-			policy.Sleep(ctx, delay)
+			if sleepErr := policy.Sleep(ctx, delay); sleepErr != nil {
+				return fmt.Errorf("retry sleep: %w", sleepErr)
+			}
 			continue
 		}
 		break

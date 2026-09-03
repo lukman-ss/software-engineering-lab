@@ -287,6 +287,28 @@ func TestRetryTransaction_ContextCancelledDuringBackoff(t *testing.T) {
 	}
 }
 
+func TestRetryTransaction_SleepErrorPropagated(t *testing.T) {
+	ctx := context.Background()
+	expectedErr := errors.New("custom sleep error")
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  10 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep: func(ctx context.Context, d time.Duration) error {
+			return expectedErr
+		},
+	}
+
+	err := isolation.RetryTransaction(ctx, 3, policy, func(ctx context.Context) error {
+		return &pq.Error{Code: "40001", Message: "serialization failure"}
+	})
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected sleep error %v, got %v", expectedErr, err)
+	}
+}
+
 func TestRetryTransaction_SuccessFirstAttempt(t *testing.T) {
 	ctx := context.Background()
 	attempts := 0

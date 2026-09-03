@@ -88,7 +88,8 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 		}
 	}
 
-	hash := c.hashRequest(principal.UserID, cartItems)
+	// Hash should be based ONLY on the immutable command payload, not mutable server state like cart items
+	hash := c.hashRequest(cmd)
 
 	status, cachedResp, err := c.idempotency.Claim(ctx, scopedKey, hash)
 	if err != nil {
@@ -184,12 +185,8 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	return resp, nil
 }
 
-func (c *CheckoutImproved) hashRequest(userID string, items []CartItem) string {
-	type payload struct {
-		UserID string
-		Items  []CartItem
-	}
-	b, _ := json.Marshal(payload{UserID: userID, Items: items})
+func (c *CheckoutImproved) hashRequest(cmd CheckoutCommand) string {
+	b, _ := json.Marshal(cmd)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
