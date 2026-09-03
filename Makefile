@@ -168,6 +168,20 @@ lab-07-vet:
 	@echo "=== Vet Lab 07 ==="
 	@if [ -d "labs/07-observability" ]; then go vet ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
 
+# ==================== Lab 08: Database Isolation Level ====================
+
+lab-08-test:
+	@echo "=== Testing Lab 08: Database Isolation Level ==="
+	@cd labs/08-database-isolation-level && go test -v -count=1 ./...
+
+lab-08-test-race:
+	@echo "=== Testing Lab 08 (Race Detector) ==="
+	@cd labs/08-database-isolation-level && go test -race -v -count=1 ./...
+
+lab-08-vet:
+	@echo "=== Vet Lab 08 ==="
+	@cd labs/08-database-isolation-level && go vet ./...
+
 # ==================== Lab 14: Outbox Pattern ====================
 
 lab-14-test:
@@ -181,3 +195,17 @@ lab-14-test-race:
 lab-14-vet:
 	@echo "=== Vet Lab 14 ==="
 	@go vet ./labs/14-outbox-pattern/...
+
+# ==================== Lab 15: Retry ====================
+
+lab-15-test:
+	@echo "=== Testing Lab 15: Retry ==="
+	@go test -v ./labs/15-retry/...
+
+lab-15-test-race:
+	@echo "=== Testing Lab 15 (Race Detector) ==="
+	@go test -race -v ./labs/15-retry/...
+
+lab-15-vet:
+	@echo "=== Vet Lab 15 ==="
+	@go vet ./labs/15-retry/...

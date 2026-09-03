@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/08-retry"
+	"github.com/lukman-ss/software-engineering-lab/labs/15-retry"
 )
 
 func TestRetryBudget(t *testing.T) {

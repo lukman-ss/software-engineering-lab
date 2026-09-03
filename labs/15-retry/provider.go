@@ -327,7 +327,7 @@ func isRetryableNetworkError(err error) bool {
 // waitDuration implements exponential backoff with full jitter.
 func waitDuration(baseDelay time.Duration, attempt int, jitterFactor float64) time.Duration {
 	// Exponential backoff: base * 2^attempt
-	delay := float64(baseDelay) * float64(1<<uint(attempt))
+	delay := float64(baseDelay) * float64(int(1)<<uint(attempt))
 
 	// Add jitter: multiply by random factor between (1-jitter) and (1+jitter)
 	jitter := 1.0 + jitterFactor*(rand.Float64()*2-1)

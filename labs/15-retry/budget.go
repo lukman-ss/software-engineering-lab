@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -27,6 +26,14 @@ func NewRetryBudget(budget int64, window time.Duration) *RetryBudget {
 		window:        window,
 		lastReplenish: time.Now(),
 	}
+}
+
+// Reset resets the budget used count.
+func (rb *RetryBudget) Reset() {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	rb.used = 0
+	rb.lastReplenish = time.Now()
 }
 
 // TryConsume returns true if a retry is allowed by the budget.

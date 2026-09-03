@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lukman/software-engineering-lab/pkg/validation"
+	"github.com/lukman-ss/software-engineering-lab/pkg/validation"
 )
 
 type testPayload struct {

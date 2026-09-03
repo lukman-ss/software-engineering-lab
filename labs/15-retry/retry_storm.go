@@ -46,7 +46,7 @@ func RunStormExperiment(ctx context.Context, provider *MockProvider, cfg StormCo
 	var wg sync.WaitGroup
 	var totalReqs atomic.Int32
 	requestByTime := make([]int, 0, 1000)
-	var timingMu sync.Mutex
+	_ = requestByTime
 
 	rand.Seed(time.Now().UnixNano())
 

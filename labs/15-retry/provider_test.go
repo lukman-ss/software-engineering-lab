@@ -2,11 +2,10 @@ package retry_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/08-retry"
+	"github.com/lukman-ss/software-engineering-lab/labs/15-retry"
 )
 
 func TestMockProviderFailModes(t *testing.T) {

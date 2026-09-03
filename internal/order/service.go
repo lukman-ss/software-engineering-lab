@@ -8,8 +8,8 @@ import (
 
 	"github.com/lukman-ss/software-engineering-lab/internal/inventory"
 	"github.com/lukman-ss/software-engineering-lab/internal/notification"
-	"github.com/lukman/software-engineering-lab/internal/payment"
-	"github.com/lukman/software-engineering-lab/pkg/util"
+	"github.com/lukman-ss/software-engineering-lab/internal/payment"
+	"github.com/lukman-ss/software-engineering-lab/pkg/util"
 )
 
 type appService struct {

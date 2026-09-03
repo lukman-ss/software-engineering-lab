@@ -133,3 +133,10 @@ Run tests against a local PostgreSQL database:
 docker-compose up -d postgres
 go test ./labs/14-outbox-pattern/... -v
 ```
+
+---
+
+## Navigasi
+
+- **Previous**: [Lab 13 — Deadlock](../13-deadlock/)
+- **Next**: [Lab 15 — Retry](../15-retry/)
