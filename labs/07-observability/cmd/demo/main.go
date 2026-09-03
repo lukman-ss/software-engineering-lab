@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -221,7 +222,14 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"delivered"}`))
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "delivered"}); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			logger.ErrorContext(ctx, "failed to write notification response",
+				"operation", "encode_response",
+				"error", err.Error(),
+			)
+		}
 	})
 
 	// Metrics endpoint

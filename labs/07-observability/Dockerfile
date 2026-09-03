@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine3.21 AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/demo ./labs/07-observability/cmd/demo
 
-FROM alpine:latest
+FROM alpine:3.21
 
 WORKDIR /app
 

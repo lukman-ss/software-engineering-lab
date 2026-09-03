@@ -29,19 +29,19 @@ type SuccessResponse struct {
 	RequestID string `json:"request_id"`
 }
 
-func writeJSONError(w http.ResponseWriter, status int, msg, requestID string) {
+func writeJSONError(w http.ResponseWriter, status int, msg, requestID string) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(ErrorResponse{
+	return json.NewEncoder(w).Encode(ErrorResponse{
 		Error:     msg,
 		RequestID: requestID,
 	})
 }
 
-func writeJSONSuccess(w http.ResponseWriter, invoiceID, requestID string) {
+func writeJSONSuccess(w http.ResponseWriter, invoiceID, requestID string) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(SuccessResponse{
+	return json.NewEncoder(w).Encode(SuccessResponse{
 		Status:    "success",
 		InvoiceID: invoiceID,
 		RequestID: requestID,
@@ -241,7 +241,12 @@ func (s *SafeInvoiceService) HTTPHandler(resolveDeps func(r *http.Request, baseD
 				"status", http.StatusBadRequest,
 				"duration_ms", duration.Milliseconds(),
 			)
-			writeJSONError(w, http.StatusBadRequest, "missing invoice id", requestID)
+			if err := writeJSONError(w, http.StatusBadRequest, "missing invoice id", requestID); err != nil {
+				logger.ErrorContext(ctx, "failed to write response",
+					"operation", "encode_response",
+					"error", err.Error(),
+				)
+			}
 			return
 		}
 
@@ -272,7 +277,12 @@ func (s *SafeInvoiceService) HTTPHandler(resolveDeps func(r *http.Request, baseD
 				"error", err.Error(),
 			)
 
-			writeJSONError(w, statusCode, "invoice processing failed", requestID)
+			if err := writeJSONError(w, statusCode, "invoice processing failed", requestID); err != nil {
+				logger.ErrorContext(ctx, "failed to write response",
+					"operation", "encode_response",
+					"error", err.Error(),
+				)
+			}
 			return
 		}
 
@@ -285,7 +295,12 @@ func (s *SafeInvoiceService) HTTPHandler(resolveDeps func(r *http.Request, baseD
 			"duration_ms", duration.Milliseconds(),
 		)
 
-		writeJSONSuccess(w, invoiceID, requestID)
+		if err := writeJSONSuccess(w, invoiceID, requestID); err != nil {
+			logger.ErrorContext(ctx, "failed to write response",
+				"operation", "encode_response",
+				"error", err.Error(),
+			)
+		}
 	})
 }
 

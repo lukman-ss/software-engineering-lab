@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/lukman-ss/software-engineering-lab/pkg/middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -60,6 +61,10 @@ func (c *HTTPNotificationClient) Send(ctx context.Context, invoiceID string) err
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL.String(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if reqID := middleware.GetRequestID(ctx); reqID != "" {
+		req.Header.Set(middleware.HeaderRequestID, reqID)
 	}
 
 	resp, err := c.HTTPClient.Do(req)

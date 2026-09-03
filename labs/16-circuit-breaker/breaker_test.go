@@ -54,7 +54,7 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 
 // TestCircuitBreakerHalfOpenTransition tests transition from Open to HalfOpen.
 func TestCircuitBreakerHalfOpenTransition(t *testing.T) {
-	var now = time.Now()
+	now := time.Now()
 
 	cfg := breaker.Config{
 		FailureThreshold:  2,

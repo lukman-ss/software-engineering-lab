@@ -251,8 +251,8 @@ func TestRetryTransaction_ContextCancelledDuringBackoff(t *testing.T) {
 	sleepCancelled := make(chan struct{})
 
 	policy := isolation.RetryPolicy{
-		BaseDelay: 1 * time.Millisecond,
-		MaxDelay:  100 * time.Millisecond,
+		BaseDelay: 1 * time.Second, // Long delay so context times out during backoff
+		MaxDelay:  2 * time.Second,
 		RandSrc:   func() float64 { return 0.5 },
 		Sleep: func(ctx context.Context, d time.Duration) error {
 			select {
@@ -265,7 +265,7 @@ func TestRetryTransaction_ContextCancelledDuringBackoff(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
 	err := isolation.RetryTransaction(ctx, 5, policy, func(ctx context.Context) error {
@@ -273,8 +273,8 @@ func TestRetryTransaction_ContextCancelledDuringBackoff(t *testing.T) {
 		return &pq.Error{Code: "40001", Message: "serialization failure"}
 	})
 
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled, got %v", err)
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected context.Canceled or DeadlineExceeded, got %v", err)
 	}
 	if attempts != 1 {
 		t.Fatalf("expected 1 attempt, got %d", attempts)

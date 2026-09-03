@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -606,6 +607,126 @@ func TestIntegration_TracePropagation(t *testing.T) {
 	}
 }
 
+func TestIntegration_RequestID_Propagation_To_Downstream(t *testing.T) {
+	prevProp := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(prevProp)
+	})
+
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tracer := tp.Tracer("test-tracer")
+
+	var downstreamLogBuf bytes.Buffer
+	downstreamLogger := slog.New(slog.NewJSONHandler(&downstreamLogBuf, nil))
+
+	var downstreamReqID string
+	var downstreamCtxReqID string
+	var downstreamSpanID string
+	var downstreamTraceID string
+
+	downstreamHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		extractedCtx := otel.GetTextMapPropagator().Extract(
+			r.Context(),
+			propagation.HeaderCarrier(r.Header),
+		)
+		ctx, span := tracer.Start(extractedCtx, "POST /notifications",
+			trace.WithSpanKind(trace.SpanKindServer),
+		)
+		defer span.End()
+
+		downstreamReqID = r.Header.Get(middleware.HeaderRequestID)
+		downstreamCtxReqID = middleware.GetRequestID(ctx)
+		downstreamSpanID = span.SpanContext().SpanID().String()
+		downstreamTraceID = span.SpanContext().TraceID().String()
+
+		log := ContextLogger(ctx, downstreamLogger, downstreamCtxReqID)
+		log.InfoContext(ctx, "received notification webhook",
+			"invoice_id", r.URL.Query().Get("invoice_id"),
+		)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"delivered"}`))
+	})
+
+	downstreamSrv := httptest.NewServer(middleware.RequestID(downstreamHandler))
+	defer downstreamSrv.Close()
+
+	notifClient := NewHTTPNotificationClient(downstreamSrv.URL, nil)
+
+	deps := NewDependencies(ScenarioConfig{})
+	deps.Notification = notifClient
+
+	service := NewSafeInvoiceService(deps, nil, tracer, nil)
+
+	customReqID := "correlation-demo-001"
+	req := httptest.NewRequest(http.MethodPost, "/invoices/INV-CORR-001/process", nil)
+	req.SetPathValue("id", "INV-CORR-001")
+	req.Header.Set(middleware.HeaderRequestID, customReqID)
+	rec := httptest.NewRecorder()
+
+	handler := middleware.RequestID(service.HTTPHandler(nil))
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	// 1. Downstream receives exact same header
+	if downstreamReqID != customReqID {
+		t.Fatalf("downstream header mismatch: expected %s, got %s", customReqID, downstreamReqID)
+	}
+
+	// 2. Downstream context has exact same request ID
+	if downstreamCtxReqID != customReqID {
+		t.Fatalf("downstream context request ID mismatch: expected %s, got %s", customReqID, downstreamCtxReqID)
+	}
+
+	// 3. Find root span and check trace ID match
+	var rootSpan sdktrace.ReadOnlySpan
+	for _, s := range sr.Ended() {
+		if s.Name() == "POST /invoices/{id}/process" {
+			rootSpan = s
+			break
+		}
+	}
+	if rootSpan == nil {
+		t.Fatal("root span not found")
+	}
+
+	if downstreamTraceID != rootSpan.SpanContext().TraceID().String() {
+		t.Fatalf("downstream trace ID mismatch: downstream=%s, root=%s", downstreamTraceID, rootSpan.SpanContext().TraceID().String())
+	}
+
+	// 4. Downstream structured log has request_id, trace_id, span_id
+	downstreamLogOutput := strings.TrimSpace(downstreamLogBuf.String())
+	if downstreamLogOutput == "" {
+		t.Fatal("expected downstream log output")
+	}
+
+	var logEntry map[string]any
+	if err := json.Unmarshal([]byte(downstreamLogOutput), &logEntry); err != nil {
+		t.Fatalf("failed to unmarshal downstream log: %v", err)
+	}
+
+	if logEntry["request_id"] != customReqID {
+		t.Errorf("downstream log request_id mismatch: expected %s, got %v", customReqID, logEntry["request_id"])
+	}
+	if logEntry["trace_id"] != downstreamTraceID {
+		t.Errorf("downstream log trace_id mismatch: expected %s, got %v", downstreamTraceID, logEntry["trace_id"])
+	}
+	if logEntry["span_id"] != downstreamSpanID {
+		t.Errorf("downstream log span_id mismatch: expected %s, got %v", downstreamSpanID, logEntry["span_id"])
+	}
+}
+
 func TestIntegration_ExtractIncomingW3CTraceContext(t *testing.T) {
 	prevProp := otel.GetTextMapPropagator()
 	otel.SetTextMapPropagator(
@@ -879,5 +1000,74 @@ func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
 		if res.statusCode != expectedStatus {
 			t.Errorf("unsafe scenario %s expected status %d, got %d", res.scenario, expectedStatus, res.statusCode)
 		}
+	}
+}
+
+type failingResponseWriter struct {
+	header http.Header
+}
+
+func newFailingResponseWriter() *failingResponseWriter {
+	return &failingResponseWriter{
+		header: make(http.Header),
+	}
+}
+
+func (f *failingResponseWriter) Header() http.Header {
+	return f.header
+}
+
+func (f *failingResponseWriter) WriteHeader(statusCode int) {}
+
+func (f *failingResponseWriter) Write(b []byte) (int, error) {
+	return 0, errors.New("simulated write failure")
+}
+
+func TestIntegration_ResponseEncodingError_LoggedWithContext(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tracer := tp.Tracer("test-tracer")
+
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, nil)
+
+	customReqID := "encoding-err-demo-001"
+	req := httptest.NewRequest(http.MethodPost, "/invoices/INV-ENCODE-ERR/process", nil)
+	req.SetPathValue("id", "INV-ENCODE-ERR")
+	req.Header.Set(middleware.HeaderRequestID, customReqID)
+
+	rec := newFailingResponseWriter()
+	handler := middleware.RequestID(service.HTTPHandler(nil))
+	handler.ServeHTTP(rec, req)
+
+	// Verify log contains encoding failure with correlation details
+	lines := strings.Split(strings.TrimSpace(logBuf.String()), "\n")
+	var foundEncodeErrLog bool
+	for _, line := range lines {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		if entry["operation"] == "encode_response" && entry["level"] == "ERROR" {
+			foundEncodeErrLog = true
+			if entry["request_id"] != customReqID {
+				t.Errorf("expected request_id=%s, got %v", customReqID, entry["request_id"])
+			}
+			if entry["trace_id"] == "" || entry["trace_id"] == nil {
+				t.Errorf("missing trace_id in encode error log")
+			}
+			if entry["span_id"] == "" || entry["span_id"] == nil {
+				t.Errorf("missing span_id in encode error log")
+			}
+			if entry["error"] != "simulated write failure" {
+				t.Errorf("expected error='simulated write failure', got %v", entry["error"])
+			}
+		}
+	}
+
+	if !foundEncodeErrLog {
+		t.Fatal("expected structured error log with operation=encode_response")
 	}
 }

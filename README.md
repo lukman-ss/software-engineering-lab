@@ -158,23 +158,27 @@ cd labs/01-idempotency
 go test -v ./...
 ```
 
-### Run Lab 05 (Race Condition)
+### Run Lab Tests
 
 ```bash
-make lab-05-test        # Unit tests
-make lab-05-test-race   # Tests with race detector
-make lab-05-vet         # Vet
-make lab-05-fmt         # Format
-make lab-05-integration # Integration tests (requires DB)
+make lab-08-test        # Unit tests for Lab 08
+make lab-08-test-race   # Tests with race detector for Lab 08
+make lab-08-vet         # Vet for Lab 08
+make lab-15-test        # Unit tests for Lab 15
+make lab-15-test-race   # Tests with race detector for Lab 15
+make lab-17-test        # Unit tests for Lab 17
+make lab-17-test-race   # Tests with race detector for Lab 17
 ```
 
-Note: Lab 05 is a nested Go module. Run from repository root with `make lab-05-test` or from the lab directory directly with `cd labs/05-race-condition && go test ./...`. Running `go test ./...` from the root will NOT test Lab 05.
+### Nested Modules
+
+Several labs are isolated Go modules with their own `go.mod`. The root `go test ./...` does not automatically test nested modules. Several labs are isolated Go modules with their own go.mod. Root `go test ./...` will not automatically validate nested modules. Use the corresponding Makefile targets or run tests from inside each lab directory.
 
 ## Testing
 
 ```bash
-make test          # Unit tests
-make test-race     # Tests with race detector
+make test          # Unit tests (uses -short tag)
+make test-race     # Tests with race detector (uses -short tag)
 make lint          # go vet
 ```
 
