@@ -21,45 +21,34 @@ type DashboardKeyBuilder struct {
 // NewDashboardKey creates a new dashboard key builder for single-tenant/demo usage.
 // WARNING: Default tenant is 1 and businessDate is today in UTC - this is for convenience only.
 // Production multi-tenant calls MUST provide explicit tenantID, branchID, and businessDate via NewTenantDashboardKey.
-//
-// Example usage for production multi-tenant:
-//
-//	localNow := now.In(loc)
-//	businessDate := time.Date(
-//	    localNow.Year(),
-//	    localNow.Month(),
-//	    localNow.Day(),
-//	    0, 0, 0, 0,
-//	    loc,
-//	)
-//	key := NewTenantDashboardKey(
-//	    tenantID,
-//	    branchID,
-//	    businessDate,
-//	).Build()
-//
-// WARNING: time.Time.Truncate(24 * time.Hour) does NOT give local midnight!
-// It truncates to the previous 24-hour boundary from the time's epoch,
-// not to "00:00:00" in the local timezone.
 func NewDashboardKey(branchID int64) *DashboardKeyBuilder {
 	return &DashboardKeyBuilder{
-		tenantID:     1, // default tenant - DEMO ONLY. Must override in multi-tenant production
+		tenantID:     1, // default tenant - DEMO ONLY
 		branchID:     branchID,
-		businessDate: time.Now().UTC(), // DEFAULT: convenience only, not timezone-aware business date
+		businessDate: time.Now().UTC(), // DEFAULT: convenience only
 		version:      1,
 	}
 }
 
-// NewTenantDashboardKey creates a dashboard key builder with explicit tenant, branch, and business date.
-// Production-safe: requires tenantID, branchID, and businessDate to be provided at construction.
-// Multi-tenant isolation is enforced by construction.
-func NewTenantDashboardKey(tenantID, branchID int64, businessDate time.Time) *DashboardKeyBuilder {
+// NewTenantDashboardKey creates a dashboard key builder with validated tenant, branch, and business date.
+// Production-safe: validates tenantID > 0, branchID > 0, and non-zero businessDate at construction.
+// Multi-tenant isolation and validity are enforced by construction.
+func NewTenantDashboardKey(tenantID, branchID int64, businessDate time.Time) (*DashboardKeyBuilder, error) {
+	if tenantID <= 0 {
+		return nil, fmt.Errorf("tenant ID must be positive: got %d", tenantID)
+	}
+	if branchID <= 0 {
+		return nil, fmt.Errorf("branch ID must be positive: got %d", branchID)
+	}
+	if businessDate.IsZero() {
+		return nil, fmt.Errorf("business date cannot be zero")
+	}
 	return &DashboardKeyBuilder{
 		tenantID:     tenantID,
 		branchID:     branchID,
 		businessDate: businessDate,
 		version:      1,
-	}
+	}, nil
 }
 
 // WithTenant sets the tenant ID for multi-tenant isolation.

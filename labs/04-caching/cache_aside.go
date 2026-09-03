@@ -72,6 +72,7 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 	case err != nil:
 		// Cache backend error (Redis down, network, timeout)
 		s.metrics.IncError()
+		s.metrics.IncCacheOperationError()
 		s.metrics.IncDBFallback()
 	default:
 		// Empty value without error - treat as miss per empty-value policy

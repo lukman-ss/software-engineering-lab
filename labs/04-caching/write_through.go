@@ -136,7 +136,10 @@ func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) 
 		// Unmarshal gagal → corrupt cache
 		s.metrics.IncError()
 		s.metrics.IncCacheInvalidateOp()
-		_ = s.cache.Delete(ctx, key)
+		if delErr := s.cache.Delete(ctx, key); delErr != nil && !errors.Is(delErr, ErrCacheMiss) {
+			s.metrics.IncError()
+			s.metrics.IncCacheInvalidationError()
+		}
 		// Fall through to DB read
 	case errors.Is(err, ErrCacheMiss):
 		// Normal miss - no error cost
@@ -147,6 +150,7 @@ func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) 
 	case err != nil:
 		// Cache backend error (down, network, timeout)
 		s.metrics.IncError()
+		s.metrics.IncCacheOperationError()
 		s.metrics.IncDBFallback()
 	}
 

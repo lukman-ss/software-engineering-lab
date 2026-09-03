@@ -14,14 +14,12 @@ import (
 //  3. CAPACITY: memory_usage_pct, evicted_keys, expired_keys, key_count
 //
 // Derived metrics: hit_ratio, cache_error_rate, rebuild_success_rate
-//
-// Catatan: Threshold alert (seperti hit_ratio < 50%) bersifat illustrative
-// dan harus disesuaikan dengan baseline serta SLO service.
 type CacheMetrics struct {
 	// COUNTERS
 	hits                  atomic.Int64
 	misses                atomic.Int64
-	errors                atomic.Int64
+	errors                atomic.Int64 // aggregate educational counter (technical + data quality + serialization)
+	cacheOperationErrors  atomic.Int64 // backend cache command failures ONLY (GET, SET, DELETE)
 	rebuildAttempts       atomic.Int64
 	rebuildSuccesses      atomic.Int64
 	dbQueries             atomic.Int64
@@ -55,6 +53,7 @@ func (m *CacheMetrics) Reset() {
 	m.hits.Store(0)
 	m.misses.Store(0)
 	m.errors.Store(0)
+	m.cacheOperationErrors.Store(0)
 	m.rebuildAttempts.Store(0)
 	m.rebuildSuccesses.Store(0)
 	m.dbQueries.Store(0)
@@ -75,21 +74,25 @@ func (m *CacheMetrics) Reset() {
 
 // --- COUNTERS ---
 
-func (m *CacheMetrics) IncHit()                    { m.hits.Add(1) }
-func (m *CacheMetrics) IncMiss()                   { m.misses.Add(1) }
-func (m *CacheMetrics) IncError()                  { m.errors.Add(1) }
-func (m *CacheMetrics) IncRebuildAttempt()         { m.rebuildAttempts.Add(1) }
-func (m *CacheMetrics) IncRebuildSuccess()         { m.rebuildSuccesses.Add(1) }
-func (m *CacheMetrics) IncDBQuery()                { m.dbQueries.Add(1) }
-func (m *CacheMetrics) IncLockWait()               { m.lockWaits.Add(1) }
-func (m *CacheMetrics) IncDBFallback()             { m.dbFallbacks.Add(1) }
-func (m *CacheMetrics) IncEvictedKey()             { m.evictedKeys.Add(1) }
-func (m *CacheMetrics) IncExpiredKey()             { m.expiredKeys.Add(1) }
-func (m *CacheMetrics) IncCacheSetError()          { m.cacheSetErrors.Add(1) }
-func (m *CacheMetrics) IncCacheInvalidationError() { m.cacheInvalidateErrors.Add(1) }
-func (m *CacheMetrics) IncCacheGetOp()             { m.cacheGetOps.Add(1) }
-func (m *CacheMetrics) IncCacheSetOp()             { m.cacheSetOps.Add(1) }
-func (m *CacheMetrics) IncCacheInvalidateOp()      { m.cacheInvalidateOps.Add(1) }
+func (m *CacheMetrics) IncHit()                 { m.hits.Add(1) }
+func (m *CacheMetrics) IncMiss()                { m.misses.Add(1) }
+func (m *CacheMetrics) IncError()               { m.errors.Add(1) }
+func (m *CacheMetrics) IncCacheOperationError() { m.cacheOperationErrors.Add(1) }
+func (m *CacheMetrics) IncRebuildAttempt()      { m.rebuildAttempts.Add(1) }
+func (m *CacheMetrics) IncRebuildSuccess()      { m.rebuildSuccesses.Add(1) }
+func (m *CacheMetrics) IncDBQuery()             { m.dbQueries.Add(1) }
+func (m *CacheMetrics) IncLockWait()            { m.lockWaits.Add(1) }
+func (m *CacheMetrics) IncDBFallback()          { m.dbFallbacks.Add(1) }
+func (m *CacheMetrics) IncEvictedKey()          { m.evictedKeys.Add(1) }
+func (m *CacheMetrics) IncExpiredKey()          { m.expiredKeys.Add(1) }
+func (m *CacheMetrics) IncCacheSetError()       { m.cacheSetErrors.Add(1); m.cacheOperationErrors.Add(1) }
+func (m *CacheMetrics) IncCacheInvalidationError() {
+	m.cacheInvalidateErrors.Add(1)
+	m.cacheOperationErrors.Add(1)
+}
+func (m *CacheMetrics) IncCacheGetOp()        { m.cacheGetOps.Add(1) }
+func (m *CacheMetrics) IncCacheSetOp()        { m.cacheSetOps.Add(1) }
+func (m *CacheMetrics) IncCacheInvalidateOp() { m.cacheInvalidateOps.Add(1) }
 
 // --- LATENCY ---
 
@@ -105,6 +108,7 @@ func (m *CacheMetrics) RecordRebuildLatency(d time.Duration) { m.rebuildLatency.
 func (m *CacheMetrics) Hits() int64                    { return m.hits.Load() }
 func (m *CacheMetrics) Misses() int64                  { return m.misses.Load() }
 func (m *CacheMetrics) Errors() int64                  { return m.errors.Load() }
+func (m *CacheMetrics) CacheOperationErrors() int64    { return m.cacheOperationErrors.Load() }
 func (m *CacheMetrics) RebuildAttempts() int64         { return m.rebuildAttempts.Load() }
 func (m *CacheMetrics) RebuildSuccesses() int64        { return m.rebuildSuccesses.Load() }
 func (m *CacheMetrics) DBQueries() int64               { return m.dbQueries.Load() }
@@ -120,10 +124,6 @@ func (m *CacheMetrics) CacheInvalidateOps() int64      { return m.cacheInvalidat
 
 // --- DERIVED METRICS ---
 
-// HitRatio menghitung persentase hit dari total (hit + miss).
-// Catatan: Hit ratio tinggi ≠ cache pasti bernilai.
-// ROI cache harus dilihat bersama cost query yang dihindari, cache latency,
-// memory cost, invalidation complexity, dan failure amplification.
 func (m *CacheMetrics) HitRatio() float64 {
 	total := m.hits.Load() + m.misses.Load()
 	if total == 0 {
@@ -132,16 +132,15 @@ func (m *CacheMetrics) HitRatio() float64 {
 	return float64(m.hits.Load()) / float64(total) * 100.0
 }
 
-// CacheErrorRate menghitung persentase error teknis dari total operasi cache (GET + SET + INVALIDATE).
+// CacheErrorRate menghitung persentase error operasi/backend teknis dari total operasi cache.
 func (m *CacheMetrics) CacheErrorRate() float64 {
-	total := m.cacheGetOps.Load() + m.cacheSetOps.Load() + m.cacheInvalidateOps.Load()
-	if total == 0 {
+	totalOps := m.cacheGetOps.Load() + m.cacheSetOps.Load() + m.cacheInvalidateOps.Load()
+	if totalOps == 0 {
 		return 0.0
 	}
-	return float64(m.errors.Load()) / float64(total) * 100.0
+	return float64(m.cacheOperationErrors.Load()) / float64(totalOps) * 100.0
 }
 
-// RebuildSuccessRate menghitung persentase rebuild yang berhasil.
 func (m *CacheMetrics) RebuildSuccessRate() float64 {
 	attempts := m.rebuildAttempts.Load()
 	if attempts == 0 {
@@ -150,8 +149,6 @@ func (m *CacheMetrics) RebuildSuccessRate() float64 {
 	return float64(m.rebuildSuccesses.Load()) / float64(attempts) * 100.0
 }
 
-// AverageCacheGetLatency mengembalikan rata-rata latency cache GET.
-// Uses actual GET operation count as denominator (not hits+misses+errors).
 func (m *CacheMetrics) AverageCacheGetLatency() time.Duration {
 	ops := m.cacheGetOps.Load()
 	if ops == 0 {
@@ -160,8 +157,6 @@ func (m *CacheMetrics) AverageCacheGetLatency() time.Duration {
 	return time.Duration(m.cacheGetLatency.Load() / ops)
 }
 
-// AverageCacheSetLatency mengembalikan rata-rata latency cache SET.
-// Uses actual SET operation count as denominator.
 func (m *CacheMetrics) AverageCacheSetLatency() time.Duration {
 	ops := m.cacheSetOps.Load()
 	if ops == 0 {
@@ -170,7 +165,6 @@ func (m *CacheMetrics) AverageCacheSetLatency() time.Duration {
 	return time.Duration(m.cacheSetLatency.Load() / ops)
 }
 
-// AverageDBFallbackLatency mengembalikan rata-rata latency fallback ke DB.
 func (m *CacheMetrics) AverageDBFallbackLatency() time.Duration {
 	if m.dbFallbacks.Load() == 0 {
 		return 0

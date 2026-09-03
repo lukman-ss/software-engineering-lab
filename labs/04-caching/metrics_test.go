@@ -15,6 +15,7 @@ func TestCacheMetricsReset(t *testing.T) {
 	m.IncHit()
 	m.IncMiss()
 	m.IncError()
+	m.IncCacheOperationError()
 	m.IncRebuildAttempt()
 	m.IncRebuildSuccess()
 	m.IncDBQuery()
@@ -34,7 +35,7 @@ func TestCacheMetricsReset(t *testing.T) {
 	m.RecordRebuildLatency(40 * time.Millisecond)
 
 	// Assert non-zero
-	if m.Hits() == 0 || m.Misses() == 0 || m.Errors() == 0 ||
+	if m.Hits() == 0 || m.Misses() == 0 || m.Errors() == 0 || m.CacheOperationErrors() == 0 ||
 		m.RebuildAttempts() == 0 || m.RebuildSuccesses() == 0 ||
 		m.DBQueries() == 0 || m.LockWaits() == 0 || m.DBFallbacks() == 0 ||
 		m.EvictedKeys() == 0 || m.ExpiredKeys() == 0 ||
@@ -51,7 +52,7 @@ func TestCacheMetricsReset(t *testing.T) {
 	m.Reset()
 
 	// Assert semua counters = 0
-	if m.Hits() != 0 || m.Misses() != 0 || m.Errors() != 0 ||
+	if m.Hits() != 0 || m.Misses() != 0 || m.Errors() != 0 || m.CacheOperationErrors() != 0 ||
 		m.RebuildAttempts() != 0 || m.RebuildSuccesses() != 0 ||
 		m.DBQueries() != 0 || m.LockWaits() != 0 || m.DBFallbacks() != 0 ||
 		m.EvictedKeys() != 0 || m.ExpiredKeys() != 0 ||
@@ -76,29 +77,38 @@ func TestCacheErrorRate(t *testing.T) {
 
 	// 1. Initial state (0 operations) -> 0.0
 	if rate := m.CacheErrorRate(); rate != 0.0 {
-		t.Errorf("expected 0.0 for 0 operations, got %f", rate)
+		t.Errorf("expected 0.0 for 0 operations, got %v", rate)
 	}
 
-	// 2. 2 GET operations (1 succeeds, 1 errors) + 1 SET operation (succeeds)
-	// Total ops = 3, Errors = 1 -> 33.333%
-	m.IncCacheGetOp() // op 1
+	// 2. 1 GET backend error out of 2 cache ops -> 50%
+	m.IncCacheGetOp() // op 1: GET success
 	m.IncHit()
 
-	m.IncCacheGetOp() // op 2
+	m.IncCacheGetOp() // op 2: GET backend error
 	m.IncError()
-
-	m.IncCacheSetOp() // op 3
+	m.IncCacheOperationError()
 
 	rate := m.CacheErrorRate()
-	if math.Abs(rate-33.333333333333336) > 0.001 {
-		t.Errorf("expected ~33.33%%, got %v", rate)
+	if math.Abs(rate-50.0) > 0.001 {
+		t.Errorf("expected 50.0%% operation error rate, got %v", rate)
 	}
 
-	// 3. Reset and test only errors (100% error rate)
-	m.Reset()
-	m.IncCacheGetOp()
-	m.IncError()
-	if rate := m.CacheErrorRate(); rate != 100.0 {
-		t.Errorf("expected 100.0 for all error operations, got %v", rate)
+	// 3. Corrupt JSON -> aggregate Errors increases, CacheOperationErrors does not increase
+	errsBefore := m.Errors()
+	opErrsBefore := m.CacheOperationErrors()
+	m.IncError() // Corrupt JSON
+
+	if m.Errors() != errsBefore+1 {
+		t.Errorf("expected aggregate Errors to increase by 1")
+	}
+	if m.CacheOperationErrors() != opErrsBefore {
+		t.Errorf("expected CacheOperationErrors to remain unchanged on corrupt JSON, got %d", m.CacheOperationErrors())
+	}
+
+	// 4. Marshal error -> aggregate Errors increases, operation error rate does not change
+	rateBefore := m.CacheErrorRate()
+	m.IncError() // Marshal error
+	if rateAfter := m.CacheErrorRate(); rateAfter != rateBefore {
+		t.Errorf("expected operation error rate to remain unchanged on marshal error, before %v, after %v", rateBefore, rateAfter)
 	}
 }

@@ -9,7 +9,6 @@ import (
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
-// TestStampedeBrokenVersion demonstrates the BROKEN stampede pattern deterministically.
 func TestStampedeBrokenVersion(t *testing.T) {
 	db := caching.NewCounterRepository()
 	cache := caching.NewMockCache()
@@ -48,7 +47,6 @@ func TestStampedeBrokenVersion(t *testing.T) {
 	t.Log("PROVEN: Broken version causes stampede - multiple concurrent DB queries without protection")
 }
 
-// TestStampedeProtectedVersion demonstrates singleflight protection deterministically.
 func TestStampedeProtectedVersion(t *testing.T) {
 	db := caching.NewCounterRepository()
 	cache := caching.NewMockCache()
@@ -57,6 +55,11 @@ func TestStampedeProtectedVersion(t *testing.T) {
 
 	key := int64(2)
 	numRequests := 10
+
+	waiterEntered := make(chan struct{}, numRequests)
+	svc.SetOnWaitEntry(func(k string) {
+		waiterEntered <- struct{}{}
+	})
 
 	db.Block()
 
@@ -72,8 +75,10 @@ func TestStampedeProtectedVersion(t *testing.T) {
 	// Singleflight leader enters repository
 	db.WaitUntilEntered()
 
-	// Allow waiters to join singleflight queue
-	time.Sleep(5 * time.Millisecond)
+	// Wait until all numRequests have entered/joined singleflight
+	for i := 0; i < numRequests; i++ {
+		<-waiterEntered
+	}
 
 	// Unblock repository after leader and waiters are ready
 	db.Unblock()
@@ -88,7 +93,6 @@ func TestStampedeProtectedVersion(t *testing.T) {
 	t.Log("✓ Single-flight deduplication validated - only 1 DB query for concurrent requests")
 }
 
-// TestTTLWithJitter verifies TTL jitter boundary contract.
 func TestTTLWithJitter(t *testing.T) {
 	baseTTL := 60 * time.Second
 	maxJitter := 15 * time.Second
@@ -111,7 +115,6 @@ func TestTTLWithJitter(t *testing.T) {
 	t.Log("✓ TTL jitter boundary contract validated (base <= TTL < base + maxJitter, zero/negative maxJitter returns base)")
 }
 
-// TestSingleflightLeaderCancelDoesNotKillRebuild verifies the bounded context fix deterministically.
 func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
 	repo := caching.NewCounterRepository()
 	cache := caching.NewMockCache()
@@ -123,6 +126,11 @@ func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
 	errA := make(chan error, 1)
 	errB := make(chan error, 1)
 
+	waiterEntered := make(chan struct{}, 10)
+	svc.SetOnWaitEntry(func(k string) {
+		waiterEntered <- struct{}{}
+	})
+
 	repo.Block()
 
 	// A becomes leader (first caller)
@@ -131,8 +139,9 @@ func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
 		errA <- err
 	}()
 
-	// Wait until A/shared rebuild is actually inside repository
+	// Wait until A/shared rebuild is actually inside repository and in singleflight
 	repo.WaitUntilEntered()
+	<-waiterEntered
 
 	// B joins as waiter (second caller)
 	go func() {
@@ -140,8 +149,8 @@ func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
 		errB <- err
 	}()
 
-	// Ensure B has registered in singleflight
-	time.Sleep(5 * time.Millisecond)
+	// Wait until B has registered in singleflight waiter queue
+	<-waiterEntered
 
 	// A cancels its context while waiting
 	cancelA()
@@ -183,7 +192,6 @@ func TestSingleflightLeaderCancelDoesNotKillRebuild(t *testing.T) {
 	t.Log("✓ Deterministic singleflight leader cancellation test passed")
 }
 
-// TestBoundedContextIsolatedFromLeaderCancel specifically verifies bounded context isolation.
 func TestBoundedContextIsolatedFromLeaderCancel(t *testing.T) {
 	repo := caching.NewCounterRepository()
 	cache := caching.NewMockCache()
@@ -195,6 +203,11 @@ func TestBoundedContextIsolatedFromLeaderCancel(t *testing.T) {
 	doneA := make(chan error, 1)
 	doneB := make(chan error, 1)
 
+	waiterEntered := make(chan struct{}, 10)
+	svc.SetOnWaitEntry(func(k string) {
+		waiterEntered <- struct{}{}
+	})
+
 	repo.Block()
 
 	go func() {
@@ -203,13 +216,14 @@ func TestBoundedContextIsolatedFromLeaderCancel(t *testing.T) {
 	}()
 
 	repo.WaitUntilEntered()
+	<-waiterEntered
 
 	go func() {
 		_, err := svc.GetData(ctx, 300)
 		doneB <- err
 	}()
 
-	time.Sleep(5 * time.Millisecond)
+	<-waiterEntered
 
 	cancelA()
 

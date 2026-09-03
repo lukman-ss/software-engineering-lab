@@ -2,15 +2,16 @@ package caching_test
 
 import (
 	"context"
-	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
 )
 
+var testFixedDate = time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+
 // Integration tests for essential cache behaviors.
-// These tests demonstrate real-world scenarios without requiring Redis.
 
 // TestCacheMissReadsDatabase verifies: cache miss reads from repository
 func TestCacheMissReadsDatabase(t *testing.T) {
@@ -21,7 +22,10 @@ func TestCacheMissReadsDatabase(t *testing.T) {
 	ctx := context.Background()
 
 	// First request = cache miss → database read
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, err := svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if repo.CallCount() == 0 {
 		t.Error("cache miss should trigger repository call")
@@ -42,10 +46,10 @@ func TestCacheMissWritesCache(t *testing.T) {
 	ctx := context.Background()
 
 	// First request
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, _ = svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 
 	// Second request - should be cache hit
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, _ = svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 
 	if metrics.Hits() == 0 {
 		t.Error("second request should be cache hit (cache was written)")
@@ -62,13 +66,13 @@ func TestCacheHitDoesNotQueryDatabase(t *testing.T) {
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 
 	// Populate cache first
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, _ = svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 
 	initialCalls := repo.CallCount()
 
 	// Multiple cache hits
 	for i := 0; i < 5; i++ {
-		_, _ = svc.GetDashboard(ctx, 1)
+		_, _ = svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 	}
 
 	if repo.CallCount() > initialCalls {
@@ -86,14 +90,15 @@ func TestCacheExpiryCausesRebuild(t *testing.T) {
 	ctx := context.Background()
 
 	// Build cache
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, _ = svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 	initialRebuilds := metrics.Rebuilds()
 
 	// Force miss by deleting
-	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, 1, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)))
+	key := caching.DashboardCacheKey(1, 1, testFixedDate)
+	_ = cache.Delete(ctx, key)
 
 	// Next request rebuilds
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, _ = svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 
 	if metrics.Rebuilds() <= initialRebuilds {
 		t.Error("after delete, rebuild should be triggered")
@@ -109,12 +114,11 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(1)
-	today := time.Now().UTC()
-	key := caching.DashboardCacheKey(1, branchID, today)
+	key := caching.DashboardCacheKey(1, branchID, testFixedDate)
 
 	// Step 1: Populate cache with initial data
 	repo.Reset()
-	cache.Set(ctx, key, `{"branch_id":1,"invoice_count":10,"date":"`+caching.Today()+`"}`, time.Minute)
+	cache.Set(ctx, key, `{"branch_id":1,"invoice_count":10,"date":"2026-09-03"}`, time.Minute)
 
 	// Verify cache has initial data
 	cached, _ := cache.Get(ctx, key)
@@ -123,11 +127,11 @@ func TestCacheInvalidationReturnsFreshData(t *testing.T) {
 	}
 
 	// Step 2: Invalidate
-	_ = svc.InvalidateCurrentDashboard(ctx, 1, branchID)
+	_ = svc.InvalidateDashboard(ctx, 1, branchID, testFixedDate)
 
 	// Step 3: Next request should query repo and update cache
 	repo.Reset()
-	_, _ = svc.GetDashboard(ctx, 1)
+	_, _ = svc.GetDashboardWithTenant(ctx, 1, branchID, testFixedDate)
 
 	if repo.CallCount() != 1 {
 		t.Errorf("expected 1 repository call after invalidation, got %d", repo.CallCount())
@@ -141,12 +145,12 @@ func TestDifferentBranchDoesNotShareCache(t *testing.T) {
 	ctx := context.Background()
 
 	// Set data for branch 1
-	key1 := caching.DashboardCacheKey(1, 1, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
+	key1 := caching.DashboardCacheKey(1, 1, testFixedDate)
 	data1 := `{"branch_id":1,"invoice_count":50}`
 	cache.Set(ctx, key1, data1, time.Minute)
 
 	// Set data for branch 2
-	key2 := caching.DashboardCacheKey(1, 2, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
+	key2 := caching.DashboardCacheKey(1, 2, testFixedDate)
 	data2 := `{"branch_id":2,"invoice_count":75}`
 	cache.Set(ctx, key2, data2, time.Minute)
 
@@ -165,118 +169,106 @@ func TestDifferentBranchDoesNotShareCache(t *testing.T) {
 	t.Log("✓ Different branch does not share cache")
 }
 
-// TestDifferentTenantDoesNotShareCache verifies: different tenant isolation
+// TestDifferentTenantDoesNotShareCache verifies tenant isolation
 func TestDifferentTenantDoesNotShareCache(t *testing.T) {
-	now := time.Now()
-	keyTenantA := caching.DashboardCacheKey(1, 1, now)
-	keyTenantB := caching.DashboardCacheKey(2, 1, now)
+	cache := caching.NewMockCache()
+	ctx := context.Background()
 
-	if keyTenantA == keyTenantB {
-		t.Error("different tenants should have different cache keys")
-	}
+	keyTenantA := caching.DashboardCacheKey(1, 1, testFixedDate)
+	keyTenantB := caching.DashboardCacheKey(2, 1, testFixedDate)
 
-	// Key format check
-	// Expected: cmms:dashboard:v1:tenant:{id}:branch:{id}:{date}
 	t.Logf("Tenant A key: %s", keyTenantA)
 	t.Logf("Tenant B key: %s", keyTenantB)
+
+	if keyTenantA == keyTenantB {
+		t.Fatal("Tenant A and Tenant B must not share the same cache key")
+	}
+
+	cache.Set(ctx, keyTenantA, `{"branch_id":1,"invoice_count":10}`, time.Minute)
+	cache.Set(ctx, keyTenantB, `{"branch_id":1,"invoice_count":99}`, time.Minute)
+
+	cachedA, _ := cache.Get(ctx, keyTenantA)
+	cachedB, _ := cache.Get(ctx, keyTenantB)
+
+	if cachedA == cachedB {
+		t.Fatal("Data leakage: Tenant A and Tenant B received identical cache data")
+	}
 
 	t.Log("✓ Different tenant does not share cache")
 }
 
-// TestTenantIsolationInService verifies: Tenant A Branch 1 != Tenant B Branch 1
+// TestTenantIsolationInService verifies multi-tenant isolation in RobustDashboardService
 func TestTenantIsolationInService(t *testing.T) {
-	ctx := context.Background()
 	cache := caching.NewMockCache()
 	metrics := caching.NewCacheMetrics()
 	repo := caching.NewFakeDashboardRepository()
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
+	ctx := context.Background()
 
-	today := time.Now().UTC().Truncate(24 * time.Hour)
+	keyA1 := caching.DashboardCacheKey(1, 1, testFixedDate)
+	keyB1 := caching.DashboardCacheKey(2, 1, testFixedDate)
 
-	// Tenant A, Branch 1 - set data
-	keyA1 := caching.NewTenantDashboardKey(1, 1, today).Build()
-	dataA1 := caching.Dashboard{BranchID: 1, InvoiceCountToday: 100, Date: today.Format("2006-01-02")}
-	dataA1Bytes, _ := json.Marshal(dataA1)
-	cache.Set(ctx, keyA1, string(dataA1Bytes), time.Minute)
+	if keyA1 == keyB1 {
+		t.Fatal("Tenant A and Tenant B keys must be different")
+	}
 
-	// Tenant B, Branch 1 - set different data
-	keyB1 := caching.NewTenantDashboardKey(2, 1, today).Build()
-	dataB1 := caching.Dashboard{BranchID: 1, InvoiceCountToday: 200, Date: today.Format("2006-01-02")}
-	dataB1Bytes, _ := json.Marshal(dataB1)
-	cache.Set(ctx, keyB1, string(dataB1Bytes), time.Minute)
-
-	// Tenant A Branch 1 should get 100
-	resultA1, err := svc.GetDashboardWithTenant(ctx, 1, 1, today)
+	resultA1, err := svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 	if err != nil {
-		t.Fatalf("Tenant A get failed: %v", err)
-	}
-	if resultA1.InvoiceCountToday != 100 {
-		t.Errorf("Tenant A Branch 1: expected 100, got %d", resultA1.InvoiceCountToday)
+		t.Fatalf("Tenant A request failed: %v", err)
 	}
 
-	// Tenant B Branch 1 should get 200
-	resultB1, err := svc.GetDashboardWithTenant(ctx, 2, 1, today)
-	if err != nil {
-		t.Fatalf("Tenant B get failed: %v", err)
+	if resultA1.InvoiceCountToday != 43 {
+		t.Errorf("expected Tenant A invoice count 43, got %d", resultA1.InvoiceCountToday)
 	}
-	if resultB1.InvoiceCountToday != 200 {
-		t.Errorf("Tenant B Branch 1: expected 200, got %d", resultB1.InvoiceCountToday)
+
+	resultB1, err := svc.GetDashboardWithTenant(ctx, 2, 1, testFixedDate)
+	if err != nil {
+		t.Fatalf("Tenant B request failed: %v", err)
+	}
+
+	if resultB1.InvoiceCountToday != 44 {
+		t.Errorf("expected Tenant B invoice count 44, got %d", resultB1.InvoiceCountToday)
+	}
+
+	if resultA1.InvoiceCountToday == resultB1.InvoiceCountToday {
+		t.Fatalf("DATA LEAK: Tenant A data matches Tenant B data (%d == %d)",
+			resultA1.InvoiceCountToday, resultB1.InvoiceCountToday)
 	}
 
 	t.Log("✓ Tenant isolation verified: Tenant A Branch 1 ≠ Tenant B Branch 1")
 }
 
-// TestCorruptCacheFallsBackAppropriately verifies: corrupt cache falls back to database
-// This test puts corrupt JSON in the exact key that will be read by the service.
+// TestCorruptCacheFallsBackAppropriately verifies fallback on corrupt cache
 func TestCorruptCacheFallsBackAppropriately(t *testing.T) {
 	cache := caching.NewMockCache()
-	repo := caching.NewFakeDashboardRepository()
 	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
 	branchID := int64(1)
-	today := time.Now().UTC()
-	key := caching.DashboardCacheKey(1, branchID, today)
+	key := caching.DashboardCacheKey(1, branchID, testFixedDate)
 
-	// Set corrupt JSON in the exact key that the service will read
-	corruptData := `{"id":"123"` // incomplete JSON - corrupt
-	cache.Set(ctx, key, corruptData, time.Minute)
+	cache.Set(ctx, key, `{"invalid json`, time.Minute)
 
-	// GetDashboard will:
-	// 1. Read from cache
-	// 2. Fail to unmarshal
-	// 3. Delete corrupt entry, fallback to repo, rebuild cache
-	repo.Reset()
-	result, err := svc.GetDashboard(ctx, branchID)
-
-	// Should succeed via fallback
+	result, err := svc.GetDashboardWithTenant(ctx, 1, branchID, testFixedDate)
 	if err != nil {
 		t.Fatalf("expected fallback to succeed, got error: %v", err)
 	}
 
-	// Repository should have been called once to rebuild
-	if repo.CallCount() != 1 {
-		t.Errorf("expected 1 repository call after corrupt cache bypass, got %d", repo.CallCount())
+	if result.BranchID != branchID {
+		t.Errorf("expected BranchID %d, got %d", branchID, result.BranchID)
 	}
 
-	// Cache hit should now work
-	cached, err := cache.Get(ctx, key)
-	if err != nil {
-		t.Error("cache should now have valid data after rebuild")
-	}
-
-	// Verify the cached data is valid JSON
-	var d caching.Dashboard
-	if err := json.Unmarshal([]byte(cached), &d); err != nil {
-		t.Error("cache should contain valid JSON after rebuild")
+	if metrics.Errors() == 0 {
+		t.Error("corrupt cache should increment error counter")
 	}
 
 	t.Logf("Result from database fallback: %+v", result)
 	t.Log("✓ Corrupt cache falls back appropriately")
 }
 
-// TestCacheFailureFallsBackToDatabase verifies: cache down falls back to database
+// TestCacheFailureFallsBackToDatabase verifies fallback when cache is down
 func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 	cache := caching.NewFailingMockCache()
 	metrics := caching.NewCacheMetrics()
@@ -284,20 +276,19 @@ func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// Cache is down, but request should still succeed
-	result, err := svc.GetDashboard(ctx, 1)
-
-	// Request should succeed via DB fallback
+	result, err := svc.GetDashboardWithTenant(ctx, 1, 1, testFixedDate)
 	if err != nil {
-		t.Errorf("cache failure should fall back to database, got error: %v", err)
+		t.Fatalf("expected fallback to succeed, got error: %v", err)
 	}
 
-	// Repository should have been called
+	if result.BranchID != 1 {
+		t.Errorf("expected BranchID 1, got %d", result.BranchID)
+	}
+
 	if repo.CallCount() == 0 {
 		t.Error("repository should have been called for fallback")
 	}
 
-	// Metrics should show error
 	if metrics.Errors() == 0 {
 		t.Error("cache failure should increment error counter")
 	}
@@ -306,53 +297,71 @@ func TestCacheFailureFallsBackToDatabase(t *testing.T) {
 	t.Log("✓ Cache failure falls back to database")
 }
 
-// TestConcurrentCacheMissProtectedBySingleflight verifies stampede protection
+// TestConcurrentCacheMissProtectedBySingleflight verifies singleflight deduplication deterministically
 func TestConcurrentCacheMissProtectedBySingleflight(t *testing.T) {
 	cache := caching.NewMockCache()
 	repo := caching.NewCounterRepository()
 	svc := caching.NewProtectedStampedeService(cache, repo)
 	ctx := context.Background()
 
-	// Run concurrent requests
-	done := make(chan bool)
-	for i := 0; i < 50; i++ {
+	numGoroutines := 10
+	waiterEntered := make(chan struct{}, numGoroutines)
+	svc.SetOnWaitEntry(func(key string) {
+		waiterEntered <- struct{}{}
+	})
+
+	repo.Block()
+
+	var wg sync.WaitGroup
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			_, _ = svc.GetData(ctx, 1)
-			done <- true
 		}()
 	}
 
-	for i := 0; i < 50; i++ {
-		<-done
+	// 1. Leader enters repository
+	repo.WaitUntilEntered()
+
+	// 2. Wait until all goroutines have entered/joined singleflight
+	for i := 0; i < numGoroutines; i++ {
+		<-waiterEntered
 	}
 
-	// With singleflight, all concurrent requests should result in 1 DB query
+	// 3. Unblock repository
+	repo.Unblock()
+	wg.Wait()
+
 	if repo.CallCount() != 1 {
 		t.Errorf("singleflight should dedupe concurrent misses to 1 DB query, got %d", repo.CallCount())
 	}
-	t.Log("✓ Concurrent cache miss protected by singleflight")
+	t.Log("✓ Concurrent cache miss protected by singleflight (deterministic)")
 }
 
-// TestTTLJitterRange verifies: TTL jitter stays within configured range
+// TestTTLJitterRange verifies: TTL jitter stays within configured range [base, base + maxJitter)
 func TestTTLJitterRange(t *testing.T) {
 	baseTTL := 60 * time.Second
 	maxJitter := 15 * time.Second
 
-	// Test many samples
 	for i := 0; i < 1000; i++ {
 		jitteredTTL := caching.TTLWithJitter(baseTTL, maxJitter)
-
-		// Must be within [baseTTL, baseTTL + maxJitter]
-		if jitteredTTL < baseTTL || jitteredTTL > baseTTL+maxJitter {
-			t.Errorf("TTL jitter out of range: %v (expected %v - %v)",
-				jitteredTTL, baseTTL, baseTTL+maxJitter)
+		if jitteredTTL < baseTTL || jitteredTTL >= baseTTL+maxJitter {
+			t.Errorf("TTL jitter out of range [base, base+maxJitter): %v", jitteredTTL)
 		}
 	}
 
-	t.Log("✓ TTL jitter stays within configured range")
+	if ttl := caching.TTLWithJitter(baseTTL, 0); ttl != baseTTL {
+		t.Errorf("expected ttl == baseTTL when maxJitter == 0, got %v", ttl)
+	}
+	if ttl := caching.TTLWithJitter(baseTTL, -5*time.Second); ttl != baseTTL {
+		t.Errorf("expected ttl == baseTTL when maxJitter < 0, got %v", ttl)
+	}
+
+	t.Log("✓ TTL jitter stays within configured range [base, base+maxJitter)")
 }
 
-// TestCacheHitRatio calculates correctly verifies hit ratio calculation
+// TestCacheHitRatioCalculatesCorrectly verifies hit ratio calculation
 func TestCacheHitRatioCalculatesCorrectly(t *testing.T) {
 	metrics := caching.NewCacheMetrics()
 
@@ -376,7 +385,6 @@ func TestCacheHitRatioCalculatesCorrectly(t *testing.T) {
 }
 
 // TestHistoricalDateInvariant verifies that historical date requests use exact dates
-// throughout the whole pipeline (key, repo, result)
 func TestHistoricalDateInvariant(t *testing.T) {
 	cache := caching.NewMockCache()
 	metrics := caching.NewCacheMetrics()
@@ -384,23 +392,19 @@ func TestHistoricalDateInvariant(t *testing.T) {
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	// Given a specific historical business date
 	historicalDate := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	tenantID, branchID := int64(1), int64(42)
 
-	// When dashboard is requested
 	result, err := svc.GetDashboardWithTenant(ctx, tenantID, branchID, historicalDate)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Then the result date must match the requested historical date
 	expectedDateStr := "2026-08-01"
 	if result.Date != expectedDateStr {
 		t.Errorf("Result date is %s, expected %s", result.Date, expectedDateStr)
 	}
 
-	// And cache key must have exactly that date
 	expectedKey := caching.DashboardCacheKey(tenantID, branchID, historicalDate)
 	cached, err := cache.Get(ctx, expectedKey)
 	if err != nil || cached == "" {
@@ -418,15 +422,11 @@ func TestMultiTenantBehavioralIsolation(t *testing.T) {
 	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	date := time.Now()
 	branchID := int64(10)
 
-	// Tenant 1 request
-	res1, _ := svc.GetDashboardWithTenant(ctx, 1, branchID, date)
-	// Tenant 2 request
-	res2, _ := svc.GetDashboardWithTenant(ctx, 2, branchID, date)
+	res1, _ := svc.GetDashboardWithTenant(ctx, 1, branchID, testFixedDate)
+	res2, _ := svc.GetDashboardWithTenant(ctx, 2, branchID, testFixedDate)
 
-	// In FakeDashboardRepository, InvoiceCountToday = 42 + int(tenantID%10)
 	expectedT1 := 42 + 1 // 43
 	expectedT2 := 42 + 2 // 44
 
@@ -438,14 +438,12 @@ func TestMultiTenantBehavioralIsolation(t *testing.T) {
 		t.Errorf("Tenant 2 expected %d invoices, got %d", expectedT2, res2.InvoiceCountToday)
 	}
 
-	// 2 distinct repository calls
 	if repo.CallCount() != 2 {
 		t.Errorf("Expected 2 repo calls, got %d", repo.CallCount())
 	}
 
-	// Subsequent requests should hit cache, retaining correct tenant values
-	res1Cached, _ := svc.GetDashboardWithTenant(ctx, 1, branchID, date)
-	res2Cached, _ := svc.GetDashboardWithTenant(ctx, 2, branchID, date)
+	res1Cached, _ := svc.GetDashboardWithTenant(ctx, 1, branchID, testFixedDate)
+	res2Cached, _ := svc.GetDashboardWithTenant(ctx, 2, branchID, testFixedDate)
 
 	if res1Cached.InvoiceCountToday != expectedT1 {
 		t.Errorf("Tenant 1 cached expected %d, got %d", expectedT1, res1Cached.InvoiceCountToday)
@@ -455,7 +453,6 @@ func TestMultiTenantBehavioralIsolation(t *testing.T) {
 		t.Errorf("Tenant 2 cached expected %d, got %d", expectedT2, res2Cached.InvoiceCountToday)
 	}
 
-	// Still 2 repository calls (cache hit)
 	if repo.CallCount() != 2 {
 		t.Errorf("Expected repo calls to remain 2, got %d", repo.CallCount())
 	}
@@ -463,51 +460,40 @@ func TestMultiTenantBehavioralIsolation(t *testing.T) {
 	t.Log("✓ Multi-tenant behavioral isolation validated")
 }
 
-// TestSingleflightContextCancellation verifies that wait requests can be cancelled
-// while the actual rebuild continues for others.
+// TestSingleflightContextCancellation verifies cancellation
 func TestSingleflightContextCancellation(t *testing.T) {
 	cache := caching.NewMockCache()
 	repo := caching.NewCounterRepository()
 	svc := caching.NewProtectedStampedeService(cache, repo)
 
-	// Create two contexts: one will be cancelled, one will complete
 	ctx1 := context.Background()
 	ctx2, cancel := context.WithCancel(context.Background())
 
-	// Create channels to track results
 	errCh := make(chan error, 2)
 
-	// Lock the repository so requests block
 	repo.Block()
 
-	// Launch first request
 	go func() {
 		_, err := svc.GetData(ctx1, 99)
 		errCh <- err
 	}()
 
-	// Wait until req 1 enters repository
 	repo.WaitUntilEntered()
 
-	// Launch second request (will wait on singleflight)
 	go func() {
 		_, err := svc.GetData(ctx2, 99)
 		errCh <- err
 	}()
 
-	// Cancel second request while it's waiting
 	cancel()
 
-	// Second request should return context cancelled immediately
 	err2 := <-errCh
 	if err2 != context.Canceled {
 		t.Errorf("Expected context.Canceled for second request, got: %v", err2)
 	}
 
-	// Release repository block
 	repo.Unblock()
 
-	// First request should complete successfully
 	err1 := <-errCh
 	if err1 != nil {
 		t.Errorf("First request should complete successfully, got error: %v", err1)

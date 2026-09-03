@@ -58,8 +58,10 @@ func TestBusinessTimezone(t *testing.T) {
 	}
 
 	// Keys must reflect business timezone
-	keyJakarta := caching.NewTenantDashboardKey(1, 1, utcNow.In(locJakarta)).Build()
-	keyNY := caching.NewTenantDashboardKey(1, 1, utcNow.In(locNY)).Build()
+	bJ, _ := caching.NewTenantDashboardKey(1, 1, utcNow.In(locJakarta))
+	keyJakarta := bJ.Build()
+	bNY, _ := caching.NewTenantDashboardKey(1, 1, utcNow.In(locNY))
+	keyNY := bNY.Build()
 
 	// Assert exact expected key dates
 	if !strings.Contains(keyJakarta, "date:2026-08-30") {
@@ -84,7 +86,8 @@ func TestTimezoneBoundary(t *testing.T) {
 	ts := time.Date(2026, 8, 30, 0, 30, 0, 0, locJakarta)
 
 	// Key must reflect Jakarta business date, NOT UTC date
-	key := caching.NewTenantDashboardKey(1, 1, ts).Build()
+	b, _ := caching.NewTenantDashboardKey(1, 1, ts)
+	key := b.Build()
 
 	// Expected: date:2026-08-30 (NOT 2026-08-29)
 	if !strings.Contains(key, "date:2026-08-30") {
@@ -101,7 +104,8 @@ func TestDashboardKeyBuilderVersatility(t *testing.T) {
 	t.Logf("Single-tenant key: %s", singleKey)
 
 	// Multi-tenant dashboard key
-	multiKey := caching.NewTenantDashboardKey(5, 42, time.Now().UTC()).Build()
+	bM, _ := caching.NewTenantDashboardKey(5, 42, time.Now().UTC())
+	multiKey := bM.Build()
 	t.Logf("Multi-tenant key: %s", multiKey)
 
 	// With explicit date (use a fixed past date to differentiate from today)
@@ -122,4 +126,46 @@ func TestDashboardKeyBuilderVersatility(t *testing.T) {
 	if len(unique) != len(keys) {
 		t.Error("all keys should be unique")
 	}
+}
+
+// TestNewTenantDashboardKeyValidation verifies zero tenant, zero branch, zero businessDate return error.
+func TestNewTenantDashboardKeyValidation(t *testing.T) {
+	validDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+
+	// Zero tenant -> error
+	_, err := caching.NewTenantDashboardKey(0, 1, validDate)
+	if err == nil {
+		t.Error("expected error for zero tenant ID, got nil")
+	}
+
+	// Negative tenant -> error
+	_, err = caching.NewTenantDashboardKey(-1, 1, validDate)
+	if err == nil {
+		t.Error("expected error for negative tenant ID, got nil")
+	}
+
+	// Zero branch -> error
+	_, err = caching.NewTenantDashboardKey(1, 0, validDate)
+	if err == nil {
+		t.Error("expected error for zero branch ID, got nil")
+	}
+
+	// Zero businessDate -> error
+	_, err = caching.NewTenantDashboardKey(1, 1, time.Time{})
+	if err == nil {
+		t.Error("expected error for zero businessDate, got nil")
+	}
+
+	// Valid values -> correct key
+	builder, err := caching.NewTenantDashboardKey(1, 42, validDate)
+	if err != nil {
+		t.Fatalf("unexpected error for valid values: %v", err)
+	}
+
+	expectedKey := "cmms:dashboard:v1:tenant:1:branch:42:date:2026-09-03"
+	if key := builder.Build(); key != expectedKey {
+		t.Errorf("expected key %s, got %s", expectedKey, key)
+	}
+
+	t.Log("✓ NewTenantDashboardKey validation validated")
 }

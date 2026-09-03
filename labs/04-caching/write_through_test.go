@@ -390,4 +390,46 @@ func TestWriteThroughGetProduct(t *testing.T) {
 			t.Errorf("expected 1 error for corrupt json, got %d", metrics.Errors())
 		}
 	})
+
+	t.Run("CorruptJSON_DeleteFails", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("failed to create mock db: %v", err)
+		}
+		defer db.Close()
+
+		metrics := caching.NewCacheMetrics()
+		cache := NewPartialFailingMockCache()
+		cache.FailDelete = true
+		cache.Set(ctx, caching.CacheKey("product", "p6", 1), "{corrupt_json}", time.Minute)
+		metrics.Reset()
+
+		svc := caching.NewWriteThroughServiceWithMetrics(db, cache, metrics)
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("p6").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("p6", "Item 6", 200.0))
+
+		p, err := svc.GetProduct(ctx, "p6")
+		if err != nil {
+			t.Fatalf("business read should succeed even if corrupt cache delete fails: %v", err)
+		}
+		if p.ID != "p6" || p.Name != "Item 6" {
+			t.Errorf("unexpected product: %+v", p)
+		}
+
+		if metrics.Errors() != 2 {
+			t.Errorf("expected 2 total errors (corrupt json + delete fail), got %d", metrics.Errors())
+		}
+		if metrics.CacheInvalidationErrors() != 1 {
+			t.Errorf("expected CacheInvalidationErrors == 1, got %d", metrics.CacheInvalidationErrors())
+		}
+		if metrics.CacheInvalidateOps() != 1 {
+			t.Errorf("expected CacheInvalidateOps == 1, got %d", metrics.CacheInvalidateOps())
+		}
+		if metrics.DBQueries() != 1 {
+			t.Errorf("expected DBQueries == 1, got %d", metrics.DBQueries())
+		}
+	})
 }

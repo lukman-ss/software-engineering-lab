@@ -92,5 +92,9 @@ func ShouldRefreshEarly(now time.Time, expiry time.Time, originalTTL time.Durati
 // DashboardCacheKey creates canonical cache key for dashboard statistics.
 // Format: cmms:dashboard:v1:tenant:{tenantID}:branch:{branchID}:date:{YYYY-MM-DD}
 func DashboardCacheKey(tenantID, branchID int64, businessDate time.Time) string {
-	return NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
+	b, err := NewTenantDashboardKey(tenantID, branchID, businessDate)
+	if err != nil {
+		panic(fmt.Sprintf("DashboardCacheKey invalid arguments: %v", err))
+	}
+	return b.Build()
 }

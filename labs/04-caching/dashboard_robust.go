@@ -34,7 +34,11 @@ func (s *RobustDashboardService) GetDashboard(ctx context.Context, branchID int6
 // GetDashboardWithTenant returns dashboard data with tenant isolation.
 // Primary entry point for multi-tenant deployments.
 func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
-	key := NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
+	b, err := NewTenantDashboardKey(tenantID, branchID, businessDate)
+	if err != nil {
+		return Dashboard{}, fmt.Errorf("invalid dashboard key: %w", err)
+	}
+	key := b.Build()
 
 	// 1. Check cache with latency measurement
 	startGet := time.Now()
@@ -49,6 +53,7 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 			return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key, false)
 		default:
 			s.metrics.IncError()
+			s.metrics.IncCacheOperationError()
 			s.metrics.IncDBFallback()
 			return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key, true)
 		}
@@ -116,9 +121,13 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID,
 
 // InvalidateDashboard invalidates cache for a branch and specific business date.
 func (s *RobustDashboardService) InvalidateDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
-	key := NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
+	b, err := NewTenantDashboardKey(tenantID, branchID, businessDate)
+	if err != nil {
+		return fmt.Errorf("invalid dashboard key: %w", err)
+	}
+	key := b.Build()
 	s.metrics.IncCacheInvalidateOp()
-	err := s.cache.Delete(ctx, key)
+	err = s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		s.metrics.IncError()
 		s.metrics.IncCacheInvalidationError()

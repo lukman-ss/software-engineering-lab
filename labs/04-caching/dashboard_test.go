@@ -16,7 +16,8 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 
 	branchID := int64(1)
 	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
-	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
+	b, _ := caching.NewTenantDashboardKey(1, branchID, fixedDate)
+	key := b.Build()
 
 	// Step 1: Cache empty
 	_, err := cache.Get(ctx, key)
@@ -57,7 +58,8 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 
 	branchID := int64(1)
 	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
-	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
+	b, _ := caching.NewTenantDashboardKey(1, branchID, fixedDate)
+	key := b.Build()
 
 	// Step 1: Request dashboard - cache miss
 	initialData := caching.Dashboard{
@@ -103,7 +105,8 @@ func TestCacheInvalidationRequiredAfterDataChange(t *testing.T) {
 
 	branchID := int64(42)
 	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
-	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
+	b, _ := caching.NewTenantDashboardKey(1, branchID, fixedDate)
+	key := b.Build()
 
 	// Step 1: Populate cache via service read
 	initial, err := svc.GetDashboardWithTenant(ctx, 1, branchID, fixedDate)
@@ -158,7 +161,8 @@ func TestRepeatedReadsHitCache(t *testing.T) {
 
 	branchID := int64(99)
 	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
-	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
+	b, _ := caching.NewTenantDashboardKey(1, branchID, fixedDate)
+	key := b.Build()
 	hits, misses := 0, 0
 
 	// Populate cache
@@ -203,7 +207,8 @@ func TestDashboardServesStaleValueBeforeInvalidation(t *testing.T) {
 	// Populate cache with stale value (100)
 	staleDashboard := caching.Dashboard{BranchID: branchID, InvoiceCountToday: 100, Date: "2026-09-03"}
 	data, _ := json.Marshal(staleDashboard)
-	cache.Set(ctx, caching.NewTenantDashboardKey(1, branchID, fixedDate).Build(), string(data), 30*time.Second)
+	b, _ := caching.NewTenantDashboardKey(1, branchID, fixedDate)
+	cache.Set(ctx, b.Build(), string(data), 30*time.Second)
 
 	// Authoritative source has newer value (120)
 	repo.SetNextValue(func() caching.Dashboard {
