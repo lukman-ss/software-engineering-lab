@@ -14,15 +14,12 @@ func TestRouting_ErrorBehaviors(t *testing.T) {
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
 
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
 	tests := []struct {
 		name           string
 		method         string
 		path           string
 		expectedStatus int
-		expectedKey    string // string JSON key error, etc
+		expectedKey    string
 	}{
 		{
 			name:           "Valid ID returns 200",
@@ -55,7 +52,7 @@ func TestRouting_ErrorBehaviors(t *testing.T) {
 		{
 			name:           "Non-existent ID returns 404",
 			method:         http.MethodGet,
-			path:           "/api/v1/invoices/9999", // ID lain selain 1001
+			path:           "/api/v1/invoices/9999",
 			expectedStatus: http.StatusNotFound,
 			expectedKey:    "error",
 		},
@@ -71,36 +68,29 @@ func TestRouting_ErrorBehaviors(t *testing.T) {
 			method:         http.MethodGet,
 			path:           "/api/v3/invoices/1001",
 			expectedStatus: http.StatusNotFound,
-			expectedKey:    "", // mux doesn't return JSON by default
+			expectedKey:    "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := http.NewRequest(tt.method, server.URL+tt.path, nil)
-			if err != nil {
-				t.Fatalf("failed to create request: %v", err)
-			}
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
 
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request failed: %v", err)
-			}
+			resp := w.Result()
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tt.expectedStatus {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, resp.StatusCode)
 			}
 
-			// Validate Content-Type for all responses mapped to handlers
 			if resp.StatusCode != http.StatusNotFound || tt.path == "/api/v1/invoices/9999" {
-				// Mux 404 is plain text, but our 404 is JSON
 				if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 					t.Errorf("expected Content-Type application/json, got %s", ct)
 				}
 			}
 
-			// Verify if error key exists in response body when expected
 			if tt.expectedKey != "" {
 				var raw map[string]interface{}
 				if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {

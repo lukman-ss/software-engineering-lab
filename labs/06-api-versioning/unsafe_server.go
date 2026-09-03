@@ -4,9 +4,10 @@ import (
 	"net/http"
 )
 
-// UnsafeHandler merepresentasikan anti-pattern ketika backend mengubah kontrak API
-// secara merusak tanpa versioning. Response V2 dengan `customer` sebagai object
-// akan membuat legacy client (yang mengharapkan string) gagal decode.
+// UnsafeHandler merepresentasikan anti-pattern ketika backend mengubah
+// published API contract secara breaking tanpa version boundary.
+// Customer yang sebelumnya string berubah menjadi object sehingga
+// legacy consumer gagal decode.
 //
 // Mental model: API adalah kontrak. Backend berhasil compile ≠ backward compatible.
 // HTTP 200 ≠ backward compatible.
@@ -37,8 +38,7 @@ func UnsafeHandler(w http.ResponseWriter, r *http.Request) {
 	// Ini mensimulasikan breaking change yang dapat lolos bila hanya server-side
 	// success/HTTP status yang diuji tanpa consumer contract regression test.
 	//
-	// IMPORTANT: TestBreakingChange_LegacyClientFails dan TestV1Contract_RemainsBackwardCompatible
-	// di repo ini MANUAL detect breaking change ini melalui test regression contract.
+	// Contract regression tests mendeteksi breaking change ini secara otomatis.
 	invoice := map[string]interface{}{
 		"id": id,
 		"customer": map[string]interface{}{ // BREAKING: sebelumnya string "Budi"

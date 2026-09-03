@@ -2,11 +2,22 @@ package api_versioning
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func newVersionedMux() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/v1/invoices", V1Handler)
+	mux.HandleFunc("/api/v1/invoices/", V1Handler)
+
+	mux.HandleFunc("/api/v2/invoices", V2Handler)
+	mux.HandleFunc("/api/v2/invoices/", V2Handler)
+
+	return mux
+}
 
 // assertV1WireContract adalah helper untuk verifikasi kontrak wire V1.
 // Menyimpan satu sumber kebenaran untuk V1 contract assertions.
@@ -180,25 +191,16 @@ func performRequest(handler http.Handler, method, path string) *httptest.Respons
 func TestSafeVersioning_LegacyClientSucceedsOnV1(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	// Legacy client menggunakan V1 API
-	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/1001", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected HTTP 200, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", w.Code)
 	}
 
-	// Baca body sekali untuk semua asserts
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	body := w.Body.Bytes()
 
 	// Legacy client decode menggunakan model consumer lama
 	legacyResponse, err := ParseLegacyInvoice(body)
@@ -229,23 +231,17 @@ func TestSafeVersioning_LegacyClientSucceedsOnV1(t *testing.T) {
 func TestSafeVersioning_NewClientSucceedsOnV2(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	// New client menggunakan V2 API
-	resp, err := http.Get(server.URL + "/api/v2/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/invoices/1001", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected HTTP 200, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", w.Code)
 	}
 
-	// New client decode ke struct V2
 	var v2Response InvoiceV2Response
-	err = json.NewDecoder(resp.Body).Decode(&v2Response)
+	err := json.NewDecoder(w.Body).Decode(&v2Response)
 	if err != nil {
 		t.Fatalf("new client SHOULD succeed on V2: %v", err)
 	}
@@ -281,38 +277,29 @@ func TestVersionedRoutes_CanRunSideBySide(t *testing.T) {
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
 
-	server := httptest.NewServer(mux)
-	defer server.Close()
+	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/1001", nil)
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
 
-	// Request ke V1
-	resp1, err := http.Get(server.URL + "/api/v1/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed V1 request: %v", err)
-	}
-	defer resp1.Body.Close()
-
-	if resp1.StatusCode != http.StatusOK {
-		t.Fatalf("V1: expected HTTP 200, got %d", resp1.StatusCode)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("V1: expected HTTP 200, got %d", w1.Code)
 	}
 
 	var v1Resp InvoiceV1Response
-	if err := json.NewDecoder(resp1.Body).Decode(&v1Resp); err != nil {
+	if err := json.NewDecoder(w1.Body).Decode(&v1Resp); err != nil {
 		t.Fatalf("V1 decode failed: %v", err)
 	}
 
-	// Request ke V2
-	resp2, err := http.Get(server.URL + "/api/v2/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed V2 request: %v", err)
-	}
-	defer resp2.Body.Close()
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v2/invoices/1001", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
 
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("V2: expected HTTP 200, got %d", resp2.StatusCode)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("V2: expected HTTP 200, got %d", w2.Code)
 	}
 
 	var v2Resp InvoiceV2Response
-	if err := json.NewDecoder(resp2.Body).Decode(&v2Resp); err != nil {
+	if err := json.NewDecoder(w2.Body).Decode(&v2Resp); err != nil {
 		t.Fatalf("V2 decode failed: %v", err)
 	}
 
@@ -335,19 +322,13 @@ func TestVersionedRoutes_CanRunSideBySide(t *testing.T) {
 func TestV1Contract_DoesNotIntroduceRequiredTenantHeader(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	// Request tanpa X-Tenant-ID header - legacy client tidak mengirim header ini
-	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/1001", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	// V1 tidak membutuhkan header khusus - harus success (backward compatible)
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("V1: expected HTTP 200 without X-Tenant-ID, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Errorf("V1: expected HTTP 200 without X-Tenant-ID, got %d", w.Code)
 	}
 
 	t.Log("✅ V1 endpoint tidak membutuhkan X-Tenant-ID header - backward compatible")
@@ -356,39 +337,24 @@ func TestV1Contract_DoesNotIntroduceRequiredTenantHeader(t *testing.T) {
 // TestV1Contract_RegressionGuaranteeAfterV2Registration tambahan verifikasi
 // untuk memastikan tidak ada breaking change pada V1 pasca V2 registration.
 func TestV1Contract_RegressionGuaranteeAfterV2Registration(t *testing.T) {
-	// Setup: V1 dan V2 pada router yang sama
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
 
-	server := httptest.NewServer(mux)
-	defer server.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/1001", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	// Request ke V1 - harus tetap mengembalikan V1 contract
-	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed V1 request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// HTTP 200
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("V1: expected HTTP 200, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("V1: expected HTTP 200, got %d", w.Code)
 	}
 
-	// Content-Type application/json
-	ct := resp.Header.Get("Content-Type")
+	ct := w.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("V1: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
-	// Baca body sekali untuk semua asserts
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("V1: failed to read body: %v", err)
-	}
-
-	// Use helper untuk semua V1 contract assertions including field existence
+	body := w.Body.Bytes()
 	assertV1WireContract(t, body)
 
 	t.Log("✅ V1 contract regression guarantee: V2 registration tidak mengubah V1 output")
@@ -399,33 +365,21 @@ func TestV1Contract_RegressionGuaranteeAfterV2Registration(t *testing.T) {
 func TestV1Contract_RemainsBackwardCompatible(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	resp, err := http.Get(server.URL + "/api/v1/invoices/1001")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/1001", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	// HTTP 200 requirement
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("V1: expected HTTP 200, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("V1: expected HTTP 200, got %d", w.Code)
 	}
 
-	// Content-Type application/json
-	ct := resp.Header.Get("Content-Type")
+	ct := w.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("V1: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
-	// Baca body sekali untuk semua asserts
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("V1: failed to read body: %v", err)
-	}
-
-	// Use helper untuk semua V1 contract assertions
+	body := w.Body.Bytes()
 	assertV1WireContract(t, body)
 
 	t.Log("✅ V1 contract protected: customer remains string")
@@ -437,36 +391,23 @@ func TestV1Contract_RemainsBackwardCompatible(t *testing.T) {
 func TestV2Contract_UsesNestedCustomer(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v2/invoices/", V2Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	resp, err := http.Get(server.URL + "/api/v2/invoices/1001")
-	if err != nil {
-		t.Fatalf("V2: failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/invoices/1001", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	// 1. HTTP Status = 200
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("V2: expected HTTP 200, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("V2: expected HTTP 200, got %d", w.Code)
 	}
 
-	// 2. Content-Type = application/json
-	ct := resp.Header.Get("Content-Type")
+	ct := w.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("V2: expected Content-Type 'application/json', got '%s'", ct)
 	}
 
-	// Baca body sekali untuk semua assertions
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("V2: failed to read body: %v", err)
-	}
-
-	// Use helper untuk semua V2 contract assertions including field existence
+	body := w.Body.Bytes()
 	assertV2WireContract(t, body)
 
-	// Additional: verify decode ke struct V2 tetap berhasil (new client compatibility)
 	var v2Resp InvoiceV2Response
 	if err := json.Unmarshal(body, &v2Resp); err != nil {
 		t.Fatalf("V2 struct decode failed: %v", err)
@@ -501,43 +442,26 @@ func TestV2Handler_WrongPrefixReturnsBadRequest(t *testing.T) {
 	t.Logf("✅ V2Handler returns HTTP 400 for wrong prefix path")
 }
 
-// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash
-// tidak mengembalikan data invoice yang valid (harus 400/404, bukan 200).
+// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash adalah invalid collection request pada lab ini dan harus menghasilkan 400 Bad Request.
+// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash adalah invalid collection request pada lab ini dan harus menghasilkan 400 Bad Request.
 func TestTrailingSlash_NoSlashReturnsBadRequest(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	mux.HandleFunc("/api/v2/invoices/", V2Handler)
+	mux := newVersionedMux()
 
-	server := httptest.NewServer(mux)
-	defer server.Close()
+	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/invoices", nil)
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
 
-	// GET /api/v1/invoices (tanpa trailing slash)
-	// http.ServeMux dengan pattern "/api/v1/invoices/" akan redirect atau
-	// menjalankan handler tergantung konfigurasi.
-	// Namun penting: tidak boleh return 200 dengan id=0.
-	resp, err := http.Get(server.URL + "/api/v1/invoices")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
+	if w1.Code != http.StatusBadRequest {
+		t.Fatalf("expected HTTP 400, got %d", w1.Code)
 	}
-	defer resp.Body.Close()
 
-	// Pastikan tidak pernah return 200 untuk path tanpa ID
-	if resp.StatusCode == http.StatusOK {
-		t.Errorf("BUG: path without trailing slash should NOT return HTTP 200")
-	}
-	t.Logf("✅ Route /api/v1/invoices (no slash) returns HTTP %d, not 200", resp.StatusCode)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v2/invoices", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
 
-	// GET /api/v2/invoices tanpa trailing slash
-	resp2, err := http.Get(server.URL + "/api/v2/invoices")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
+	if w2.Code != http.StatusBadRequest {
+		t.Fatalf("expected HTTP 400, got %d", w2.Code)
 	}
-	defer resp2.Body.Close()
-
-	if resp2.StatusCode == http.StatusOK {
-		t.Errorf("BUG: V2 path without trailing slash should NOT return HTTP 200")
-	}
-	t.Logf("✅ Route /api/v2/invoices (no slash) returns HTTP %d, not 200", resp2.StatusCode)
 }
 
 // TestIDValidation_ZeroAndNegativeIDs memastikan ID nol dan negatif
@@ -545,30 +469,22 @@ func TestTrailingSlash_NoSlashReturnsBadRequest(t *testing.T) {
 func TestIDValidation_ZeroAndNegativeIDs(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	// ID 0 → 400 (invalid ID: must be positive)
-	resp, err := http.Get(server.URL + "/api/v1/invoices/0")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/0", nil)
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected HTTP 400 for ID=0, got %d", resp.StatusCode)
+	if w1.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for ID=0, got %d", w1.Code)
 	}
 	t.Logf("✅ V1 returns HTTP 400 for ID=0 (invalid: must be positive)")
 
-	// ID negatif → 400 (invalid ID: must be positive)
-	resp2, err := http.Get(server.URL + "/api/v1/invoices/-1")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp2.Body.Close()
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/-1", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
 
-	if resp2.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected HTTP 400 for ID=-1, got %d", resp2.StatusCode)
+	if w2.Code != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 for ID=-1, got %d", w2.Code)
 	}
 	t.Logf("✅ V1 returns HTTP 400 for ID=-1 (invalid: must be positive)")
 }
@@ -578,18 +494,13 @@ func TestIDValidation_ZeroAndNegativeIDs(t *testing.T) {
 func TestIDValidation_ValidButNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/invoices/", V1Handler)
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
-	// ID 9999 (valid positive, but not in mock)
-	resp, err := http.Get(server.URL + "/api/v1/invoices/9999")
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/invoices/9999", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected HTTP 404 for valid-but-not-found ID, got %d", resp.StatusCode)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected HTTP 404 for valid-but-not-found ID, got %d", w.Code)
 	}
 	t.Logf("✅ V1 returns HTTP 404 for valid ID=9999 (not found)")
 }

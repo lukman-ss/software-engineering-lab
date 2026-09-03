@@ -1,9 +1,7 @@
 package api_versioning
 
 import (
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
@@ -12,29 +10,17 @@ import (
 //
 // Mental model: HTTP 200 ≠ backward compatible
 func TestBreakingChange_LegacyClientFails(t *testing.T) {
-	// Setup: server yang mengembalikan response V2 (customer sebagai object)
-	server := httptest.NewServer(http.HandlerFunc(UnsafeHandler))
-	defer server.Close()
+	// Setup: handler yang mengembalikan breaking response (customer sebagai object)
+	handler := http.HandlerFunc(UnsafeHandler)
+	w := performRequest(handler, http.MethodGet, "/api/invoices/1001")
 
-	// Legacy client mencoba decode ke struct yang mengharapkan customer = string
-	url := server.URL + "/api/invoices/1001"
-
-	resp, err := http.Get(url)
-	if err != nil {
-		t.Fatalf("failed to connect to server: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected HTTP 200, got %d", resp.StatusCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", w.Code)
 	}
 
 	// Decode JSON body seperti legacy client menggunakan helper
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
-	_, err = ParseLegacyInvoice(body)
+	body := w.Body.Bytes()
+	_, err := ParseLegacyInvoice(body)
 
 	// ASSERTION: Decode HARUS gagal karena `customer` sudah bukan string
 	if err == nil {

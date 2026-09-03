@@ -93,17 +93,17 @@ Perubahan yang **biasanya compatible**:
 >- `json.Unmarshal` Go: abaikan unknown field → aman
 >- JSON Schema strict: field baru bisa mismatch → tidak aman
 
-### Breaking
+### Contract-Breaking Changes
 
-Perubahan yang **pasti breaking**:
+Perubahan berikut mengubah published contract dan dapat memutus consumer yang bergantung pada contract lama.
 
-| Perubahan | Alasan |
-|-----------|--------|
-| Rename | Consumer pakai nama lama |
-| Remove | Consumer butuh data itu |
-| Type change | Deserialization error |
-| Shape change | Struct mismatch |
-| Semantics change | Logika bisnis berubah |
+| Perubahan | Reasoning |
+|-----------|-----------|
+| Rename | nama field lama tidak lagi tersedia dalam published contract |
+| Remove | published contract berubah; consumer yang bergantung pada field tersebut dapat gagal |
+| Type change | schema lama tidak lagi cocok dan deserialization dapat gagal |
+| Shape change | representasi lama tidak lagi sesuai contract |
+| Semantic change | payload dapat tetap valid secara syntax tetapi behavior consumer dapat menjadi salah |
 
 ---
 
@@ -335,7 +335,7 @@ Hanya karena API response berubah! API versioning adalah **representasi public c
 | Mistake | Dampak | Solusi |
 |---------|--------|--------|
 | `name` langsung ganti `full_name` | Client crash | Gunakan `name` + `full_name` paralel |
-| Hapus field tanpa notice | Consumer error | Deprecation cycle dulu |
+| Hapus field dari published contract tanpa migration/deprecation | consumer yang bergantung pada field dapat gagal | Deprecation cycle dulu |
 | `price:number` jadi `price:string` | Type error | Version baru |
 | Reuse DTO V1/V2 | Keduanya saling terikat | DTO terpisah |
 | Tidak ada contract test | Breaking lompat | Tambahkan test |
@@ -356,9 +356,32 @@ mux.HandleFunc("/api/v1/invoices/", V1Handler)
 mux.HandleFunc("/api/v2/invoices/", V2Handler)
 ```
 
-- Route `/api/v1/invoices/1001` dipetakan ke `V1Handler`
-- Route tak dikenal seperti `/foo` akan mengembalikan 404
-- Route dengan ID tidak valid (`/api/v1/invoices/abc`) mengembalikan 400
+Dokumentasi exact routing & error behavior:
+
+- `GET /api/v1/invoices/1001`
+  → `200 OK`
+- `GET /api/v1/invoices/`
+  → `400 Bad Request` (missing invoice ID)
+- `GET /api/v1/invoices`
+  → `400 Bad Request` (invalid/missing invoice ID)
+- `GET /api/v1/invoices/abc`
+  → `400 Bad Request` (ID harus numeric)
+- `GET /api/v1/invoices/0`
+  → `400 Bad Request` (ID harus positive)
+- `GET /api/v1/invoices/-1`
+  → `400 Bad Request` (ID harus positive)
+- `GET /api/v1/invoices/9999`
+  → `404 Not Found` (ID valid tetapi invoice tidak ditemukan)
+- `GET /api/v1/invoices/1001/extra`
+  → `400 Bad Request` (extra path segment)
+- `POST /api/v1/invoices/1001`
+  → `405 Method Not Allowed` (`Allow: GET`, `Content-Type: application/json`)
+
+V2 menggunakan routing/error semantics yang sama, hanya wire response contract yang berbeda.
+
+Unknown route:
+- `GET /api/v3/invoices/1001`
+  → `404 Not Found` dari router (default `ServeMux` 404 mengembalikan `text/plain`, bukan JSON API response).
 
 ---
 
