@@ -269,13 +269,14 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	t.Cleanup(func() {
+		tp.Shutdown(context.Background())
+	})
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, nil)
 
-	ctx := context.Background()
 	reqID := "demo-req-001"
-	ctx = context.WithValue(ctx, middleware.HeaderRequestID, reqID)
 
 	req := httptest.NewRequest(http.MethodPost, "/invoices/INV-1/process", nil)
 	req.SetPathValue("id", "INV-1")
@@ -523,12 +524,16 @@ func TestIntegration_Trace_Diagnosis_SlowPDF(t *testing.T) {
 }
 
 func TestIntegration_TracePropagation(t *testing.T) {
+	prevProp := otel.GetTextMapPropagator()
 	otel.SetTextMapPropagator(
 		propagation.NewCompositeTextMapPropagator(
 			propagation.TraceContext{},
 			propagation.Baggage{},
 		),
 	)
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(prevProp)
+	})
 
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
@@ -602,12 +607,16 @@ func TestIntegration_TracePropagation(t *testing.T) {
 }
 
 func TestIntegration_ExtractIncomingW3CTraceContext(t *testing.T) {
+	prevProp := otel.GetTextMapPropagator()
 	otel.SetTextMapPropagator(
 		propagation.NewCompositeTextMapPropagator(
 			propagation.TraceContext{},
 			propagation.Baggage{},
 		),
 	)
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(prevProp)
+	})
 
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
@@ -723,6 +732,9 @@ func TestConcurrentRequests_NoDataRace(t *testing.T) {
 	collector := NewPrometheusCollector(reg)
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	t.Cleanup(func() {
+		tp.Shutdown(context.Background())
+	})
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, collector)
@@ -740,8 +752,13 @@ func TestConcurrentRequests_NoDataRace(t *testing.T) {
 
 	handler := middleware.RequestID(service.HTTPHandler(resolveScenario))
 
-	done := make(chan bool)
+	type result struct {
+		scenario   string
+		statusCode int
+		requestID  string
+	}
 	scenarios := []string{"normal", "error", "slow", "normal", "error"}
+	results := make(chan result, len(scenarios))
 
 	for i, sc := range scenarios {
 		go func(idx int, scenario string) {
@@ -750,12 +767,32 @@ func TestConcurrentRequests_NoDataRace(t *testing.T) {
 			req.SetPathValue("id", "INV-CONC-"+string(rune('A'+idx)))
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
-			done <- true
+
+			results <- result{
+				scenario:   scenario,
+				statusCode: rec.Code,
+				requestID:  rec.Header().Get(middleware.HeaderRequestID),
+			}
 		}(i, sc)
 	}
 
 	for range scenarios {
-		<-done
+		res := <-results
+		if res.requestID == "" {
+			t.Errorf("missing request ID in concurrent response")
+		}
+		expectedStatus := http.StatusOK
+		if res.scenario == "error" {
+			expectedStatus = http.StatusBadGateway
+		}
+		if res.statusCode != expectedStatus {
+			t.Errorf("scenario %s expected status %d, got %d", res.scenario, expectedStatus, res.statusCode)
+		}
+	}
+
+	inFlight := testutil.ToFloat64(collector.HTTPInFlightRequests.WithLabelValues("/invoices/{id}/process"))
+	if inFlight != 0 {
+		t.Errorf("expected in_flight_requests=0, got %f", inFlight)
 	}
 }
 
@@ -806,8 +843,13 @@ func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
 
 	handler := middleware.RequestID(unsafeService.HTTPHandler(resolveScenario))
 
-	done := make(chan bool)
+	type result struct {
+		scenario   string
+		statusCode int
+		requestID  string
+	}
 	scenarios := []string{"normal", "error", "slow", "normal", "error"}
+	results := make(chan result, len(scenarios))
 
 	for i, sc := range scenarios {
 		go func(idx int, scenario string) {
@@ -816,11 +858,26 @@ func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
 			req.SetPathValue("id", "INV-CONC-"+string(rune('A'+idx)))
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
-			done <- true
+
+			results <- result{
+				scenario:   scenario,
+				statusCode: rec.Code,
+				requestID:  rec.Header().Get(middleware.HeaderRequestID),
+			}
 		}(i, sc)
 	}
 
 	for range scenarios {
-		<-done
+		res := <-results
+		if res.requestID == "" {
+			t.Errorf("missing request ID in unsafe concurrent response")
+		}
+		expectedStatus := http.StatusOK
+		if res.scenario == "error" {
+			expectedStatus = http.StatusBadGateway
+		}
+		if res.statusCode != expectedStatus {
+			t.Errorf("unsafe scenario %s expected status %d, got %d", res.scenario, expectedStatus, res.statusCode)
+		}
 	}
 }

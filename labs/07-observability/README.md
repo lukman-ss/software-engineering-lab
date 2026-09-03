@@ -121,6 +121,8 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
      "msg": "dependency completed",
      "request_id": "demo-slow-pdf-001",
      "trace_id": "ece356994a7f660b01a9a2d75a9e4171",
+     "span_id": "5d8fa7cc0d77c85e",
+     "invoice_id": "INV-1001",
      "component": "pdf",
      "operation": "generate",
      "duration_ms": 4800,
@@ -235,11 +237,64 @@ make lab-07-vet
 
 ---
 
+### Korelasi Signal Saat Diagnosa Bottleneck
+
+| Signal | Yang Terlihat |
+|---|---|
+| **Log** | Request selesai sekitar 4,8 detik |
+| **HTTP metric** | Request latency meningkat |
+| **Dependency metric** | Latency komponen `pdf` meningkat |
+| **Trace** | `pdf.generate` memakai hampir seluruh waktu |
+| **Request ID** | Log request yang sama dapat dicari |
+| **Trace ID** | Log dapat dibuka sebagai distributed trace |
+| **Span ID** | Log dapat diarahkan ke dependency span tertentu |
+
+---
+
+## Command Reproduksi & Manual Testing
+
+Jalankan perintah berikut untuk menguji berbagai skenario I/O:
+
+```bash
+# 1. Normal scenario (~95ms)
+curl -i -X POST \
+  -H "X-Request-ID: demo-normal-001" \
+  "http://localhost:8087/invoices/INV-1001/process?scenario=normal"
+
+# 2. Slow PDF scenario (~4800ms bottleneck)
+curl -i -X POST \
+  -H "X-Request-ID: demo-slow-pdf-001" \
+  "http://localhost:8087/invoices/INV-1001/process?scenario=slow-pdf"
+
+# 3. Slow Database scenario (~3000ms bottleneck)
+curl -i -X POST \
+  -H "X-Request-ID: demo-slow-db-001" \
+  "http://localhost:8087/invoices/INV-1001/process?scenario=slow-database"
+
+# 4. Slow External Notification scenario (~3500ms downstream HTTP delay)
+# Catatan: slow-external benar-benar melewati HTTP network boundary via HTTPNotificationClient
+curl -i -X POST \
+  -H "X-Request-ID: demo-slow-ext-001" \
+  "http://localhost:8087/invoices/INV-1001/process?scenario=slow-external"
+
+# 5. PDF Error scenario (502 Bad Gateway)
+curl -i -X POST \
+  -H "X-Request-ID: demo-pdf-err-001" \
+  "http://localhost:8087/invoices/INV-1001/process?scenario=pdf-error"
+```
+
+---
+
 ## Out of Scope
 
-- Distributed log aggregation clusters (Elasticsearch / Loki).
-- Dynamic runtime profiling / eBPF instrumentation.
-- Service Mesh telemetry injection (Istio / Envoy).
+- Alerting & PagerDuty integration
+- SLO/SLI engineering
+- Log aggregation cluster (Elasticsearch / Loki)
+- Tail-based sampling & massive-scale sampling strategy
+- Multi-region telemetry
+- Incident response runbooks
+- Capacity planning
+- Full APM platform setup
 
 ---
 
