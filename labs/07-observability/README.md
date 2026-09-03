@@ -158,7 +158,7 @@ Dilarang menjadi label:
 ```
 traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 ```
-Memastikan trace context tidak terputus saat request keluar menuju layanan eksternal.
+Memastikan trace context tidak terputus saat request keluar menuju layanan eksternal. (Dalam simulasi ini service boundary di simulasikan dalam 1 proses yang sama)
 
 ---
 

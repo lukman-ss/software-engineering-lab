@@ -179,12 +179,98 @@ Logging harus mencakup:
 
 Lihat `checkout_improved.go` untuk implementasi yang sudah direview dengan:
 
-1. **Validasi input** - empty cart, quantity validation
+1. **Validasi input** - empty cart, quantity validation, product validation
 2. **Atomic Idempotency Claim** - `Claim` dengan state (PROCESSING/COMPLETED), conflict check via hash, auto-release pada error
 3. **Transaction Boundary & Rollback** - unit of work `TransactionManager` memastikan stock reservation dan `CreateOrder` atomic (rollback jika salah satu gagal)
 4. **Conditional Atomic Stock Operation** - validasi dan pemotongan stock berada dalam critical section transaksional (invarian `stock >= 0` terjaga)
 5. **Good error propagation** - mengembalikan error yang sesuai tanpa merusak state idempotency
-6. **Notification setelah transaction** - side effect dijalankan di luar transaksi setelah commit sukses
+6. **Notification setelah transaction** - side effect dijalankan di luar transaksi setelah commit sukses, failure notification dicatat tanpa rollback order
+
+## Transaction Boundary
+
+Unit of work `TransactionManager` menjamin atomicity pada multi-step checkout. Jika salah satu operasi gagal, seluruh perubahan state dalam unit of work di-rollback.
+
+```go
+txManager.WithinTransaction(ctx, func(tx CheckoutTx) error {
+    for _, item := range cartItems {
+        if err := tx.ReserveStock(ctx, item.ProductID, item.Quantity); err != nil {
+            return err
+        }
+    }
+    if err := tx.CreateOrder(ctx, order); err != nil {
+        return err
+    }
+    return nil
+})
+```
+
+## Atomic Stock Reservation
+
+Check dan mutasi stock digabung dalam operasi atomik untuk menghindari race condition.
+
+```go
+// Mock meniru critical section yang menjamin invariant `stock >= 0`
+func (r *MockProductRepository) ReserveStock(ctx context.Context, productID string, quantity int) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    stock, exists := r.stock[productID]
+    if !exists {
+        return ErrProductNotFound
+    }
+    if stock < quantity {
+        return ErrInsufficientStock
+    }
+    r.stock[productID] = stock - quantity
+    return nil
+}
+```
+
+## Idempotency State Machine
+
+State idempotency berkembang melalui state yang jelas:
+- **PROCESSING**: request sedang dijalankan
+- **COMPLETED**: request sukses, response tersimpan untuk replay
+
+Pada error, record di-release agar retry memungkinkan.
+
+## Deterministic Concurrency Test
+
+Test konkurensi memakai barrier (`sync.WaitGroup`) untuk memaksa interleaving yang sama tiap run, sehingga bug dapat direproduksi secara deterministik.
+
+```go
+var claimedCount atomic.Int32
+bothAttempted := make(chan struct{})
+idem.SetClaimHook(func(key string) {
+    if claimedCount.Add(1) == 2 {
+        close(bothAttempted)
+    } else {
+        <-bothAttempted
+    }
+})
+```
+
+## Rollback Demonstration
+
+Test seperti `TestImprovedCheckout_OrderCreationFailureRollsBackStock` dan `TestImprovedCheckout_MultiProductOrderCreationFailureRollsBackStock` membuktikan bahwa kegagalan `CreateOrder` mengembalikan stock ke nilai semula tanpa menciptakan order.
+
+## Authorization
+
+```go
+if principal.UserID != cmd.CartOwnerID {
+    return nil, ErrForbidden
+}
+```
+
+Dibuktikan via test `TestImprovedCheckout_CannotCheckoutAnotherUsersCart`.
+
+## N+1 Demonstration
+
+Naive tetap melakukan `GetProduct` sebanyak jumlah item. Improved menggunakan `GetProducts` batch.
+
+Dibuktikan via call counter:
+- `TestNaiveCheckout_NPlusOneProductLookups`
+- `TestImprovedCheckout_BatchLoadsProducts`
+
 
 ## Failure Scenario Tests
 

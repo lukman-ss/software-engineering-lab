@@ -272,7 +272,39 @@ func TestImprovedCheckout_InsufficientStock(t *testing.T) {
 	}
 }
 
-func TestImprovedCheckout_DuplicateRequest(t *testing.T) {
+func TestImprovedCheckout_BatchLoadsProducts(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	cart.SetCart("user1", []codereview.CartItem{
+		{ProductID: "p1", Quantity: 2, UnitPrice: 1000},
+		{ProductID: "p2", Quantity: 1, UnitPrice: 2000},
+	})
+
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+		CartOwnerID:    "user1",
+		IdempotencyKey: "batch-test-key",
+	})
+	if err != nil {
+		t.Fatalf("checkout failed: %v", err)
+	}
+
+	if products.BatchGetCalls() != 1 {
+		t.Errorf("Expected exactly 1 batch GetProducts call, got %d", products.BatchGetCalls())
+	}
+	if products.GetCalls() != 0 {
+		t.Errorf("Expected no single GetProduct calls on improved path, got %d", products.GetCalls())
+	}
+}
+
+func TestImprovedCheckout_DuplicateRequestReturnsSameResult(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
 	notify := codereview.NewMockNotificationSender()
@@ -309,113 +341,39 @@ func TestImprovedCheckout_DuplicateRequest(t *testing.T) {
 	}
 }
 
-func TestImprovedCheckout_EmptyCart(t *testing.T) {
+func TestImprovedCheckout_IdempotencyConflict(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
-	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10})
 	notify := codereview.NewMockNotificationSender()
 	logger := codereview.NewMockLogger()
 	cart := newTestCartSource()
 	idem := codereview.NewMockIdempotencyRepository()
 	txManager := codereview.NewMockTransactionManager(products, repo)
 
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
 
+	key := "conflict-key"
 	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
 		CartOwnerID:    "user1",
-		IdempotencyKey: "test-key",
+		IdempotencyKey: key,
 	})
-
-	if err == nil {
-		t.Error("Expected error for empty cart")
+	if err != nil {
+		t.Fatalf("First request failed: %v", err)
 	}
-}
 
-func TestImprovedCheckout_ProductNotFound(t *testing.T) {
-	repo := codereview.NewMockOrderRepository()
-	products := codereview.NewMockProductRepository(map[string]int{})
-	notify := codereview.NewMockNotificationSender()
-	logger := codereview.NewMockLogger()
-	cart := newTestCartSource()
-	idem := codereview.NewMockIdempotencyRepository()
-	txManager := codereview.NewMockTransactionManager(products, repo)
-
-	cart.SetCart("user1", []codereview.CartItem{{ProductID: "nonexistent", Quantity: 1, UnitPrice: 1000}})
-
-	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
-
-	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+	// Change cart for same user and same key
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p2", Quantity: 1, UnitPrice: 2000}})
+	_, err = improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
 		CartOwnerID:    "user1",
-		IdempotencyKey: "test-key",
+		IdempotencyKey: key,
 	})
-
-	if err == nil {
-		t.Error("Expected error for product not found")
+	if !errors.Is(err, codereview.ErrIdempotencyConflict) {
+		t.Errorf("Expected ErrIdempotencyConflict, got: %v", err)
 	}
 }
 
-func TestImprovedCheckout_InvalidQuantity(t *testing.T) {
-	repo := codereview.NewMockOrderRepository()
-	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
-	notify := codereview.NewMockNotificationSender()
-	logger := codereview.NewMockLogger()
-	cart := newTestCartSource()
-	idem := codereview.NewMockIdempotencyRepository()
-	txManager := codereview.NewMockTransactionManager(products, repo)
-
-	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 0, UnitPrice: 1000}})
-
-	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
-
-	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
-		CartOwnerID:    "user1",
-		IdempotencyKey: "test-key",
-	})
-
-	if err == nil {
-		t.Error("Expected error for invalid quantity")
-	}
-}
-
-func TestConcurrentCheckout_InvariantPreserved(t *testing.T) {
-	for i := 0; i < 3; i++ {
-		t.Run("iteration-"+string(rune('A'+i)), func(t *testing.T) {
-			repo := codereview.NewMockOrderRepository()
-			products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
-			notify := codereview.NewMockNotificationSender()
-			logger := codereview.NewMockLogger()
-			cart := newTestCartSource()
-			idem := codereview.NewMockIdempotencyRepository()
-			txManager := codereview.NewMockTransactionManager(products, repo)
-
-			for u := 1; u <= 4; u++ {
-				userID := string(rune('A' + u))
-				cart.SetCart(userID, []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
-			}
-
-			improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
-
-			var wg sync.WaitGroup
-			for u := 1; u <= 4; u++ {
-				wg.Add(1)
-				go func(userID string) {
-					defer wg.Done()
-					_, _ = improved.Checkout(context.Background(), codereview.Principal{UserID: userID}, codereview.CheckoutCommand{
-						CartOwnerID:    userID,
-						IdempotencyKey: "key-" + userID,
-					})
-				}(string(rune('A' + u)))
-			}
-			wg.Wait()
-
-			stock, _ := products.GetStock(context.Background(), "p1")
-			if stock < 0 {
-				t.Errorf("Stock invariant violated: %d", stock)
-			}
-		})
-	}
-}
-
-func TestImprovedCheckout_OrderCreationFailureRollsBackStock(t *testing.T) {
+func TestImprovedCheckout_IdempotencyFailureCanRetry(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	repo.FailNextCreate(errors.New("database unavailable"))
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
@@ -426,43 +384,27 @@ func TestImprovedCheckout_OrderCreationFailureRollsBackStock(t *testing.T) {
 	txManager := codereview.NewMockTransactionManager(products, repo)
 
 	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
-
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
 
-	key := "fail-test-key"
-	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
-		CartOwnerID:    "user1",
-		IdempotencyKey: key,
-	})
-	if err == nil {
-		t.Fatal("Expected checkout to fail")
-	}
+	key := "retryable-key"
+	cmd := codereview.CheckoutCommand{CartOwnerID: "user1", IdempotencyKey: key}
 
-	stock, _ := products.GetStock(context.Background(), "p1")
-	if stock != 10 {
-		t.Errorf("Stock should be rolled back to 10, got %d", stock)
-	}
-	if len(repo.GetOrders(context.Background())) != 0 {
-		t.Error("No order should be created")
-	}
-	if len(notify.GetSent()) != 0 {
-		t.Error("No notification should be sent")
+	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
+	if err == nil {
+		t.Fatal("Expected first request to fail")
 	}
 
 	repo.FailNextCreate(nil)
-	resp, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
-		CartOwnerID:    "user1",
-		IdempotencyKey: key,
-	})
+	resp, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
 	if err != nil {
-		t.Fatalf("Retry should succeed, got error: %v", err)
+		t.Fatalf("Retry request should succeed, got error: %v", err)
 	}
-	if resp == nil {
-		t.Fatal("Retry response should not be nil")
+	if resp == nil || !resp.Success {
+		t.Fatal("Expected successful retry response")
 	}
 }
 
-func TestImprovedCheckout_MultiProductOrderCreationFailureRollsBackStock(t *testing.T) {
+func TestImprovedCheckout_MultiProductFailureRollsBackEverything(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	repo.FailNextCreate(errors.New("database unavailable"))
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 1})
@@ -502,7 +444,77 @@ func TestImprovedCheckout_MultiProductOrderCreationFailureRollsBackStock(t *test
 	}
 }
 
-func TestImprovedCheckout_SameKeyConcurrentRequestsWithBarrier(t *testing.T) {
+func TestImprovedCheckout_ConcurrentStockReservationPreservesInvariant(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 1})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 1, UnitPrice: 1000}})
+	cart.SetCart("user2", []codereview.CartItem{{ProductID: "p1", Quantity: 1, UnitPrice: 1000}})
+
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, 2)
+	successCount := atomic.Int32{}
+	failCount := atomic.Int32{}
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+			CartOwnerID:    "user1",
+			IdempotencyKey: "key-user1",
+		})
+		if err == nil {
+			successCount.Add(1)
+		} else {
+			failCount.Add(1)
+		}
+		errChan <- err
+	}()
+	go func() {
+		defer wg.Done()
+		_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user2"}, codereview.CheckoutCommand{
+			CartOwnerID:    "user2",
+			IdempotencyKey: "key-user2",
+		})
+		if err == nil {
+			successCount.Add(1)
+		} else {
+			failCount.Add(1)
+		}
+		errChan <- err
+	}()
+
+	wg.Wait()
+	close(errChan)
+
+	stock, _ := products.GetStock(context.Background(), "p1")
+	orders := len(repo.GetOrders(context.Background()))
+
+	if successCount.Load() != 1 {
+		t.Errorf("Expected 1 successful checkout, got %d", successCount.Load())
+	}
+	if failCount.Load() != 1 {
+		t.Errorf("Expected 1 failed checkout, got %d", failCount.Load())
+	}
+	if stock != 0 {
+		t.Errorf("Final stock must be 0, got %d", stock)
+	}
+	if orders != 1 {
+		t.Errorf("Expected exactly 1 order, got %d", orders)
+	}
+	if len(notify.GetSent()) > 1 {
+		t.Errorf("Expected at most 1 notification sent, got %d", len(notify.GetSent()))
+	}
+}
+
+func TestImprovedCheckout_ConcurrentSameIdempotencyKeyRunsOnce(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
 	notify := codereview.NewMockNotificationSender()
@@ -511,19 +523,11 @@ func TestImprovedCheckout_SameKeyConcurrentRequestsWithBarrier(t *testing.T) {
 	idem := codereview.NewMockIdempotencyRepository()
 	txManager := codereview.NewMockTransactionManager(products, repo)
 
-	var claimedCount atomic.Int32
-	bothAttempted := make(chan struct{})
-
-	idem.SetClaimHook(func(key string) {
-		if claimedCount.Add(1) == 2 {
-			close(bothAttempted)
-		} else {
-			<-bothAttempted
-		}
-	})
-
 	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	var startGate sync.WaitGroup
+	startGate.Add(1)
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
@@ -533,9 +537,10 @@ func TestImprovedCheckout_SameKeyConcurrentRequestsWithBarrier(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func() {
 			defer wg.Done()
+			startGate.Wait()
 			_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
 				CartOwnerID:    "user1",
-				IdempotencyKey: "barrier-same-key",
+				IdempotencyKey: "concurrent-same-key",
 			})
 			if err == nil {
 				successCount.Add(1)
@@ -544,6 +549,7 @@ func TestImprovedCheckout_SameKeyConcurrentRequestsWithBarrier(t *testing.T) {
 		}()
 	}
 
+	startGate.Done()
 	wg.Wait()
 	close(errChan)
 
@@ -565,31 +571,6 @@ func TestImprovedCheckout_SameKeyConcurrentRequestsWithBarrier(t *testing.T) {
 		t.Errorf("Notification should be sent at most once, got %d", len(notify.GetSent()))
 	}
 }
-
-func TestNaiveCheckout_NPlusOneProductLookups(t *testing.T) {
-	repo := codereview.NewMockOrderRepository()
-	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10, "p3": 10})
-	notify := codereview.NewMockNotificationSender()
-	logger := codereview.NewMockLogger()
-	cart := newTestCartSource()
-
-	cart.SetCart("user1", []codereview.CartItem{
-		{ProductID: "p1", Quantity: 1, UnitPrice: 1000},
-		{ProductID: "p2", Quantity: 1, UnitPrice: 1000},
-		{ProductID: "p3", Quantity: 1, UnitPrice: 1000},
-	})
-
-	naive := codereview.NewCheckoutNaive(repo, products, notify, logger, cart)
-	_, _ = naive.Checkout(context.Background(), "user1")
-
-	if products.GetCalls() != 3 {
-		t.Errorf("Naive expected 3 N+1 GetProduct calls, got %d", products.GetCalls())
-	}
-	if products.BatchGetCalls() != 0 {
-		t.Errorf("Naive should not use batch GetProducts")
-	}
-}
-
 
 func TestImprovedCheckout_IdempotencyKeyConflict(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()

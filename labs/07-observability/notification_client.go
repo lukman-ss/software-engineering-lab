@@ -41,9 +41,11 @@ func (c *HTTPNotificationClient) Send(ctx context.Context, invoiceID string) err
 	if err != nil {
 		return fmt.Errorf("invalid base url: %w", err)
 	}
-	reqURL.Path = "/notifications"
+
+	// Preserve existing query params if any
 	q := reqURL.Query()
 	q.Set("invoice_id", invoiceID)
+	reqURL.Path = "/notifications"
 	reqURL.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL.String(), nil)

@@ -320,23 +320,19 @@ func (r *PostgresWalletRepo) TransferSerializable(ctx context.Context, fromID, t
 	return nil
 }
 
-// RetryPolicy defines backoff configuration.
+type TxOperation func(ctx context.Context) error
+
 type RetryPolicy struct {
 	BaseDelay time.Duration
 	RandSrc   func() float64
 }
 
-// TransferSerializableWithRetry retries on retryable transaction errors (40001/40P01) with exponential backoff & jitter.
-// maxAttempts represents total allowed attempts (including the first attempt).
-func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxAttempts int) error {
-	return r.TransferSerializableWithRetryPolicy(ctx, fromID, toID, amount, maxAttempts, RetryPolicy{
-		BaseDelay: 10 * time.Millisecond,
-		RandSrc:   rand.Float64,
-	})
-}
-
-// TransferSerializableWithRetryPolicy allows passing custom retry policy for testing.
-func (r *PostgresWalletRepo) TransferSerializableWithRetryPolicy(ctx context.Context, fromID, toID int, amount int64, maxAttempts int, policy RetryPolicy) error {
+func RetryTransaction(
+	ctx context.Context,
+	maxAttempts int,
+	policy RetryPolicy,
+	operation TxOperation,
+) error {
 	if maxAttempts <= 0 {
 		return ErrInvalidMaxAttempts
 	}
@@ -349,14 +345,13 @@ func (r *PostgresWalletRepo) TransferSerializableWithRetryPolicy(ctx context.Con
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		err := r.TransferSerializable(ctx, fromID, toID, amount)
+		err := operation(ctx)
 		if err == nil {
 			return nil
 		}
 		lastErr = err
 
 		if IsRetryableTxError(err) && attempt < maxAttempts {
-			// Exponential backoff with full jitter
 			factor := float64(int(1) << uint(attempt-1))
 			jitter := 0.5 + policy.RandSrc()*0.5
 			sleep := time.Duration(float64(policy.BaseDelay) * factor * jitter)
@@ -375,4 +370,18 @@ func (r *PostgresWalletRepo) TransferSerializableWithRetryPolicy(ctx context.Con
 		return fmt.Errorf("%w: %w", ErrMaxRetryExceeded, lastErr)
 	}
 	return lastErr
+}
+
+func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxAttempts int) error {
+	return r.TransferSerializableWithRetryPolicy(ctx, fromID, toID, amount, maxAttempts, RetryPolicy{
+		BaseDelay: 10 * time.Millisecond,
+		RandSrc:   rand.Float64,
+	})
+}
+
+func (r *PostgresWalletRepo) TransferSerializableWithRetryPolicy(ctx context.Context, fromID, toID int, amount int64, maxAttempts int, policy RetryPolicy) error {
+	repo := r
+	return RetryTransaction(ctx, maxAttempts, policy, func(ctx context.Context) error {
+		return repo.TransferSerializable(ctx, fromID, toID, amount)
+	})
 }

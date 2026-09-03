@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestIntegration_SpanHierarchy_And_TraceContext(t *testing.T) {
@@ -248,7 +249,8 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	tp := sdktrace.NewTracerProvider()
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, nil)
@@ -264,6 +266,12 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 
 	handler := middleware.RequestID(service.HTTPHandler(nil))
 	handler.ServeHTTP(rec, req)
+
+	// Build map of recorded span IDs by component.operation
+	depSpanIDs := make(map[string]string)
+	for _, span := range sr.Ended() {
+		depSpanIDs[span.Name()] = span.SpanContext().SpanID().String()
+	}
 
 	// Validate JSON lines
 	lines := strings.Split(strings.TrimSpace(logBuf.String()), "\n")
@@ -292,17 +300,36 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 		}
 
 		if msg == "dependency completed" {
-			if _, ok := entry["component"]; !ok {
+			comp, _ := entry["component"].(string)
+			op, _ := entry["operation"].(string)
+			if comp == "" {
 				t.Errorf("missing component in dependency log: %s", line)
 			}
-			if _, ok := entry["operation"]; !ok {
+			if op == "" {
 				t.Errorf("missing operation in dependency log: %s", line)
 			}
 			if _, ok := entry["duration_ms"]; !ok {
 				t.Errorf("missing duration_ms in dependency log: %s", line)
 			}
-			if _, ok := entry["outcome"]; !ok {
+			outcome, ok := entry["outcome"].(string)
+			if !ok || outcome == "" {
 				t.Errorf("missing outcome in dependency log: %s", line)
+			}
+
+			spanID, _ := entry["span_id"].(string)
+			if spanID == "" {
+				t.Errorf("missing span_id in dependency log: %s", line)
+			} else {
+				expectedSpanID := depSpanIDs[comp+"."+op]
+				if expectedSpanID != "" && spanID != expectedSpanID {
+					t.Errorf("span_id mismatch for %s.%s: log=%s, recorded=%s", comp, op, spanID, expectedSpanID)
+				}
+			}
+
+			if outcome == "success" {
+				if _, ok := entry["error"]; ok {
+					t.Errorf("success dependency log should not have error field: %s", line)
+				}
 			}
 		}
 
@@ -312,6 +339,58 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 				t.Errorf("forbidden sensitive field '%s' logged", forbidden)
 			}
 		}
+	}
+
+	// Test error log schema
+	var failLogBuf bytes.Buffer
+	failLogger := slog.New(slog.NewJSONHandler(&failLogBuf, nil))
+
+	failSr := tracetest.NewSpanRecorder()
+	failTp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(failSr))
+	failTracer := failTp.Tracer("test")
+
+	failService := NewSafeInvoiceService(NewDependencies(ScenarioConfig{PDFErr: ErrPDFGeneration}), failLogger, failTracer, nil)
+
+	failReq := httptest.NewRequest(http.MethodPost, "/invoices/INV-FAIL/process", nil)
+	failReq.SetPathValue("id", "INV-FAIL")
+	failReq.Header.Set(middleware.HeaderRequestID, "req-fail-log")
+	failRec := httptest.NewRecorder()
+
+	failHandler := middleware.RequestID(failService.HTTPHandler(nil))
+	failHandler.ServeHTTP(failRec, failReq)
+
+	failDepSpanIDs := make(map[string]string)
+	for _, span := range failSr.Ended() {
+		failDepSpanIDs[span.Name()] = span.SpanContext().SpanID().String()
+	}
+
+	failLines := strings.Split(strings.TrimSpace(failLogBuf.String()), "\n")
+	hasErrorDepLog := false
+	for _, line := range failLines {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("failed to parse log JSON: %v", err)
+		}
+		if entry["msg"] == "dependency completed" && entry["outcome"] == "error" {
+			hasErrorDepLog = true
+			if entry["error"] == nil || entry["error"] == "" {
+				t.Errorf("error dependency log missing error field: %s", line)
+			}
+			comp, _ := entry["component"].(string)
+			op, _ := entry["operation"].(string)
+			spanID, _ := entry["span_id"].(string)
+			if spanID == "" {
+				t.Errorf("error dependency log missing span_id: %s", line)
+			} else {
+				expectedSpanID := failDepSpanIDs[comp+"."+op]
+				if expectedSpanID != "" && spanID != expectedSpanID {
+					t.Errorf("span_id mismatch on error for %s.%s: log=%s, recorded=%s", comp, op, spanID, expectedSpanID)
+				}
+			}
+		}
+	}
+	if !hasErrorDepLog {
+		t.Error("expected an error dependency log for failing dependency")
 	}
 }
 
@@ -433,17 +512,21 @@ func TestIntegration_TracePropagation(t *testing.T) {
 		),
 	)
 
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tracer := tp.Tracer("test")
+
 	var downstreamTraceparent string
 	downstreamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		downstreamTraceparent = r.Header.Get("traceparent")
+		extractedCtx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		_, span := tracer.Start(extractedCtx, "POST /notifications", trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}))
 	defer downstreamSrv.Close()
-
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
-	tracer := tp.Tracer("test")
 
 	notifClient := NewHTTPNotificationClient(downstreamSrv.URL, nil)
 
@@ -476,18 +559,95 @@ func TestIntegration_TracePropagation(t *testing.T) {
 
 	// Ensure trace ID matches the root span
 	var rootSpan sdktrace.ReadOnlySpan
+	var downstreamSpan sdktrace.ReadOnlySpan
 	for _, s := range sr.Ended() {
 		if s.Name() == "POST /invoices/{id}/process" {
 			rootSpan = s
-			break
+		}
+		if s.Name() == "POST /notifications" {
+			downstreamSpan = s
 		}
 	}
 	if rootSpan == nil {
 		t.Fatal("root span not found")
 	}
+	if downstreamSpan == nil {
+		t.Fatal("downstream server span not found")
+	}
 
 	if rootSpan.SpanContext().TraceID().String() != traceIDStr {
-		t.Fatalf("trace ID mismatch: root=%s, downstream=%s", rootSpan.SpanContext().TraceID().String(), traceIDStr)
+		t.Fatalf("trace ID mismatch: root=%s, downstream header=%s", rootSpan.SpanContext().TraceID().String(), traceIDStr)
+	}
+	if downstreamSpan.SpanContext().TraceID().String() != rootSpan.SpanContext().TraceID().String() {
+		t.Fatalf("downstream span trace ID mismatch: downstream span=%s, root=%s", downstreamSpan.SpanContext().TraceID().String(), rootSpan.SpanContext().TraceID().String())
+	}
+}
+
+func TestIntegration_ExtractIncomingW3CTraceContext(t *testing.T) {
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
+
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tracer := tp.Tracer("test")
+
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, nil)
+
+	incomingTraceID := "4bf92f3577b34da6a3ce929d0e0e4736"
+	incomingParentSpanID := "00f067aa0ba902b7"
+	incomingTraceparent := "00-" + incomingTraceID + "-" + incomingParentSpanID + "-01"
+
+	req := httptest.NewRequest(http.MethodPost, "/invoices/INV-INCOMING/process", nil)
+	req.SetPathValue("id", "INV-INCOMING")
+	req.Header.Set("traceparent", incomingTraceparent)
+	rec := httptest.NewRecorder()
+
+	handler := middleware.RequestID(service.HTTPHandler(nil))
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var rootSpan sdktrace.ReadOnlySpan
+	var invoiceProcessSpan sdktrace.ReadOnlySpan
+	for _, s := range sr.Ended() {
+		if s.Name() == "POST /invoices/{id}/process" {
+			rootSpan = s
+		} else if s.Name() == "invoice.process" {
+			invoiceProcessSpan = s
+		}
+	}
+
+	if rootSpan == nil {
+		t.Fatal("root server span missing")
+	}
+	if invoiceProcessSpan == nil {
+		t.Fatal("invoice.process span missing")
+	}
+
+	// Root server trace ID equals incoming Trace ID
+	if rootSpan.SpanContext().TraceID().String() != incomingTraceID {
+		t.Fatalf("expected root trace ID %s, got %s", incomingTraceID, rootSpan.SpanContext().TraceID().String())
+	}
+
+	// Root server parent span ID equals incoming parent span ID
+	if rootSpan.Parent().SpanID().String() != incomingParentSpanID {
+		t.Fatalf("expected root parent span ID %s, got %s", incomingParentSpanID, rootSpan.Parent().SpanID().String())
+	}
+
+	// invoice.process is child of root server span
+	if invoiceProcessSpan.Parent().SpanID() != rootSpan.SpanContext().SpanID() {
+		t.Fatalf("expected invoice.process parent to be root span %s, got %s", rootSpan.SpanContext().SpanID().String(), invoiceProcessSpan.Parent().SpanID().String())
+	}
+
+	// Same trace ID across all spans (no new trace created)
+	if invoiceProcessSpan.SpanContext().TraceID().String() != incomingTraceID {
+		t.Fatalf("expected invoice.process trace ID %s, got %s", incomingTraceID, invoiceProcessSpan.SpanContext().TraceID().String())
 	}
 }
 
@@ -549,14 +709,14 @@ func TestConcurrentRequests_NoDataRace(t *testing.T) {
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, collector)
 
-	resolveScenario := func(r *http.Request) ScenarioConfig {
+	resolveScenario := func(r *http.Request, baseDeps Dependencies) Dependencies {
 		switch r.URL.Query().Get("scenario") {
 		case "error":
-			return ScenarioConfig{PDFErr: ErrPDFGeneration}
+			return NewDependencies(ScenarioConfig{PDFErr: ErrPDFGeneration})
 		case "slow":
-			return ScenarioConfig{PDFDelay: 5 * time.Millisecond}
+			return NewDependencies(ScenarioConfig{PDFDelay: 5 * time.Millisecond})
 		default:
-			return ScenarioConfig{RepoDelay: 2 * time.Millisecond}
+			return NewDependencies(ScenarioConfig{RepoDelay: 2 * time.Millisecond})
 		}
 	}
 
@@ -615,14 +775,14 @@ func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
 		Deps: NewDependencies(ScenarioConfig{}),
 	}
 
-	resolveScenario := func(r *http.Request) ScenarioConfig {
+	resolveScenario := func(r *http.Request, baseDeps Dependencies) Dependencies {
 		switch r.URL.Query().Get("scenario") {
 		case "error":
-			return ScenarioConfig{PDFErr: ErrPDFGeneration}
+			return NewDependencies(ScenarioConfig{PDFErr: ErrPDFGeneration})
 		case "slow":
-			return ScenarioConfig{PDFDelay: 5 * time.Millisecond}
+			return NewDependencies(ScenarioConfig{PDFDelay: 5 * time.Millisecond})
 		default:
-			return ScenarioConfig{RepoDelay: 2 * time.Millisecond}
+			return NewDependencies(ScenarioConfig{RepoDelay: 2 * time.Millisecond})
 		}
 	}
 

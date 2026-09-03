@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-// CheckoutImproved is a production-ready checkout implementation.
+// CheckoutImproved demonstrates a safer checkout implementation
+// after addressing the review findings in this lab.
 type CheckoutImproved struct {
 	repo         OrderRepository
 	products     ProductRepository
@@ -46,11 +47,13 @@ func NewCheckoutImproved(
 // Checkout processes a checkout request with proper validation, transactions, and idempotency.
 func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cmd CheckoutCommand) (*CheckoutResponse, error) {
 	if principal.UserID != cmd.CartOwnerID {
+		c.logger.Error(ctx, "authorization failed", "userID", principal.UserID, "cartOwnerID", cmd.CartOwnerID)
 		return nil, ErrForbidden
 	}
 
 	cartItems, err := c.cartSource.GetCart(ctx, cmd.CartOwnerID)
 	if err != nil {
+		c.logger.Error(ctx, "load cart failed", "userID", principal.UserID, "error", err.Error())
 		return nil, fmt.Errorf("load cart: %w", err)
 	}
 
@@ -71,6 +74,7 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 
 	status, cachedResp, err := c.idempotency.Claim(ctx, scopedKey, hash)
 	if err != nil {
+		c.logger.Error(ctx, "idempotency claim failed", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", err.Error())
 		return nil, err
 	}
 	if status == IdempotencyStatusCompleted && cachedResp != nil {
@@ -80,6 +84,7 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	productsMap, err := c.products.GetProducts(ctx, productIDs)
 	if err != nil {
 		_ = c.idempotency.Release(ctx, scopedKey)
+		c.logger.Error(ctx, "load products failed", "userID", principal.UserID, "error", err.Error())
 		if errors.Is(err, ErrProductNotFound) {
 			return nil, ErrProductNotFound
 		}
@@ -92,6 +97,7 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 		product, exists := productsMap[item.ProductID]
 		if !exists {
 			_ = c.idempotency.Release(ctx, scopedKey)
+			c.logger.Error(ctx, "product missing in batch", "userID", principal.UserID, "productID", item.ProductID)
 			return nil, ErrProductNotFound
 		}
 
@@ -129,7 +135,7 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 
 	if txErr != nil {
 		_ = c.idempotency.Release(ctx, scopedKey)
-		c.logger.Error(ctx, "checkout transaction failed", "userID", principal.UserID, "error", txErr.Error())
+		c.logger.Error(ctx, "checkout transaction failed", "userID", principal.UserID, "idempotencyKey", scopedKey, "error", txErr.Error())
 		if errors.Is(txErr, ErrInsufficientStock) || errors.Is(txErr, ErrProductNotFound) || errors.Is(txErr, ErrInvalidQuantity) {
 			return nil, txErr
 		}
@@ -140,7 +146,9 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	_ = c.idempotency.MarkCompleted(ctx, scopedKey, resp)
 
 	// Notification after successful transaction (fire-and-forget)
-	_ = c.notify.SendOrderConfirmation(ctx, principal.UserID, orderID)
+	if err := c.notify.SendOrderConfirmation(ctx, principal.UserID, orderID); err != nil {
+		c.logger.Error(ctx, "send order confirmation failed", "userID", principal.UserID, "orderID", orderID, "error", err.Error())
+	}
 
 	c.logger.Info(ctx, "checkout completed", "userID", principal.UserID, "orderID", orderID, "total", total)
 

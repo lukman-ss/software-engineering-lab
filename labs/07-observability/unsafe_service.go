@@ -58,7 +58,7 @@ func (s *UnsafeInvoiceService) logf(format string, args ...any) {
 	}
 }
 
-func (s *UnsafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) ScenarioConfig) http.Handler {
+func (s *UnsafeInvoiceService) HTTPHandler(resolveDeps func(r *http.Request, baseDeps Dependencies) Dependencies) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := middleware.GetRequestID(r.Context())
 		invoiceID := r.PathValue("id")
@@ -72,9 +72,8 @@ func (s *UnsafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request)
 		}
 
 		deps := s.Deps
-		if resolveScenario != nil {
-			cfg := resolveScenario(r)
-			deps = NewDependencies(cfg)
+		if resolveDeps != nil {
+			deps = resolveDeps(r, s.Deps)
 		}
 
 		if err := s.ProcessWithDeps(r.Context(), invoiceID, deps); err != nil {

@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -92,14 +93,6 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 
 	requestID := middleware.GetRequestID(ctx)
 
-	traceID := rootSpan.SpanContext().TraceID().String()
-
-	logger := s.Logger.With(
-		"request_id", requestID,
-		"trace_id", traceID,
-		"invoice_id", invoiceID,
-	)
-
 	steps := []dependencyStep{
 		{
 			component: "database",
@@ -151,6 +144,10 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 		err := step.execute(stepCtx)
 		duration := time.Since(start)
 
+		stepLogger := ContextLogger(stepCtx, s.Logger, requestID).With(
+			"invoice_id", invoiceID,
+		)
+
 		if err != nil {
 			stepSpan.RecordError(err)
 			stepSpan.SetStatus(codes.Error, err.Error())
@@ -165,7 +162,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 				s.Collector.DependencyErrorsTotal.WithLabelValues(step.component, step.operation, outcome).Inc()
 			}
 
-			logger.ErrorContext(stepCtx, "dependency completed",
+			stepLogger.ErrorContext(stepCtx, "dependency completed",
 				"component", step.component,
 				"operation", step.operation,
 				"duration_ms", duration.Milliseconds(),
@@ -184,7 +181,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 			s.Collector.DependencyDurationSeconds.WithLabelValues(step.component, step.operation, outcome).Observe(duration.Seconds())
 		}
 
-		logger.InfoContext(stepCtx, "dependency completed",
+		stepLogger.InfoContext(stepCtx, "dependency completed",
 			"component", step.component,
 			"operation", step.operation,
 			"duration_ms", duration.Milliseconds(),
@@ -197,7 +194,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 }
 
 // HTTPHandler returns an http.Handler that instruments HTTP request telemetry.
-func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) ScenarioConfig) http.Handler {
+func (s *SafeInvoiceService) HTTPHandler(resolveDeps func(r *http.Request, baseDeps Dependencies) Dependencies) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const route = "/invoices/{id}/process"
 		const rootSpanName = "POST /invoices/{id}/process"
@@ -208,7 +205,11 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 			defer s.Collector.HTTPInFlightRequests.WithLabelValues(route).Dec()
 		}
 
-		ctx, rootSpan := s.Tracer.Start(r.Context(), rootSpanName,
+		extractedCtx := otel.GetTextMapPropagator().Extract(
+			r.Context(),
+			propagation.HeaderCarrier(r.Header),
+		)
+		ctx, rootSpan := s.Tracer.Start(extractedCtx, rootSpanName,
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				semconv.HTTPRequestMethodKey.String(r.Method),
@@ -222,8 +223,6 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 
 		r = r.WithContext(ctx)
 		requestID := middleware.GetRequestID(ctx)
-		traceID := rootSpan.SpanContext().TraceID().String()
-		spanID := rootSpan.SpanContext().SpanID().String()
 		logger := ContextLogger(ctx, s.Logger, requestID)
 
 		invoiceID := r.PathValue("id")
@@ -249,9 +248,8 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 		rootSpan.SetAttributes(attribute.String("invoice.id", invoiceID))
 
 		deps := s.Deps
-		if resolveScenario != nil {
-			cfg := resolveScenario(r)
-			deps = NewDependencies(cfg)
+		if resolveDeps != nil {
+			deps = resolveDeps(r, s.Deps)
 		}
 
 		err := s.ProcessWithDeps(ctx, invoiceID, deps)
@@ -286,8 +284,6 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 			"status", http.StatusOK,
 			"duration_ms", duration.Milliseconds(),
 		)
-		_ = traceID
-		_ = spanID
 
 		writeJSONSuccess(w, invoiceID, requestID)
 	})

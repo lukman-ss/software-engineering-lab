@@ -15,11 +15,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func initTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
@@ -63,11 +65,12 @@ func initTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
 	return tp, nil
 }
 
-func resolveScenario(r *http.Request) observability.ScenarioConfig {
+func resolveScenario(r *http.Request, baseDeps observability.Dependencies) observability.Dependencies {
 	scenario := r.URL.Query().Get("scenario")
+	var cfg observability.ScenarioConfig
 	switch scenario {
 	case "slow-pdf":
-		return observability.ScenarioConfig{
+		cfg = observability.ScenarioConfig{
 			RepoDelay:         20 * time.Millisecond,
 			InventoryDelay:    15 * time.Millisecond,
 			CommissionDelay:   10 * time.Millisecond,
@@ -75,7 +78,7 @@ func resolveScenario(r *http.Request) observability.ScenarioConfig {
 			NotificationDelay: 20 * time.Millisecond,
 		}
 	case "slow-database":
-		return observability.ScenarioConfig{
+		cfg = observability.ScenarioConfig{
 			RepoDelay:         3000 * time.Millisecond,
 			InventoryDelay:    15 * time.Millisecond,
 			CommissionDelay:   10 * time.Millisecond,
@@ -83,7 +86,7 @@ func resolveScenario(r *http.Request) observability.ScenarioConfig {
 			NotificationDelay: 20 * time.Millisecond,
 		}
 	case "slow-external":
-		return observability.ScenarioConfig{
+		cfg = observability.ScenarioConfig{
 			RepoDelay:         20 * time.Millisecond,
 			InventoryDelay:    15 * time.Millisecond,
 			CommissionDelay:   10 * time.Millisecond,
@@ -91,7 +94,7 @@ func resolveScenario(r *http.Request) observability.ScenarioConfig {
 			NotificationDelay: 3500 * time.Millisecond,
 		}
 	case "pdf-error":
-		return observability.ScenarioConfig{
+		cfg = observability.ScenarioConfig{
 			RepoDelay:         20 * time.Millisecond,
 			InventoryDelay:    15 * time.Millisecond,
 			CommissionDelay:   10 * time.Millisecond,
@@ -101,7 +104,7 @@ func resolveScenario(r *http.Request) observability.ScenarioConfig {
 	case "normal":
 		fallthrough
 	default:
-		return observability.ScenarioConfig{
+		cfg = observability.ScenarioConfig{
 			RepoDelay:         20 * time.Millisecond,
 			InventoryDelay:    15 * time.Millisecond,
 			CommissionDelay:   10 * time.Millisecond,
@@ -109,6 +112,19 @@ func resolveScenario(r *http.Request) observability.ScenarioConfig {
 			NotificationDelay: 20 * time.Millisecond,
 		}
 	}
+	deps := observability.NewDependencies(cfg)
+	if baseDeps.Notification != nil {
+		if httpNotif, isHTTP := baseDeps.Notification.(*observability.HTTPNotificationClient); isHTTP {
+			baseURL := httpNotif.BaseURL
+			if scenario == "slow-external" {
+				baseURL = baseURL + "?scenario=slow-external"
+			}
+			deps.Notification = observability.NewHTTPNotificationClient(baseURL, httpNotif.HTTPClient)
+		} else if baseDeps.Notification != nil {
+			deps.Notification = baseDeps.Notification
+		}
+	}
+	return deps
 }
 
 func main() {
@@ -162,14 +178,48 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Simulated downstream notification service endpoint
+	// Simulated downstream notification service endpoint (service boundary simulation in same process)
 	mux.HandleFunc("POST /notifications", func(w http.ResponseWriter, r *http.Request) {
-		invoiceID := r.URL.Query().Get("invoice_id")
-		traceparent := r.Header.Get("traceparent")
-		logger.Info("received notification webhook",
-			"invoice_id", invoiceID,
-			"traceparent", traceparent,
+		extractedCtx := otel.GetTextMapPropagator().Extract(
+			r.Context(),
+			propagation.HeaderCarrier(r.Header),
 		)
+		ctx, span := tracer.Start(extractedCtx, "POST /notifications",
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				semconv.HTTPRequestMethodKey.String(r.Method),
+				semconv.URLPath(r.URL.Path),
+			),
+		)
+		defer span.End()
+
+		invoiceID := r.URL.Query().Get("invoice_id")
+		scenario := r.URL.Query().Get("scenario")
+		if scenario == "slow-external" {
+			delay := 3500 * time.Millisecond
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				span.RecordError(ctx.Err())
+				span.SetStatus(codes.Error, ctx.Err().Error())
+				span.SetAttributes(semconv.HTTPResponseStatusCode(499))
+				w.WriteHeader(499)
+				return
+			}
+		}
+
+		span.SetStatus(codes.Ok, "")
+		span.SetAttributes(semconv.HTTPResponseStatusCode(http.StatusOK))
+
+		requestID := middleware.GetRequestID(ctx)
+		logger := observability.ContextLogger(ctx, logger, requestID)
+		logger.InfoContext(ctx, "received notification webhook",
+			"invoice_id", invoiceID,
+		)
+
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"delivered"}`))
 	})

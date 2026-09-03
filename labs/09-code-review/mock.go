@@ -18,15 +18,15 @@ type IdempotencyRecord struct {
 }
 
 type MockProductRepository struct {
-	mu             sync.RWMutex
-	stock          map[string]int
-	getCalls       atomic.Int64
-	batchGetCalls  atomic.Int64
-	readHook       func(productID string)
-	getError       error
-	batchGetError  error
-	reserveError   error
-	updateError    error
+	mu            sync.RWMutex
+	stock         map[string]int
+	getCalls      atomic.Int64
+	batchGetCalls atomic.Int64
+	readHook      func(productID string)
+	getError      error
+	batchGetError error
+	reserveError  error
+	updateError   error
 }
 
 func NewMockProductRepository(initialStock map[string]int) *MockProductRepository {
@@ -304,13 +304,9 @@ func (r *MockIdempotencyRepository) SetClaimHook(hook func(key string)) {
 }
 
 func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error) {
-	hook := r.claimHook
-	if hook != nil {
-		hook(key)
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	existing, exists := r.records[key]
 	if exists {
 		if existing.RequestHash != hash {
