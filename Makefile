@@ -32,17 +32,17 @@ run: fmt vet
 	@go run ./cmd/api
 
 # Run tests
-test: lab-08-test lab-09-test lab-14-test lab-15-test lab-16-test lab-17-test
+test: lab-07-test lab-08-test lab-09-test lab-14-test lab-15-test lab-16-test lab-17-test
 	@echo "Running unit tests..."
 	@go test ./... -short
 
-test-race: lab-05-test-race lab-08-test-race lab-09-test-race lab-14-test-race lab-15-test-race lab-16-test-race lab-17-test-race
+test-race: lab-05-test-race lab-07-test-race lab-08-test-race lab-09-test-race lab-14-test-race lab-15-test-race lab-16-test-race lab-17-test-race
 	@echo "Running tests with race detector..."
 	@go test -race ./... -short
 
-lint: lab-08-vet lab-09-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
+lint: lab-07-vet lab-08-vet lab-09-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
 	@echo "Running linter..."
-	@go vet ./... -short
+	@go vet ./...
 
 fmt:
 	@echo "Formatting code..."

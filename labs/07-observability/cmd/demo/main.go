@@ -259,10 +259,13 @@ func main() {
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
+		sig := <-quit
+		logger.Info("shutting down server", "signal", sig.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		server.Shutdown(ctx)
+		if err := server.Shutdown(ctx); err != nil {
+			logger.Error("server shutdown failed", "error", err)
+		}
 	}()
 
 	fmt.Printf("Lab 07 Observability demo server listening on :%s\n", port)

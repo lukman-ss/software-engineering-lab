@@ -2,7 +2,9 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -71,10 +73,21 @@ func (c *HTTPNotificationClient) Send(ctx context.Context, invoiceID string) err
 	if err != nil {
 		return fmt.Errorf("notification client request error: %w", err)
 	}
-	defer resp.Body.Close()
+
+	_, copyErr := io.Copy(io.Discard, io.LimitReader(resp.Body, 1024*1024))
+	closeErr := resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("notification service returned %d", resp.StatusCode)
+		statusErr := fmt.Errorf("notification service returned %d", resp.StatusCode)
+		if copyErr != nil || closeErr != nil {
+			return errors.Join(statusErr, copyErr, closeErr)
+		}
+		return statusErr
 	}
+
+	if copyErr != nil || closeErr != nil {
+		return errors.Join(copyErr, closeErr)
+	}
+
 	return nil
 }

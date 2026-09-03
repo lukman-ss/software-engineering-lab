@@ -5,16 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/lukman-ss/software-engineering-lab/pkg/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -22,9 +25,19 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func TestIntegration_SpanHierarchy_And_TraceContext(t *testing.T) {
+func newTestTracerProvider(t *testing.T) (*sdktrace.TracerProvider, *tracetest.SpanRecorder) {
 	sr := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	t.Cleanup(func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			t.Errorf("failed to shutdown TracerProvider: %v", err)
+		}
+	})
+	return tp, sr
+}
+
+func TestIntegration_SpanHierarchy_And_TraceContext(t *testing.T) {
+	tp, sr := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, nil)
@@ -158,13 +171,15 @@ func TestIntegration_RequestID_Validation_And_Generation(t *testing.T) {
 }
 
 func TestIntegration_HTTPNotificationClient_Immutability(t *testing.T) {
+	origTransport := &http.Transport{}
 	originalClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout:   10 * time.Second,
+		Transport: origTransport,
 	}
 
 	newClient := NewHTTPNotificationClient("http://localhost:8087", originalClient)
 
-	if originalClient.Transport != nil {
+	if originalClient.Transport != origTransport {
 		t.Errorf("original client transport was mutated: %v", originalClient.Transport)
 	}
 	if originalClient.Timeout != 10*time.Second {
@@ -173,6 +188,97 @@ func TestIntegration_HTTPNotificationClient_Immutability(t *testing.T) {
 	if newClient.HTTPClient == originalClient {
 		t.Errorf("expected new HTTP client instance, got same pointer")
 	}
+
+	// Test that already instrumented transport is not wrapped multiple times
+	instrumentedTransport := otelhttp.NewTransport(http.DefaultTransport)
+	instrumentedClient := &http.Client{
+		Transport: instrumentedTransport,
+	}
+	newClient2 := NewHTTPNotificationClient("http://localhost:8087", instrumentedClient)
+	if newClient2.HTTPClient.Transport != instrumentedTransport {
+		t.Errorf("expected existing otelhttp transport to be preserved without extra wrapping")
+	}
+}
+
+type errReader struct{}
+
+func (errReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("read error")
+}
+
+type errCloser struct {
+	io.Reader
+}
+
+func (errCloser) Close() error {
+	return errors.New("close error")
+}
+
+func TestIntegration_NotificationClient_DrainAndClose(t *testing.T) {
+	// 1. Response 200 with large body drained
+	srv200 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"delivered"}`))
+	}))
+	defer srv200.Close()
+
+	client200 := NewHTTPNotificationClient(srv200.URL, nil)
+	if err := client200.Send(context.Background(), "INV-200"); err != nil {
+		t.Fatalf("expected nil error on 200, got: %v", err)
+	}
+
+	// 2. Response 500 returns service error
+	srv500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`internal server error`))
+	}))
+	defer srv500.Close()
+
+	client500 := NewHTTPNotificationClient(srv500.URL, nil)
+	err := client500.Send(context.Background(), "INV-500")
+	if err == nil || !strings.Contains(err.Error(), "notification service returned 500") {
+		t.Fatalf("expected 500 error, got: %v", err)
+	}
+
+	// 3. Custom roundtripper simulating body read error
+	customClient := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(errReader{}),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	clientReadErr := NewHTTPNotificationClient("http://example.com", customClient)
+	if err := clientReadErr.Send(context.Background(), "INV-ERR-READ"); err == nil {
+		t.Fatal("expected error on body read failure, got nil")
+	} else if !strings.Contains(err.Error(), "read error") {
+		t.Fatalf("expected error containing 'read error', got: %v", err)
+	}
+
+	// 4. Custom roundtripper simulating body close error
+	customClientCloseErr := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       errCloser{Reader: strings.NewReader("ok")},
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	clientCloseErr := NewHTTPNotificationClient("http://example.com", customClientCloseErr)
+	if err := clientCloseErr.Send(context.Background(), "INV-ERR-CLOSE"); err == nil {
+		t.Fatal("expected error on body close failure, got nil")
+	} else if !strings.Contains(err.Error(), "close error") {
+		t.Fatalf("expected error containing 'close error', got: %v", err)
+	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }
 
 func TestIntegration_NotificationClient_Cancellation(t *testing.T) {
@@ -199,8 +305,7 @@ func TestIntegration_RequestID_Propagation_And_Preservation(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	collector := NewPrometheusCollector(reg)
 
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tp, _ := newTestTracerProvider(t)
 	tracer := tp.Tracer("test-tracer")
 
 	var logBuf bytes.Buffer
@@ -268,11 +373,7 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
-	t.Cleanup(func() {
-		tp.Shutdown(context.Background())
-	})
+	tp, sr := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, nil)
@@ -365,8 +466,7 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 	var failLogBuf bytes.Buffer
 	failLogger := slog.New(slog.NewJSONHandler(&failLogBuf, nil))
 
-	failSr := tracetest.NewSpanRecorder()
-	failTp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(failSr))
+	failTp, failSr := newTestTracerProvider(t)
 	failTracer := failTp.Tracer("test")
 
 	failService := NewSafeInvoiceService(NewDependencies(ScenarioConfig{PDFErr: ErrPDFGeneration}), failLogger, failTracer, nil)
@@ -418,7 +518,7 @@ func TestIntegration_Prometheus_GoldenSignals(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	collector := NewPrometheusCollector(reg)
 
-	tp := sdktrace.NewTracerProvider()
+	tp, _ := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{
@@ -485,8 +585,7 @@ func TestIntegration_Prometheus_GoldenSignals(t *testing.T) {
 }
 
 func TestIntegration_Trace_Diagnosis_SlowPDF(t *testing.T) {
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tp, sr := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{
@@ -536,8 +635,7 @@ func TestIntegration_TracePropagation(t *testing.T) {
 		otel.SetTextMapPropagator(prevProp)
 	})
 
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tp, sr := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	var downstreamTraceparent string
@@ -619,8 +717,7 @@ func TestIntegration_RequestID_Propagation_To_Downstream(t *testing.T) {
 		otel.SetTextMapPropagator(prevProp)
 	})
 
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tp, sr := newTestTracerProvider(t)
 	tracer := tp.Tracer("test-tracer")
 
 	var downstreamLogBuf bytes.Buffer
@@ -739,8 +836,7 @@ func TestIntegration_ExtractIncomingW3CTraceContext(t *testing.T) {
 		otel.SetTextMapPropagator(prevProp)
 	})
 
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tp, sr := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, nil)
@@ -851,11 +947,7 @@ func TestNoHighCardinalityLabelsInPrometheusRegistry(t *testing.T) {
 func TestConcurrentRequests_NoDataRace(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	collector := NewPrometheusCollector(reg)
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
-	t.Cleanup(func() {
-		tp.Shutdown(context.Background())
-	})
+	tp, _ := newTestTracerProvider(t)
 	tracer := tp.Tracer("test")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, collector)
@@ -874,46 +966,103 @@ func TestConcurrentRequests_NoDataRace(t *testing.T) {
 	handler := middleware.RequestID(service.HTTPHandler(resolveScenario))
 
 	type result struct {
+		invoiceID  string
 		scenario   string
 		statusCode int
 		requestID  string
+		body       []byte
+		err        error
 	}
 	scenarios := []string{"normal", "error", "slow", "normal", "error"}
-	results := make(chan result, len(scenarios))
+	resChan := make(chan result, len(scenarios))
+	var wg sync.WaitGroup
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	for i, sc := range scenarios {
+		wg.Add(1)
 		go func(idx int, scenario string) {
-			url := "/invoices/INV-CONC-" + string(rune('A'+idx)) + "/process?scenario=" + scenario
-			req := httptest.NewRequest(http.MethodPost, url, nil)
-			req.SetPathValue("id", "INV-CONC-"+string(rune('A'+idx)))
+			defer wg.Done()
+			invID := "INV-CONC-" + string(rune('A'+idx))
+			url := "/invoices/" + invID + "/process?scenario=" + scenario
+			req := httptest.NewRequest(http.MethodPost, url, nil).WithContext(ctx)
+			req.SetPathValue("id", invID)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 
-			results <- result{
+			resChan <- result{
+				invoiceID:  invID,
 				scenario:   scenario,
 				statusCode: rec.Code,
 				requestID:  rec.Header().Get(middleware.HeaderRequestID),
+				body:       rec.Body.Bytes(),
 			}
 		}(i, sc)
 	}
 
-	for range scenarios {
-		res := <-results
+	go func() {
+		wg.Wait()
+		close(resChan)
+	}()
+
+	errorCount := 0
+	successCount := 0
+	for res := range resChan {
 		if res.requestID == "" {
-			t.Errorf("missing request ID in concurrent response")
+			t.Errorf("missing request ID for %s", res.invoiceID)
 		}
-		expectedStatus := http.StatusOK
 		if res.scenario == "error" {
-			expectedStatus = http.StatusBadGateway
-		}
-		if res.statusCode != expectedStatus {
-			t.Errorf("scenario %s expected status %d, got %d", res.scenario, expectedStatus, res.statusCode)
+			errorCount++
+			if res.statusCode != http.StatusBadGateway {
+				t.Errorf("scenario %s expected 502, got %d", res.scenario, res.statusCode)
+			}
+			var errResp ErrorResponse
+			if err := json.Unmarshal(res.body, &errResp); err != nil {
+				t.Errorf("invalid json in error response: %v", err)
+			}
+			if errResp.Error != "invoice processing failed" {
+				t.Errorf("expected sanitized error message, got %s", errResp.Error)
+			}
+			if errResp.RequestID != res.requestID {
+				t.Errorf("error body request_id %s != header %s", errResp.RequestID, res.requestID)
+			}
+		} else {
+			successCount++
+			if res.statusCode != http.StatusOK {
+				t.Errorf("scenario %s expected 200, got %d", res.scenario, res.statusCode)
+			}
+			var succResp SuccessResponse
+			if err := json.Unmarshal(res.body, &succResp); err != nil {
+				t.Errorf("invalid json in success response: %v", err)
+			}
+			if succResp.InvoiceID != res.invoiceID {
+				t.Errorf("expected invoice_id %s, got %s", res.invoiceID, succResp.InvoiceID)
+			}
+			if succResp.RequestID != res.requestID {
+				t.Errorf("success body request_id %s != header %s", succResp.RequestID, res.requestID)
+			}
 		}
 	}
 
 	inFlight := testutil.ToFloat64(collector.HTTPInFlightRequests.WithLabelValues("/invoices/{id}/process"))
 	if inFlight != 0 {
 		t.Errorf("expected in_flight_requests=0, got %f", inFlight)
+	}
+
+	totalReqs := testutil.ToFloat64(collector.HTTPRequestsTotal.WithLabelValues("POST", "/invoices/{id}/process", "2xx"))
+	if int(totalReqs) != successCount {
+		t.Errorf("expected %d successful metrics, got %f", successCount, totalReqs)
+	}
+
+	totalErrReqs := testutil.ToFloat64(collector.HTTPRequestErrorsTotal.WithLabelValues("POST", "/invoices/{id}/process", "5xx"))
+	if int(totalErrReqs) != errorCount {
+		t.Errorf("expected %d error metrics, got %f", errorCount, totalErrReqs)
+	}
+
+	depErrors := testutil.ToFloat64(collector.DependencyErrorsTotal.WithLabelValues("pdf", "generate", "error"))
+	if int(depErrors) != errorCount {
+		t.Errorf("expected %d dependency error metrics, got %f", errorCount, depErrors)
 	}
 }
 
@@ -965,33 +1114,52 @@ func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
 	handler := middleware.RequestID(unsafeService.HTTPHandler(resolveScenario))
 
 	type result struct {
+		invoiceID  string
 		scenario   string
 		statusCode int
 		requestID  string
+		body       []byte
+		err        error
 	}
 	scenarios := []string{"normal", "error", "slow", "normal", "error"}
-	results := make(chan result, len(scenarios))
+	resChan := make(chan result, len(scenarios))
+	var wg sync.WaitGroup
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	for i, sc := range scenarios {
+		wg.Add(1)
 		go func(idx int, scenario string) {
-			url := "/unsafe/invoices/INV-CONC-" + string(rune('A'+idx)) + "/process?scenario=" + scenario
-			req := httptest.NewRequest(http.MethodPost, url, nil)
-			req.SetPathValue("id", "INV-CONC-"+string(rune('A'+idx)))
+			defer wg.Done()
+			invID := "INV-CONC-" + string(rune('A'+idx))
+			url := "/unsafe/invoices/" + invID + "/process?scenario=" + scenario
+			req := httptest.NewRequest(http.MethodPost, url, nil).WithContext(ctx)
+			req.SetPathValue("id", invID)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 
-			results <- result{
+			resChan <- result{
+				invoiceID:  invID,
 				scenario:   scenario,
 				statusCode: rec.Code,
 				requestID:  rec.Header().Get(middleware.HeaderRequestID),
+				body:       rec.Body.Bytes(),
 			}
 		}(i, sc)
 	}
 
-	for range scenarios {
-		res := <-results
+	go func() {
+		wg.Wait()
+		close(resChan)
+	}()
+
+	for res := range resChan {
 		if res.requestID == "" {
-			t.Errorf("missing request ID in unsafe concurrent response")
+			t.Errorf("missing request ID in unsafe concurrent response for %s", res.invoiceID)
+		}
+		if res.body == nil {
+			t.Errorf("nil body in unsafe response for %s", res.invoiceID)
 		}
 		expectedStatus := http.StatusOK
 		if res.scenario == "error" {
@@ -999,6 +1167,9 @@ func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
 		}
 		if res.statusCode != expectedStatus {
 			t.Errorf("unsafe scenario %s expected status %d, got %d", res.scenario, expectedStatus, res.statusCode)
+		}
+		if !json.Valid(res.body) {
+			t.Errorf("unsafe response body is not valid JSON for %s: %s", res.invoiceID, res.body)
 		}
 	}
 }
@@ -1027,8 +1198,7 @@ func TestIntegration_ResponseEncodingError_LoggedWithContext(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tp, _ := newTestTracerProvider(t)
 	tracer := tp.Tracer("test-tracer")
 
 	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, nil)

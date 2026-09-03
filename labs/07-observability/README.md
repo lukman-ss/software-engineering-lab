@@ -154,13 +154,46 @@ Dilarang menjadi label:
 
 ---
 
-## W3C Trace Context Propagation
+## W3C Trace Context & Request Correlation
+
+Dua identifier memiliki fungsi berbeda:
+- `request_id`: Correlation identifier yang diteruskan lewat HTTP header `X-Request-ID` untuk pencarian log end-to-end.
+- `trace_id`: OpenTelemetry distributed tracing identifier yang diteruskan via W3C header `traceparent` untuk melacak span dan latency.
+
+Keduanya bukan hal yang sama.
+
+### Alur Propagasi:
+
+```
+Client request
+X-Request-ID: demo-slow-ext-001
+traceparent: ...
+
+        ↓
+
+Invoice API log
+request_id=demo-slow-ext-001
+trace_id=<same-trace>
+
+        ↓
+
+Notification HTTP request
+X-Request-ID: demo-slow-ext-001
+traceparent=<same-trace>
+
+        ↓
+
+Notification server log
+request_id=demo-slow-ext-001
+trace_id=<same-trace>
+span_id=<downstream-server-span>
+```
 
 `HTTPNotificationClient` menggunakan OpenTelemetry TextMapPropagator resmi untuk menginjeksi header standar W3C:
 ```
 traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 ```
-Memastikan trace context tidak terputus saat request keluar menuju layanan eksternal. (Dalam simulasi ini service boundary di simulasikan dalam 1 proses yang sama)
+serta header `X-Request-ID`. Memastikan trace context dan request correlation tidak terputus saat request keluar menuju layanan eksternal (service boundary disimulasikan dalam satu proses untuk keperluan lab).
 
 ---
 
