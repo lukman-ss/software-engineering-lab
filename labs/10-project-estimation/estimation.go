@@ -13,6 +13,7 @@ var (
 	ErrNegativeContingency = errors.New("contingency rate cannot be negative")
 	ErrEmptyProject        = errors.New("project must have at least one task or feature")
 	ErrUnknownRiskNoSpike  = errors.New("task with unknown risk cannot have zero effort without a spike or explicit range")
+	ErrInvalidRiskLevel    = errors.New("invalid risk level")
 )
 
 // RiskLevel represents the technical uncertainty or complexity risk of a task.
@@ -73,6 +74,9 @@ func (t Task) Validate() error {
 	}
 	if t.SpikeDays < 0 {
 		return fmt.Errorf("task %q: spike days cannot be negative", t.Name)
+	}
+	if t.Risk != RiskLow && t.Risk != RiskMedium && t.Risk != RiskHigh && t.Risk != RiskUnknown {
+		return fmt.Errorf("task %q: %w", t.Name, ErrInvalidRiskLevel)
 	}
 	if t.Risk == RiskUnknown && t.SpikeDays == 0 && t.Estimate.Max == 0 {
 		return fmt.Errorf("task %q: %w", t.Name, ErrUnknownRiskNoSpike)
@@ -164,6 +168,7 @@ func (p Project) Estimate() (*EstimationResult, error) {
 		maxSum        float64
 		spikeSum      float64
 		highRiskCount int
+		mediumRiskCount int
 		unknownCount  int
 		requiredSpikes []string
 		assumptions   []string
@@ -190,6 +195,8 @@ func (p Project) Estimate() (*EstimationResult, error) {
 		switch task.Risk {
 		case RiskHigh:
 			highRiskCount++
+		case RiskMedium:
+			mediumRiskCount++
 		case RiskUnknown:
 			unknownCount++
 		}
@@ -198,9 +205,11 @@ func (p Project) Estimate() (*EstimationResult, error) {
 	// Calculate overall project risk
 	overallRisk := RiskLow
 	totalTasks := len(allTasks)
-	if unknownCount > 0 || float64(highRiskCount)/float64(totalTasks) >= 0.3 {
+	if unknownCount > 0 {
 		overallRisk = RiskHigh
-	} else if highRiskCount > 0 || float64(totalTasks) > 10 {
+	} else if float64(highRiskCount)/float64(totalTasks) >= 0.3 {
+		overallRisk = RiskHigh
+	} else if highRiskCount > 0 || mediumRiskCount > 0 {
 		overallRisk = RiskMedium
 	}
 
@@ -228,9 +237,12 @@ func (p Project) Estimate() (*EstimationResult, error) {
 
 	// Determine confidence level
 	confidence := ConfidenceHigh
-	if len(assumptions) == 0 || unknownCount > 0 || overallRisk == RiskHigh {
+	if unknownCount > 0 || overallRisk == RiskHigh || len(assumptions) == 0 {
 		confidence = ConfidenceLow
 	} else if overallRisk == RiskMedium || contingencyRate > 0.15 {
+		confidence = ConfidenceMedium
+	}
+	if overallRisk == RiskMedium && mediumRiskCount >= 3 {
 		confidence = ConfidenceMedium
 	}
 
