@@ -9,6 +9,18 @@ import (
 // CheckoutNaive demonstrates multiple code review issues in checkout processing.
 // This implementation is INTENTIONALLY BROKEN for educational purposes.
 // DO NOT USE IN PRODUCTION. See CheckoutImproved for the corrected implementation.
+//
+// Bugs intentionally present for review practice:
+//   - N+1 query pattern (GetProduct in loop)
+//   - Race condition: non-atomic read-modify-write on stock
+//   - Overselling possible: stock can become negative
+//   - No transaction boundary (partial state on failure)
+//   - No idempotency / retry protection
+//   - Missing product existence handling (continues with nil)
+//   - No empty cart validation
+//   - Side effect notification unguarded by transaction
+//   - Poor error handling (always returns success)
+//   - Order ID uses timestamp (collisions possible under concurrency)
 type CheckoutNaive struct {
 	repo       OrderRepository
 	products   ProductRepository

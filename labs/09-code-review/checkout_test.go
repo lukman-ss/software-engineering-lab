@@ -340,8 +340,6 @@ func TestImprovedCheckout_DuplicateRequestReturnsSameResult(t *testing.T) {
 	}
 }
 
-
-
 func TestImprovedCheckout_IdempotencyFailureCanRetry(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	repo.FailNextCreate(errors.New("database unavailable"))
@@ -726,19 +724,17 @@ func TestImprovedCheckout_RetryAfterCartMutationReturnsOriginalResponse(t *testi
 	if err != nil {
 		t.Fatalf("Retry failed: %v", err)
 	}
-	
+
 	// Should return identical response to resp1 (same order ID, success state)
 	if resp1.OrderID != resp2.OrderID {
 		t.Errorf("Retry should return same OrderID. Expected %s, got %s", resp1.OrderID, resp2.OrderID)
 	}
-	
+
 	stock, _ := products.GetStock(context.Background(), "p1")
 	if stock != 8 {
 		t.Errorf("Stock should only be deducted once. Expected 8, got %d", stock)
 	}
 }
-
-
 
 func TestImprovedCheckout_CannotCheckoutAnotherUsersCart(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()

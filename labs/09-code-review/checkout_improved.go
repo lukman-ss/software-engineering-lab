@@ -7,13 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 // CheckoutImproved demonstrates a safer checkout implementation
 // after addressing the review findings in this lab.
+// Test-only ID generator: atomic.Int64 produces unique IDs within a single process.
+// Production systems should use UUID/ULID, database sequences, or Snowflake-style IDs.
 type CheckoutImproved struct {
 	repo         OrderRepository
 	products     ProductRepository
@@ -135,6 +137,9 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 		})
 	}
 
+	// Demo-only ID generation.
+	// Production systems should use a database sequence, UUID/ULID, Snowflake-style ID,
+	// or another distributed-safe strategy (atomic is only safe within a single process).
 	orderID := fmt.Sprintf("order-%d", c.orderCounter.Add(1))
 	order := &Order{
 		ID:             orderID,
@@ -175,7 +180,8 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 		return nil, fmt.Errorf("%w: %v", ErrIdempotencyFinalize, markErr)
 	}
 
-	// Notification after successful transaction (fire-and-forget)
+	// Best-effort post-commit notification (Synchronous).
+	// In production, consider the Outbox Pattern for reliable delivery.
 	if notifyErr := c.notify.SendOrderConfirmation(ctx, principal.UserID, orderID); notifyErr != nil {
 		c.logger.Error(ctx, "send order confirmation failed", "userID", principal.UserID, "orderID", orderID, "error", notifyErr.Error())
 	}
