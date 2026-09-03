@@ -63,67 +63,120 @@ Send External Notification / WhatsApp
 
 ## Unsafe vs Safe Comparison
 
-### Unsafe Implementation (`unsafe.go`)
+### Unsafe Implementation (`unsafe_service.go`)
 
 ```go
-func (p *UnsafeInvoiceProcessor) ProcessInvoice(ctx context.Context, invoiceID string) error {
+func (s *UnsafeInvoiceService) Process(ctx context.Context, invoiceID string) error {
     start := time.Now()
     // ... executes database, inventory, commission, pdf, notification ...
     duration := time.Since(start)
-    p.logf("INFO request completed duration_ms=%d", duration.Milliseconds())
+    s.logf("INFO request completed duration_ms=%d", duration.Milliseconds())
     return nil
 }
 ```
 
 **Kelemahan Unsafe:**
-1. **Opaque logs**: Hanya mencatat `duration_ms=4865`. Developer tidak tahu apakah DB, PDF, atau Notification yang lambat.
+1. **Opaque logs**: Hanya mencatat `INFO request completed duration_ms=4865`. Developer tidak tahu apakah DB, PDF, atau Notification yang lambat.
 2. **Tidak ada dependency metrics**: Prometheus tidak dapat mengagregasi p95 per dependency.
 3. **Tidak ada span tree / tracing**: Tidak dapat melihat korelasi antar I/O sub-operations.
 4. **Tidak ada context correlation**: Request ID tidak dipropagasi ke child operations.
 
-### Safe Implementation (`safe.go`)
+### Safe Implementation (`safe_service.go`)
 
 ```go
-func (p *SafeInvoiceProcessor) ProcessInvoice(ctx context.Context, invoiceID string) error {
-    ctx, rootSpan := p.Tracer.Start(ctx, "invoice.process")
-    defer p.Tracer.End(rootSpan)
-    
-    // Setiap step diinstrumentasi dengan span, metric, dan structured logs
-    stepCtx, span := p.Tracer.Start(ctx, "pdf.generate")
-    err := p.PDF.Generate(stepCtx, invoiceID)
-    p.Tracer.End(span)
-    // ...
+func (s *SafeInvoiceService) Process(ctx context.Context, invoiceID string) error {
+    ctx, rootSpan := s.Tracer.Start(ctx, "invoice.process",
+        trace.WithAttributes(attribute.String("invoice_id", invoiceID)),
+    )
+    defer rootSpan.End()
+
+    for _, step := range steps {
+        stepCtx, stepSpan := s.Tracer.Start(ctx, step.component+"."+step.operation)
+        err := step.execute(stepCtx)
+        // ... record OTel spans, prometheus metrics, and structured logs ...
+    }
 }
 ```
 
 **Keunggulan Safe:**
 1. **Child Spans**: Setiap tahapan memiliki span tersendiri (`database.load_invoice`, `pdf.generate`, dll).
-2. **Prometheus Metrics**: Mengukur counter `dependency_requests_total` dan latency histogram/duration per status.
-3. **Structured Slog Correlation**: Setiap log otomatis mengikutsertakan `request_id`, `trace_id`, `span_id`, dan `invoice_id`.
-4. **Context Propagation & Cancellation**: Mendukung timeout dan context cancel secara presisi di setiap boundary I/O.
+2. **Prometheus Metrics (Golden Signals)**:
+   - Traffic: `lab07_http_requests_total{method="POST",route="/invoices/{id}/process",status_class="2xx"}`
+   - Latency: `lab07_http_request_duration_seconds` & `lab07_dependency_duration_seconds`
+   - Errors: `lab07_http_request_errors_total` & `lab07_dependency_errors_total`
+   - Saturation: `lab07_http_in_flight_requests`
+3. **Structured Slog Correlation**:
+```json
+{
+  "time": "2026-09-03T10:56:10Z",
+  "level": "INFO",
+  "msg": "dependency completed",
+  "request_id": "demo-slow-pdf-001",
+  "trace_id": "ece356994a7f660b01a9a2d75a9e4171",
+  "span_id": "06111ee7e4a6daae",
+  "component": "pdf",
+  "operation": "generate",
+  "duration_ms": 4800,
+  "outcome": "success"
+}
+```
+4. **Context Propagation & Cancellation**: Request ID (`X-Request-ID`) dipropagasi dan dipertahankan.
 
 ---
 
-## Dependency Scenarios
+## Logs dan Trace Correlation: Alur Diagnosis
 
-Lab ini menyediakan fake dependency simulator yang mendukung:
-- `normal`
-- `slow-pdf`
-- `slow-database`
-- `slow-external`
-- `pdf-error`
-- `context-cancellation`
+```
+cari request_id pada log
+    ↓
+temukan trace_id
+    ↓
+buka trace
+    ↓
+lihat child span yang lambat (pdf.generate)
+```
+
+---
+
+## Menjalankan Demo Server
+
+Jalankan server demo:
+
+```bash
+go run ./labs/07-observability/cmd/demo
+```
+
+Server berjalan pada port `:8087`.
+
+### Scenario Endpoints (Safe)
+
+- `POST http://localhost:8087/invoices/INV-101/process?scenario=normal`
+- `POST http://localhost:8087/invoices/INV-101/process?scenario=slow-pdf`
+- `POST http://localhost:8087/invoices/INV-101/process?scenario=slow-database`
+- `POST http://localhost:8087/invoices/INV-101/process?scenario=slow-external`
+- `POST http://localhost:8087/invoices/INV-101/process?scenario=pdf-error`
+
+### Unsafe Endpoint
+
+- `POST http://localhost:8087/unsafe/invoices/INV-101/process?scenario=slow-pdf`
+
+### Prometheus Metrics
+
+- `GET http://localhost:8087/metrics`
 
 ---
 
 ## Cara Menjalankan Test
 
 ```bash
-# Jalankan unit & scenario tests
-go test -v ./labs/07-observability/...
+# Jalankan unit & integration tests
+make lab-07-test
 
 # Jalankan dengan race detector
-go test -race -v ./labs/07-observability/...
+make lab-07-test-race
+
+# Linter & Vet
+make lab-07-vet
 ```
 
 ---
@@ -131,4 +184,4 @@ go test -race -v ./labs/07-observability/...
 ## Navigasi
 
 - **Previous**: [Lab 06 — API Versioning](../06-api-versioning/)
-- **Next**: [Lab 08 — Database Isolation Level](../08-database-isolation-level/)
+- **Next**: [Lab 08 — Retry](../08-retry/)
