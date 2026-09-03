@@ -442,8 +442,8 @@ func TestV2Handler_WrongPrefixReturnsBadRequest(t *testing.T) {
 	t.Logf("✅ V2Handler returns HTTP 400 for wrong prefix path")
 }
 
-// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash adalah invalid collection request pada lab ini dan harus menghasilkan 400 Bad Request.
-// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash adalah invalid collection request pada lab ini dan harus menghasilkan 400 Bad Request.
+// TestTrailingSlash_NoSlashReturnsBadRequest memastikan route tanpa trailing slash
+// adalah invalid collection request pada lab ini dan harus menghasilkan 400 Bad Request.
 func TestTrailingSlash_NoSlashReturnsBadRequest(t *testing.T) {
 	mux := newVersionedMux()
 

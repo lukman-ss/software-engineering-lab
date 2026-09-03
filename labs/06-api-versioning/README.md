@@ -352,9 +352,16 @@ Hanya karena API response berubah! API versioning adalah **representasi public c
 Untuk lab ini, routing menggunakan `http.NewServeMux()`:
 
 ```go
+mux := http.NewServeMux()
+
+mux.HandleFunc("/api/v1/invoices", V1Handler)
 mux.HandleFunc("/api/v1/invoices/", V1Handler)
+
+mux.HandleFunc("/api/v2/invoices", V2Handler)
 mux.HandleFunc("/api/v2/invoices/", V2Handler)
 ```
+
+Exact collection path dan subtree path didaftarkan eksplisit agar request tanpa trailing slash masuk langsung ke handler dan menghasilkan API error 400, bukan implicit redirect dari http.ServeMux.
 
 Dokumentasi exact routing & error behavior:
 
