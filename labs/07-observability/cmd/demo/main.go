@@ -14,8 +14,54 @@ import (
 	"github.com/lukman-ss/software-engineering-lab/pkg/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
+
+func initTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4317" // Default Jaeger OTLP gRPC port
+	}
+
+	serviceName := os.Getenv("OTEL_SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = "lab07-observability"
+	}
+
+	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint), otlptracegrpc.WithInsecure())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(res),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(
+		propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		),
+	)
+
+	return tp, nil
+}
 
 func resolveScenario(r *http.Request) observability.ScenarioConfig {
 	scenario := r.URL.Query().Get("scenario")
@@ -73,26 +119,30 @@ func main() {
 	collector := observability.NewPrometheusCollector(reg)
 
 	// OTel TracerProvider
-	tp := sdktrace.NewTracerProvider()
-	defer tp.Shutdown(context.Background())
-	tracer := tp.Tracer("lab07-observability-demo")
+	tp, err := initTracerProvider(context.Background())
+	if err != nil {
+		logger.Error("failed to initialize tracer provider", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tp.Shutdown(shutdownCtx); err != nil {
+			logger.Error("tracer provider shutdown failed", "error", err)
+		}
+	}()
+	tracer := otel.Tracer(os.Getenv("OTEL_SERVICE_NAME"))
 
 	// Safe Service
-	safeRepo, safeInv, safeComm, safePDF, safeNotif := observability.NewFakeDependencies(observability.ScenarioConfig{})
 	safeService := observability.NewSafeInvoiceService(
-		safeRepo, safeInv, safeComm, safePDF, safeNotif,
+		observability.NewDependencies(observability.ScenarioConfig{}),
 		logger, tracer, collector,
 	)
 
 	// Unsafe Service
-	unsafeRepo, unsafeInv, unsafeComm, unsafePDF, unsafeNotif := observability.NewFakeDependencies(observability.ScenarioConfig{})
 	unsafeService := &observability.UnsafeInvoiceService{
-		Repo:         unsafeRepo,
-		Inventory:    unsafeInv,
-		Commission:   unsafeComm,
-		PDF:          unsafePDF,
-		Notification: unsafeNotif,
-		LogWriter:    os.Stdout,
+		Deps:      observability.NewDependencies(observability.ScenarioConfig{}),
+		LogWriter: os.Stdout,
 	}
 
 	mux := http.NewServeMux()

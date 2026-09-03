@@ -63,6 +63,16 @@ services:
     networks:
       - se-lab
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: se-lab-jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - se-lab
+
 volumes:
   postgres_data:
   redis_data:

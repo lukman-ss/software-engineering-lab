@@ -11,38 +11,38 @@ import (
 )
 
 type UnsafeInvoiceService struct {
-	Repo         InvoiceRepository
-	Inventory    InventoryService
-	Commission   CommissionService
-	PDF          PDFGenerator
-	Notification NotificationService
-	LogWriter    io.Writer
+	Deps      Dependencies
+	LogWriter io.Writer
 }
 
 func (s *UnsafeInvoiceService) Process(ctx context.Context, invoiceID string) error {
+	return s.ProcessWithDeps(ctx, invoiceID, s.Deps)
+}
+
+func (s *UnsafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID string, deps Dependencies) error {
 	start := time.Now()
 
-	if err := s.Repo.Load(ctx, invoiceID); err != nil {
+	if err := deps.Repo.Load(ctx, invoiceID); err != nil {
 		s.logf("ERROR request failed: %v", err)
 		return err
 	}
 
-	if err := s.Inventory.Reserve(ctx, invoiceID); err != nil {
+	if err := deps.Inventory.Reserve(ctx, invoiceID); err != nil {
 		s.logf("ERROR request failed: %v", err)
 		return err
 	}
 
-	if err := s.Commission.Calculate(ctx, invoiceID); err != nil {
+	if err := deps.Commission.Calculate(ctx, invoiceID); err != nil {
 		s.logf("ERROR request failed: %v", err)
 		return err
 	}
 
-	if err := s.PDF.Generate(ctx, invoiceID); err != nil {
+	if err := deps.PDF.Generate(ctx, invoiceID); err != nil {
 		s.logf("ERROR request failed: %v", err)
 		return err
 	}
 
-	if err := s.Notification.Send(ctx, invoiceID); err != nil {
+	if err := deps.Notification.Send(ctx, invoiceID); err != nil {
 		s.logf("ERROR request failed: %v", err)
 		return err
 	}
@@ -71,17 +71,13 @@ func (s *UnsafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request)
 			return
 		}
 
+		deps := s.Deps
 		if resolveScenario != nil {
 			cfg := resolveScenario(r)
-			repo, inv, comm, pdf, notif := NewFakeDependencies(cfg)
-			s.Repo = repo
-			s.Inventory = inv
-			s.Commission = comm
-			s.PDF = pdf
-			s.Notification = notif
+			deps = NewDependencies(cfg)
 		}
 
-		if err := s.Process(r.Context(), invoiceID); err != nil {
+		if err := s.ProcessWithDeps(r.Context(), invoiceID, deps); err != nil {
 			http.Error(w, fmt.Sprintf("internal server error: %v", err), http.StatusInternalServerError)
 			return
 		}

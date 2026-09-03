@@ -107,6 +107,25 @@ type ScenarioConfig struct {
 	NotificationErr   error
 }
 
+type Dependencies struct {
+	Repo         InvoiceRepository
+	Inventory    InventoryService
+	Commission   CommissionService
+	PDF          PDFGenerator
+	Notification NotificationService
+}
+
+func NewDependencies(cfg ScenarioConfig) Dependencies {
+	repo, inv, comm, pdf, notif := NewFakeDependencies(cfg)
+	return Dependencies{
+		Repo:         repo,
+		Inventory:    inv,
+		Commission:   comm,
+		PDF:          pdf,
+		Notification: notif,
+	}
+}
+
 func NewFakeDependencies(cfg ScenarioConfig) (InvoiceRepository, InventoryService, CommissionService, PDFGenerator, NotificationService) {
 	return &FakeInvoiceRepo{ConfigurableDependency: ConfigurableDependency{Delay: cfg.RepoDelay, Err: cfg.RepoErr}},
 		&FakeInventoryService{ConfigurableDependency: ConfigurableDependency{Delay: cfg.InventoryDelay, Err: cfg.InventoryErr}},

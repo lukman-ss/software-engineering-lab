@@ -15,22 +15,14 @@ import (
 )
 
 type SafeInvoiceService struct {
-	Repo         InvoiceRepository
-	Inventory    InventoryService
-	Commission   CommissionService
-	PDF          PDFGenerator
-	Notification NotificationService
+	Deps         Dependencies
 	Logger       *slog.Logger
 	Tracer       trace.Tracer
 	Collector    *PrometheusCollector
 }
 
 func NewSafeInvoiceService(
-	repo InvoiceRepository,
-	inv InventoryService,
-	comm CommissionService,
-	pdf PDFGenerator,
-	notif NotificationService,
+	deps Dependencies,
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	collector *PrometheusCollector,
@@ -42,11 +34,7 @@ func NewSafeInvoiceService(
 		logger = slog.Default()
 	}
 	return &SafeInvoiceService{
-		Repo:         repo,
-		Inventory:    inv,
-		Commission:   comm,
-		PDF:          pdf,
-		Notification: notif,
+		Deps:         deps,
 		Logger:       logger,
 		Tracer:       tracer,
 		Collector:    collector,
@@ -60,6 +48,10 @@ type dependencyStep struct {
 }
 
 func (s *SafeInvoiceService) Process(ctx context.Context, invoiceID string) error {
+	return s.ProcessWithDeps(ctx, invoiceID, s.Deps)
+}
+
+func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID string, deps Dependencies) error {
 	ctx, rootSpan := s.Tracer.Start(ctx, "invoice.process",
 		trace.WithAttributes(attribute.String("invoice_id", invoiceID)),
 	)
@@ -72,35 +64,35 @@ func (s *SafeInvoiceService) Process(ctx context.Context, invoiceID string) erro
 			component: "database",
 			operation: "load_invoice",
 			execute: func(ctx context.Context) error {
-				return s.Repo.Load(ctx, invoiceID)
+				return deps.Repo.Load(ctx, invoiceID)
 			},
 		},
 		{
 			component: "inventory",
 			operation: "reserve",
 			execute: func(ctx context.Context) error {
-				return s.Inventory.Reserve(ctx, invoiceID)
+				return deps.Inventory.Reserve(ctx, invoiceID)
 			},
 		},
 		{
 			component: "commission",
 			operation: "calculate",
 			execute: func(ctx context.Context) error {
-				return s.Commission.Calculate(ctx, invoiceID)
+				return deps.Commission.Calculate(ctx, invoiceID)
 			},
 		},
 		{
 			component: "pdf",
 			operation: "generate",
 			execute: func(ctx context.Context) error {
-				return s.PDF.Generate(ctx, invoiceID)
+				return deps.PDF.Generate(ctx, invoiceID)
 			},
 		},
 		{
 			component: "notification",
 			operation: "send",
 			execute: func(ctx context.Context) error {
-				return s.Notification.Send(ctx, invoiceID)
+				return deps.Notification.Send(ctx, invoiceID)
 			},
 		},
 	}
@@ -210,18 +202,14 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 			return
 		}
 
-		// Reconfigure dependencies based on query scenario if dynamic
+		// Resolve request-scoped dependencies
+		deps := s.Deps
 		if resolveScenario != nil {
 			cfg := resolveScenario(r)
-			repo, inv, comm, pdf, notif := NewFakeDependencies(cfg)
-			s.Repo = repo
-			s.Inventory = inv
-			s.Commission = comm
-			s.PDF = pdf
-			s.Notification = notif
+			deps = NewDependencies(cfg)
 		}
 
-		err := s.Process(ctx, invoiceID)
+		err := s.ProcessWithDeps(ctx, invoiceID, deps)
 		duration := time.Since(start)
 
 		if err != nil {

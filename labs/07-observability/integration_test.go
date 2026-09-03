@@ -29,8 +29,7 @@ func TestIntegration_RequestID_Propagation_And_Preservation(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	repo, inv, comm, pdf, notif := NewFakeDependencies(ScenarioConfig{})
-	service := NewSafeInvoiceService(repo, inv, comm, pdf, notif, logger, tracer, collector)
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, collector)
 
 	// Test with explicit custom valid X-Request-ID
 	customReqID := "demo-slow-pdf-001"
@@ -61,8 +60,8 @@ func TestIntegration_RequestID_Propagation_And_Preservation(t *testing.T) {
 	}
 
 	// Test failed request retains request ID
-	failRepo, failInv, failComm, failPDF, failNotif := NewFakeDependencies(ScenarioConfig{PDFErr: ErrPDFGeneration})
-	failService := NewSafeInvoiceService(failRepo, failInv, failComm, failPDF, failNotif, logger, tracer, collector)
+	failDeps := NewDependencies(ScenarioConfig{PDFErr: ErrPDFGeneration})
+	failService := NewSafeInvoiceService(failDeps, logger, tracer, collector)
 
 	failReq := httptest.NewRequest(http.MethodPost, "/invoices/INV-FAIL/process", nil)
 	failReq.SetPathValue("id", "INV-FAIL")
@@ -92,8 +91,7 @@ func TestIntegration_StructuredLogging_Schema(t *testing.T) {
 	tp := sdktrace.NewTracerProvider()
 	tracer := tp.Tracer("test")
 
-	repo, inv, comm, pdf, notif := NewFakeDependencies(ScenarioConfig{})
-	service := NewSafeInvoiceService(repo, inv, comm, pdf, notif, logger, tracer, nil)
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), logger, tracer, nil)
 
 	ctx := context.Background()
 	reqID := "demo-req-001"
@@ -151,11 +149,10 @@ func TestIntegration_Prometheus_GoldenSignals(t *testing.T) {
 	tp := sdktrace.NewTracerProvider()
 	tracer := tp.Tracer("test")
 
-	repo, inv, comm, pdf, notif := NewFakeDependencies(ScenarioConfig{
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{
 		RepoDelay: 2 * time.Millisecond,
 		PDFDelay:  5 * time.Millisecond,
-	})
-	service := NewSafeInvoiceService(repo, inv, comm, pdf, notif, nil, tracer, collector)
+	}), nil, tracer, collector)
 
 	req := httptest.NewRequest(http.MethodPost, "/invoices/INV-1/process", nil)
 	req.SetPathValue("id", "INV-1")
@@ -187,10 +184,9 @@ func TestIntegration_Prometheus_GoldenSignals(t *testing.T) {
 	}
 
 	// Error scenario metrics check
-	failRepo, failInv, failComm, failPDF, failNotif := NewFakeDependencies(ScenarioConfig{
+	failService := NewSafeInvoiceService(NewDependencies(ScenarioConfig{
 		PDFErr: ErrPDFGeneration,
-	})
-	failService := NewSafeInvoiceService(failRepo, failInv, failComm, failPDF, failNotif, nil, tracer, collector)
+	}), nil, tracer, collector)
 
 	failReq := httptest.NewRequest(http.MethodPost, "/invoices/INV-FAIL/process", nil)
 	failReq.SetPathValue("id", "INV-FAIL")
@@ -221,10 +217,9 @@ func TestIntegration_Trace_Diagnosis_SlowPDF(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	tracer := tp.Tracer("test")
 
-	repo, inv, comm, pdf, notif := NewFakeDependencies(ScenarioConfig{
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{
 		PDFDelay: 10 * time.Millisecond,
-	})
-	service := NewSafeInvoiceService(repo, inv, comm, pdf, notif, nil, tracer, nil)
+	}), nil, tracer, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/invoices/INV-SLOW/process", nil)
 	req.SetPathValue("id", "INV-SLOW")
@@ -257,18 +252,103 @@ func TestIntegration_Trace_Diagnosis_SlowPDF(t *testing.T) {
 	}
 }
 
+func TestNoHighCardinalityLabelsInPrometheusRegistry(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	collector := NewPrometheusCollector(reg)
+
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, nil, collector)
+
+	reqID := "req-high-cardinality-uuid-12345"
+	invoiceID := "INV-SENSITIVE-9999"
+
+	req := httptest.NewRequest(http.MethodPost, "/invoices/"+invoiceID+"/process", nil)
+	req.SetPathValue("id", invoiceID)
+	req.Header.Set(middleware.HeaderRequestID, reqID)
+	rec := httptest.NewRecorder()
+
+	handler := middleware.RequestID(service.HTTPHandler(nil))
+	handler.ServeHTTP(rec, req)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("failed to gather metrics: %v", err)
+	}
+
+	forbiddenValues := []string{
+		reqID,
+		invoiceID,
+	}
+
+	for _, mf := range mfs {
+		for _, m := range mf.Metric {
+			for _, pair := range m.Label {
+				labelName := pair.GetName()
+				labelVal := pair.GetValue()
+
+				for _, forbiddenKey := range []string{"request_id", "trace_id", "span_id", "invoice_id", "customer_id", "user_id", "error", "timestamp", "url"} {
+					if strings.EqualFold(labelName, forbiddenKey) {
+						t.Errorf("found forbidden metric label name '%s' in metric '%s'", labelName, mf.GetName())
+					}
+				}
+
+				for _, forbiddenVal := range forbiddenValues {
+					if strings.Contains(labelVal, forbiddenVal) {
+						t.Errorf("found forbidden high-cardinality value '%s' inside label '%s' for metric '%s'", forbiddenVal, labelName, mf.GetName())
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestConcurrentRequests_NoDataRace(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	collector := NewPrometheusCollector(reg)
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	tracer := tp.Tracer("test")
+
+	service := NewSafeInvoiceService(NewDependencies(ScenarioConfig{}), nil, tracer, collector)
+
+	resolveScenario := func(r *http.Request) ScenarioConfig {
+		switch r.URL.Query().Get("scenario") {
+		case "error":
+			return ScenarioConfig{PDFErr: ErrPDFGeneration}
+		case "slow":
+			return ScenarioConfig{PDFDelay: 5 * time.Millisecond}
+		default:
+			return ScenarioConfig{RepoDelay: 2 * time.Millisecond}
+		}
+	}
+
+	handler := middleware.RequestID(service.HTTPHandler(resolveScenario))
+
+	done := make(chan bool)
+	scenarios := []string{"normal", "error", "slow", "normal", "error"}
+
+	for i, sc := range scenarios {
+		go func(idx int, scenario string) {
+			url := "/invoices/INV-CONC-" + string(rune('A'+idx)) + "/process?scenario=" + scenario
+			req := httptest.NewRequest(http.MethodPost, url, nil)
+			req.SetPathValue("id", "INV-CONC-"+string(rune('A'+idx)))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			done <- true
+		}(i, sc)
+	}
+
+	for range scenarios {
+		<-done
+	}
+}
+
 func TestUnsafeInvoiceService_LacksGranularity(t *testing.T) {
 	buf := &bytes.Buffer{}
-	repo, inv, comm, pdf, notif := NewFakeDependencies(ScenarioConfig{
-		PDFDelay: 10 * time.Millisecond,
-	})
 	unsafeService := &UnsafeInvoiceService{
-		Repo:         repo,
-		Inventory:    inv,
-		Commission:   comm,
-		PDF:          pdf,
-		Notification: notif,
-		LogWriter:    buf,
+		Deps: NewDependencies(ScenarioConfig{
+			PDFDelay: 10 * time.Millisecond,
+		}),
+		LogWriter: buf,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/unsafe/invoices/INV-UNSAFE/process", nil)
@@ -288,5 +368,42 @@ func TestUnsafeInvoiceService_LacksGranularity(t *testing.T) {
 	}
 	if strings.Contains(logs, "pdf.generate") {
 		t.Errorf("unsafe logs should not contain child breakdown")
+	}
+}
+
+func TestUnsafeConcurrentRequests_NoDataRace(t *testing.T) {
+	unsafeService := &UnsafeInvoiceService{
+		Deps: NewDependencies(ScenarioConfig{}),
+	}
+
+	resolveScenario := func(r *http.Request) ScenarioConfig {
+		switch r.URL.Query().Get("scenario") {
+		case "error":
+			return ScenarioConfig{PDFErr: ErrPDFGeneration}
+		case "slow":
+			return ScenarioConfig{PDFDelay: 5 * time.Millisecond}
+		default:
+			return ScenarioConfig{RepoDelay: 2 * time.Millisecond}
+		}
+	}
+
+	handler := middleware.RequestID(unsafeService.HTTPHandler(resolveScenario))
+
+	done := make(chan bool)
+	scenarios := []string{"normal", "error", "slow", "normal", "error"}
+
+	for i, sc := range scenarios {
+		go func(idx int, scenario string) {
+			url := "/unsafe/invoices/INV-CONC-" + string(rune('A'+idx)) + "/process?scenario=" + scenario
+			req := httptest.NewRequest(http.MethodPost, url, nil)
+			req.SetPathValue("id", "INV-CONC-"+string(rune('A'+idx)))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			done <- true
+		}(i, sc)
+	}
+
+	for range scenarios {
+		<-done
 	}
 }
