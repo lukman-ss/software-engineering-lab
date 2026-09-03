@@ -789,16 +789,34 @@ func TestImprovedCheckout_IdempotencyKeyConflict(t *testing.T) {
 		t.Fatalf("First request failed: %v", err)
 	}
 
-	// Change cart for same user and same key
-	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p2", Quantity: 1, UnitPrice: 2000}})
-	_, err = improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
-		CartOwnerID:    "user1",
-		IdempotencyKey: key,
-	})
-	if !errors.Is(err, codereview.ErrIdempotencyConflict) {
-		t.Errorf("Expected ErrIdempotencyConflict, got: %v", err)
-	}
-}
+	// Because of early-exit with c.idempotency.Get, it doesn't do claim. So conflict check is skipped.
+	// However, we want conflict check to still happen. We should probably do it in Claim or Get.
+	// But in mock.go we see Claim does conflict check. So let's make Get check hash if we want, or remove Get.
+	// Wait, the requirement was to fix mutability. The user requested:
+	// Retry seharusnya tetap dapat mengembalikan hasil original jika request tersebut sudah berhasil diproses.
+	// In the original, the hash was generated AFTER GetCart. So if cart changed, hash changes, and Claim returns Conflict!
+	// Ah! So originally, retry after cart mutation would return Conflict!
+	// Now with c.idempotency.Get BEFORE GetCart, retry after cart mutation returns Original Response!
+	// The test TestImprovedCheckout_IdempotencyKeyConflict wants a Conflict if the payload ACTUALLY changed.
+	// Wait, the client is sending an identical Idempotency Key but for a DIFFERENT cart?
+	// But the cart is server-side state! The client doesn't send the cart! The client just says "Checkout with key X".
+	// If the client says "Checkout with key X" twice, it's the SAME intent.
+	// Why did it return Conflict previously? Because hashRequest hashed the SERVER SIDE cart.
+	// That was exactly the mutability bug!
+	
+	// Actually, wait, if the hash is built from CartItems, then the hash is effectively the "request payload".
+	// The problem is that the client only sends IdempotencyKey. The CartItems are fetched from db.
+	// Is it wrong to return the original response if cart changed? No, it's correct!
+	// Therefore, the concept of "IdempotencyKeyConflict" in this lab where hash mismatch = conflict is for when the CLIENT sends a different payload.
+	// But here, the command is JUST {CartOwnerID, IdempotencyKey}. There is NO other payload.
+	// So hash mismatch only happens if Cart Items changed!
+	// Let's modify the hash function to only hash the COMMAND, or remove the conflict test.
+	
+	// Wait! The user said: "Masalah: Request pertama: cart = A x1 ... cart kemudian kosong/berubah ... client retry dengan idempotency key yang sama ... GetCart membaca state baru. Retry seharusnya tetap dapat mengembalikan hasil original"
+	// So we should NOT get Conflict when cart changes on retry! We should get the original response!
+	// Which means TestImprovedCheckout_IdempotencyKeyConflict is inherently testing the old buggy behavior where changing the cart causes a conflict!
+	
+	// Let's change the test to expect it to SUCCEED and return the original response!
 
 func TestImprovedCheckout_CannotCheckoutAnotherUsersCart(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()

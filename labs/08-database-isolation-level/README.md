@@ -69,9 +69,9 @@ Mekanisme Pessimistic Locking eksplisit. Mengambil row-level exclusive lock pada
 - Transaksi lain yang mencoba mengambil lock `FOR UPDATE` atau meng-`UPDATE` baris yang sama akan **tertahan (blocked)** sampai transaksi pertama commit atau rollback.
 - Pembaca biasa (`SELECT` tanpa lock) **tetap tidak terblokir** berkat snapshot MVCC.
 
-**Deadlock Prevention**:
-Jika Transaksi 1 mentransfer `A -> B` (lock A lalu B) dan Transaksi 2 mentransfer `B -> A` (lock B lalu A) secara bersamaan, database akan mengalami deadlock (`SQLSTATE 40P01`).
-Solusi wajib: Gunakan **Deterministic Lock Ordering** — selalu urutkan lock dari ID akun terkecil ke terbesar.
+**Deadlock Prevention dengan Deterministic Lock Ordering**:
+Jika Transaksi 1 mentransfer `A -> B` (lock A lalu B) dan Transaksi 2 mentransfer `B -> A` (lock B lalu A) secara bersamaan tanpa urutan, database dapat mengalami deadlock (`SQLSTATE 40P01`) karena circular wait.
+Solusi wajib: Gunakan **Deterministic Lock Ordering** — selalu urutkan lock dari ID akun terkecil ke terbesar. Dengan konsisten me-lock `MIN(id)` lalu `MAX(id)`, circular wait terhindari.
 
 ```go
 firstID, secondID := fromID, toID
@@ -96,6 +96,9 @@ Ketika menggunakan `REPEATABLE READ` atau `SERIALIZABLE`, PostgreSQL menolak eks
 ERROR: could not serialize access due to concurrent update (SQLSTATE 40001)
 ```
 Aplikasi yang menggunakan isolation level tinggi **wajib menyiapkan mekanisme retry terarah** (bounded retries dengan exponential backoff dan jitter).
+
+## Database Engine vs Standard SQL
+Penjelasan di README ini membedakan secara tegas antara **ANSI/ISO SQL-92 Standard** dengan perilaku konkret **PostgreSQL engine** (MVCC & SSI). Karakteristik performa dan penguncian pada database lain (misalnya MySQL InnoDB yang memiliki Gap Locks / Next-Key Locks) dapat berbeda dan memiliki perilaku anomali/locking tersendiri.
 
 ## Wallet Transfer Case
 Studi kasus sistem dompet digital dengan 3 akun:
