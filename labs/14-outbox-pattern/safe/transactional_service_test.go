@@ -9,7 +9,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/lukman-ss/software-engineering-lab/labs/07-outbox-pattern/safe"
+	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/safe"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {

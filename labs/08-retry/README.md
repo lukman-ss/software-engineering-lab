@@ -129,5 +129,5 @@ Example output:
 
 ## Navigasi
 
-- **Previous**: [Lab 07 — Outbox Pattern](../07-outbox-pattern/)
+- **Previous**: [Lab 07 — Observability](../07-observability/)
 - **Next**: [Lab 09 — Circuit Breaker](../09-circuit-breaker/)

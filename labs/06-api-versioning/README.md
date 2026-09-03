@@ -481,4 +481,4 @@ labs/06-api-versioning/
 ## Navigasi
 
 - **Previous**: [Lab 05 — Race Condition](../05-race-condition/)
-- **Next**: [Lab 07 — Outbox Pattern](../07-outbox-pattern/)
+- **Next**: [Lab 07 — Observability](../07-observability/)

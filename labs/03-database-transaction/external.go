@@ -427,7 +427,7 @@ func (s *InvoiceServiceDualWrite) PayInvoiceDualWrite(ctx context.Context, invoi
 // purposes. Production-grade dispatcher features — FOR UPDATE SKIP LOCKED
 // concurrency control, exponential backoff retry, crash-after-publish recovery,
 // Dead Letter Queue (DLQ), poison message handling, replay mechanisms —
-// are covered in Lab 07 — Outbox Pattern.
+// are covered in Lab 14 — Outbox Pattern.
 // ============================================================================
 
 type InvoiceServiceOutbox struct {
@@ -527,7 +527,7 @@ func (s *InvoiceServiceOutbox) PayInvoiceWithOutboxInjectError(ctx context.Conte
 //
 // Production-grade concerns (retry with backoff, concurrency control with
 // FOR UPDATE SKIP LOCKED, crash recovery, DLQ handling) are NOT implemented here.
-// See Lab 07 — Outbox Pattern for the full implementation.
+// See Lab 14 — Outbox Pattern for the full implementation.
 // ============================================================================
 
 type OutboxDispatcher struct {
@@ -570,7 +570,7 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 
 		log.Printf("[DISPATCHER] publishing event=%s", event.ID)
 		if pubErr := d.broker.Publish(ctx, event); pubErr != nil {
-			log.Printf("[DISPATCHER] publish failed for event=%s: %v — Lab 07 covers retry/backoff", event.ID, pubErr)
+			log.Printf("[DISPATCHER] publish failed for event=%s: %v — Lab 14 covers retry/backoff", event.ID, pubErr)
 			continue
 		}
 
@@ -595,7 +595,7 @@ func (d *OutboxDispatcher) DispatchBatch(ctx context.Context) (int, error) {
 // transaction using INSERT ... ON CONFLICT DO NOTHING.
 //
 // Production concerns (per-consumer dedup keys, concurrency control, replay
-// handling) are covered in Lab 07 — Outbox Pattern.
+// handling) are covered in Lab 14 — Outbox Pattern.
 // ============================================================================
 
 // CommissionWorker processes events idempotently.

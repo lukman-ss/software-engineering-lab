@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/07-outbox-pattern/safe"
+	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/safe"
 )
 
 // setupConsumerTestDB initializes the database for consumer tests.

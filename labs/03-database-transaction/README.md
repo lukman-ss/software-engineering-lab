@@ -60,7 +60,7 @@ Batas tersebut **tidak dapat dijamin oleh satu local DB::transaction()**.
 
 Distributed transaction lintas resource secara teknis dapat dilakukan dengan mekanisme seperti Two-Phase Commit (2PC) atau XA pada sistem tertentu, tetapi membawa coupling, availability, operational complexity, dan scalability trade-off. Karena itu banyak arsitektur modern memilih local transaction + messaging + Saga + compensation + Outbox sesuai kebutuhan.
 
-> **Nota**: Lab ini hanya memperkenalkan Two-Phase Commit (2PC) dan XA sebagai konteks bahwa distributed transaction lintas resource secara teknis memang ada, tetapi tidak membahas implementasinya secara mendalam. Lab 07 tetap fokus pada Transactional Outbox, bukan 2PC/XA.
+> **Nota**: Lab ini hanya memperkenalkan Two-Phase Commit (2PC) dan XA sebagai konteks bahwa distributed transaction lintas resource secara teknis memang ada, tetapi tidak membahas implementasinya secara mendalam. Lab 14 tetap fokus pada Transactional Outbox, bukan 2PC/XA.
 
 ### Flow yang Benar
 
@@ -397,7 +397,7 @@ Consumer tidak boleh menghasilkan duplicate side effect.
 
 > **Hubungkan ke Lab 01 Idempotency** untuk detail implementasinya.
 
-> **Deep Dive**: Implementasi production-grade Transactional Outbox dibahas secara spesifik pada **Lab 07 — Outbox Pattern**.
+> **Deep Dive**: Implementasi production-grade Transactional Outbox dibahas secara spesifik pada **Lab 14 — Outbox Pattern**.
 
 ---
 

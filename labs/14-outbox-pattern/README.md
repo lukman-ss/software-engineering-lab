@@ -1,4 +1,4 @@
-# Lab 07: Outbox Pattern - Dual Write Problem
+# Lab 14: Outbox Pattern - Dual Write Problem
 
 This lab demonstrates the dual write problem and its solution using the transactional outbox pattern.
 
@@ -72,8 +72,7 @@ Both operations are in the same transaction - atomic!
 
 ## Navigasi
 
-- **Previous**: [Lab 06 — API Versioning](../06-api-versioning/)
-- **Next**: [Lab 08 — Retry](../08-retry/)
+- **Previous**: [Lab 13 — Deadlock](../13-deadlock/)
 
 ---
 
@@ -132,5 +131,5 @@ Run tests against a local PostgreSQL database:
 
 ```bash
 docker-compose up -d postgres
-go test ./labs/07-outbox-pattern/... -v
+go test ./labs/14-outbox-pattern/... -v
 ```

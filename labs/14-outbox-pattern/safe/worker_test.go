@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/lukman-ss/software-engineering-lab/labs/07-outbox-pattern/safe"
+	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/safe"
 )
 
 // TestOutboxWorkerSuccess tests that the worker picks up unpublished events and publishes them successfully.

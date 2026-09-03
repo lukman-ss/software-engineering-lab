@@ -3,7 +3,9 @@
 	lab-02-setup lab-02-seed lab-02-baseline lab-02-indexes \
 	lab-02-explain lab-02-benchmark lab-02-clean lab-02-verify \
 	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration \
-	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration
+	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration \
+	lab-07-test lab-07-test-race lab-07-vet \
+	lab-14-test lab-14-test-race lab-14-vet
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost
@@ -151,3 +153,31 @@ lab-05-fmt:
 lab-05-integration:
 	@echo "=== Testing Lab 05 (Integration) ==="
 	@cd labs/05-race-condition && go test -tags=integration -count=1 ./...
+
+# ==================== Lab 07: Observability ====================
+
+lab-07-test:
+	@echo "=== Testing Lab 07: Observability ==="
+	@if [ -d "labs/07-observability" ]; then go test -v ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
+
+lab-07-test-race:
+	@echo "=== Testing Lab 07 (Race Detector) ==="
+	@if [ -d "labs/07-observability" ]; then go test -race -v ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
+
+lab-07-vet:
+	@echo "=== Vet Lab 07 ==="
+	@if [ -d "labs/07-observability" ]; then go vet ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
+
+# ==================== Lab 14: Outbox Pattern ====================
+
+lab-14-test:
+	@echo "=== Testing Lab 14: Outbox Pattern ==="
+	@go test -v ./labs/14-outbox-pattern/...
+
+lab-14-test-race:
+	@echo "=== Testing Lab 14 (Race Detector) ==="
+	@go test -race -v ./labs/14-outbox-pattern/...
+
+lab-14-vet:
+	@echo "=== Vet Lab 14 ==="
+	@go vet ./labs/14-outbox-pattern/...

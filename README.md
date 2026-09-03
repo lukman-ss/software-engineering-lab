@@ -123,13 +123,14 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | 04 | Cache stampede and stale reads |
 | 05 | Race conditions corrupting inventory counts |
 | 06 | API versioning - breaking changes and backward compatibility |
-| 07 | Outbox Pattern: transactional outbox deep dive, retry, DLQ, idempotency, recovery |
+| 07 | Observability |
 | 08 | Retry storms amplifying failures |
 | 09 | Cascading failures from downstream |
 | 10 | Unbounded load causing outages |
 | 11 | Lock contention causing delays |
 | 12 | Optimistic locking for concurrent updates |
 | 13 | Deadlocks hanging the system |
+| 14 | Outbox Pattern: transactional outbox deep dive, retry, DLQ, idempotency, recovery |
 
 ## How to Run
 
@@ -207,13 +208,14 @@ make lint          # go vet
 - [x] 04 Caching
 - [x] 05 Race Condition
 - [x] 06 API Versioning
-- [ ] 07 Outbox Pattern
+- [ ] 07 Observability
 - [ ] 08 Retry
 - [ ] 09 Circuit Breaker
 - [ ] 10 Rate Limiting
 - [ ] 11 Pessimistic Locking
 - [ ] 12 Optimistic Locking
 - [x] 13 Deadlock
+- [ ] 14 Outbox Pattern
 
 ### Phase 2: Extended Topics
 - Bulkhead pattern

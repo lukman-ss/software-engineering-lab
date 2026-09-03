@@ -18,3 +18,4 @@ Always acquire locks in a globally consistent order (e.g., ascending order of ac
 ## Navigasi
 
 - **Previous**: [Lab 12 — Optimistic Locking](../12-optimistic-locking/)
+- **Next**: [Lab 14 — Outbox Pattern](../14-outbox-pattern/)
