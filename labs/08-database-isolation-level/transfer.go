@@ -118,7 +118,7 @@ func (r *PostgresWalletRepo) TransferNaive(ctx context.Context, fromID, toID int
 }
 
 // TransferWithLock: READ COMMITTED + SELECT ... FOR UPDATE
-// Acquired locks in consistent order (smaller ID first) to prevent deadlock
+// Acquires locks in deterministic order (smaller ID first) to prevent deadlock
 func (r *PostgresWalletRepo) TransferWithLock(ctx context.Context, fromID, toID int, amount int64) error {
 	if amount <= 0 {
 		return ErrNegativeTransferAmount
@@ -130,10 +130,7 @@ func (r *PostgresWalletRepo) TransferWithLock(ctx context.Context, fromID, toID 
 	}
 	defer tx.Rollback()
 
-	firstID, secondID := fromID, toID
-	if firstID > secondID {
-		firstID, secondID = secondID, firstID
-	}
+	firstID, secondID := DeterministicLockOrder(fromID, toID)
 
 	// Lock both accounts deterministically
 	var b1, b2 int64
@@ -176,7 +173,6 @@ func (r *PostgresWalletRepo) TransferWithLock(ctx context.Context, fromID, toID 
 }
 
 // TransferRepeatableRead: REPEATABLE READ transaction
-// In PostgreSQL, concurrent UPDATE on the same row triggers 40001 serialization error
 func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID, toID int, amount int64) error {
 	if amount <= 0 {
 		return ErrNegativeTransferAmount
@@ -295,7 +291,7 @@ func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, 
 			return nil
 		}
 
-		if errors.Is(err, ErrSerializationFailure) && attempt < maxRetries {
+		if IsSerializationError(err) && attempt < maxRetries {
 			// Exponential backoff with full jitter
 			sleep := time.Duration(float64(baseDelay) * float64(int(1)<<uint(attempt)) * (0.5 + rand.Float64()*0.5))
 			select {
@@ -310,7 +306,6 @@ func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, 
 	return ErrMaxRetryExceeded
 }
 
-// isSerializationError checks if the error is PostgreSQL 40001 (serialization_failure)
 func isSerializationError(err error) bool {
 	if err == nil {
 		return false
@@ -322,8 +317,7 @@ func isSerializationError(err error) bool {
 	return false
 }
 
-// IsSerializationError is a public helper exposed for tests/observability code
-// to detect PostgreSQL 40001 (serialization_failure) from any wrapped error chain.
+// IsSerializationError is exposed for tests and callers.
 func IsSerializationError(err error) bool {
 	if err == nil {
 		return false

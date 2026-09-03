@@ -1,0 +1,170 @@
+package isolation_test
+
+import (
+	"context"
+	"database/sql"
+	"sync"
+	"testing"
+
+	_ "github.com/lib/pq"
+	isolation "github.com/lukman-ss/software-engineering-lab/labs/08-database-isolation-level"
+)
+
+// TestRepeatableRead_SnapshotIsolation proves that in REPEATABLE READ,
+// a transaction sees a consistent snapshot taken at the start of transaction.
+// Even when another transaction commits an update in between, the read remains consistent.
+func TestRepeatableRead_SnapshotIsolation(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := isolation.NewPostgresWalletRepo(db)
+
+	ctx := context.Background()
+	_ = repo.ResetAccounts(ctx, 1000000, 1000000, 1000000)
+
+	tx1Ready := make(chan struct{})
+	tx2Committed := make(chan struct{})
+
+	var tx1FirstRead, tx1SecondRead int64
+	var tx1Err, tx2Err error
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Transaction 1: REPEATABLE READ reader
+	go func() {
+		defer wg.Done()
+		tx1, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			tx1Err = err
+			return
+		}
+		defer tx1.Rollback()
+
+		// 1st Read (snapshot acquired)
+		tx1FirstRead, tx1Err = repo.GetBalance(ctx, tx1, 1)
+		if tx1Err != nil {
+			return
+		}
+
+		close(tx1Ready) // Signal TX2 to modify data
+		<-tx2Committed  // Wait for TX2 commit
+
+		// 2nd Read (must see snapshot, ignoring TX2's commit)
+		tx1SecondRead, tx1Err = repo.GetBalance(ctx, tx1, 1)
+		if tx1Err != nil {
+			return
+		}
+
+		_ = tx1.Commit()
+	}()
+
+	// Transaction 2: Writer
+	go func() {
+		defer wg.Done()
+		<-tx1Ready
+
+		tx2, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+		if err != nil {
+			tx2Err = err
+			return
+		}
+		defer tx2.Rollback()
+
+		_, tx2Err = tx2.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + 500000 WHERE id = 1")
+		if tx2Err != nil {
+			return
+		}
+
+		tx2Err = tx2.Commit()
+		close(tx2Committed)
+	}()
+
+	wg.Wait()
+
+	if tx1Err != nil || tx2Err != nil {
+		t.Fatalf("unexpected error: tx1=%v, tx2=%v", tx1Err, tx2Err)
+	}
+
+	t.Logf("REPEATABLE READ Snapshot Isolation Proof:")
+	t.Logf("  TX1 First Read:  %d", tx1FirstRead)
+	t.Logf("  TX1 Second Read: %d", tx1SecondRead)
+
+	if tx1FirstRead != tx1SecondRead {
+		t.Fatalf("REPEATABLE READ failed to provide snapshot isolation: 1st=%d != 2nd=%d", tx1FirstRead, tx1SecondRead)
+	}
+	if tx1FirstRead != 1000000 {
+		t.Errorf("expected balance 1000000, got %d", tx1FirstRead)
+	}
+}
+
+// TestRepeatableRead_ConcurrentUpdate_SerializationFailure proves that PostgreSQL's
+// REPEATABLE READ prevents lost updates by raising error 40001 (serialization failure)
+// when two transactions try to update the same row concurrently.
+func TestRepeatableRead_ConcurrentUpdate_SerializationFailure(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := isolation.NewPostgresWalletRepo(db)
+
+	ctx := context.Background()
+	_ = repo.ResetAccounts(ctx, 1000000, 1000000, 1000000)
+
+	var wg sync.WaitGroup
+	var errA, errB error
+	wg.Add(2)
+
+	tx1Read := make(chan struct{})
+	tx2Read := make(chan struct{})
+	release := make(chan struct{})
+
+	go func() {
+		defer wg.Done()
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			errA = err
+			return
+		}
+		defer tx.Rollback()
+
+		_, _ = repo.GetBalance(ctx, tx, 1)
+		close(tx1Read)
+		<-release
+
+		_, errA = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - 800000 WHERE id = 1")
+		if errA == nil {
+			errA = tx.Commit()
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			errB = err
+			return
+		}
+		defer tx.Rollback()
+
+		_, _ = repo.GetBalance(ctx, tx, 1)
+		close(tx2Read)
+		<-release
+
+		_, errB = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - 800000 WHERE id = 1")
+		if errB == nil {
+			errB = tx.Commit()
+		}
+	}()
+
+	<-tx1Read
+	<-tx2Read
+	close(release)
+	wg.Wait()
+
+	t.Logf("Repeatable Read Concurrent Update Error: errA=%v, errB=%v", errA, errB)
+
+	hasSerializationFailure := (errA != nil && isolation.IsSerializationError(errA)) ||
+		(errB != nil && isolation.IsSerializationError(errB))
+
+	if !hasSerializationFailure {
+		t.Fatalf("expected serialization failure (40001) in one of the concurrent transactions")
+	}
+}

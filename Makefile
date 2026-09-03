@@ -5,7 +5,9 @@
 	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration \
 	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration \
 	lab-07-test lab-07-test-race lab-07-vet \
-	lab-14-test lab-14-test-race lab-14-vet
+	lab-08-test lab-08-test-race lab-08-vet \
+	lab-14-test lab-14-test-race lab-14-vet \
+	lab-15-test lab-15-test-race lab-15-vet
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost

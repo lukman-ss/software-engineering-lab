@@ -1,8 +1,6 @@
 package isolation
 
 import (
-	"context"
-	"database/sql"
 	"errors"
 )
 
@@ -12,12 +10,19 @@ var (
 	ErrSerializationFailure   = errors.New("serialization failure (40001)")
 	ErrMaxRetryExceeded       = errors.New("max retry attempts exceeded")
 	ErrNegativeTransferAmount = errors.New("transfer amount must be positive")
+	ErrDeadlockDetected       = errors.New("deadlock detected (40P01)")
 )
 
 type Account struct {
 	ID      int    `json:"id"`
 	Owner   string `json:"owner"`
 	Balance int64  `json:"balance"`
+}
+
+type Invoice struct {
+	ID        int       `json:"id"`
+	Amount    int64     `json:"amount"`
+	Status    string    `json:"status"`
 }
 
 type IsolationLevel string
@@ -29,11 +34,10 @@ const (
 	LevelSerializable    IsolationLevel = "SERIALIZABLE"
 )
 
-type WalletRepository interface {
-	GetBalance(ctx context.Context, tx *sql.Tx, accountID int) (int64, error)
-	TransferNaive(ctx context.Context, fromID, toID int, amount int64) error
-	TransferWithLock(ctx context.Context, fromID, toID int, amount int64) error
-	TransferRepeatableRead(ctx context.Context, fromID, toID int, amount int64) error
-	TransferSerializable(ctx context.Context, fromID, toID int, amount int64) error
-	TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxRetries int) error
+// DeterministicLockOrder sorts two IDs in ascending order to prevent deadlocks.
+func DeterministicLockOrder(id1, id2 int) (firstID, secondID int) {
+	if id1 < id2 {
+		return id1, id2
+	}
+	return id2, id1
 }

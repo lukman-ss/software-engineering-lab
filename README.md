@@ -124,8 +124,8 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | 05 | Race conditions corrupting inventory counts |
 | 06 | API versioning - breaking changes and backward compatibility |
 | 07 | Observability |
-| 08 | Database Isolation Level: non-repeatable read, phantom read, serializable conflict, and lost update |
-| 09 | Cascading failures from downstream |
+| Lab 08 | Database Isolation Level: non-repeatable read, phantom read, serializable conflict, SELECT FOR UPDATE deadlock prevention |
+| Lab 09 | Circuit Breaker: cascading failures from downstream |
 | 10 | Unbounded load causing outages |
 | 11 | Lock contention causing delays |
 | 12 | Optimistic locking for concurrent updates |

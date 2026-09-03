@@ -184,4 +184,4 @@ make lab-07-vet
 ## Navigasi
 
 - **Previous**: [Lab 06 — API Versioning](../06-api-versioning/)
-- **Next**: [Lab 08 — Retry](../08-retry/)
+- **Next**: [Lab 08 — Database Isolation Level](../08-database-isolation-level/)
