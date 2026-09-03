@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,20 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 		return nil, ErrForbidden
 	}
 
+	if strings.TrimSpace(cmd.IdempotencyKey) == "" {
+		return nil, ErrInvalidIdempotencyKey
+	}
+
+	scopedKey := fmt.Sprintf("checkout:%s:%s", principal.UserID, cmd.IdempotencyKey)
+
+	// Check if already completed first before relying on current mutable cart state.
+	// In production, an idempotency record stores the committed result. If completed, return cached response directly.
+	if existing, err := c.idempotency.Get(ctx, scopedKey); err == nil && existing != nil {
+		if existing.Status == IdempotencyStatusCompleted && existing.Response != nil {
+			return existing.Response, nil
+		}
+	}
+
 	cartItems, err := c.cartSource.GetCart(ctx, cmd.CartOwnerID)
 	if err != nil {
 		c.logger.Error(ctx, "load cart failed", "userID", principal.UserID, "error", err.Error())
@@ -74,7 +89,6 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 	}
 
 	hash := c.hashRequest(principal.UserID, cartItems)
-	scopedKey := fmt.Sprintf("checkout:%s:%s", principal.UserID, cmd.IdempotencyKey)
 
 	status, cachedResp, err := c.idempotency.Claim(ctx, scopedKey, hash)
 	if err != nil {

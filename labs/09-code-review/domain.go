@@ -7,14 +7,15 @@ import (
 )
 
 var (
-	ErrEmptyCart           = errors.New("cart is empty")
-	ErrProductNotFound     = errors.New("product not found")
-	ErrInvalidQuantity     = errors.New("item quantity must be greater than zero")
-	ErrInsufficientStock   = errors.New("insufficient stock for product")
-	ErrIdempotencyConflict = errors.New("idempotency key conflict: request payload mismatch")
-	ErrDuplicateRequest    = errors.New("request already processed or in progress")
-	ErrForbidden           = errors.New("forbidden: user does not own this cart")
-	ErrIdempotencyFinalize = errors.New("idempotency finalize failed but business transaction was committed")
+	ErrEmptyCart             = errors.New("cart is empty")
+	ErrProductNotFound       = errors.New("product not found")
+	ErrInvalidQuantity       = errors.New("item quantity must be greater than zero")
+	ErrInsufficientStock     = errors.New("insufficient stock for product")
+	ErrIdempotencyConflict   = errors.New("idempotency key conflict: request payload mismatch")
+	ErrDuplicateRequest      = errors.New("request already processed or in progress")
+	ErrForbidden             = errors.New("forbidden: user does not own this cart")
+	ErrIdempotencyFinalize   = errors.New("idempotency finalize failed but business transaction was committed")
+	ErrInvalidIdempotencyKey = errors.New("idempotency key is missing or invalid")
 )
 
 type Principal struct {
@@ -74,6 +75,7 @@ type IdempotencyRepository interface {
 	Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error)
 	MarkCompleted(ctx context.Context, key string, resp *CheckoutResponse) error
 	Release(ctx context.Context, key string) error
+	Get(ctx context.Context, key string) (*IdempotencyRecord, error)
 }
 
 type CheckoutTx interface {

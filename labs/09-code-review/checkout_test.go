@@ -703,6 +703,71 @@ func TestImprovedCheckout_ReleaseFailureIsNotIgnored(t *testing.T) {
 	}
 }
 
+func TestImprovedCheckout_EmptyIdempotencyKeyFails(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+		CartOwnerID:    "user1",
+		IdempotencyKey: "",
+	})
+
+	if err == nil {
+		t.Fatal("Expected error for empty idempotency key")
+	}
+	if !errors.Is(err, codereview.ErrInvalidIdempotencyKey) {
+		t.Errorf("Expected ErrInvalidIdempotencyKey, got: %v", err)
+	}
+}
+
+func TestImprovedCheckout_RetryAfterCartMutationReturnsOriginalResponse(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+	idem := codereview.NewMockIdempotencyRepository()
+	txManager := codereview.NewMockTransactionManager(products, repo)
+
+	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 2, UnitPrice: 1000}})
+	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+
+	key := "retry-mutation-key"
+	cmd := codereview.CheckoutCommand{CartOwnerID: "user1", IdempotencyKey: key}
+
+	// 1. Initial success
+	resp1, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
+	if err != nil {
+		t.Fatalf("First request failed: %v", err)
+	}
+
+	// 2. Client empties/changes the cart
+	cart.SetCart("user1", []codereview.CartItem{})
+
+	// 3. Retry with same key
+	resp2, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
+	if err != nil {
+		t.Fatalf("Retry failed: %v", err)
+	}
+	
+	// Should return identical response to resp1 (same order ID, success state)
+	if resp1.OrderID != resp2.OrderID {
+		t.Errorf("Retry should return same OrderID. Expected %s, got %s", resp1.OrderID, resp2.OrderID)
+	}
+	
+	stock, _ := products.GetStock(context.Background(), "p1")
+	if stock != 8 {
+		t.Errorf("Stock should only be deducted once. Expected 8, got %d", stock)
+	}
+}
+
 func TestImprovedCheckout_IdempotencyKeyConflict(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10})
