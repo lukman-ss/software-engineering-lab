@@ -64,6 +64,8 @@ Dashboard workshop menampilkan statistik dilihat oleh banyak user. Tanpa cache, 
                      │
                      ▼
                   ~1ms latency
+
+*Catatan: Angka latency hanya ilustrasi untuk lab, bukan universal benchmark.*
 ```
 
 ---
@@ -153,6 +155,13 @@ Lab ini menggunakan pattern **Cache Aside** untuk read operations.
 - Cache miss diselesaikan oleh kode aplikasi kita.
 - Aplikasi tahu bahwa ada dua storage layer (Redis & DB).
 - Memberikan kontrol lebih besar atas penanganan error (misal: Redis mati, aplikasi masih bisa query DB).
+
+### Perbedaan Cache Aside vs Read Through
+
+- **Cache Aside:** Application sendiri menangani miss → DB → populate cache.
+- **Read Through:** Application membaca melalui cache abstraction/provider dan cache layer yang memuat backing store saat miss.
+
+Lab 04 menggunakan **Cache Aside**.
 
 ---
 
@@ -548,7 +557,8 @@ Graceful degradation harus mempertimbangkan:
 - request timeout
 - circuit breaker jika relevan
 
-**Degraded Performance:** Aplikasi harus tetap berfungsi meski lambat.
+**Degraded Performance:** Target graceful degradation adalah mempertahankan fungsi utama selama authoritative dependency dan kapasitas fallback masih tersedia.
+Cache outage dapat menyebabkan outage jika DB overload atau timeout.
 - **Circuit Breaker:** Mencegah aplikasi stuck menunggu Redis Timeout.
 - **Observability:** Log `cache_miss` dan `cache_error` terpisah.
 
@@ -708,7 +718,7 @@ Cache **bukan pengganti** database optimization.
 | Saldo Wallet | ⚠️ Conditional | Bisa cache read projection untuk UI, tapi tidak untuk transactional operation | 1–5 detik | Detik | Transaction completed |
 | Stock Sparepart | ⚠️ Conditional | Display UI boleh, validation final harus DB + concurrency control | 1–5 detik | Detik | Purchase part, invoice/service part line posted |
 
-**Nuance:** Cache? bukan sekadar YES/NO; beberapa kasus adalah conditional dengan trade-off yang complex. Semua entri dapat menggunakan read projection cache untuk UI display, selama tidak digunakan untuk transaction authorization.
+**Nuance:** Cache? bukan sekadar YES/NO; beberapa kasus adalah conditional dengan trade-off yang complex. Sebagian data transactional dapat memiliki cached read projection jika freshness, security, dan consistency requirement mengizinkan, selama tidak digunakan untuk transaction authorization.
 
 **Catatan TTL:** Nilai TTL pada contoh hanyalah illustrative. TTL yang sebenarnya bergantung pada business requirement dan invalidation mechanism yang tersedia. Active invalidation yang reliable dapat memungkinkan TTL jauh lebih panjang untuk master data.
 

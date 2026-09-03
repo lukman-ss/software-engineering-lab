@@ -26,7 +26,7 @@ func (s *DashboardNaiveService) GetDashboard(ctx context.Context, branchID int64
 	// Track query count untuk demonstration
 	s.queryCounter.Add(1)
 
-	// Combine semua query menjadi satu transaction untuk kompleksitas yang realistis
+	// Dashboard dihitung melalui beberapa query agregasi langsung ke database.
 	var d Dashboard
 	d.BranchID = branchID
 	// Date format for the key - use dayStart's date in UTC or from application timezone

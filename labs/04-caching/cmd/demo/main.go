@@ -24,7 +24,7 @@ func main() {
 		fmt.Println("  cache-aside           : Standard cache: 100 requests = 1 repo call, 99 cache hits")
 		fmt.Println("  stampede-unprotected  : Cache expire + concurrent requests = DB overloaded")
 		fmt.Println("  stampede-protected    : Cache expire + singleflight = 1 DB rebuild")
-		fmt.Println("  write-through         : Update product: DB + cache synced (no stale window)")
+		fmt.Println("  write-through         : Happy-path DB update followed by best-effort cache update")
 		os.Exit(1)
 	}
 

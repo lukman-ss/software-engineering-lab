@@ -23,11 +23,45 @@ func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
 	return base + jitter
 }
 
+var fixedNow = time.Now()
+
 // CounterRepository counts calls for stampede demonstration.
+// Provides deterministic blocking/coordinating capabilities for tests.
 type CounterRepository struct {
 	callCount atomic.Int64
 	mu        sync.Mutex
 	blockCh   chan struct{}
+	enteredCh chan struct{} // buffered, signals that a goroutine has entered GetDashboard
+}
+
+// Block sets up blocking behavior: all GetDashboard calls will block until Unblock is called.
+// Returns immediately. Signals via enteredCh when a call enters GetDashboard.
+func (r *CounterRepository) Block() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.blockCh = make(chan struct{})
+	r.enteredCh = make(chan struct{}, 100)
+}
+
+// WaitUntilEntered blocks until a goroutine signals it has entered GetDashboard.
+// Call after Block() - returns when first goroutine enters the repository.
+func (r *CounterRepository) WaitUntilEntered() {
+	r.mu.Lock()
+	ch := r.enteredCh
+	r.mu.Unlock()
+	if ch != nil {
+		<-ch
+	}
+}
+
+// Unblock releases all blocked GetDashboard calls.
+func (r *CounterRepository) Unblock() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.blockCh != nil {
+		close(r.blockCh)
+		r.blockCh = nil
+	}
 }
 
 func NewCounterRepository() *CounterRepository {
@@ -39,8 +73,15 @@ func NewCounterRepository() *CounterRepository {
 const queryDelay = 5 * time.Millisecond
 
 func (r *CounterRepository) GetDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
-	// Check for blocking (thread-safe)
+	// Signal entry into repository (for deterministic test coordination)
 	r.mu.Lock()
+	if r.enteredCh != nil {
+		select {
+		case r.enteredCh <- struct{}{}:
+		default:
+		}
+	}
+	// Check for blocking (thread-safe)
 	ch := r.blockCh
 	r.mu.Unlock()
 
@@ -66,23 +107,6 @@ func (r *CounterRepository) GetDashboard(ctx context.Context, tenantID, branchID
 
 func (r *CounterRepository) CallCount() int64 {
 	return r.callCount.Load()
-}
-
-// Block makes the repository wait before returning, for testing coordination.
-func (r *CounterRepository) Block() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.blockCh = make(chan struct{})
-}
-
-// Unblock releases all blocked repository calls.
-func (r *CounterRepository) Unblock() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.blockCh != nil {
-		close(r.blockCh)
-		r.blockCh = nil
-	}
 }
 
 // --- VERSI BROKEN (STAMPEDE) ---
@@ -116,7 +140,7 @@ func (s *BrokenStampedeService) GetData(ctx context.Context, branchID int64) (Da
 
 	// 2. Cache miss -> parallel DB queries (NO protection)
 	// In real system: 100 concurrent requests → 100 DB queries
-	d, err := s.repo.GetDashboard(ctx, 1, branchID, time.Now())
+	d, err := s.repo.GetDashboard(ctx, 1, branchID, fixedNow.UTC())
 	if err != nil {
 		return Dashboard{}, err
 	}
@@ -187,7 +211,7 @@ func (s *ProtectedStampedeService) GetData(ctx context.Context, branchID int64) 
 		}
 
 		// Only one goroutine reaches here - it fetches from DB using rebuildCtx
-		d, err := s.repo.GetDashboard(rebuildCtx, 1, branchID, time.Now())
+		d, err := s.repo.GetDashboard(rebuildCtx, 1, branchID, fixedNow.UTC())
 		if err != nil {
 			return Dashboard{}, err
 		}

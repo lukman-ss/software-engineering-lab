@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	caching "github.com/lukman-ss/software-engineering-lab/labs/04-caching"
@@ -223,4 +224,170 @@ func TestWriteThroughCacheAndFallbackFailure(t *testing.T) {
 
 	t.Log("✓ Business operation succeeds even when cache SET+DELETE both fail")
 	t.Log("✓ Stale cache persists until TTL (safety net)")
+}
+
+// TestWriteThroughGetProduct memverifikasi GetProduct menangani: ErrCacheMiss, nil error + empty value, backend error, valid hit, corrupt JSON.
+func TestWriteThroughGetProduct(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("ErrCacheMiss", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("failed to create mock db: %v", err)
+		}
+		defer db.Close()
+
+		metrics := caching.NewCacheMetrics()
+		cache := caching.NewMockCache()
+		svc := caching.NewWriteThroughServiceWithMetrics(db, cache, metrics)
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("p1").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("p1", "Item 1", 50.0))
+
+		p, err := svc.GetProduct(ctx, "p1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.ID != "p1" || p.Name != "Item 1" {
+			t.Errorf("unexpected product: %+v", p)
+		}
+		if metrics.Misses() != 1 {
+			t.Errorf("expected 1 miss, got %d", metrics.Misses())
+		}
+		if metrics.Errors() != 0 {
+			t.Errorf("expected 0 errors, got %d", metrics.Errors())
+		}
+		if metrics.DBFallbacks() != 0 {
+			t.Errorf("expected 0 db fallbacks for miss, got %d", metrics.DBFallbacks())
+		}
+	})
+
+	t.Run("NilErrorAndEmptyValue", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("failed to create mock db: %v", err)
+		}
+		defer db.Close()
+
+		metrics := caching.NewCacheMetrics()
+		cache := caching.NewMockCache()
+		cache.Set(ctx, caching.CacheKey("product", "p2", 1), "", time.Minute)
+		metrics.Reset()
+
+		svc := caching.NewWriteThroughServiceWithMetrics(db, cache, metrics)
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("p2").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("p2", "Item 2", 75.0))
+
+		p, err := svc.GetProduct(ctx, "p2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.ID != "p2" || p.Name != "Item 2" {
+			t.Errorf("unexpected product: %+v", p)
+		}
+		if metrics.Misses() != 1 {
+			t.Errorf("expected 1 miss for empty cached value, got %d", metrics.Misses())
+		}
+		if metrics.Errors() != 0 {
+			t.Errorf("expected 0 errors for empty cached value, got %d", metrics.Errors())
+		}
+		if metrics.DBFallbacks() != 0 {
+			t.Errorf("expected 0 db fallbacks for empty cached value, got %d", metrics.DBFallbacks())
+		}
+	})
+
+	t.Run("BackendError", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("failed to create mock db: %v", err)
+		}
+		defer db.Close()
+
+		metrics := caching.NewCacheMetrics()
+		cache := caching.NewFailingMockCache()
+		svc := caching.NewWriteThroughServiceWithMetrics(db, cache, metrics)
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("p3").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("p3", "Item 3", 100.0))
+
+		p, err := svc.GetProduct(ctx, "p3")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.ID != "p3" {
+			t.Errorf("unexpected product ID: %s", p.ID)
+		}
+		if metrics.Errors() == 0 {
+			t.Errorf("expected >0 errors for backend failure")
+		}
+		if metrics.DBFallbacks() != 1 {
+			t.Errorf("expected 1 DB fallback for backend error, got %d", metrics.DBFallbacks())
+		}
+	})
+
+	t.Run("ValidHit", func(t *testing.T) {
+		db, _, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("failed to create mock db: %v", err)
+		}
+		defer db.Close()
+
+		metrics := caching.NewCacheMetrics()
+		cache := caching.NewMockCache()
+		svc := caching.NewWriteThroughServiceWithMetrics(db, cache, metrics)
+
+		product := caching.Product{ID: "p4", Name: "Item 4", Price: 120.0}
+		data, _ := json.Marshal(product)
+		cache.Set(ctx, caching.CacheKey("product", "p4", 1), string(data), time.Minute)
+		metrics.Reset()
+
+		p, err := svc.GetProduct(ctx, "p4")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.Name != "Item 4" {
+			t.Errorf("expected Item 4, got %s", p.Name)
+		}
+		if metrics.Hits() != 1 {
+			t.Errorf("expected 1 hit, got %d", metrics.Hits())
+		}
+	})
+
+	t.Run("CorruptJSON", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("failed to create mock db: %v", err)
+		}
+		defer db.Close()
+
+		metrics := caching.NewCacheMetrics()
+		cache := caching.NewMockCache()
+		cache.Set(ctx, caching.CacheKey("product", "p5", 1), "{corrupt_json}", time.Minute)
+		metrics.Reset()
+
+		svc := caching.NewWriteThroughServiceWithMetrics(db, cache, metrics)
+
+		mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+			WithArgs("p5").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+				AddRow("p5", "Item 5", 150.0))
+
+		p, err := svc.GetProduct(ctx, "p5")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.ID != "p5" {
+			t.Errorf("unexpected product: %+v", p)
+		}
+		if metrics.Errors() != 1 {
+			t.Errorf("expected 1 error for corrupt json, got %d", metrics.Errors())
+		}
+	})
 }

@@ -34,39 +34,41 @@ func (s *RobustDashboardService) GetDashboard(ctx context.Context, branchID int6
 // GetDashboardWithTenant returns dashboard data with tenant isolation.
 // Primary entry point for multi-tenant deployments.
 func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
-	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
+	key := NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
 
-	// 1. Check cache
-	s.metrics.IncCacheGetOp()
+	// 1. Check cache with latency measurement
+	startGet := time.Now()
 	cached, err := s.cache.Get(ctx, key)
+	s.metrics.IncCacheGetOp()
+	s.metrics.RecordCacheGetLatency(time.Since(startGet))
+
 	if err != nil {
-		// Categorize error
 		switch {
 		case errors.Is(err, ErrCacheMiss):
-			// Cache miss - expected, go to DB
 			s.metrics.IncMiss()
+			return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key, false)
 		default:
-			// Cache down/network error - fallback
 			s.metrics.IncError()
+			s.metrics.IncDBFallback()
+			return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key, true)
 		}
-		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key)
 	}
 
 	if cached == "" {
-		// Explicit miss
 		s.metrics.IncMiss()
-		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key)
+		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key, false)
 	}
 
 	// 2. Cache hit - check for corruption
 	var d Dashboard
 	if err := json.Unmarshal([]byte(cached), &d); err != nil {
-		// Corrupt cache entry
 		s.metrics.IncError()
-		if delErr := s.cache.Delete(ctx, key); delErr != nil {
+		s.metrics.IncCacheInvalidateOp()
+		if delErr := s.cache.Delete(ctx, key); delErr != nil && !errors.Is(delErr, ErrCacheMiss) {
+			s.metrics.IncCacheInvalidationError()
 			fmt.Printf("warn: failed to delete corrupt cache key %s: %v\n", key, delErr)
 		}
-		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key)
+		return s.fetchAndPopulate(ctx, tenantID, branchID, businessDate, key, false)
 	}
 
 	// Valid cache hit
@@ -74,30 +76,32 @@ func (s *RobustDashboardService) GetDashboardWithTenant(ctx context.Context, ten
 	return d, nil
 }
 
-func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID, branchID int64, businessDate time.Time, key string) (Dashboard, error) {
+func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID, branchID int64, businessDate time.Time, key string, isFallback bool) (Dashboard, error) {
 	s.metrics.IncRebuildAttempt()
+	startRebuild := time.Now()
 
-	// Query repository for real data - use tenant-aware method for proper isolation
-	s.metrics.IncDBQuery() // Ensure DBQuery metric increments exactly when repo is called
+	s.metrics.IncDBQuery()
 	startDB := time.Now()
 	d, err := s.repo.GetDashboard(ctx, tenantID, branchID, businessDate)
+	if isFallback {
+		s.metrics.RecordDBFallbackLatency(time.Since(startDB))
+	}
 	if err != nil {
 		return Dashboard{}, fmt.Errorf("repo get: %w", err)
 	}
-	s.metrics.RecordRebuildLatency(time.Since(startDB))
 
 	// Rebuild cache
-	startSet := time.Now()
 	data, marshalErr := json.Marshal(d)
 	if marshalErr != nil {
-		// Log but don't fail - we have the data
 		fmt.Printf("warn: failed to marshal dashboard for cache: %v\n", marshalErr)
 		s.metrics.IncError()
 	} else {
-		// Add jitter to prevent synchronized cache expiration across branches
 		jitteredTTL := TTLWithJitter(30*time.Second, 10*time.Second)
-		if setErr := s.cache.Set(ctx, key, string(data), jitteredTTL); setErr != nil {
-			// Log cache set error but don't fail the request
+		s.metrics.IncCacheSetOp()
+		startSet := time.Now()
+		setErr := s.cache.Set(ctx, key, string(data), jitteredTTL)
+		s.metrics.RecordCacheSetLatency(time.Since(startSet))
+		if setErr != nil {
 			s.metrics.IncError()
 			s.metrics.IncCacheSetError()
 			fmt.Printf("warn: cache set failed: %v\n", setErr)
@@ -105,29 +109,19 @@ func (s *RobustDashboardService) fetchAndPopulate(ctx context.Context, tenantID,
 			s.metrics.IncRebuildSuccess()
 		}
 	}
-	s.metrics.RecordCacheSetLatency(time.Since(startSet))
 
+	s.metrics.RecordRebuildLatency(time.Since(startRebuild))
 	return d, nil
 }
 
 // InvalidateDashboard invalidates cache for a branch and specific business date.
-//
-// LOW-LEVEL INVALIDATE METHOD:
-// This method can return error if cache DELETE fails (e.g., Redis down, network error).
-// Callers should be aware that this is a cache side-effect failure, NOT a transaction failure.
-//
-// BUSINESS MUTATION FLOW:
-// DB mutation → COMMIT success → cache invalidation attempt → if invalidation fails, record error but business write succeeded → TTL serves as safety net for stale cache
-//
-// The error return allows monitoring/debugging, but business operations must handle
-// cache errors as non-blocking side-effects, not transaction rollbacks.
 func (s *RobustDashboardService) InvalidateDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
-	key := NewDashboardKey(branchID).WithTenant(tenantID).WithDate(businessDate).Build()
+	key := NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
+	s.metrics.IncCacheInvalidateOp()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		s.metrics.IncError()
-		// Log and return error - caller should handle as cache side-effect
-		// Business operation already succeeded if we're here
+		s.metrics.IncCacheInvalidationError()
 		fmt.Printf("warn: failed to invalidate cache key %s: %v\n", key, err)
 		return fmt.Errorf("invalidate cache: %w", err)
 	}

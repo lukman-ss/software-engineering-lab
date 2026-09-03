@@ -31,10 +31,7 @@ func (s *DashboardCacheService) GetDashboard(ctx context.Context, branchID int64
 // GetDashboardWithTenant mengembalikan statistik dashboard dengan tenant isolation.
 // Primary entry point for multi-tenant deployments.
 func (s *DashboardCacheService) GetDashboardWithTenant(ctx context.Context, tenantID, branchID int64, businessDate time.Time) (Dashboard, error) {
-	key := NewDashboardKey(branchID).
-		WithTenant(tenantID).
-		WithDate(businessDate).
-		Build()
+	key := NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
 
 	cached, err := s.cache.Get(ctx, key)
 	if err == nil && cached != "" {
@@ -69,10 +66,7 @@ func (s *DashboardCacheService) GetDashboardWithTenant(ctx context.Context, tena
 
 // InvalidateDashboard invalidates cache for a branch and specific business date.
 func (s *DashboardCacheService) InvalidateDashboard(ctx context.Context, tenantID, branchID int64, businessDate time.Time) error {
-	key := NewDashboardKey(branchID).
-		WithTenant(tenantID).
-		WithDate(businessDate).
-		Build()
+	key := NewTenantDashboardKey(tenantID, branchID, businessDate).Build()
 	err := s.cache.Delete(ctx, key)
 	if err != nil && !errors.Is(err, ErrCacheMiss) {
 		return fmt.Errorf("invalidate cache: %w", err)

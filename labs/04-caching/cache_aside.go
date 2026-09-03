@@ -64,6 +64,7 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 		}
 		// Cache CORRUPT - unmarshal gagal
 		s.metrics.IncError()
+		s.metrics.IncCacheInvalidateOp()
 		_ = s.cache.Delete(ctx, key) // attempt cleanup, but don't fail read
 	case errors.Is(err, ErrCacheMiss):
 		// Normal cache miss - bukan error
@@ -97,7 +98,10 @@ func (s *CacheAsideService) GetProduct(ctx context.Context, id string) (Product,
 
 	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
 	s.metrics.IncCacheSetOp()
-	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
+	startSet := time.Now()
+	err = s.cache.Set(ctx, key, string(data), jitteredTTL)
+	s.metrics.RecordCacheSetLatency(time.Since(startSet))
+	if err != nil {
 		// Cache SET failed - DB success, data tersedia
 		// Record cache-side error, bukan fail business read
 		s.metrics.IncError()

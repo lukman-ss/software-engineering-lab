@@ -31,8 +31,9 @@ type CacheMetrics struct {
 	cacheInvalidateErrors atomic.Int64
 
 	// OPERATION COUNTERS (for accurate latency averaging)
-	cacheGetOps atomic.Int64
-	cacheSetOps atomic.Int64
+	cacheGetOps        atomic.Int64
+	cacheSetOps        atomic.Int64
+	cacheInvalidateOps atomic.Int64
 
 	// LATENCY (total nanoseconds untuk menghitung average)
 	cacheGetLatency   atomic.Int64
@@ -63,6 +64,11 @@ func (m *CacheMetrics) Reset() {
 	m.cacheInvalidateErrors.Store(0)
 	m.cacheGetOps.Store(0)
 	m.cacheSetOps.Store(0)
+	m.cacheInvalidateOps.Store(0)
+	m.cacheGetLatency.Store(0)
+	m.cacheSetLatency.Store(0)
+	m.dbFallbackLatency.Store(0)
+	m.rebuildLatency.Store(0)
 	m.evictedKeys.Store(0)
 	m.expiredKeys.Store(0)
 }
@@ -83,6 +89,7 @@ func (m *CacheMetrics) IncCacheSetError()          { m.cacheSetErrors.Add(1) }
 func (m *CacheMetrics) IncCacheInvalidationError() { m.cacheInvalidateErrors.Add(1) }
 func (m *CacheMetrics) IncCacheGetOp()             { m.cacheGetOps.Add(1) }
 func (m *CacheMetrics) IncCacheSetOp()             { m.cacheSetOps.Add(1) }
+func (m *CacheMetrics) IncCacheInvalidateOp()      { m.cacheInvalidateOps.Add(1) }
 
 // --- LATENCY ---
 
@@ -109,6 +116,7 @@ func (m *CacheMetrics) CacheSetErrors() int64          { return m.cacheSetErrors
 func (m *CacheMetrics) CacheInvalidationErrors() int64 { return m.cacheInvalidateErrors.Load() }
 func (m *CacheMetrics) CacheGetOps() int64             { return m.cacheGetOps.Load() }
 func (m *CacheMetrics) CacheSetOps() int64             { return m.cacheSetOps.Load() }
+func (m *CacheMetrics) CacheInvalidateOps() int64      { return m.cacheInvalidateOps.Load() }
 
 // --- DERIVED METRICS ---
 
@@ -124,9 +132,9 @@ func (m *CacheMetrics) HitRatio() float64 {
 	return float64(m.hits.Load()) / float64(total) * 100.0
 }
 
-// CacheErrorRate menghitung persentase error dari total operasi cache.
+// CacheErrorRate menghitung persentase error teknis dari total operasi cache (GET + SET + INVALIDATE).
 func (m *CacheMetrics) CacheErrorRate() float64 {
-	total := m.hits.Load() + m.misses.Load() + m.errors.Load()
+	total := m.cacheGetOps.Load() + m.cacheSetOps.Load() + m.cacheInvalidateOps.Load()
 	if total == 0 {
 		return 0.0
 	}

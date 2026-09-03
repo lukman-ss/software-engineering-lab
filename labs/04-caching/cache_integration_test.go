@@ -90,7 +90,7 @@ func TestCacheExpiryCausesRebuild(t *testing.T) {
 	initialRebuilds := metrics.Rebuilds()
 
 	// Force miss by deleting
-	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, 1, time.Now().UTC()))
+	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, 1, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)))
 
 	// Next request rebuilds
 	_, _ = svc.GetDashboard(ctx, 1)
@@ -141,12 +141,12 @@ func TestDifferentBranchDoesNotShareCache(t *testing.T) {
 	ctx := context.Background()
 
 	// Set data for branch 1
-	key1 := caching.DashboardCacheKey(1, 1, time.Now().UTC())
+	key1 := caching.DashboardCacheKey(1, 1, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
 	data1 := `{"branch_id":1,"invoice_count":50}`
 	cache.Set(ctx, key1, data1, time.Minute)
 
 	// Set data for branch 2
-	key2 := caching.DashboardCacheKey(1, 2, time.Now().UTC())
+	key2 := caching.DashboardCacheKey(1, 2, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
 	data2 := `{"branch_id":2,"invoice_count":75}`
 	cache.Set(ctx, key2, data2, time.Minute)
 
@@ -194,13 +194,13 @@ func TestTenantIsolationInService(t *testing.T) {
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
 	// Tenant A, Branch 1 - set data
-	keyA1 := caching.NewDashboardKey(1).WithTenant(1).WithDate(today).Build()
+	keyA1 := caching.NewTenantDashboardKey(1, 1, today).Build()
 	dataA1 := caching.Dashboard{BranchID: 1, InvoiceCountToday: 100, Date: today.Format("2006-01-02")}
 	dataA1Bytes, _ := json.Marshal(dataA1)
 	cache.Set(ctx, keyA1, string(dataA1Bytes), time.Minute)
 
 	// Tenant B, Branch 1 - set different data
-	keyB1 := caching.NewDashboardKey(1).WithTenant(2).WithDate(today).Build()
+	keyB1 := caching.NewTenantDashboardKey(2, 1, today).Build()
 	dataB1 := caching.Dashboard{BranchID: 1, InvoiceCountToday: 200, Date: today.Format("2006-01-02")}
 	dataB1Bytes, _ := json.Marshal(dataB1)
 	cache.Set(ctx, keyB1, string(dataB1Bytes), time.Minute)
@@ -486,8 +486,8 @@ func TestSingleflightContextCancellation(t *testing.T) {
 		errCh <- err
 	}()
 
-	// Wait a tiny bit to ensure req 1 establishes the singleflight
-	time.Sleep(10 * time.Millisecond)
+	// Wait until req 1 enters repository
+	repo.WaitUntilEntered()
 
 	// Launch second request (will wait on singleflight)
 	go func() {

@@ -58,8 +58,8 @@ func TestBusinessTimezone(t *testing.T) {
 	}
 
 	// Keys must reflect business timezone
-	keyJakarta := caching.NewDashboardKey(1).WithTenant(1).WithDate(utcNow.In(locJakarta)).Build()
-	keyNY := caching.NewDashboardKey(1).WithTenant(1).WithDate(utcNow.In(locNY)).Build()
+	keyJakarta := caching.NewTenantDashboardKey(1, 1, utcNow.In(locJakarta)).Build()
+	keyNY := caching.NewTenantDashboardKey(1, 1, utcNow.In(locNY)).Build()
 
 	// Assert exact expected key dates
 	if !strings.Contains(keyJakarta, "date:2026-08-30") {
@@ -84,7 +84,7 @@ func TestTimezoneBoundary(t *testing.T) {
 	ts := time.Date(2026, 8, 30, 0, 30, 0, 0, locJakarta)
 
 	// Key must reflect Jakarta business date, NOT UTC date
-	key := caching.NewDashboardKey(1).WithTenant(1).WithDate(ts).Build()
+	key := caching.NewTenantDashboardKey(1, 1, ts).Build()
 
 	// Expected: date:2026-08-30 (NOT 2026-08-29)
 	if !strings.Contains(key, "date:2026-08-30") {
@@ -101,7 +101,7 @@ func TestDashboardKeyBuilderVersatility(t *testing.T) {
 	t.Logf("Single-tenant key: %s", singleKey)
 
 	// Multi-tenant dashboard key
-	multiKey := caching.NewDashboardKey(42).WithTenant(5).Build()
+	multiKey := caching.NewTenantDashboardKey(5, 42, time.Now().UTC()).Build()
 	t.Logf("Multi-tenant key: %s", multiKey)
 
 	// With explicit date (use a fixed past date to differentiate from today)

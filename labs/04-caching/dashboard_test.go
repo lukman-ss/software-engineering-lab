@@ -15,10 +15,11 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 	ctx := context.Background()
 
 	branchID := int64(1)
-	businessDate := time.Now().UTC()
+	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
 
 	// Step 1: Cache empty
-	_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
+	_, err := cache.Get(ctx, key)
 	if err == nil {
 		t.Fatal("expected cache miss initially")
 	}
@@ -28,13 +29,16 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 		BranchID:          branchID,
 		InvoiceCountToday: 50,
 		TotalRevenueToday: 250000.0,
-		Date:              caching.Today(),
+		Date:              "2026-09-03",
 	}
 	data, _ := json.Marshal(dashboard)
-	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(data), 30*time.Second)
+	cache.Set(ctx, key, string(data), 30*time.Second)
 
 	// Step 3: Cache hit
-	cached, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
+	cached, err := cache.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("expected cache hit, got error: %v", err)
+	}
 
 	var result caching.Dashboard
 	json.Unmarshal([]byte(cached), &result)
@@ -49,44 +53,39 @@ func TestDashboardCacheMissThenHit(t *testing.T) {
 func TestDashboardCacheInvalidation(t *testing.T) {
 	cache := caching.NewMockCache()
 	ctx := context.Background()
-	// Create service with mock DB
 	svc := caching.NewDashboardCacheService(nil, cache)
 
 	branchID := int64(1)
-	businessDate := time.Now().UTC()
+	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
 
 	// Step 1: Request dashboard - cache miss
 	initialData := caching.Dashboard{
 		BranchID:          branchID,
 		InvoiceCountToday: 10,
 		TotalRevenueToday: 100000.0,
-		Date:              caching.Today(),
+		Date:              "2026-09-03",
 	}
 	jsonData, _ := json.Marshal(initialData)
-	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(jsonData), 30*time.Second)
+	cache.Set(ctx, key, string(jsonData), 30*time.Second)
 
 	// Verify cache has data
-	cachedData, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
+	cachedData, err := cache.Get(ctx, key)
 	if err != nil {
 		t.Fatalf("cache should have initial data: %v", err)
 	}
 
 	var beforeMutation caching.Dashboard
 	json.Unmarshal([]byte(cachedData), &beforeMutation)
-	t.Logf("Before mutation: InvoiceCount=%d, Revenue=%.0f", beforeMutation.InvoiceCountToday, beforeMutation.TotalRevenueToday)
 
-	// Step 2: Simulate invoice creation (mutation)
-	// Because DB is nil, we bypass CreateInvoice and directly simulate what happens AFTER commit:
-	// In real world: BEGIN -> INSERT invoice -> COMMIT -> Invalidate
-
-	// Step 3: Invalidate cache (happens after commit)
-	err = svc.InvalidateCurrentDashboard(ctx, 1, branchID)
+	// Step 2: Invalidate cache (happens after commit)
+	err = svc.InvalidateDashboard(ctx, 1, branchID, fixedDate)
 	if err != nil {
 		t.Fatalf("invalidation failed: %v", err)
 	}
 
-	// Step 4: Cache should be invalidated
-	_, err = cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
+	// Step 3: Cache should be invalidated
+	_, err = cache.Get(ctx, key)
 	if err == nil {
 		t.Fatal("cache should be invalidated (miss) after mutation")
 	}
@@ -94,88 +93,82 @@ func TestDashboardCacheInvalidation(t *testing.T) {
 	t.Log("Cache invalidation after mutation validated")
 }
 
-// Test 3: Cache Invalidation Prevents Stuck Stale Data
-// Test ini gagal jika invalidation tidak diimplementasikan
+// Test 3: Cache Invalidation Required After Data Change
 func TestCacheInvalidationRequiredAfterDataChange(t *testing.T) {
 	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
 	branchID := int64(42)
-	businessDate := time.Now().UTC()
+	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
 
-	// Initial state
-	initial := caching.Dashboard{InvoiceCountToday: 100, Date: caching.Today()}
-	data, _ := json.Marshal(initial)
-	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(data), 30*time.Second)
-
-	// Mutate database directly (simulate another process)
-	mutated := caching.Dashboard{InvoiceCountToday: 150, Date: caching.Today()}
-	mutatedData, _ := json.Marshal(mutated)
-
-	// WITHOUT invalidation, cache still has old data
-	cached, _ := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
-	var result caching.Dashboard
-	json.Unmarshal([]byte(cached), &result)
-
-	if result.InvoiceCountToday == 150 {
-		t.Fatal("TEST FAILED: Cache still has old data - invalidation NOT working")
+	// Step 1: Populate cache via service read
+	initial, err := svc.GetDashboardWithTenant(ctx, 1, branchID, fixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if initial.InvoiceCountToday != 43 {
+		t.Fatalf("expected initial repo invoice count 43, got %d", initial.InvoiceCountToday)
 	}
 
-	// WITH invalidation, we update cache
-	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(mutatedData), 30*time.Second)
+	// Step 2: Authoritative source changes
+	repo.SetNextValue(func() caching.Dashboard {
+		return caching.Dashboard{BranchID: branchID, InvoiceCountToday: 150, Date: "2026-09-03"}
+	})
 
-	// Now cache reflects new data
-	cached2, _ := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
-	json.Unmarshal([]byte(cached2), &result)
-
-	if result.InvoiceCountToday != 150 {
-		t.Error("TEST FAILED: Cache should reflect updated data after invalidation")
+	// Step 3: Assert stale value is still returned from cache before invalidation
+	staleResult, err := svc.GetDashboardWithTenant(ctx, 1, branchID, fixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if staleResult.InvoiceCountToday != 43 {
+		t.Errorf("expected stale value 43 before invalidation, got %d", staleResult.InvoiceCountToday)
 	}
 
-	t.Log("Cache invalidation propagation validated")
+	// Step 4: Invalidate cache
+	if err := svc.InvalidateDashboard(ctx, 1, branchID, fixedDate); err != nil {
+		t.Fatalf("invalidation failed: %v", err)
+	}
+
+	// Step 5: Assert cache miss on key
+	_, err = cache.Get(ctx, key)
+	if err == nil {
+		t.Fatal("expected cache miss after invalidation")
+	}
+
+	// Step 6: Service fetches fresh value from repository
+	freshResult, err := svc.GetDashboardWithTenant(ctx, 1, branchID, fixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if freshResult.InvoiceCountToday != 150 {
+		t.Errorf("expected fresh value 150 after invalidation, got %d", freshResult.InvoiceCountToday)
+	}
+
+	t.Log("Cache invalidation flow validated: stale cache -> mutation -> invalidation -> miss -> fresh repo value")
 }
 
-// Test 4: Invalidation Is Async-Unsafe Without Proper Ordering
-func TestCacheDeletionBeforeCommitIsUnsafe(t *testing.T) {
-	// This test demonstrates the race condition when deleting cache BEFORE commit.
-
-	// Scenario:
-	// T1: Client A creates invoice
-	// T1: Delete cache (cache becomes empty)
-	// T1: DB commit fails or process crashes
-	// T1: Client B reads dashboard -> cache miss -> reads DB -> gets OLD data
-	// Result: Cache serves stale data even though commit failed!
-
-	// The safe flow:
-	// T1: Client A creates invoice
-	// T1: DB commit succeeds
-	// T1: Invalidate cache (only after commit)
-	// T2: Client B reads dashboard -> cache miss -> reads DB commit -> gets NEW data
-
-	// TTL is the safety net: if process crashes after commit but before invalidation,
-	// fresh data will appear after TTL expires.
-
-	t.Log("Lesson: Always COMMIT -> Invalidate. Never Delete -> Commit")
-	t.Log("TTL provides safety net for process crashes")
-}
-
-// Test 5: Cache Hit Ratio Improves With Frequent Mutations
-func TestCacheHitRatioImprovesWithMutations(t *testing.T) {
+// Test 4: Repeated Reads Hit Cache
+func TestRepeatedReadsHitCache(t *testing.T) {
 	cache := caching.NewMockCache()
 	ctx := context.Background()
 
 	branchID := int64(99)
-	businessDate := time.Now().UTC()
+	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	key := caching.NewTenantDashboardKey(1, branchID, fixedDate).Build()
 	hits, misses := 0, 0
 
 	// Populate cache
-	dashboard := caching.Dashboard{InvoiceCountToday: 50, Date: caching.Today()}
+	dashboard := caching.Dashboard{InvoiceCountToday: 50, Date: "2026-09-03"}
 	data, _ := json.Marshal(dashboard)
-	cache.Set(ctx, caching.DashboardCacheKey(1, branchID, businessDate), string(data), 30*time.Second)
+	cache.Set(ctx, key, string(data), 30*time.Second)
 
 	// Simulate 100 read requests
 	for i := 0; i < 100; i++ {
-		_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, businessDate))
+		_, err := cache.Get(ctx, key)
 		if err == nil {
 			hits++
 		} else {
@@ -187,38 +180,58 @@ func TestCacheHitRatioImprovesWithMutations(t *testing.T) {
 		t.Errorf("expected 100 cache hits, got %d hits, %d misses", hits, misses)
 	}
 
-	t.Logf("Cache hit ratio: %d%%", hits*100)
+	ratio := float64(hits) / float64(hits+misses) * 100.0
+	if ratio != 100.0 {
+		t.Errorf("expected hit ratio 100.0%%, got %.2f%%", ratio)
+	}
+
+	t.Logf("Cache hit ratio: %.2f%%", ratio)
 	t.Log("Cache reduces DB load significantly")
 }
 
-// Test 6: Stale Data Acceptable for Dashboard Statistics
-func TestStaleDataAcceptableForDashboard(t *testing.T) {
-	// Pertanyaan utama caching bukan: "Apakah datanya berubah?"
-	// tapi: "Berapa lama stale data masih dapat diterima?"
-
-	// Contoh:
-	// Top Mekanik terlambat 60 detik → biasanya acceptable
-	// Saldo Wallet terlambat 60 detik → mungkin tidak acceptable
-
-	// Ini adalah business decision, bukan teknisalah.
+// Test 5: Dashboard Serves Stale Value Before Invalidation
+func TestDashboardServesStaleValueBeforeInvalidation(t *testing.T) {
 	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	repo := caching.NewFakeDashboardRepository()
+	svc := caching.NewRobustDashboardService(repo, cache, metrics)
 	ctx := context.Background()
 
-	trueData := caching.Dashboard{InvoiceCountToday: 100, Date: caching.Today()}
+	branchID := int64(7)
+	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
 
-	data, _ := json.Marshal(trueData)
-	cache.Set(ctx, "dash", string(data), 30*time.Second)
+	// Populate cache with stale value (100)
+	staleDashboard := caching.Dashboard{BranchID: branchID, InvoiceCountToday: 100, Date: "2026-09-03"}
+	data, _ := json.Marshal(staleDashboard)
+	cache.Set(ctx, caching.NewTenantDashboardKey(1, branchID, fixedDate).Build(), string(data), 30*time.Second)
 
-	cached, _ := cache.Get(ctx, "dash")
-	var d caching.Dashboard
-	json.Unmarshal([]byte(cached), &d)
+	// Authoritative source has newer value (120)
+	repo.SetNextValue(func() caching.Dashboard {
+		return caching.Dashboard{BranchID: branchID, InvoiceCountToday: 120, Date: "2026-09-03"}
+	})
 
-	staleDifference := trueData.InvoiceCountToday - d.InvoiceCountToday
-	t.Logf("Stale data difference: %d invoices (30s)", staleDifference)
-	t.Logf("For dashboard: acceptable for operational metrics")
+	// Read before invalidation returns stale value (100)
+	read1, err := svc.GetDashboardWithTenant(ctx, 1, branchID, fixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if read1.InvoiceCountToday != 100 {
+		t.Errorf("expected stale value 100 before invalidation, got %d", read1.InvoiceCountToday)
+	}
 
-	// TODO: Bagaimana jika stale > 5% dari value?
-	// Itu adalah pertanyaan business, bukan teknis.
+	// Invalidate cache
+	if err := svc.InvalidateDashboard(ctx, 1, branchID, fixedDate); err != nil {
+		t.Fatalf("invalidation failed: %v", err)
+	}
 
-	t.Log("Stale data tolerance validated for aggregated stats")
+	// Read after invalidation returns fresh value (120)
+	read2, err := svc.GetDashboardWithTenant(ctx, 1, branchID, fixedDate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if read2.InvoiceCountToday != 120 {
+		t.Errorf("expected authoritative value 120 after invalidation, got %d", read2.InvoiceCountToday)
+	}
+
+	t.Log("Verified stale value served before invalidation and authoritative value served after invalidation")
 }

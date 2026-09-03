@@ -32,7 +32,7 @@ func TestCacheFailureFallback(t *testing.T) {
 	t.Log("✓ Cache failure fallback: all requests hit DB when cache is unavailable")
 }
 
-// Test 2: Cache aside pattern - miss then hit
+// TestCacheAsideHit verifies cache aside pattern - miss then hit.
 func TestCacheAsideHit(t *testing.T) {
 	repo := caching.NewFakeDashboardRepository()
 	cache := caching.NewMockCache()
@@ -65,7 +65,7 @@ func TestCacheAsideHit(t *testing.T) {
 	t.Log("✓ Cache aside pattern validated using robust service")
 }
 
-// Test 4: Stale read is possible with cache TTL
+// TestCacheStaleRead verifies stale read is possible with cache TTL.
 func TestCacheStaleRead(t *testing.T) {
 	repo := caching.NewFakeDashboardRepository()
 	cache := caching.NewMockCache()
@@ -101,7 +101,7 @@ func TestCacheStaleRead(t *testing.T) {
 	t.Log("✓ Stale read verified: Cache returns old data until invalidated")
 }
 
-// Test 5: Probabilistic early refresh mitigates stampede
+// TestCacheStampedeMitigation verifies probabilistic early refresh mitigates stampede.
 func TestCacheStampedeMitigation(t *testing.T) {
 	now := time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
 	ttl := 5 * time.Minute
@@ -195,7 +195,7 @@ func TestShouldRefreshEarlyEdgeCases(t *testing.T) {
 	}
 }
 
-// Test 6: Distributed lock mutual exclusion
+// TestDistributedLockMutualExclusion verifies distributed lock mutual exclusion.
 func TestDistributedLockMutualExclusion(t *testing.T) {
 	locker := caching.NewMockRedisClient()
 	ctx := context.Background()
@@ -231,7 +231,7 @@ func TestDistributedLockMutualExclusion(t *testing.T) {
 	}
 }
 
-// Test 7: Distributed lock wrong token cannot release another holder's lock
+// TestDistributedLockWrongTokenCannotRelease verifies wrong token cannot release another holder's lock.
 func TestDistributedLockWrongTokenCannotRelease(t *testing.T) {
 	locker := caching.NewMockRedisClient()
 	ctx := context.Background()
@@ -261,7 +261,7 @@ func TestDistributedLockWrongTokenCannotRelease(t *testing.T) {
 	t.Log("Wrong token rejection verified")
 }
 
-// Test 8: Negative TTL should fail
+// TestDistributedLockNegativeTTL verifies negative TTL should fail.
 func TestDistributedLockNegativeTTL(t *testing.T) {
 	locker := caching.NewMockRedisClient()
 	ctx := context.Background()
@@ -280,7 +280,7 @@ func TestDistributedLockNegativeTTL(t *testing.T) {
 // NOTE: TestDistributedLockGetCleansExpired removed - it used time.Sleep(100ms) which is flaky.
 // Lock expiry with real time is better tested via integration tests or with injected fake clock.
 
-// Test 9: Cache key versioning for schema/deployment namespace migration
+// TestCacheKeyIncludesVersion verifies cache key versioning for schema/deployment namespace migration.
 func TestCacheKeyIncludesVersion(t *testing.T) {
 	keyV1 := caching.CacheKey("product", "700", 1)
 	keyV2 := caching.CacheKey("product", "700", 2)
@@ -304,31 +304,64 @@ func TestCacheKeyIncludesVersion(t *testing.T) {
 	t.Log("Cache key versioning validated")
 }
 
-// Test 8: Cache miss triggers population
+// TestCacheMissPopulatesCache verifies that a cache miss triggers database retrieval and populates the cache.
 func TestCacheMissPopulatesCache(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create mock db: %v", err)
+	}
+	defer db.Close()
+
 	cache := caching.NewMockCache()
+	metrics := caching.NewCacheMetrics()
+	svc := caching.NewCacheAsideService(db, cache, metrics)
 	ctx := context.Background()
 
-	product := caching.Product{ID: "900", Name: "AutoPop", Price: 30.0}
+	// 1. Cache empty -> GetProduct -> DB called
+	mock.ExpectQuery("SELECT id, name, price FROM products WHERE id =").
+		WithArgs("prod-auto-900").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "price"}).
+			AddRow("prod-auto-900", "AutoPop", 30.0))
 
-	// Cache miss - populate cache
-	data, err := json.Marshal(product)
+	p1, err := svc.GetProduct(ctx, "prod-auto-900")
 	if err != nil {
-		t.Fatalf("marshal failed: %v", err)
+		t.Fatalf("first GetProduct failed: %v", err)
+	}
+	if p1.ID != "prod-auto-900" || p1.Name != "AutoPop" {
+		t.Errorf("unexpected product: %+v", p1)
 	}
 
-	cache.Set(ctx, "product:900", string(data), 5*time.Minute)
+	// Verify cache was populated
+	key := caching.CacheKey("product", "prod-auto-900", 1)
+	cached, err := cache.Get(ctx, key)
+	if err != nil || cached == "" {
+		t.Fatalf("cache should be populated after miss, err: %v", err)
+	}
 
-	// Verify cache now has the data
-	cachedData, err := cache.Get(ctx, "product:900")
+	// 2. Second GetProduct -> cache hit -> DB query count remains 1
+	p2, err := svc.GetProduct(ctx, "prod-auto-900")
 	if err != nil {
-		t.Fatalf("cache get failed: %v", err)
+		t.Fatalf("second GetProduct failed: %v", err)
 	}
-	if cachedData == "" {
-		t.Fatal("cache should be populated after miss")
+	if p2.ID != "prod-auto-900" || p2.Name != "AutoPop" {
+		t.Errorf("unexpected second product: %+v", p2)
 	}
 
-	t.Log("Cache population on miss validated")
+	if metrics.DBQueries() != 1 {
+		t.Errorf("expected exactly 1 DB query, got %d", metrics.DBQueries())
+	}
+	if metrics.Hits() != 1 {
+		t.Errorf("expected 1 cache hit, got %d", metrics.Hits())
+	}
+	if metrics.Misses() != 1 {
+		t.Errorf("expected 1 cache miss, got %d", metrics.Misses())
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+
+	t.Log("✓ Cache miss populates cache and subsequent request hits cache")
 }
 
 // TestCacheAsideServiceMetricsClassification verifies correct metric classification:

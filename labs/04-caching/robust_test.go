@@ -92,7 +92,7 @@ func TestCacheDeleteFailureMetrics(t *testing.T) {
 	cache.FailDelete = true
 
 	// Invalidate cache
-	err := svc.InvalidateDashboard(ctx, 1, 1, time.Now().UTC())
+	err := svc.InvalidateDashboard(ctx, 1, 1, time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
 
 	// Should return error
 	if err == nil {
@@ -250,6 +250,9 @@ func TestConcurrentCacheOperations(t *testing.T) {
 
 	wg.Wait()
 
+	if metrics.Hits() != int64(ops) {
+		t.Errorf("expected %d hits, got %d", ops, metrics.Hits())
+	}
 	t.Logf("Concurrent cache operations completed: %d ops", ops)
 	t.Log("Thread-safe cache operations validated")
 }
@@ -273,8 +276,8 @@ func TestSourceOfTruth(t *testing.T) {
 	}
 
 	// Step 2: Verify cache has been populated
-	today := time.Now().UTC()
-	_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, today))
+	fixedDate := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	_, err := cache.Get(ctx, caching.DashboardCacheKey(1, branchID, fixedDate))
 	if err != nil {
 		t.Fatalf("expected cache to be populated: %v", err)
 	}
@@ -286,7 +289,7 @@ func TestSourceOfTruth(t *testing.T) {
 	})
 
 	// Step 4: Invalidate cache (simulates commit -> invalidate)
-	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, branchID, today))
+	_ = cache.Delete(ctx, caching.DashboardCacheKey(1, branchID, fixedDate))
 
 	// Step 5: Next request should get fresh data from repo
 	result, err := svc.GetDashboard(ctx, branchID)

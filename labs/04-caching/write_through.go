@@ -94,14 +94,20 @@ func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) erro
 	// 3. Best-effort cache update (setelah DB commit!)
 	key := CacheKey("product", authoritativeProduct.ID, 1)
 	jitteredTTL := TTLWithJitter(s.ttl, s.jitterTTL)
-	if err := s.cache.Set(ctx, key, string(data), jitteredTTL); err != nil {
+	s.metrics.IncCacheSetOp()
+	startSet := time.Now()
+	setErr := s.cache.Set(ctx, key, string(data), jitteredTTL)
+	s.metrics.RecordCacheSetLatency(time.Since(startSet))
+	if setErr != nil {
 		// Cache set gagal - DB sudah sukses, business operation tetap success
 		// Catat error untuk observability
+		s.metrics.IncError()
 		s.metrics.IncCacheSetError()
 		// Best-effort: delete stale key sebagai safety fallback
 		// INI BUKAN guaranteed - stale cache masih mungkin bertahan sampai TTL
+		s.metrics.IncCacheInvalidateOp()
 		if delErr := s.cache.Delete(ctx, key); delErr != nil {
-			// Catat error cache invalidation juga
+			s.metrics.IncError()
 			s.metrics.IncCacheInvalidationError()
 		}
 	}
@@ -110,17 +116,13 @@ func (s *WriteThroughService) UpdateProduct(ctx context.Context, p Product) erro
 }
 
 // GetProduct menggunakan cache-aside pattern untuk read.
-//
-// Cache-Aside: Application mengontrol cache interaction, bukan cache layer.
-// - GET cache
-// - MISS -> GET database
-// - SET cache
-//
-// Bukan Read-Through (di mana cache layer sendiri meload dari backing store).
 func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) (Product, error) {
 	// 1. Check cache
 	key := CacheKey("product", productID, 1)
+	startGet := time.Now()
 	cached, err := s.cache.Get(ctx, key)
+	s.metrics.IncCacheGetOp()
+	s.metrics.RecordCacheGetLatency(time.Since(startGet))
 
 	// Klasifikasi error cache:
 	switch {
@@ -128,21 +130,28 @@ func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) 
 		// Cache HIT
 		var p Product
 		if unmarshalErr := json.Unmarshal([]byte(cached), &p); unmarshalErr == nil {
+			s.metrics.IncHit()
 			return p, nil
 		}
 		// Unmarshal gagal → corrupt cache
 		s.metrics.IncError()
+		s.metrics.IncCacheInvalidateOp()
 		_ = s.cache.Delete(ctx, key)
 		// Fall through to DB read
 	case errors.Is(err, ErrCacheMiss):
 		// Normal miss - no error cost
-	default:
+		s.metrics.IncMiss()
+	case err == nil && cached == "":
+		// empty-value policy => miss
+		s.metrics.IncMiss()
+	case err != nil:
 		// Cache backend error (down, network, timeout)
 		s.metrics.IncError()
 		s.metrics.IncDBFallback()
 	}
 
 	// 2. Cache miss → query DB
+	s.metrics.IncDBQuery()
 	var p Product
 	row := s.db.QueryRowContext(ctx, "SELECT id, name, price FROM products WHERE id = $1", productID)
 	err = row.Scan(&p.ID, &p.Name, &p.Price)
@@ -160,10 +169,20 @@ func (s *WriteThroughService) GetProduct(ctx context.Context, productID string) 
 		return p, nil
 	}
 
-	if setErr := s.cache.Set(ctx, key, string(data), s.ttl); setErr != nil {
+	s.metrics.IncCacheSetOp()
+	startSet := time.Now()
+	setErr := s.cache.Set(ctx, key, string(data), s.ttl)
+	s.metrics.RecordCacheSetLatency(time.Since(startSet))
+	if setErr != nil {
 		// Cache set gagal - catat error, bukan fail business read
+		s.metrics.IncError()
 		s.metrics.IncCacheSetError()
 	}
 
 	return p, nil
+}
+
+// GetMetrics mengembalikan metrics untuk observability.
+func (s *WriteThroughService) GetMetrics() *CacheMetrics {
+	return s.metrics
 }
