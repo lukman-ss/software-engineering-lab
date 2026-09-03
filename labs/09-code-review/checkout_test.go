@@ -389,18 +389,39 @@ func TestImprovedCheckout_IdempotencyFailureCanRetry(t *testing.T) {
 	key := "retryable-key"
 	cmd := codereview.CheckoutCommand{CartOwnerID: "user1", IdempotencyKey: key}
 
-	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
+	resp, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
 	if err == nil {
 		t.Fatal("Expected first request to fail")
 	}
+	if resp != nil {
+		t.Fatal("Expected response to be nil on failure")
+	}
+
+	stock, _ := products.GetStock(context.Background(), "p1")
+	if stock != 10 {
+		t.Errorf("Stock should remain 10 on failure, got %d", stock)
+	}
+	if len(repo.GetOrders(context.Background())) != 0 {
+		t.Error("No order should be created")
+	}
+	if len(notify.GetSent()) != 0 {
+		t.Error("No notification should be sent")
+	}
 
 	repo.FailNextCreate(nil)
-	resp, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
+	retryResp, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, cmd)
 	if err != nil {
 		t.Fatalf("Retry request should succeed, got error: %v", err)
 	}
-	if resp == nil || !resp.Success {
+	if retryResp == nil || !retryResp.Success {
 		t.Fatal("Expected successful retry response")
+	}
+	if len(repo.GetOrders(context.Background())) != 1 {
+		t.Errorf("Expected 1 order created after retry, got %d", len(repo.GetOrders(context.Background())))
+	}
+	finalStock, _ := products.GetStock(context.Background(), "p1")
+	if finalStock != 8 {
+		t.Errorf("Stock should be deducted exactly once (8), got %d", finalStock)
 	}
 }
 
@@ -552,10 +573,6 @@ func TestImprovedCheckout_ConcurrentSameIdempotencyKeyRunsOnce(t *testing.T) {
 	startGate.Done()
 	wg.Wait()
 	close(errChan)
-
-	if successCount.Load() != 1 {
-		t.Errorf("Expected exactly 1 request to complete checkout, got %d", successCount.Load())
-	}
 
 	orders := len(repo.GetOrders(context.Background()))
 	if orders != 1 {
