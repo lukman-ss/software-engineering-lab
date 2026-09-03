@@ -279,7 +279,7 @@ Client mengirim request yang sama dengan payload identik. Mengembalikan response
 ### Test: Concurrent Checkout
 
 Dua request checkout berbeda atau sama yang dijalankan bersamaan:
-- Idempotency claim mencegah concurrent double execution dengan key sama (`TestImprovedCheckout_SameKeyConcurrentRequests`).
+- Coordinated concurrent start mencegah duplicate execution dengan key sama (`TestImprovedCheckout_ConcurrentSameIdempotencyKeyRunsOnce`).
 - Atomic transaction mencegah overselling pada stock terbatas (`TestImprovedCheckout_NoRaceCondition`, `TestConcurrentCheckout_InvariantPreserved`).
 
 ### Test: Rollback on Order Creation Failure
@@ -336,8 +336,11 @@ go test -v -race ./...
 ## Expected Result
 
 - Test `TestImprovedCheckout_*` semua passing
-- Test `TestNativeCheckout_RaceCondition` skip (membuktikan bug)
-- Tidak ada race condition yang terdeteksi pada improved implementation
+- Test naive overselling (`TestNaiveCheckout_DeterministicallyDemonstratesOverselling`) membuktikan stock dapat negatif secara deterministik
+- Rollback test mengembalikan seluruh state setelah order failure (`TestImprovedCheckout_OrderCreationFailureRollsBackStock`)
+- Duplicate request mengembalikan cached response tanpa mengurangi stock dua kali (`TestImprovedCheckout_DuplicateRequestReturnsSameResult`)
+- Test concurrent request mempertahankan invarian `stock >= 0` (`TestImprovedCheckout_ConcurrentStockReservationPreservesInvariant`)
+- Tidak ada race condition yang terdeteksi pada improved implementation via `go test -race`
 
 ## Senior Engineer Takeaways
 

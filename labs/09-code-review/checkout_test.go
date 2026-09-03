@@ -116,7 +116,7 @@ func TestNaiveCheckout_DeterministicallyDemonstratesOverselling(t *testing.T) {
 // TestImprovedCheckout_DeterministicNoRace memastikan improved implementation aman
 // terhadap race condition yang sama menggunakan barrier yang sama.
 func TestImprovedCheckout_DeterministicNoRace(t *testing.T) {
-	improved, products, repo, _, _, txManager, cart := setupImproved(t, map[string]int{"p1": 1})
+	improved, products, repo, _, _, _, cart := setupImproved(t, map[string]int{"p1": 1})
 
 	cart.SetCart("user1", []codereview.CartItem{{ProductID: "p1", Quantity: 1, UnitPrice: 1000}})
 	cart.SetCart("user2", []codereview.CartItem{{ProductID: "p1", Quantity: 1, UnitPrice: 1000}})
@@ -177,7 +177,6 @@ func TestImprovedCheckout_DeterministicNoRace(t *testing.T) {
 	if successCount.Load() != 1 {
 		t.Errorf("Expected exactly 1 success, got %d", successCount.Load())
 	}
-	_ = txManager
 }
 
 func TestImprovedCheckout_NoRaceCondition(t *testing.T) {
@@ -826,7 +825,10 @@ func TestNaiveCheckout_NPlusOneProductLookups(t *testing.T) {
 	})
 
 	naive := codereview.NewCheckoutNaive(repo, products, notify, logger, cart)
-	_, _ = naive.Checkout(context.Background(), "user1")
+	resp, err := naive.Checkout(context.Background(), "user1")
+	if err != nil || resp == nil {
+		t.Fatalf("Naive checkout failed: %v", err)
+	}
 
 	if products.GetCalls() != 3 {
 		t.Errorf("Naive expected 3 N+1 GetProduct calls, got %d", products.GetCalls())
