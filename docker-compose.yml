@@ -51,7 +51,7 @@ services:
       - se-lab
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.0
     container_name: se-lab-grafana
     ports:
       - "3000:3000"
@@ -59,17 +59,35 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     networks:
       - se-lab
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.57.0
     container_name: se-lab-jaeger
     ports:
       - "16686:16686"
       - "4317:4317"
       - "4318:4318"
+    networks:
+      - se-lab
+
+  lab07-observability:
+    build:
+      context: .
+      dockerfile: labs/07-observability/Dockerfile
+    container_name: se-lab-07-observability
+    ports:
+      - "8087:8087"
+    environment:
+      - PORT=8087
+      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
+      - OTEL_SERVICE_NAME=lab07-observability
+    depends_on:
+      - jaeger
+      - prometheus
     networks:
       - se-lab
 

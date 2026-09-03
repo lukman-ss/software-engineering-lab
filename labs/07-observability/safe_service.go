@@ -2,6 +2,8 @@ package observability
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,8 +13,39 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
+
+type ErrorResponse struct {
+	Error     string `json:"error"`
+	RequestID string `json:"request_id"`
+}
+
+type SuccessResponse struct {
+	Status    string `json:"status"`
+	InvoiceID string `json:"invoice_id"`
+	RequestID string `json:"request_id"`
+}
+
+func writeJSONError(w http.ResponseWriter, status int, msg, requestID string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(ErrorResponse{
+		Error:     msg,
+		RequestID: requestID,
+	})
+}
+
+func writeJSONSuccess(w http.ResponseWriter, invoiceID, requestID string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(SuccessResponse{
+		Status:    "success",
+		InvoiceID: invoiceID,
+		RequestID: requestID,
+	})
+}
 
 type SafeInvoiceService struct {
 	Deps         Dependencies
@@ -58,6 +91,14 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 	defer rootSpan.End()
 
 	requestID := middleware.GetRequestID(ctx)
+
+	traceID := rootSpan.SpanContext().TraceID().String()
+
+	logger := s.Logger.With(
+		"request_id", requestID,
+		"trace_id", traceID,
+		"invoice_id", invoiceID,
+	)
 
 	steps := []dependencyStep{
 		{
@@ -110,9 +151,6 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 		err := step.execute(stepCtx)
 		duration := time.Since(start)
 
-		traceID := stepSpan.SpanContext().TraceID().String()
-		spanID := stepSpan.SpanContext().SpanID().String()
-
 		if err != nil {
 			stepSpan.RecordError(err)
 			stepSpan.SetStatus(codes.Error, err.Error())
@@ -127,10 +165,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 				s.Collector.DependencyErrorsTotal.WithLabelValues(step.component, step.operation, outcome).Inc()
 			}
 
-			s.Logger.Error("dependency completed",
-				"request_id", requestID,
-				"trace_id", traceID,
-				"span_id", spanID,
+			logger.ErrorContext(stepCtx, "dependency completed",
 				"component", step.component,
 				"operation", step.operation,
 				"duration_ms", duration.Milliseconds(),
@@ -149,10 +184,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 			s.Collector.DependencyDurationSeconds.WithLabelValues(step.component, step.operation, outcome).Observe(duration.Seconds())
 		}
 
-		s.Logger.Info("dependency completed",
-			"request_id", requestID,
-			"trace_id", traceID,
-			"span_id", spanID,
+		logger.InfoContext(stepCtx, "dependency completed",
 			"component", step.component,
 			"operation", step.operation,
 			"duration_ms", duration.Milliseconds(),
@@ -168,6 +200,7 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) ScenarioConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const route = "/invoices/{id}/process"
+		const rootSpanName = "POST /invoices/{id}/process"
 		start := time.Now()
 
 		if s.Collector != nil {
@@ -175,16 +208,23 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 			defer s.Collector.HTTPInFlightRequests.WithLabelValues(route).Dec()
 		}
 
-		ctx, rootSpan := s.Tracer.Start(r.Context(), "http.request",
+		ctx, rootSpan := s.Tracer.Start(r.Context(), rootSpanName,
+			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
-				attribute.String("http.method", r.Method),
-				attribute.String("http.route", route),
+				semconv.HTTPRequestMethodKey.String(r.Method),
+				semconv.HTTPRoute(route),
+				semconv.URLPath(r.URL.Path),
+				semconv.URLScheme(r.URL.Scheme),
+				semconv.ServerAddress(r.Host),
 			),
 		)
 		defer rootSpan.End()
 
 		r = r.WithContext(ctx)
 		requestID := middleware.GetRequestID(ctx)
+		traceID := rootSpan.SpanContext().TraceID().String()
+		spanID := rootSpan.SpanContext().SpanID().String()
+		logger := ContextLogger(ctx, s.Logger, requestID)
 
 		invoiceID := r.PathValue("id")
 		if invoiceID == "" {
@@ -192,17 +232,22 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 		}
 
 		if invoiceID == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf(`{"error":"missing invoice id","request_id":"%s"}`, requestID)))
-
 			duration := time.Since(start)
+			rootSpan.SetStatus(codes.Error, "missing invoice id")
+			rootSpan.SetAttributes(semconv.HTTPResponseStatusCode(http.StatusBadRequest))
 			s.recordHTTPMetrics(r.Method, route, "4xx", duration, false)
-			s.logHTTPRequest(r.Method, route, http.StatusBadRequest, duration, requestID, rootSpan)
+			logger.Warn("http request",
+				"method", r.Method,
+				"route", route,
+				"status", http.StatusBadRequest,
+				"duration_ms", duration.Milliseconds(),
+			)
+			writeJSONError(w, http.StatusBadRequest, "missing invoice id", requestID)
 			return
 		}
 
-		// Resolve request-scoped dependencies
+		rootSpan.SetAttributes(attribute.String("invoice.id", invoiceID))
+
 		deps := s.Deps
 		if resolveScenario != nil {
 			cfg := resolveScenario(r)
@@ -212,25 +257,66 @@ func (s *SafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request) S
 		err := s.ProcessWithDeps(ctx, invoiceID, deps)
 		duration := time.Since(start)
 
-		if err != nil {
-			statusClass := "5xx"
-			s.recordHTTPMetrics(r.Method, route, statusClass, duration, true)
-			s.logHTTPRequest(r.Method, route, http.StatusInternalServerError, duration, requestID, rootSpan)
+		rootSpan.SetAttributes(semconv.HTTPResponseStatusCode(httpStatusFromError(err)))
 
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf(`{"error":"%s","request_id":"%s"}`, err.Error(), requestID)))
+		if err != nil {
+			statusCode := httpStatusFromError(err)
+			statusClass := statusClassFor(statusCode)
+			rootSpan.RecordError(err)
+			rootSpan.SetStatus(codes.Error, err.Error())
+
+			s.recordHTTPMetrics(r.Method, route, statusClass, duration, true)
+			logger.Error("http request",
+				"method", r.Method,
+				"route", route,
+				"status", statusCode,
+				"duration_ms", duration.Milliseconds(),
+				"error", err.Error(),
+			)
+
+			writeJSONError(w, statusCode, "invoice processing failed", requestID)
 			return
 		}
 
-		statusClass := "2xx"
-		s.recordHTTPMetrics(r.Method, route, statusClass, duration, false)
-		s.logHTTPRequest(r.Method, route, http.StatusOK, duration, requestID, rootSpan)
+		rootSpan.SetStatus(codes.Ok, "")
+		s.recordHTTPMetrics(r.Method, route, "2xx", duration, false)
+		logger.Info("http request",
+			"method", r.Method,
+			"route", route,
+			"status", http.StatusOK,
+			"duration_ms", duration.Milliseconds(),
+		)
+		_ = traceID
+		_ = spanID
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf(`{"status":"success","invoice_id":"%s","request_id":"%s"}`, invoiceID, requestID)))
+		writeJSONSuccess(w, invoiceID, requestID)
 	})
+}
+
+func httpStatusFromError(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return http.StatusGatewayTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return 499
+	}
+	return http.StatusBadGateway
+}
+
+func statusClassFor(status int) string {
+	switch {
+	case status >= 200 && status < 300:
+		return "2xx"
+	case status >= 300 && status < 400:
+		return "3xx"
+	case status >= 400 && status < 500:
+		return "4xx"
+	default:
+		return "5xx"
+	}
 }
 
 func (s *SafeInvoiceService) recordHTTPMetrics(method, route, statusClass string, duration time.Duration, isError bool) {
@@ -242,26 +328,4 @@ func (s *SafeInvoiceService) recordHTTPMetrics(method, route, statusClass string
 	if isError {
 		s.Collector.HTTPRequestErrorsTotal.WithLabelValues(method, route, statusClass).Inc()
 	}
-}
-
-func (s *SafeInvoiceService) logHTTPRequest(method, route string, status int, duration time.Duration, requestID string, span trace.Span) {
-	traceID := span.SpanContext().TraceID().String()
-	spanID := span.SpanContext().SpanID().String()
-
-	level := slog.LevelInfo
-	if status >= 500 {
-		level = slog.LevelError
-	} else if status >= 400 {
-		level = slog.LevelWarn
-	}
-
-	s.Logger.Log(context.Background(), level, "http request",
-		"request_id", requestID,
-		"trace_id", traceID,
-		"span_id", spanID,
-		"method", method,
-		"route", route,
-		"status", status,
-		"duration_ms", duration.Milliseconds(),
-	)
 }

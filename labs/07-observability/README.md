@@ -66,7 +66,7 @@ Send External Notification / WhatsApp
 ### Unsafe Implementation (`unsafe_service.go`)
 
 ```go
-func (s *UnsafeInvoiceService) Process(ctx context.Context, invoiceID string) error {
+func (s *UnsafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID string, deps Dependencies) error {
     start := time.Now()
     // ... executes database, inventory, commission, pdf, notification ...
     duration := time.Since(start)
@@ -75,16 +75,15 @@ func (s *UnsafeInvoiceService) Process(ctx context.Context, invoiceID string) er
 }
 ```
 
-**Kelemahan Unsafe:**
-1. **Opaque logs**: Hanya mencatat `INFO request completed duration_ms=4865`. Developer tidak tahu apakah DB, PDF, atau Notification yang lambat.
-2. **Tidak ada dependency metrics**: Prometheus tidak dapat mengagregasi p95 per dependency.
-3. **Tidak ada span tree / tracing**: Tidak dapat melihat korelasi antar I/O sub-operations.
-4. **Tidak ada context correlation**: Request ID tidak dipropagasi ke child operations.
+**Karakteristik Unsafe:**
+1. **Opaque logs**: Hanya mencatat total durasi tanpa breakdown sub-operasi I/O.
+2. **Tidak ada correlation**: Meneruskan `context.Context` tanpa mengaitkan `trace_id` atau `span_id` ke logs.
+3. **Tidak ada dependency metrics & tracing**: Tidak ada p95 latency atau tracing span per dependency.
 
 ### Safe Implementation (`safe_service.go`)
 
 ```go
-func (s *SafeInvoiceService) Process(ctx context.Context, invoiceID string) error {
+func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID string, deps Dependencies) error {
     ctx, rootSpan := s.Tracer.Start(ctx, "invoice.process",
         trace.WithAttributes(attribute.String("invoice_id", invoiceID)),
     )
@@ -99,70 +98,117 @@ func (s *SafeInvoiceService) Process(ctx context.Context, invoiceID string) erro
 ```
 
 **Keunggulan Safe:**
-1. **Child Spans**: Setiap tahapan memiliki span tersendiri (`database.load_invoice`, `pdf.generate`, dll).
-2. **Prometheus Metrics (Golden Signals)**:
+1. **Span Hierarchy**:
+   ```
+   POST /invoices/{id}/process
+   └── invoice.process
+       ├── database.load_invoice
+       ├── inventory.reserve
+       ├── commission.calculate
+       ├── pdf.generate
+       └── notification.send
+   ```
+2. **Prometheus Golden Signals**:
    - Traffic: `lab07_http_requests_total{method="POST",route="/invoices/{id}/process",status_class="2xx"}`
    - Latency: `lab07_http_request_duration_seconds` & `lab07_dependency_duration_seconds`
    - Errors: `lab07_http_request_errors_total` & `lab07_dependency_errors_total`
    - Saturation: `lab07_http_in_flight_requests`
 3. **Structured Slog Correlation**:
-```json
-{
-  "time": "2026-09-03T10:56:10Z",
-  "level": "INFO",
-  "msg": "dependency completed",
-  "request_id": "demo-slow-pdf-001",
-  "trace_id": "ece356994a7f660b01a9a2d75a9e4171",
-  "span_id": "06111ee7e4a6daae",
-  "component": "pdf",
-  "operation": "generate",
-  "duration_ms": 4800,
-  "outcome": "success"
-}
-```
-4. **Context Propagation & Cancellation**: Request ID (`X-Request-ID`) dipropagasi dan dipertahankan.
+   ```json
+   {
+     "time": "2026-09-03T10:56:10Z",
+     "level": "INFO",
+     "msg": "dependency completed",
+     "request_id": "demo-slow-pdf-001",
+     "trace_id": "ece356994a7f660b01a9a2d75a9e4171",
+     "component": "pdf",
+     "operation": "generate",
+     "duration_ms": 4800,
+     "outcome": "success"
+   }
+   ```
+4. **W3C Trace Context Propagation**: Header `traceparent` diinjeksi ke panggilan HTTP downstream.
 
 ---
 
-## Logs dan Trace Correlation: Alur Diagnosis
+## Golden Signals
 
-```
-cari request_id pada log
-    ↓
-temukan trace_id
-    ↓
-buka trace
-    ↓
-lihat child span yang lambat (pdf.generate)
-```
+- **Latency**: Waktu yang dibutuhkan untuk melayani request (`lab07_http_request_duration_seconds`, `lab07_dependency_duration_seconds`).
+- **Traffic**: Ukuran beban pada sistem (`lab07_http_requests_total`).
+- **Errors**: Tingkat kegagalan request (`lab07_http_request_errors_total`, `lab07_dependency_errors_total`).
+- **Saturation**: Seberapa penuh kapasitas layanan (`lab07_http_in_flight_requests`).
 
 ---
 
-## Menjalankan Demo Server
+## Metrics Cardinality
 
-Jalankan server demo:
+Metric labels dibatasi hanya pada nilai *bounded*: `method`, `route`, `status_class`, `component`, `operation`, `outcome`.
+
+Dilarang menjadi label:
+- `request_id`, `trace_id`, `span_id`
+- `invoice_id`, `customer_id`, `user_id`
+- `raw URL` atau `raw error` string
+- `timestamp`
+
+---
+
+## W3C Trace Context Propagation
+
+`HTTPNotificationClient` menggunakan OpenTelemetry TextMapPropagator resmi untuk menginjeksi header standar W3C:
+```
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+```
+Memastikan trace context tidak terputus saat request keluar menuju layanan eksternal.
+
+---
+
+## Error Correlation
+
+Ketika sub-operasi gagal:
+1. Record error pada dependency span & set status `Error`.
+2. Record error pada `invoice.process` span.
+3. Record error pada root HTTP span & set status `Error`.
+4. Naikkan `lab07_dependency_errors_total` dan `lab07_http_request_errors_total`.
+5. Log terstruktur dengan level `ERROR` yang memuat `request_id`, `trace_id`, dan detail error.
+6. Kembalikan respons HTTP `502 Bad Gateway` (atau `504 Gateway Timeout`) dengan sanitized JSON body yang tetap menyertakan `request_id`.
+
+---
+
+## Context Cancellation
+
+Operasi simulasi menggunakan timer yang dapat dihentikan (`time.NewTimer` + `defer timer.Stop()`). Ketika context dibatalkan atau timeout tercapai, timer segera dibatalkan dan I/O langsung dihentikan.
+
+---
+
+## Cara Menjalankan dengan Docker
 
 ```bash
-go run ./labs/07-observability/cmd/demo
+docker compose up -d
 ```
 
-Server berjalan pada port `:8087`.
+### Endpoints Layanan
+- **Lab 07 API**: `http://localhost:8087`
+- **Prometheus Metrics**: `http://localhost:8087/metrics`
+- **Prometheus Server**: `http://localhost:9090`
+- **Grafana**: `http://localhost:3000` (admin/admin)
+- **Jaeger UI**: `http://localhost:16686`
 
-### Scenario Endpoints (Safe)
+---
 
-- `POST http://localhost:8087/invoices/INV-101/process?scenario=normal`
-- `POST http://localhost:8087/invoices/INV-101/process?scenario=slow-pdf`
-- `POST http://localhost:8087/invoices/INV-101/process?scenario=slow-database`
-- `POST http://localhost:8087/invoices/INV-101/process?scenario=slow-external`
-- `POST http://localhost:8087/invoices/INV-101/process?scenario=pdf-error`
+## Cara Membaca Observability Tools
 
-### Unsafe Endpoint
+### 1. Membaca Prometheus (`:9090`)
+- Query p95 Latency: `histogram_quantile(0.95, sum(rate(lab07_dependency_duration_seconds_bucket[1m])) by (le, component, operation))`
+- Query Error Rate: `sum(rate(lab07_dependency_errors_total[1m])) by (component, operation)`
 
-- `POST http://localhost:8087/unsafe/invoices/INV-101/process?scenario=slow-pdf`
+### 2. Membaca Grafana (`:3000`)
+- Buka dashboard: **Lab 07 - Observability**.
+- Panel `Dependency p95 Latency` akan menunjukkan lonjakan pada komponen yang lambat (misal `pdf.generate` pada scenario `slow-pdf`).
 
-### Prometheus Metrics
-
-- `GET http://localhost:8087/metrics`
+### 3. Membaca Jaeger (`:16686`)
+- Pilih Service: `lab07-observability`.
+- Klik **Find Traces**.
+- Buka trace untuk melihat hierarki `POST /invoices/{id}/process` -> `invoice.process` -> child spans beserta durasi masing-masing.
 
 ---
 
@@ -178,6 +224,22 @@ make lab-07-test-race
 # Linter & Vet
 make lab-07-vet
 ```
+
+---
+
+## Production Considerations & Trade-offs
+
+- **Sampling Rate**: Tracing 100% traffic pada traffic tinggi membebani storage/network; gunakan probabilistic sampling (misal 5-10%) pada production.
+- **Log Volume**: Batasi log INFO pada level dependency untuk hot path, atau turunkan ke DEBUG.
+- **Metric Cardinality**: Hindari penggunaan user-generated identifiers sebagai labels untuk mencegah ledakan memori TSDB.
+
+---
+
+## Out of Scope
+
+- Distributed log aggregation clusters (Elasticsearch / Loki).
+- Dynamic runtime profiling / eBPF instrumentation.
+- Service Mesh telemetry injection (Istio / Envoy).
 
 ---
 

@@ -4,7 +4,7 @@
 	lab-02-explain lab-02-benchmark lab-02-clean lab-02-verify \
 	lab-04-test lab-04-test-race lab-04-vet lab-04-demo lab-04-integration \
 	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration \
-	lab-07-test lab-07-test-race lab-07-vet \
+	lab-07-test lab-07-test-race lab-07-vet lab-07-fmt lab-07-demo \
 	lab-08-test lab-08-test-race lab-08-vet \
 	lab-09-test lab-09-test-race lab-09-vet \
 	lab-14-test lab-14-test-race lab-14-vet \
@@ -162,15 +162,23 @@ lab-05-integration:
 
 lab-07-test:
 	@echo "=== Testing Lab 07: Observability ==="
-	@if [ -d "labs/07-observability" ]; then go test -v ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
+	@cd labs/07-observability && go test -v -count=1 ./...
 
 lab-07-test-race:
 	@echo "=== Testing Lab 07 (Race Detector) ==="
-	@if [ -d "labs/07-observability" ]; then go test -race -v ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
+	@cd labs/07-observability && go test -race -v -count=1 ./...
 
 lab-07-vet:
 	@echo "=== Vet Lab 07 ==="
-	@if [ -d "labs/07-observability" ]; then go vet ./labs/07-observability/...; else echo "Lab 07 Observability directory not found"; fi
+	@cd labs/07-observability && go vet ./...
+
+lab-07-fmt:
+	@echo "=== Formatting Lab 07 ==="
+	@cd labs/07-observability && go fmt ./...
+
+lab-07-demo:
+	@echo "=== Running Lab 07 Demo ==="
+	@go run ./labs/07-observability/cmd/demo
 
 # ==================== Lab 08: Database Isolation Level ====================
 

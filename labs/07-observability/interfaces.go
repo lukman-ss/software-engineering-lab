@@ -42,8 +42,11 @@ type ConfigurableDependency struct {
 
 func (d ConfigurableDependency) Execute(ctx context.Context) error {
 	if d.Delay > 0 {
+		timer := time.NewTimer(d.Delay)
+		defer timer.Stop()
+
 		select {
-		case <-time.After(d.Delay):
+		case <-timer.C:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

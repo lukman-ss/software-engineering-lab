@@ -67,7 +67,7 @@ func (s *UnsafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request)
 		}
 
 		if invoiceID == "" {
-			http.Error(w, "missing invoice id", http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, "missing invoice id", requestID)
 			return
 		}
 
@@ -78,12 +78,11 @@ func (s *UnsafeInvoiceService) HTTPHandler(resolveScenario func(r *http.Request)
 		}
 
 		if err := s.ProcessWithDeps(r.Context(), invoiceID, deps); err != nil {
-			http.Error(w, fmt.Sprintf("internal server error: %v", err), http.StatusInternalServerError)
+			statusCode := httpStatusFromError(err)
+			writeJSONError(w, statusCode, "invoice processing failed", requestID)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf(`{"status":"success","invoice_id":"%s","request_id":"%s"}`, invoiceID, requestID)))
+		writeJSONSuccess(w, invoiceID, requestID)
 	})
 }

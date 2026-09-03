@@ -133,19 +133,46 @@ func main() {
 	}()
 	tracer := otel.Tracer(os.Getenv("OTEL_SERVICE_NAME"))
 
+	// Notification client endpoint for simulated downstream service
+	notifURL := os.Getenv("NOTIFICATION_SERVICE_URL")
+	var notifClient observability.NotificationService
+	if notifURL != "" {
+		notifClient = observability.NewHTTPNotificationClient(notifURL, nil)
+	}
+
 	// Safe Service
+	defaultSafeDeps := observability.NewDependencies(observability.ScenarioConfig{})
+	if notifClient != nil {
+		defaultSafeDeps.Notification = notifClient
+	}
 	safeService := observability.NewSafeInvoiceService(
-		observability.NewDependencies(observability.ScenarioConfig{}),
+		defaultSafeDeps,
 		logger, tracer, collector,
 	)
 
 	// Unsafe Service
+	defaultUnsafeDeps := observability.NewDependencies(observability.ScenarioConfig{})
+	if notifClient != nil {
+		defaultUnsafeDeps.Notification = notifClient
+	}
 	unsafeService := &observability.UnsafeInvoiceService{
-		Deps:      observability.NewDependencies(observability.ScenarioConfig{}),
+		Deps:      defaultUnsafeDeps,
 		LogWriter: os.Stdout,
 	}
 
 	mux := http.NewServeMux()
+
+	// Simulated downstream notification service endpoint
+	mux.HandleFunc("POST /notifications", func(w http.ResponseWriter, r *http.Request) {
+		invoiceID := r.URL.Query().Get("invoice_id")
+		traceparent := r.Header.Get("traceparent")
+		logger.Info("received notification webhook",
+			"invoice_id", invoiceID,
+			"traceparent", traceparent,
+		)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"delivered"}`))
+	})
 
 	// Metrics endpoint
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
