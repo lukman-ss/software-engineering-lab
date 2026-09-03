@@ -1,8 +1,9 @@
 -- Schema for Lab 08: Database Isolation Level
 -- Wallet accounts for transfer experiments and isolation level demonstrations
 
-DROP TABLE IF EXISTS isolation_accounts CASCADE;
+DROP TABLE IF EXISTS isolation_invoices CASCADE;
 DROP TABLE IF EXISTS isolation_transfer_audit CASCADE;
+DROP TABLE IF EXISTS isolation_accounts CASCADE;
 
 CREATE TABLE isolation_accounts (
     id SERIAL PRIMARY KEY,
@@ -15,6 +16,13 @@ CREATE TABLE isolation_transfer_audit (
     from_account_id INT NOT NULL,
     to_account_id INT NOT NULL,
     amount BIGINT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE isolation_invoices (
+    id SERIAL PRIMARY KEY,
+    amount BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

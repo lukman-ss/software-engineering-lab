@@ -3,36 +3,118 @@ package codereview
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+)
+
+const (
+	IdempotencyStatusProcessing = "PROCESSING"
+	IdempotencyStatusCompleted  = "COMPLETED"
 )
 
 type IdempotencyRecord struct {
 	RequestHash string
-	Processed   bool
+	Status      string
 	Response    *CheckoutResponse
 }
 
 type MockProductRepository struct {
-	mu    sync.RWMutex
-	stock map[string]int
+	mu             sync.RWMutex
+	stock          map[string]int
+	getCalls       atomic.Int64
+	batchGetCalls  atomic.Int64
+	readHook       func(productID string)
+	getError       error
+	batchGetError  error
+	reserveError   error
+	updateError    error
 }
 
 func NewMockProductRepository(initialStock map[string]int) *MockProductRepository {
-	return &MockProductRepository{stock: initialStock}
+	stockCopy := make(map[string]int, len(initialStock))
+	for k, v := range initialStock {
+		stockCopy[k] = v
+	}
+	return &MockProductRepository{stock: stockCopy}
+}
+
+func (r *MockProductRepository) SetReadHook(hook func(productID string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.readHook = hook
+}
+
+func (r *MockProductRepository) SetGetError(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.getError = err
+}
+
+func (r *MockProductRepository) SetBatchGetError(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.batchGetError = err
+}
+
+func (r *MockProductRepository) GetCalls() int64 {
+	return r.getCalls.Load()
+}
+
+func (r *MockProductRepository) BatchGetCalls() int64 {
+	return r.batchGetCalls.Load()
 }
 
 func (r *MockProductRepository) GetProduct(ctx context.Context, productID string) (*Product, error) {
+	r.getCalls.Add(1)
+
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	hook := r.readHook
+	err := r.getError
 	stock, exists := r.stock[productID]
+	r.mu.RUnlock()
+
+	if hook != nil {
+		hook(productID)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
 	if !exists {
 		return nil, ErrProductNotFound
 	}
 	return &Product{ID: productID, Stock: stock, UnitPrice: 1000}, nil
 }
 
+func (r *MockProductRepository) GetProducts(ctx context.Context, productIDs []string) (map[string]*Product, error) {
+	r.batchGetCalls.Add(1)
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if r.batchGetError != nil {
+		return nil, r.batchGetError
+	}
+
+	result := make(map[string]*Product, len(productIDs))
+	for _, id := range productIDs {
+		stock, exists := r.stock[id]
+		if !exists {
+			return nil, ErrProductNotFound
+		}
+		result[id] = &Product{ID: id, Stock: stock, UnitPrice: 1000}
+	}
+	return result, nil
+}
+
 func (r *MockProductRepository) UpdateStock(ctx context.Context, productID string, delta int) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.updateError != nil {
+		return 0, r.updateError
+	}
+
 	stock, exists := r.stock[productID]
 	if !exists {
 		return 0, ErrProductNotFound
@@ -40,6 +122,25 @@ func (r *MockProductRepository) UpdateStock(ctx context.Context, productID strin
 	newStock := stock + delta
 	r.stock[productID] = newStock
 	return newStock, nil
+}
+
+func (r *MockProductRepository) ReserveStock(ctx context.Context, productID string, quantity int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.reserveError != nil {
+		return r.reserveError
+	}
+
+	stock, exists := r.stock[productID]
+	if !exists {
+		return ErrProductNotFound
+	}
+	if stock < quantity {
+		return ErrInsufficientStock
+	}
+	r.stock[productID] = stock - quantity
+	return nil
 }
 
 func (r *MockProductRepository) GetStock(ctx context.Context, productID string) (int, error) {
@@ -53,8 +154,9 @@ func (r *MockProductRepository) GetStock(ctx context.Context, productID string) 
 }
 
 type MockOrderRepository struct {
-	mu     sync.RWMutex
-	orders map[string]*Order
+	mu      sync.RWMutex
+	orders  map[string]*Order
+	failErr error
 }
 
 func NewMockOrderRepository() *MockOrderRepository {
@@ -63,9 +165,20 @@ func NewMockOrderRepository() *MockOrderRepository {
 	}
 }
 
+func (r *MockOrderRepository) FailNextCreate(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failErr = err
+}
+
 func (r *MockOrderRepository) CreateOrder(ctx context.Context, order *Order) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.failErr != nil {
+		err := r.failErr
+		r.failErr = nil
+		return err
+	}
 	r.orders[order.ID] = order
 	return nil
 }
@@ -80,35 +193,158 @@ func (r *MockOrderRepository) GetOrders(ctx context.Context) []*Order {
 	return result
 }
 
+type MockTransactionManager struct {
+	mu       sync.Mutex
+	products *MockProductRepository
+	orders   *MockOrderRepository
+}
+
+func NewMockTransactionManager(products *MockProductRepository, orders *MockOrderRepository) *MockTransactionManager {
+	return &MockTransactionManager{
+		products: products,
+		orders:   orders,
+	}
+}
+
+type mockTx struct {
+	parent   *MockTransactionManager
+	stockMut map[string]int
+	orderMut *Order
+}
+
+func (tm *MockTransactionManager) WithinTransaction(ctx context.Context, fn func(tx CheckoutTx) error) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	tx := &mockTx{
+		parent:   tm,
+		stockMut: make(map[string]int),
+	}
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	return tx.commit(ctx)
+}
+
+func (tx *mockTx) ReserveStock(ctx context.Context, productID string, quantity int) error {
+	if quantity <= 0 {
+		return ErrInvalidQuantity
+	}
+	tx.parent.products.mu.RLock()
+	currentStock, exists := tx.parent.products.stock[productID]
+	tx.parent.products.mu.RUnlock()
+
+	if !exists {
+		return ErrProductNotFound
+	}
+
+	accumulated := tx.stockMut[productID]
+	if currentStock-accumulated < quantity {
+		return ErrInsufficientStock
+	}
+
+	tx.stockMut[productID] = accumulated + quantity
+	return nil
+}
+
+func (tx *mockTx) CreateOrder(ctx context.Context, order *Order) error {
+	tx.parent.orders.mu.RLock()
+	failErr := tx.parent.orders.failErr
+	tx.parent.orders.mu.RUnlock()
+	if failErr != nil {
+		return failErr
+	}
+	tx.orderMut = order
+	return nil
+}
+
+func (tx *mockTx) commit(ctx context.Context) error {
+	tx.parent.products.mu.Lock()
+	defer tx.parent.products.mu.Unlock()
+
+	for pID, deduct := range tx.stockMut {
+		curr, exists := tx.parent.products.stock[pID]
+		if !exists || curr < deduct {
+			return ErrInsufficientStock
+		}
+	}
+
+	for pID, deduct := range tx.stockMut {
+		tx.parent.products.stock[pID] -= deduct
+	}
+
+	if tx.orderMut != nil {
+		if err := tx.parent.orders.CreateOrder(ctx, tx.orderMut); err != nil {
+			for pID, deduct := range tx.stockMut {
+				tx.parent.products.stock[pID] += deduct
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 type MockIdempotencyRepository struct {
-	mu      sync.RWMutex
-	records map[string]*IdempotencyRecord
+	mu        sync.RWMutex
+	records   map[string]*IdempotencyRecord
+	claimHook func(key string)
 }
 
 func NewMockIdempotencyRepository() *MockIdempotencyRepository {
 	return &MockIdempotencyRepository{records: make(map[string]*IdempotencyRecord)}
 }
 
-func (r *MockIdempotencyRepository) TryInsert(ctx context.Context, key string, hash string) (bool, error) {
+func (r *MockIdempotencyRepository) SetClaimHook(hook func(key string)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if existing, exists := r.records[key]; exists {
-		if existing.RequestHash != hash {
-			return false, ErrIdempotencyConflict
-		}
-		return false, nil
-	}
-	r.records[key] = &IdempotencyRecord{RequestHash: hash, Processed: false}
-	return true, nil
+	r.claimHook = hook
 }
 
-func (r *MockIdempotencyRepository) MarkProcessed(ctx context.Context, key string, resp *CheckoutResponse) error {
+func (r *MockIdempotencyRepository) Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error) {
+	r.mu.Lock()
+	existing, exists := r.records[key]
+	if exists {
+		r.mu.Unlock()
+		if existing.RequestHash != hash {
+			return "", nil, ErrIdempotencyConflict
+		}
+		if existing.Status == IdempotencyStatusCompleted && existing.Response != nil {
+			return IdempotencyStatusCompleted, existing.Response, nil
+		}
+		return IdempotencyStatusProcessing, nil, ErrDuplicateRequest
+	}
+
+	r.records[key] = &IdempotencyRecord{
+		RequestHash: hash,
+		Status:      IdempotencyStatusProcessing,
+	}
+	hook := r.claimHook
+	r.mu.Unlock()
+
+	if hook != nil {
+		hook(key)
+	}
+
+	return IdempotencyStatusProcessing, nil, nil
+}
+
+func (r *MockIdempotencyRepository) MarkCompleted(ctx context.Context, key string, resp *CheckoutResponse) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if rec, exists := r.records[key]; exists {
-		rec.Processed = true
+		rec.Status = IdempotencyStatusCompleted
 		rec.Response = resp
 	}
+	return nil
+}
+
+func (r *MockIdempotencyRepository) Release(ctx context.Context, key string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.records, key)
 	return nil
 }
 

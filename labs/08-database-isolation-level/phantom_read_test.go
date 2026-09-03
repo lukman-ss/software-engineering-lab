@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
+	isolation "github.com/lukman-ss/software-engineering-lab/labs/08-database-isolation-level"
 )
 
 // TestPhantomRead_ReadCommitted demonstrates that in READ COMMITTED,
@@ -14,10 +16,16 @@ import (
 func TestPhantomRead_ReadCommitted(t *testing.T) {
 	db := getTestDB(t)
 	defer db.Close()
+	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
-	_, _ = db.ExecContext(ctx, "DELETE FROM isolation_invoices")
-	_, _ = db.ExecContext(ctx, "INSERT INTO isolation_invoices (amount, status) VALUES (10000, 'PAID'), (20000, 'PAID')")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resetTestState(t, ctx, db, repo, 1000000, 1000000, 1000000)
+
+	if _, err := db.ExecContext(ctx, "INSERT INTO isolation_invoices (amount, status) VALUES (10000, 'PAID'), (20000, 'PAID')"); err != nil {
+		t.Fatalf("insert invoices: %v", err)
+	}
 
 	tx1Ready := make(chan struct{})
 	tx2Committed := make(chan struct{})
@@ -45,7 +53,13 @@ func TestPhantomRead_ReadCommitted(t *testing.T) {
 		}
 
 		close(tx1Ready)
-		<-tx2Committed
+
+		select {
+		case <-tx2Committed:
+		case <-ctx.Done():
+			tx1Err = ctx.Err()
+			return
+		}
 
 		// 2nd Count query (in same transaction)
 		tx1Err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM isolation_invoices WHERE status = 'PAID'").Scan(&count2)
@@ -53,13 +67,22 @@ func TestPhantomRead_ReadCommitted(t *testing.T) {
 			return
 		}
 
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			tx1Err = err
+		}
 	}()
 
 	// TX2: Insert Phantom Row & Commit
 	go func() {
 		defer wg.Done()
-		<-tx1Ready
+		defer close(tx2Committed)
+
+		select {
+		case <-tx1Ready:
+		case <-ctx.Done():
+			tx2Err = ctx.Err()
+			return
+		}
 
 		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		if err != nil {
@@ -74,7 +97,6 @@ func TestPhantomRead_ReadCommitted(t *testing.T) {
 		}
 
 		tx2Err = tx.Commit()
-		close(tx2Committed)
 	}()
 
 	wg.Wait()
@@ -97,10 +119,16 @@ func TestPhantomRead_ReadCommitted(t *testing.T) {
 func TestPhantomRead_RepeatableRead(t *testing.T) {
 	db := getTestDB(t)
 	defer db.Close()
+	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
-	_, _ = db.ExecContext(ctx, "DELETE FROM isolation_invoices")
-	_, _ = db.ExecContext(ctx, "INSERT INTO isolation_invoices (amount, status) VALUES (10000, 'PAID'), (20000, 'PAID')")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resetTestState(t, ctx, db, repo, 1000000, 1000000, 1000000)
+
+	if _, err := db.ExecContext(ctx, "INSERT INTO isolation_invoices (amount, status) VALUES (10000, 'PAID'), (20000, 'PAID')"); err != nil {
+		t.Fatalf("insert invoices: %v", err)
+	}
 
 	tx1Ready := make(chan struct{})
 	tx2Committed := make(chan struct{})
@@ -128,7 +156,13 @@ func TestPhantomRead_RepeatableRead(t *testing.T) {
 		}
 
 		close(tx1Ready)
-		<-tx2Committed
+
+		select {
+		case <-tx2Committed:
+		case <-ctx.Done():
+			tx1Err = ctx.Err()
+			return
+		}
 
 		// 2nd Count query
 		tx1Err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM isolation_invoices WHERE status = 'PAID'").Scan(&count2)
@@ -136,13 +170,22 @@ func TestPhantomRead_RepeatableRead(t *testing.T) {
 			return
 		}
 
-		_ = tx.Commit()
+		if err := tx.Commit(); err != nil {
+			tx1Err = err
+		}
 	}()
 
 	// TX2: Insert Phantom Row & Commit
 	go func() {
 		defer wg.Done()
-		<-tx1Ready
+		defer close(tx2Committed)
+
+		select {
+		case <-tx1Ready:
+		case <-ctx.Done():
+			tx2Err = ctx.Err()
+			return
+		}
 
 		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		if err != nil {
@@ -157,7 +200,6 @@ func TestPhantomRead_RepeatableRead(t *testing.T) {
 		}
 
 		tx2Err = tx.Commit()
-		close(tx2Committed)
 	}()
 
 	wg.Wait()

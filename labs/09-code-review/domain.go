@@ -13,7 +13,17 @@ var (
 	ErrInsufficientStock   = errors.New("insufficient stock for product")
 	ErrIdempotencyConflict = errors.New("idempotency key conflict: request payload mismatch")
 	ErrDuplicateRequest    = errors.New("request already processed or in progress")
+	ErrForbidden           = errors.New("forbidden: user does not own this cart")
 )
+
+type Principal struct {
+	UserID string
+}
+
+type CheckoutCommand struct {
+	CartOwnerID    string
+	IdempotencyKey string
+}
 
 type CartItem struct {
 	ProductID string
@@ -60,9 +70,18 @@ type NotificationSender interface {
 }
 
 type IdempotencyRepository interface {
-	TryInsert(ctx context.Context, key string, hash string) (bool, error)
-	MarkProcessed(ctx context.Context, key string, resp *CheckoutResponse) error
-	Get(ctx context.Context, key string) (*IdempotencyRecord, error)
+	Claim(ctx context.Context, key string, hash string) (string, *CheckoutResponse, error)
+	MarkCompleted(ctx context.Context, key string, resp *CheckoutResponse) error
+	Release(ctx context.Context, key string) error
+}
+
+type CheckoutTx interface {
+	ReserveStock(ctx context.Context, productID string, quantity int) error
+	CreateOrder(ctx context.Context, order *Order) error
+}
+
+type TransactionManager interface {
+	WithinTransaction(ctx context.Context, fn func(tx CheckoutTx) error) error
 }
 
 type OrderRepository interface {
@@ -71,7 +90,9 @@ type OrderRepository interface {
 
 type ProductRepository interface {
 	GetProduct(ctx context.Context, productID string) (*Product, error)
+	GetProducts(ctx context.Context, productIDs []string) (map[string]*Product, error)
 	UpdateStock(ctx context.Context, productID string, delta int) (int, error)
+	ReserveStock(ctx context.Context, productID string, quantity int) error
 }
 
 type CartSource interface {

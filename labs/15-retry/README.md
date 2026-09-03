@@ -130,4 +130,4 @@ Example output:
 ## Navigasi
 
 - **Previous**: [Lab 14 — Outbox Pattern](../14-outbox-pattern/)
-- **Next**: None
+- **Next**: [Lab 16 — Circuit Breaker](../16-circuit-breaker/)

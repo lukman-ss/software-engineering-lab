@@ -36,12 +36,12 @@ Standar ANSI/ISO SQL-92 mendefinisikan 4 tingkat isolasi berdasarkan anomali yan
 
 ## PostgreSQL dan MVCC
 
-PostgreSQL mengimplementasikan transaksi menggunakan **Multi-Version Concurrency Control (MVCC)**. Dalam MVCC, setiap penulisan data menghasilkan versi tuple baru (`xmin`, `xmax`) tanpa menimpa data lama secara langsung, sehingga pembaca tidak pernah memblokir penulis dan penulis tidak pernah memblokir pembaca.
+PostgreSQL mengimplementasikan transaksi menggunakan **Multi-Version Concurrency Control (MVCC)**. Dalam MVCC, setiap penulisan data menghasilkan versi tuple baru (`xmin`, `xmax`) tanpa menimpa data lama secara langsung. Dengan demikian, ordinary MVCC reads umumnya tidak memblokir writes dan sebaliknya, tetapi explicit locking, DDL, row locks, dan operasi tertentu tetap dapat menyebabkan blocking.
 
 Perbedaan penting implementasi PostgreSQL dibanding database lain:
 - **READ UNCOMMITTED**: PostgreSQL **tidak mendukung Dirty Read**. Jika Anda menjalankan `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;`, PostgreSQL secara internal memperlakukannya sama persis seperti `READ COMMITTED`.
 - **REPEATABLE READ**: PostgreSQL mengambil snapshot MVCC **sekali saja pada awal statement pertama dalam transaksi**. Karena snapshot ini statis sepanjang transaksi, PostgreSQL REPEATABLE READ **secara otomatis mencegah Phantom Read klasik**. Jangan berasumsi Repeatable Read selalu memunculkan Phantom Read di semua database engine!
-- **SERIALIZABLE**: PostgreSQL menggunakan **SSI (Serializable Snapshot Isolation)**. SSI tidak memblokir query atau me-lock seluruh baris seperti database lawas, melainkan mencatat dependensi pembacaan (SIREAD locks) di memori dan membatalkan (abort) transaksi yang menimbulkan dependensi anomali (Write Skew).
+- **SERIALIZABLE**: PostgreSQL Serializable menggunakan **Serializable Snapshot Isolation (SSI)**. Predicate/SIREAD locks digunakan untuk mendeteksi dependency dan tidak memblokir writer secara langsung. Namun transaksi Serializable tetap dapat mengalami blocking akibat row locks/table locks biasa dari operasi SQL yang dilakukan. Serializable tidak berarti semua transaksi dijalankan satu per satu secara literal, melainkan menjamin bahwa hasil akhirnya ekuivalen dengan suatu serial execution.
 
 ## Read Committed
 Level default di PostgreSQL. Setiap query SQL dalam transaksi mengambil **snapshot baru** dari data yang telah di-commit pada saat query tersebut dieksekusi.

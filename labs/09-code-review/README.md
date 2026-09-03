@@ -119,17 +119,20 @@ Run test: `go test -race ./...` untuk mendeteksi race condition.
 
 | Aspek | Deskripsi |
 |-------|-----------|
-| **Authentication** | Siapa yang login? (user ID) |
-| **Authorization** | Apakah user boleh akses resource tersebut? (cart milik user yang sama) |
-
-Implementation harus memastikan:
-- User hanya dapat checkout cart miliknya
-- Tidak ada akses ke cart orang lain
+| **Authentication** | Siapa yang login? (`Principal{UserID}`) |
+| **Authorization** | Apakah user boleh checkout cart milik `CartOwnerID`? |
 
 ```go
-// Benar: menggunakan userID dari konteks
-cartItems, _ := c.cartSource.GetCart(ctx, userID)
+// Benar: memakai Principal sebagai source of truth, lakukan ownership check
+if principal.UserID != cmd.CartOwnerID {
+    return nil, ErrForbidden
+}
+cartItems, _ := c.cartSource.GetCart(ctx, cmd.CartOwnerID)
 ```
+
+Implementasi memastikan:
+- User tidak dapat checkout cart milik user lain (`TestImprovedCheckout_CannotCheckoutAnotherUsersCart`)
+- Idempotency key *namespaced* per-user: `checkout:{userID}:{idempotencyKey}` sehingga dua user dengan key sama tidak bertabrakan (`TestImprovedCheckout_IdempotencyKeyIsScopedPerUser`)
 
 ## Performance Review
 
@@ -144,7 +147,16 @@ for _, item := range cartItems {
 }
 ```
 
-**Improved:** Pre-fetch semua product sekaligus atau gunakan batch query.
+**Improved:** Mengumpulkan unique product ID dan batch query `GetProducts` sekali saja:
+
+```go
+productIDs := make([]string, 0, len(cartItems))
+for _, item := range cartItems {
+    productIDs = append(productIDs, item.ProductID)
+}
+productsMap, err := c.products.GetProducts(ctx, productIDs) // 1 batch query
+```
+Dibuktikan via call counter di test `TestNaiveCheckout_NPlusOneProductLookups` vs `TestImprovedCheckout_BatchGetProductsUsedOnce`.
 
 ## Error Handling & Logging
 
@@ -167,30 +179,36 @@ Logging harus mencakup:
 
 Lihat `checkout_improved.go` untuk implementasi yang sudah direview dengan:
 
-1. **Validasi input** - empty cart, product existence, quantity, stock
-2. **Idempotency** - mencegah duplicate request
-3. **Atomic stock update** - cek dan update dalam satu operasi
-4. **Good error propagation** - mengembalikan error yang sesuai
-5. **Notification setelah transaction** - tidak ada side effect di dalam transaksi
+1. **Validasi input** - empty cart, quantity validation
+2. **Atomic Idempotency Claim** - `Claim` dengan state (PROCESSING/COMPLETED), conflict check via hash, auto-release pada error
+3. **Transaction Boundary & Rollback** - unit of work `TransactionManager` memastikan stock reservation dan `CreateOrder` atomic (rollback jika salah satu gagal)
+4. **Conditional Atomic Stock Operation** - validasi dan pemotongan stock berada dalam critical section transaksional (invarian `stock >= 0` terjaga)
+5. **Good error propagation** - mengembalikan error yang sesuai tanpa merusak state idempotency
+6. **Notification setelah transaction** - side effect dijalankan di luar transaksi setelah commit sukses
 
 ## Failure Scenario Tests
 
 ### Test: Stock Tidak Cukup
 
-Jika stock habis, checkout harus gagal tanpa mengubah stock.
+Jika stock habis/tidak mencukupi, checkout harus gagal tanpa mengubah stock (`TestImprovedCheckout_InsufficientStock`).
 
 ### Test: Duplicate Request
 
-Client dapat mengirim request yang sama dua kali. Implementasi harus:
-- Mengembalikan hasil yang sama (response replay)
-- Tidak mengubah state dua kali
+Client mengirim request yang sama dengan payload identik. Mengembalikan response replay tanpa eksekusi transaksi ulang (`TestImprovedCheckout_DuplicateRequest`).
 
 ### Test: Concurrent Checkout
 
-Dua request checkout untuk item dengan stock=1 yang dijalankan bersamaan.
-- Hanya satu yang berhasil
-- Satu yang gagal dengan error
-- Stock tetap >= 0
+Dua request checkout berbeda atau sama yang dijalankan bersamaan:
+- Idempotency claim mencegah concurrent double execution dengan key sama (`TestImprovedCheckout_SameKeyConcurrentRequests`).
+- Atomic transaction mencegah overselling pada stock terbatas (`TestImprovedCheckout_NoRaceCondition`, `TestConcurrentCheckout_InvariantPreserved`).
+
+### Test: Rollback on Order Creation Failure
+
+Jika `CreateOrder` gagal saat transaksi:
+- Stock yang di-reserve di-rollback kembali utuh.
+- Tidak ada order yang tercatat.
+- Notification tidak terkirim.
+- Idempotency key di-release sehingga retry dapat diproses kembali (`TestImprovedCheckout_OrderCreationFailureRollsBackStock`, `TestImprovedCheckout_MultiProductOrderCreationFailureRollsBackStock`).
 
 ## Risk-Based Review
 

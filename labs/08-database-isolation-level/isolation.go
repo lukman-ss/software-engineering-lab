@@ -11,6 +11,7 @@ var (
 	ErrMaxRetryExceeded       = errors.New("max retry attempts exceeded")
 	ErrNegativeTransferAmount = errors.New("transfer amount must be positive")
 	ErrDeadlockDetected       = errors.New("deadlock detected (40P01)")
+	ErrInvalidMaxAttempts     = errors.New("max attempts must be positive")
 )
 
 type Account struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 	isolation "github.com/lukman-ss/software-engineering-lab/labs/08-database-isolation-level"
@@ -21,81 +22,149 @@ func TestNaiveTransfer_LostUpdate(t *testing.T) {
 	defer db.Close()
 	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
-	_ = repo.ResetAccounts(ctx, 1000000, 1000000, 1000000)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resetTestState(t, ctx, db, repo, 1000000, 1000000, 1000000)
 
 	tx1Read := make(chan struct{})
 	tx2Read := make(chan struct{})
 	release := make(chan struct{})
 
-	var tx1Err, tx2Err error
+	type txResult struct {
+		err error
+	}
+	resultCh := make(chan txResult, 2)
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
+		var res txResult
+		defer func() { resultCh <- res }()
+
 		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		if err != nil {
-			tx1Err = err
+			res.err = err
 			return
 		}
 		defer tx.Rollback()
 
-		b1, _ := repo.GetBalance(ctx, tx, 1)
-		b2, _ := repo.GetBalance(ctx, tx, 2)
+		var b1, b2 int64
+		b1, res.err = repo.GetBalance(ctx, tx, 1)
+		if res.err != nil {
+			return
+		}
+		b2, res.err = repo.GetBalance(ctx, tx, 2)
+		if res.err != nil {
+			return
+		}
 		close(tx1Read)
 		<-release
 
 		if b1 >= 800000 {
-			_, tx1Err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 1", b1-800000)
-			_, tx1Err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 2", b2+800000)
-			_ = tx.Commit()
+			_, res.err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 1", b1-800000)
+			if res.err == nil {
+				_, res.err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 2", b2+800000)
+			}
+			if res.err == nil {
+				res.err = tx.Commit()
+			}
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
+		var res txResult
+		defer func() { resultCh <- res }()
+
 		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		if err != nil {
-			tx2Err = err
+			res.err = err
 			return
 		}
 		defer tx.Rollback()
 
-		b1, _ := repo.GetBalance(ctx, tx, 1)
-		b3, _ := repo.GetBalance(ctx, tx, 3)
+		var b1, b3 int64
+		b1, res.err = repo.GetBalance(ctx, tx, 1)
+		if res.err != nil {
+			return
+		}
+		b3, res.err = repo.GetBalance(ctx, tx, 3)
+		if res.err != nil {
+			return
+		}
 		close(tx2Read)
 		<-release
 
 		if b1 >= 800000 {
-			_, tx2Err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 1", b1-800000)
-			_, tx2Err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 3", b3+800000)
-			_ = tx.Commit()
+			_, res.err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 1", b1-800000)
+			if res.err == nil {
+				_, res.err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 3", b3+800000)
+			}
+			if res.err == nil {
+				res.err = tx.Commit()
+			}
 		}
 	}()
 
-	<-tx1Read
-	<-tx2Read
+	select {
+	case <-tx1Read:
+	case <-ctx.Done():
+		t.Fatalf("timeout waiting for tx1Read: %v", ctx.Err())
+	}
+	select {
+	case <-tx2Read:
+	case <-ctx.Done():
+		t.Fatalf("timeout waiting for tx2Read: %v", ctx.Err())
+	}
 	close(release)
 	wg.Wait()
 
-	_ = tx1Err
-	_ = tx2Err
+	res1 := <-resultCh
+	res2 := <-resultCh
+	if res1.err != nil {
+		t.Fatalf("tx1 unexpected error: %v", res1.err)
+	}
+	if res2.err != nil {
+		t.Fatalf("tx2 unexpected error: %v", res2.err)
+	}
 
-	alice, _ := repo.GetAccount(ctx, 1)
-	bob, _ := repo.GetAccount(ctx, 2)
-	charlie, _ := repo.GetAccount(ctx, 3)
+	alice, err := repo.GetAccount(ctx, 1)
+	if err != nil {
+		t.Fatalf("get alice: %v", err)
+	}
+	bob, err := repo.GetAccount(ctx, 2)
+	if err != nil {
+		t.Fatalf("get bob: %v", err)
+	}
+	charlie, err := repo.GetAccount(ctx, 3)
+	if err != nil {
+		t.Fatalf("get charlie: %v", err)
+	}
 
 	t.Logf("Naive Transfer Concurrency Result:")
 	t.Logf("  Alice:   %d", alice.Balance)
 	t.Logf("  Bob:     %d", bob.Balance)
 	t.Logf("  Charlie: %d", charlie.Balance)
 
+	// Both TXs read Alice=1,000,000, and each overwrote Alice balance with 1,000,000 - 800,000 = 200,000.
+	// Bob received 800,000 (now 1,800,000).
+	// Charlie received 800,000 (now 1,800,000).
+	// Alice lost update manifests as Alice=200,000, Total=3,800,000 (800,000 created out of thin air).
+	if alice.Balance != 200000 {
+		t.Fatalf("expected Alice balance to be 200000 due to lost update, got %d", alice.Balance)
+	}
+	if bob.Balance != 1800000 {
+		t.Fatalf("expected Bob balance to be 1800000, got %d", bob.Balance)
+	}
+	if charlie.Balance != 1800000 {
+		t.Fatalf("expected Charlie balance to be 1800000, got %d", charlie.Balance)
+	}
+
 	totalMoney := alice.Balance + bob.Balance + charlie.Balance
-	if totalMoney > 3000000 {
-		t.Logf("✅ Successfully reproduced Lost Update bug! Total money grew from 3,000,000 to %d (money created out of thin air)", totalMoney)
-	} else {
-		t.Fatalf("expected lost update to manifest under naive concurrent transfer, total was %d", totalMoney)
+	if totalMoney != 3800000 {
+		t.Fatalf("expected total money to be 3800000 due to double-spend, got %d", totalMoney)
 	}
 }
 
@@ -108,8 +177,10 @@ func TestSafeTransferWithLock_DeterministicLocking(t *testing.T) {
 	defer db.Close()
 	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
-	_ = repo.ResetAccounts(ctx, 1000000, 1000000, 1000000)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resetTestState(t, ctx, db, repo, 1000000, 1000000, 1000000)
 
 	var wg sync.WaitGroup
 	var errA, errB error
@@ -129,9 +200,18 @@ func TestSafeTransferWithLock_DeterministicLocking(t *testing.T) {
 
 	wg.Wait()
 
-	alice, _ := repo.GetAccount(ctx, 1)
-	bob, _ := repo.GetAccount(ctx, 2)
-	charlie, _ := repo.GetAccount(ctx, 3)
+	alice, err := repo.GetAccount(ctx, 1)
+	if err != nil {
+		t.Fatalf("get alice: %v", err)
+	}
+	bob, err := repo.GetAccount(ctx, 2)
+	if err != nil {
+		t.Fatalf("get bob: %v", err)
+	}
+	charlie, err := repo.GetAccount(ctx, 3)
+	if err != nil {
+		t.Fatalf("get charlie: %v", err)
+	}
 
 	t.Logf("Safe Transfer with Row Lock Result:")
 	t.Logf("  ErrA: %v, ErrB: %v", errA, errB)
@@ -166,8 +246,10 @@ func TestBidirectionalTransfers_DeadlockFree(t *testing.T) {
 	defer db.Close()
 	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
-	_ = repo.ResetAccounts(ctx, 1000000, 1000000, 1000000)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resetTestState(t, ctx, db, repo, 1000000, 1000000, 1000000)
 
 	const iterations = 50
 	var wg sync.WaitGroup
@@ -202,9 +284,18 @@ func TestBidirectionalTransfers_DeadlockFree(t *testing.T) {
 		t.Fatalf("bidirectional transfer encountered error (potential deadlock!): %v", err)
 	}
 
-	alice, _ := repo.GetAccount(ctx, 1)
-	bob, _ := repo.GetAccount(ctx, 2)
-	charlie, _ := repo.GetAccount(ctx, 3)
+	alice, err := repo.GetAccount(ctx, 1)
+	if err != nil {
+		t.Fatalf("get alice: %v", err)
+	}
+	bob, err := repo.GetAccount(ctx, 2)
+	if err != nil {
+		t.Fatalf("get bob: %v", err)
+	}
+	charlie, err := repo.GetAccount(ctx, 3)
+	if err != nil {
+		t.Fatalf("get charlie: %v", err)
+	}
 
 	totalMoney := alice.Balance + bob.Balance + charlie.Balance
 	if totalMoney != 3000000 {
@@ -220,15 +311,18 @@ func TestHighContention_100ConcurrentTransfers(t *testing.T) {
 	defer db.Close()
 	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Alice: 50,000, Bob: 50,000, Charlie: 50,000. Total = 150,000
-	_ = repo.ResetAccounts(ctx, 50000, 50000, 50000)
+	resetTestState(t, ctx, db, repo, 50000, 50000, 50000)
 
 	const totalTransfers = 100
 	var wg sync.WaitGroup
 	wg.Add(totalTransfers)
 
 	startGate := make(chan struct{})
+	errChan := make(chan error, totalTransfers)
 
 	for i := 0; i < totalTransfers; i++ {
 		from := (i % 3) + 1
@@ -239,16 +333,32 @@ func TestHighContention_100ConcurrentTransfers(t *testing.T) {
 			<-startGate // wait for barrier release to maximize contention
 
 			// Each worker attempts to transfer 1,000
-			_ = repo.TransferWithLock(ctx, fromID, toID, 1000)
+			if err := repo.TransferWithLock(ctx, fromID, toID, 1000); err != nil {
+				errChan <- fmt.Errorf("transfer %d->%d: %w", fromID, toID, err)
+			}
 		}(from, to)
 	}
 
 	close(startGate)
 	wg.Wait()
+	close(errChan)
 
-	alice, _ := repo.GetAccount(ctx, 1)
-	bob, _ := repo.GetAccount(ctx, 2)
-	charlie, _ := repo.GetAccount(ctx, 3)
+	for err := range errChan {
+		t.Fatalf("unexpected transfer error in high contention: %v", err)
+	}
+
+	alice, err := repo.GetAccount(ctx, 1)
+	if err != nil {
+		t.Fatalf("get alice: %v", err)
+	}
+	bob, err := repo.GetAccount(ctx, 2)
+	if err != nil {
+		t.Fatalf("get bob: %v", err)
+	}
+	charlie, err := repo.GetAccount(ctx, 3)
+	if err != nil {
+		t.Fatalf("get charlie: %v", err)
+	}
 
 	t.Logf("100 Concurrent Transfers Final Balances:")
 	t.Logf("  Alice:   %d", alice.Balance)

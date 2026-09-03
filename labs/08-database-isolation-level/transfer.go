@@ -21,13 +21,29 @@ func NewPostgresWalletRepo(db *sql.DB) *PostgresWalletRepo {
 
 // ResetAccounts resets account balances to initial state
 func (r *PostgresWalletRepo) ResetAccounts(ctx context.Context, aliceBalance, bobBalance, charlieBalance int64) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE isolation_accounts SET balance = $1 WHERE id = 1;
-		UPDATE isolation_accounts SET balance = $2 WHERE id = 2;
-		UPDATE isolation_accounts SET balance = $3 WHERE id = 3;
-		DELETE FROM isolation_transfer_audit;
-	`, aliceBalance, bobBalance, charlieBalance)
-	return err
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx for reset: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 1", aliceBalance); err != nil {
+		return fmt.Errorf("reset alice balance: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 2", bobBalance); err != nil {
+		return fmt.Errorf("reset bob balance: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = $1 WHERE id = 3", charlieBalance); err != nil {
+		return fmt.Errorf("reset charlie balance: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM isolation_transfer_audit"); err != nil {
+		return fmt.Errorf("clear audit: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit reset: %w", err)
+	}
+	return nil
 }
 
 // GetAccount reads single account details
@@ -172,147 +188,33 @@ func (r *PostgresWalletRepo) TransferWithLock(ctx context.Context, fromID, toID 
 	return tx.Commit()
 }
 
-// TransferRepeatableRead: REPEATABLE READ transaction
-func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID, toID int, amount int64) error {
-	if amount <= 0 {
-		return ErrNegativeTransferAmount
-	}
-
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	fromBalance, err := r.GetBalance(ctx, tx, fromID)
-	if err != nil {
-		return err
-	}
-
-	if fromBalance < amount {
-		return ErrInsufficientFunds
-	}
-
-	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
-	if err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("deduct: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
-	if err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("add: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, "INSERT INTO isolation_transfer_audit (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", fromID, toID, amount)
-	if err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("audit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("commit: %w", err)
-	}
-
-	return nil
-}
-
-// TransferSerializable: SSI (Serializable Snapshot Isolation)
-func (r *PostgresWalletRepo) TransferSerializable(ctx context.Context, fromID, toID int, amount int64) error {
-	if amount <= 0 {
-		return ErrNegativeTransferAmount
-	}
-
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	fromBalance, err := r.GetBalance(ctx, tx, fromID)
-	if err != nil {
-		return err
-	}
-
-	if fromBalance < amount {
-		return ErrInsufficientFunds
-	}
-
-	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
-	if err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("deduct: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
-	if err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("add: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, "INSERT INTO isolation_transfer_audit (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", fromID, toID, amount)
-	if err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("audit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		if isSerializationError(err) {
-			return ErrSerializationFailure
-		}
-		return fmt.Errorf("commit: %w", err)
-	}
-
-	return nil
-}
-
-// TransferSerializableWithRetry retries on 40001 serialization failures with exponential backoff & jitter
-func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxRetries int) error {
-	baseDelay := 10 * time.Millisecond
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		err := r.TransferSerializable(ctx, fromID, toID, amount)
-		if err == nil {
-			return nil
-		}
-
-		if IsSerializationError(err) && attempt < maxRetries {
-			// Exponential backoff with full jitter
-			sleep := time.Duration(float64(baseDelay) * float64(int(1)<<uint(attempt)) * (0.5 + rand.Float64()*0.5))
-			select {
-			case <-time.After(sleep):
-				continue
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		return err
-	}
-	return ErrMaxRetryExceeded
-}
-
-func isSerializationError(err error) bool {
+func wrapTxError(action string, err error) error {
 	if err == nil {
-		return false
+		return nil
 	}
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) {
-		return pqErr.Code == "40001"
+		switch pqErr.Code {
+		case "40001":
+			return fmt.Errorf("%s: %w: %w", action, ErrSerializationFailure, err)
+		case "40P01":
+			return fmt.Errorf("%s: %w: %w", action, ErrDeadlockDetected, err)
+		}
+	}
+	return fmt.Errorf("%s: %w", action, err)
+}
+
+// IsRetryableTxError checks whether an error is transient and safe to retry (40001 serialization failure or 40P01 deadlock).
+func IsRetryableTxError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrSerializationFailure) || errors.Is(err, ErrDeadlockDetected) {
+		return true
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "40001" || pqErr.Code == "40P01"
 	}
 	return false
 }
@@ -330,4 +232,147 @@ func IsSerializationError(err error) bool {
 		return pqErr.Code == "40001"
 	}
 	return false
+}
+
+// TransferRepeatableRead: REPEATABLE READ transaction
+func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID, toID int, amount int64) error {
+	if amount <= 0 {
+		return ErrNegativeTransferAmount
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return wrapTxError("begin tx", err)
+	}
+	defer tx.Rollback()
+
+	fromBalance, err := r.GetBalance(ctx, tx, fromID)
+	if err != nil {
+		return err
+	}
+
+	if fromBalance < amount {
+		return ErrInsufficientFunds
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
+	if err != nil {
+		return wrapTxError("deduct", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
+	if err != nil {
+		return wrapTxError("add", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "INSERT INTO isolation_transfer_audit (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", fromID, toID, amount)
+	if err != nil {
+		return wrapTxError("audit", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return wrapTxError("commit", err)
+	}
+
+	return nil
+}
+
+// TransferSerializable: SSI (Serializable Snapshot Isolation)
+func (r *PostgresWalletRepo) TransferSerializable(ctx context.Context, fromID, toID int, amount int64) error {
+	if amount <= 0 {
+		return ErrNegativeTransferAmount
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return wrapTxError("begin tx", err)
+	}
+	defer tx.Rollback()
+
+	fromBalance, err := r.GetBalance(ctx, tx, fromID)
+	if err != nil {
+		return err
+	}
+
+	if fromBalance < amount {
+		return ErrInsufficientFunds
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
+	if err != nil {
+		return wrapTxError("deduct", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
+	if err != nil {
+		return wrapTxError("add", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "INSERT INTO isolation_transfer_audit (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", fromID, toID, amount)
+	if err != nil {
+		return wrapTxError("audit", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return wrapTxError("commit", err)
+	}
+
+	return nil
+}
+
+// RetryPolicy defines backoff configuration.
+type RetryPolicy struct {
+	BaseDelay time.Duration
+	RandSrc   func() float64
+}
+
+// TransferSerializableWithRetry retries on retryable transaction errors (40001/40P01) with exponential backoff & jitter.
+// maxAttempts represents total allowed attempts (including the first attempt).
+func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxAttempts int) error {
+	return r.TransferSerializableWithRetryPolicy(ctx, fromID, toID, amount, maxAttempts, RetryPolicy{
+		BaseDelay: 10 * time.Millisecond,
+		RandSrc:   rand.Float64,
+	})
+}
+
+// TransferSerializableWithRetryPolicy allows passing custom retry policy for testing.
+func (r *PostgresWalletRepo) TransferSerializableWithRetryPolicy(ctx context.Context, fromID, toID int, amount int64, maxAttempts int, policy RetryPolicy) error {
+	if maxAttempts <= 0 {
+		return ErrInvalidMaxAttempts
+	}
+	if policy.RandSrc == nil {
+		policy.RandSrc = rand.Float64
+	}
+	if policy.BaseDelay <= 0 {
+		policy.BaseDelay = 10 * time.Millisecond
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := r.TransferSerializable(ctx, fromID, toID, amount)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+
+		if IsRetryableTxError(err) && attempt < maxAttempts {
+			// Exponential backoff with full jitter
+			factor := float64(int(1) << uint(attempt-1))
+			jitter := 0.5 + policy.RandSrc()*0.5
+			sleep := time.Duration(float64(policy.BaseDelay) * factor * jitter)
+
+			select {
+			case <-time.After(sleep):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		break
+	}
+
+	if IsRetryableTxError(lastErr) {
+		return fmt.Errorf("%w: %w", ErrMaxRetryExceeded, lastErr)
+	}
+	return lastErr
 }

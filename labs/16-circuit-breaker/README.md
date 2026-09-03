@@ -97,5 +97,5 @@ if errors.Is(err, breaker.ErrCircuitOpen) {
 
 ## Navigasi
 
-- **Previous**: [Lab 08 — Database Isolation Level](../08-database-isolation-level/)
-- **Next**: [Lab 10 — Rate Limiting](../10-rate-limiting/)
+- **Previous**: [Lab 15 — Retry](../15-retry/)
+- **Next**: None

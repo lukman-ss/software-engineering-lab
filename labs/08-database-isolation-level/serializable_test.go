@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 	isolation "github.com/lukman-ss/software-engineering-lab/labs/08-database-isolation-level"
@@ -17,8 +18,10 @@ func TestSerializable_ConcurrentUpdate_SerializationFailure(t *testing.T) {
 	defer db.Close()
 	repo := isolation.NewPostgresWalletRepo(db)
 
-	ctx := context.Background()
-	_ = repo.ResetAccounts(ctx, 1000000, 1000000, 1000000)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resetTestState(t, ctx, db, repo, 1000000, 1000000, 1000000)
 
 	var wg sync.WaitGroup
 	var errA, errB error
@@ -37,9 +40,18 @@ func TestSerializable_ConcurrentUpdate_SerializationFailure(t *testing.T) {
 		}
 		defer tx.Rollback()
 
-		_, _ = repo.GetBalance(ctx, tx, 1)
+		if _, err := repo.GetBalance(ctx, tx, 1); err != nil {
+			errA = err
+			return
+		}
 		close(tx1Read)
-		<-release
+
+		select {
+		case <-release:
+		case <-ctx.Done():
+			errA = ctx.Err()
+			return
+		}
 
 		_, errA = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - 500000 WHERE id = 1")
 		if errA == nil {
@@ -56,9 +68,18 @@ func TestSerializable_ConcurrentUpdate_SerializationFailure(t *testing.T) {
 		}
 		defer tx.Rollback()
 
-		_, _ = repo.GetBalance(ctx, tx, 1)
+		if _, err := repo.GetBalance(ctx, tx, 1); err != nil {
+			errB = err
+			return
+		}
 		close(tx2Read)
-		<-release
+
+		select {
+		case <-release:
+		case <-ctx.Done():
+			errB = ctx.Err()
+			return
+		}
 
 		_, errB = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - 500000 WHERE id = 1")
 		if errB == nil {
@@ -66,18 +87,37 @@ func TestSerializable_ConcurrentUpdate_SerializationFailure(t *testing.T) {
 		}
 	}()
 
-	<-tx1Read
-	<-tx2Read
+	select {
+	case <-tx1Read:
+	case <-ctx.Done():
+		t.Fatalf("timeout waiting for tx1Read: %v", ctx.Err())
+	}
+
+	select {
+	case <-tx2Read:
+	case <-ctx.Done():
+		t.Fatalf("timeout waiting for tx2Read: %v", ctx.Err())
+	}
+
 	close(release)
 	wg.Wait()
 
 	t.Logf("Serializable Concurrent Update Error: errA=%v, errB=%v", errA, errB)
 
-	// One should succeed, the other MUST fail with 40001 (serialization failure)
-	hasSerializationFailure := (errA != nil && isolation.IsSerializationError(errA)) ||
-		(errB != nil && isolation.IsSerializationError(errB))
+	successCount := 0
+	serializationFailureCount := 0
 
-	if !hasSerializationFailure {
-		t.Fatalf("expected serialization failure (40001) in one of the concurrent transactions")
+	for _, err := range []error{errA, errB} {
+		if err == nil {
+			successCount++
+		} else if isolation.IsSerializationError(err) {
+			serializationFailureCount++
+		} else {
+			t.Fatalf("unexpected error (neither success nor 40001): %v", err)
+		}
+	}
+
+	if successCount != 1 || serializationFailureCount != 1 {
+		t.Fatalf("expected exactly 1 success and 1 serialization failure (40001), got success=%d, failures=%d", successCount, serializationFailureCount)
 	}
 }
