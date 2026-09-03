@@ -185,4 +185,4 @@ go test -v -run TestSerializable_ConcurrentUpdate_SerializationFailure ./...
 ## Navigation
 
 - **Previous**: [Lab 07 — Observability](../07-observability/)
-- **Next**: [Lab 09 — Circuit Breaker](../09-circuit-breaker/)
+- **Next**: [Lab 09 — Code Review](../09-code-review/)

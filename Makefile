@@ -6,8 +6,10 @@
 	lab-05-test lab-05-test-race lab-05-vet lab-05-fmt lab-05-integration \
 	lab-07-test lab-07-test-race lab-07-vet \
 	lab-08-test lab-08-test-race lab-08-vet \
+	lab-09-test lab-09-test-race lab-09-vet \
 	lab-14-test lab-14-test-race lab-14-vet \
-	lab-15-test lab-15-test-race lab-15-vet
+	lab-15-test lab-15-test-race lab-15-vet \
+	lab-16-test lab-16-test-race lab-16-vet
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost
@@ -211,3 +213,31 @@ lab-15-test-race:
 lab-15-vet:
 	@echo "=== Vet Lab 15 ==="
 	@go vet ./labs/15-retry/...
+
+# ==================== Lab 09: Code Review ====================
+
+lab-09-test:
+	@echo "=== Testing Lab 09: Code Review ==="
+	@cd labs/09-code-review && go test -v -count=1 ./...
+
+lab-09-test-race:
+	@echo "=== Testing Lab 09 (Race Detector) ==="
+	@cd labs/09-code-review && go test -race -v -count=1 ./...
+
+lab-09-vet:
+	@echo "=== Vet Lab 09 ==="
+	@cd labs/09-code-review && go vet ./...
+
+# ==================== Lab 16: Circuit Breaker ====================
+
+lab-16-test:
+	@echo "=== Testing Lab 16: Circuit Breaker ==="
+	@cd labs/16-circuit-breaker && go test -v -count=1 ./...
+
+lab-16-test-race:
+	@echo "=== Testing Lab 16 (Race Detector) ==="
+	@cd labs/16-circuit-breaker && go test -race -v -count=1 ./...
+
+lab-16-vet:
+	@echo "=== Vet Lab 16 ==="
+	@cd labs/16-circuit-breaker && go vet ./...

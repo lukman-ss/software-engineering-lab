@@ -211,13 +211,14 @@ make lint          # go vet
 - [x] 06 API Versioning
 - [x] 07 Observability
 - [ ] 08 Database Isolation Level
-- [ ] 09 Circuit Breaker
+- [ ] 09 Code Review
 - [ ] 10 Rate Limiting
 - [ ] 11 Pessimistic Locking
 - [ ] 12 Optimistic Locking
 - [x] 13 Deadlock
 - [ ] 14 Outbox Pattern
 - [ ] 15 Retry
+- [ ] 16 Circuit Breaker
 
 ### Phase 2: Extended Topics
 - Bulkhead pattern

@@ -131,5 +131,5 @@ go test ./labs/10-rate-limiting/... -v
 
 ## Navigasi
 
-- **Previous**: [Lab 09 — Circuit Breaker](../09-circuit-breaker/)
+- **Previous**: [Lab 09 — Code Review](../09-code-review/)
 - **Next**: [Lab 11 — Pessimistic Locking](../11-pessimistic-locking/)

@@ -188,5 +188,5 @@ T3: Both think they hold lock ❌
 | 06 | Deadlock | Stress test, pg_locks | Lock ordering, timeout |
 | 14 | Event loss | Chaos test (kill broker) | Outbox pattern |
 | 15 | Retry amplification | Load test | Backoff + jitter |
-| 09 | Cascade failure | Chaos test (slow dependency) | Circuit breaker |
+| 16 | Cascade failure | Chaos test (slow dependency) | Circuit breaker |
 | 10 | Resource exhaustion | Load test | Rate limiting |

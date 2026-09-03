@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/09-circuit-breaker"
+	"github.com/lukman-ss/software-engineering-lab/labs/16-circuit-breaker"
 )
 
 // TestCircuitBreakerStateTransitions tests all state transitions (Prompt 049).

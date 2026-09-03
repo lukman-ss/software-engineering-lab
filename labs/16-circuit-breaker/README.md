@@ -1,4 +1,4 @@
-# Lab 09: Circuit Breaker Pattern
+# Lab 16: Circuit Breaker Pattern
 
 A circuit breaker prevents cascading failures by failing fast when a downstream service is struggling.
 

@@ -106,7 +106,7 @@ business_payment_total{status, provider}
 
 **Choice**: Optimistic for inventory (low contention), Pessimistic for payments (high value)
 
-### Circuit Breaker (Lab 09)
+### Circuit Breaker (Lab 16)
 | Config | Effect |
 |--------|--------|
 | Failure threshold: 5 | Open after 5 failures |
@@ -114,6 +114,13 @@ business_payment_total{status, provider}
 | Success threshold: 2 | Close after 2 successes |
 
 **Tuning**: Start conservative, adjust based on error budget
+
+### Code Review (Lab 09)
+Code reviews must prioritize correctness over style:
+- Business invariant validation
+- Concurrency safety
+- Error propagation
+- Test coverage (happy path, failure path, concurrency)
 
 ## What Can Still Fail
 
