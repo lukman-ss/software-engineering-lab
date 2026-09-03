@@ -150,13 +150,17 @@ for _, item := range cartItems {
 **Improved:** Mengumpulkan unique product ID dan batch query `GetProducts` sekali saja:
 
 ```go
+seen := make(map[string]struct{})
 productIDs := make([]string, 0, len(cartItems))
 for _, item := range cartItems {
-    productIDs = append(productIDs, item.ProductID)
+    if _, ok := seen[item.ProductID]; !ok {
+        seen[item.ProductID] = struct{}{}
+        productIDs = append(productIDs, item.ProductID)
+    }
 }
 productsMap, err := c.products.GetProducts(ctx, productIDs) // 1 batch query
 ```
-Dibuktikan via call counter di test `TestNaiveCheckout_NPlusOneProductLookups` vs `TestImprovedCheckout_BatchGetProductsUsedOnce`.
+Dibuktikan via call counter di test `TestNaiveCheckout_NPlusOneProductLookups` vs `TestImprovedCheckout_BatchLoadsProducts` (dan `TestImprovedCheckout_BatchLoadUsesUniqueProductIDs`).
 
 ## Error Handling & Logging
 

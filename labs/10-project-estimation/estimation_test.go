@@ -473,9 +473,9 @@ func TestUnknownRiskWithoutSpikeRejected(t *testing.T) {
 
 func TestEmptyTaskNameRejected(t *testing.T) {
 	task := estimation.Task{
-		Name:    "",
+		Name:     "",
 		Estimate: estimation.EstimateRange{Min: 1, MostLikely: 2, Max: 3},
-		Risk:    estimation.RiskLow,
+		Risk:     estimation.RiskLow,
 	}
 
 	if err := task.Validate(); err == nil {

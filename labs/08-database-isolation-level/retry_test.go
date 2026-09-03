@@ -3,7 +3,6 @@ package isolation_test
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,81 +73,309 @@ func TestIsRetryableTxError(t *testing.T) {
 	}
 }
 
-func TestRetryPolicy_Behavior(t *testing.T) {
+func TestWrapTxError_SerializationFailure(t *testing.T) {
+	original := &pq.Error{Code: "40001", Message: "could not serialize access"}
+	err := isolation.WrapTxError("deduct", original)
+
+	if !errors.Is(err, isolation.ErrSerializationFailure) {
+		t.Fatalf("expected ErrSerializationFailure, got %v", err)
+	}
+
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		t.Fatalf("expected *pq.Error via errors.As, got %T", err)
+	}
+	if pqErr.Code != "40001" {
+		t.Fatalf("expected SQLSTATE 40001, got %s", pqErr.Code)
+	}
+}
+
+func TestWrapTxError_Deadlock(t *testing.T) {
+	original := &pq.Error{Code: "40P01", Message: "deadlock detected"}
+	err := isolation.WrapTxError("commit", original)
+
+	if !errors.Is(err, isolation.ErrDeadlockDetected) {
+		t.Fatalf("expected ErrDeadlockDetected, got %v", err)
+	}
+
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		t.Fatalf("expected *pq.Error via errors.As, got %T", err)
+	}
+	if pqErr.Code != "40P01" {
+		t.Fatalf("expected SQLSTATE 40P01, got %s", pqErr.Code)
+	}
+}
+
+func TestRetryTransaction_SerializationFailureThenSuccess(t *testing.T) {
+	ctx := context.Background()
+	attempts := 0
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 3, policy, func(ctx context.Context) error {
+		attempts++
+		if attempts < 2 {
+			return &pq.Error{Code: "40001", Message: "serialization failure"}
+		}
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryTransaction_DeadlockThenSuccess(t *testing.T) {
+	ctx := context.Background()
+	attempts := 0
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 3, policy, func(ctx context.Context) error {
+		attempts++
+		if attempts < 3 {
+			return &pq.Error{Code: "40P01", Message: "deadlock detected"}
+		}
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryTransaction_NonRetryableStopsImmediately(t *testing.T) {
+	ctx := context.Background()
+	attempts := 0
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 5, policy, func(ctx context.Context) error {
+		attempts++
+		return &pq.Error{Code: "23505", Message: "duplicate key value violates unique constraint"}
+	})
+
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		t.Fatalf("expected pq.Error via errors.As, got %T", err)
+	}
+	if pqErr.Code != "23505" {
+		t.Fatalf("expected SQLSTATE 23505, got %s", pqErr.Code)
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt (stopped immediately), got %d", attempts)
+	}
+}
+
+func TestRetryTransaction_MaxAttemptsExceeded(t *testing.T) {
+	ctx := context.Background()
+	attempts := 0
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 3, policy, func(ctx context.Context) error {
+		attempts++
+		return &pq.Error{Code: "40001", Message: "serialization failure"}
+	})
+
+	if !errors.Is(err, isolation.ErrMaxRetryExceeded) {
+		t.Fatalf("expected ErrMaxRetryExceeded, got %v", err)
+	}
+
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		t.Fatalf("expected pq.Error via errors.As, got %v", err)
+	}
+	if pqErr.Code != "40001" {
+		t.Fatalf("expected underlying SQLSTATE 40001, got %s", pqErr.Code)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryTransaction_ContextCancelledBeforeFirstAttempt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	attempts := 0
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 5, policy, func(ctx context.Context) error {
+		attempts++
+		return nil
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if attempts != 0 {
+		t.Fatalf("expected 0 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryTransaction_ContextCancelledDuringBackoff(t *testing.T) {
+	attempts := 0
+	sleepCancelled := make(chan struct{})
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep: func(ctx context.Context, d time.Duration) error {
+			select {
+			case <-ctx.Done():
+				close(sleepCancelled)
+				return ctx.Err()
+			case <-time.After(d):
+				return nil
+			}
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	err := isolation.RetryTransaction(ctx, 5, policy, func(ctx context.Context) error {
+		attempts++
+		return &pq.Error{Code: "40001", Message: "serialization failure"}
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt, got %d", attempts)
+	}
+	select {
+	case <-sleepCancelled:
+		t.Logf("sleep was cancelled by context")
+	default:
+		t.Logf("sleep may not have been cancelled, attempts=%d", attempts)
+	}
+}
+
+func TestRetryTransaction_SuccessFirstAttempt(t *testing.T) {
+	ctx := context.Background()
+	attempts := 0
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 3, policy, func(ctx context.Context) error {
+		attempts++
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt, got %d", attempts)
+	}
+}
+
+func TestRetryTransaction_InvalidMaxAttempts(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("invalid maxAttempts returns validation error", func(t *testing.T) {
-		repo := isolation.NewPostgresWalletRepo(nil)
-		err := repo.TransferSerializableWithRetry(ctx, 1, 2, 100, 0)
-		if !errors.Is(err, isolation.ErrInvalidMaxAttempts) {
-			t.Fatalf("expected ErrInvalidMaxAttempts, got %v", err)
-		}
-		err = repo.TransferSerializableWithRetry(ctx, 1, 2, 100, -1)
-		if !errors.Is(err, isolation.ErrInvalidMaxAttempts) {
-			t.Fatalf("expected ErrInvalidMaxAttempts, got %v", err)
-		}
+	policy := isolation.RetryPolicy{
+		BaseDelay: 1 * time.Millisecond,
+		MaxDelay:  100 * time.Millisecond,
+		RandSrc:   func() float64 { return 0.5 },
+		Sleep:     func(ctx context.Context, d time.Duration) error { return nil },
+	}
+
+	err := isolation.RetryTransaction(ctx, 0, policy, func(ctx context.Context) error {
+		return nil
+	})
+	if !errors.Is(err, isolation.ErrInvalidMaxAttempts) {
+		t.Fatalf("expected ErrInvalidMaxAttempts for maxAttempts=0, got %v", err)
+	}
+
+	err = isolation.RetryTransaction(ctx, -1, policy, func(ctx context.Context) error {
+		return nil
+	})
+	if !errors.Is(err, isolation.ErrInvalidMaxAttempts) {
+		t.Fatalf("expected ErrInvalidMaxAttempts for maxAttempts=-1, got %v", err)
+	}
+}
+
+func TestRetryTransaction_DelayBounds(t *testing.T) {
+	ctx := context.Background()
+	attempts := 0
+	var delays []time.Duration
+
+	policy := isolation.RetryPolicy{
+		BaseDelay: 10 * time.Millisecond,
+		MaxDelay:  1 * time.Second,
+		RandSrc: func() float64 {
+			v := 0.0
+			return v
+		},
+		Sleep: func(ctx context.Context, d time.Duration) error {
+			delays = append(delays, d)
+			return nil
+		},
+	}
+
+	err := isolation.RetryTransaction(ctx, 4, policy, func(ctx context.Context) error {
+		attempts++
+		return &pq.Error{Code: "40001", Message: "serialization failure"}
 	})
 
-	t.Run("non-retryable error (23505) stops immediately without retry", func(t *testing.T) {
-		var attempts int32
-		nonRetryableErr := &pq.Error{Code: "23505", Message: "unique_violation"}
+	if !errors.Is(err, isolation.ErrMaxRetryExceeded) {
+		t.Fatalf("expected ErrMaxRetryExceeded, got %v", err)
+	}
+	if attempts != 4 {
+		t.Fatalf("expected 4 attempts, got %d", attempts)
+	}
+	if len(delays) != 3 {
+		t.Fatalf("expected 3 backoff sleeps, got %d", len(delays))
+	}
 
-		// Simulate custom retry loop behavior
-		policy := isolation.RetryPolicy{
-			BaseDelay: 1 * time.Millisecond,
-			RandSrc:   func() float64 { return 0.5 },
+	for i, d := range delays {
+		cap := time.Duration(float64(policy.BaseDelay) * float64(int(1) << uint(i)))
+		if cap > policy.MaxDelay {
+			cap = policy.MaxDelay
 		}
-
-		// Verify that non-retryable error is not retried
-		for attempt := 1; attempt <= 3; attempt++ {
-			atomic.AddInt32(&attempts, 1)
-			err := nonRetryableErr
-			if !isolation.IsRetryableTxError(err) {
-				break
-			}
+		if d < 0 || d > cap {
+			t.Fatalf("delay %d out of bounds [0, %v]: %v", i+1, cap, d)
 		}
-
-		if atomic.LoadInt32(&attempts) != 1 {
-			t.Fatalf("expected exactly 1 attempt for non-retryable error, got %d", attempts)
-		}
-		_ = policy
-	})
-
-	t.Run("exhausted retries on 40001 returns ErrMaxRetryExceeded with underlying cause", func(t *testing.T) {
-		pqErr := &pq.Error{Code: "40001", Message: "serialization failure"}
-		var attempts int32
-
-		var lastErr error
-		for attempt := 1; attempt <= 3; attempt++ {
-			atomic.AddInt32(&attempts, 1)
-			lastErr = pqErr
-			if !isolation.IsRetryableTxError(lastErr) || attempt == 3 {
-				break
-			}
-		}
-
-		wrappedErr := errors.Join(isolation.ErrMaxRetryExceeded, lastErr)
-		if !errors.Is(wrappedErr, isolation.ErrMaxRetryExceeded) {
-			t.Fatalf("expected ErrMaxRetryExceeded, got %v", wrappedErr)
-		}
-		var targetPQErr *pq.Error
-		if !errors.As(wrappedErr, &targetPQErr) || targetPQErr.Code != "40001" {
-			t.Fatalf("expected underlying 40001 pq.Error, got %v", wrappedErr)
-		}
-		if attempts != 3 {
-			t.Fatalf("expected 3 attempts, got %d", attempts)
-		}
-	})
-
-	t.Run("context cancelled stops retry early", func(t *testing.T) {
-		cancelCtx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
-
-		select {
-		case <-cancelCtx.Done():
-			// context cancellation correctly detected
-		default:
-			t.Fatalf("expected context to be cancelled")
-		}
-	})
+	}
 }

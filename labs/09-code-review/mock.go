@@ -22,6 +22,7 @@ type MockProductRepository struct {
 	stock         map[string]int
 	getCalls      atomic.Int64
 	batchGetCalls atomic.Int64
+	lastBatchIDs  []string
 	readHook      func(productID string)
 	getError      error
 	batchGetError error
@@ -35,6 +36,14 @@ func NewMockProductRepository(initialStock map[string]int) *MockProductRepositor
 		stockCopy[k] = v
 	}
 	return &MockProductRepository{stock: stockCopy}
+}
+
+func (r *MockProductRepository) GetLastBatchIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res := make([]string, len(r.lastBatchIDs))
+	copy(res, r.lastBatchIDs)
+	return res
 }
 
 func (r *MockProductRepository) SetReadHook(hook func(productID string)) {
@@ -89,11 +98,17 @@ func (r *MockProductRepository) GetProduct(ctx context.Context, productID string
 func (r *MockProductRepository) GetProducts(ctx context.Context, productIDs []string) (map[string]*Product, error) {
 	r.batchGetCalls.Add(1)
 
+	r.mu.Lock()
+	r.lastBatchIDs = make([]string, len(productIDs))
+	copy(r.lastBatchIDs, productIDs)
+	err := r.batchGetError
+	r.mu.Unlock()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if r.batchGetError != nil {
-		return nil, r.batchGetError
+	if err != nil {
+		return nil, err
 	}
 
 	result := make(map[string]*Product, len(productIDs))

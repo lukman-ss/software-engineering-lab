@@ -63,6 +63,27 @@ Calendar Duration: 27–33 working days (~5–7 weeks)
 
 ---
 
+## Important: Decision Support, Not Guarantees
+
+**PERT, contingency, confidence, dan risk score adalah medium komunikasi untuk membagikan ketidakpastian, bukan jaminan tanggal selesai.**
+
+- **PERT Expected Value**: rumus statistik, bukan prediksi pasti
+- **Contingency Buffer**: estimasi berbasis risiko, tidak cukup untuk memprediksi delay
+- **Confidence Level**: skala komunikasi (High/Medium/Low), bukan probabilitas
+- **Risk Score**: ukuran relative, bukan peluang yang bisa dihitung
+
+Gunakan estimasi ini untuk:
+1. Mendiskusikan rasa workshop dengan stakeholder
+2. Merancang proyek dengan buffer yang wajar
+3. Mengidentifikasi area ketidakpastian yang perlu spike
+
+JANGAN gunakan untuk:
+- Menjadwalkan sprint dengan presisi
+- Membuat kontrak delivery date
+- Menilai kinerja tim
+
+---
+
 ## Cara Berpikir Senior
 
 ```

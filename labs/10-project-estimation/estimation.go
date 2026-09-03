@@ -271,17 +271,17 @@ func (p Project) Estimate() (*EstimationResult, error) {
 	}
 
 	baseRange := EffortRange{
-		MinDays:      math.Round((implRange.MinDays + spikeRange.MinDays) * 100) / 100,
-		ExpectedDays: math.Round((implRange.ExpectedDays + spikeRange.ExpectedDays) * 100) / 100,
-		MaxDays:      math.Round((implRange.MaxDays + spikeRange.MaxDays) * 100) / 100,
+		MinDays:      math.Round((implRange.MinDays+spikeRange.MinDays)*100) / 100,
+		ExpectedDays: math.Round((implRange.ExpectedDays+spikeRange.ExpectedDays)*100) / 100,
+		MaxDays:      math.Round((implRange.MaxDays+spikeRange.MaxDays)*100) / 100,
 	}
 
 	contingencyDays := baseRange.ExpectedDays * contingencyRate
 
 	finalRange := EffortRange{
-		MinDays:      math.Round((baseRange.MinDays * (1 + contingencyRate)) * 100) / 100,
-		ExpectedDays: math.Round((baseRange.ExpectedDays + contingencyDays) * 100) / 100,
-		MaxDays:      math.Round((baseRange.MaxDays * (1 + contingencyRate)) * 100) / 100,
+		MinDays:      math.Round((baseRange.MinDays*(1+contingencyRate))*100) / 100,
+		ExpectedDays: math.Round((baseRange.ExpectedDays+contingencyDays)*100) / 100,
+		MaxDays:      math.Round((baseRange.MaxDays*(1+contingencyRate))*100) / 100,
 	}
 
 	effectiveDailyCapacity := float64(p.EngineerCount) * p.Availability
@@ -294,7 +294,7 @@ func (p Project) Estimate() (*EstimationResult, error) {
 	confidence := calculateConfidence(overallRisk, unknownCount, len(assumptions), contingencyRate)
 
 	return &EstimationResult{
-		ProjectName:    p.Name,
+		ProjectName: p.Name,
 		Effort: EffortBreakdown{
 			ImplementationEffort: implRange,
 			SpikeEffort:          spikeRange,

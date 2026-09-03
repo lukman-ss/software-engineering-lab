@@ -214,7 +214,7 @@ make lint          # go vet
 - [x] 07 Observability
 - [x] 08 Database Isolation Level
 - [x] 09 Code Review
-- [ ] 10 Project Estimation
+- [x] 10 Project Estimation
 - [x] 11 Pessimistic Locking
 - [x] 12 Optimistic Locking
 - [x] 13 Deadlock

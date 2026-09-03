@@ -776,7 +776,31 @@ func TestImprovedCheckout_IdempotencyKeyIsScopedPerUser(t *testing.T) {
 	}
 }
 
-func TestImprovedCheckout_BatchGetProductsUsedOnce(t *testing.T) {
+func TestNaiveCheckout_NPlusOneProductLookups(t *testing.T) {
+	repo := codereview.NewMockOrderRepository()
+	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10, "p3": 10})
+	notify := codereview.NewMockNotificationSender()
+	logger := codereview.NewMockLogger()
+	cart := newTestCartSource()
+
+	cart.SetCart("user1", []codereview.CartItem{
+		{ProductID: "p1", Quantity: 1, UnitPrice: 1000},
+		{ProductID: "p2", Quantity: 1, UnitPrice: 1000},
+		{ProductID: "p3", Quantity: 1, UnitPrice: 1000},
+	})
+
+	naive := codereview.NewCheckoutNaive(repo, products, notify, logger, cart)
+	_, _ = naive.Checkout(context.Background(), "user1")
+
+	if products.GetCalls() != 3 {
+		t.Errorf("Naive expected 3 N+1 GetProduct calls, got %d", products.GetCalls())
+	}
+	if products.BatchGetCalls() != 0 {
+		t.Errorf("Naive should not use batch GetProducts")
+	}
+}
+
+func TestImprovedCheckout_BatchLoadUsesUniqueProductIDs(t *testing.T) {
 	repo := codereview.NewMockOrderRepository()
 	products := codereview.NewMockProductRepository(map[string]int{"p1": 10, "p2": 10})
 	notify := codereview.NewMockNotificationSender()
@@ -786,25 +810,137 @@ func TestImprovedCheckout_BatchGetProductsUsedOnce(t *testing.T) {
 	txManager := codereview.NewMockTransactionManager(products, repo)
 
 	cart.SetCart("user1", []codereview.CartItem{
+		{ProductID: "p1", Quantity: 1, UnitPrice: 1000},
 		{ProductID: "p1", Quantity: 2, UnitPrice: 1000},
 		{ProductID: "p2", Quantity: 1, UnitPrice: 2000},
 	})
 
 	improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
-
 	_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
 		CartOwnerID:    "user1",
-		IdempotencyKey: "batch-test-key",
+		IdempotencyKey: "unique-batch-key",
 	})
 	if err != nil {
-		t.Fatalf("checkout failed: %v", err)
+		t.Fatalf("Checkout failed: %v", err)
 	}
 
-	if products.BatchGetCalls() != 1 {
-		t.Errorf("Expected exactly 1 batch GetProducts call, got %d", products.BatchGetCalls())
+	lastIDs := products.GetLastBatchIDs()
+	if len(lastIDs) != 2 {
+		t.Errorf("Expected exactly 2 unique product IDs requested in batch, got %d: %v", len(lastIDs), lastIDs)
 	}
-	if products.GetCalls() != 0 {
-		t.Errorf("Expected no single GetProduct calls on improved path, got %d", products.GetCalls())
+}
+
+func TestImprovedCheckout_DuplicateProductInCartAccumulatesReservation(t *testing.T) {
+	t.Run("success when total accumulated stock is sufficient", func(t *testing.T) {
+		repo := codereview.NewMockOrderRepository()
+		products := codereview.NewMockProductRepository(map[string]int{"p1": 5})
+		notify := codereview.NewMockNotificationSender()
+		logger := codereview.NewMockLogger()
+		cart := newTestCartSource()
+		idem := codereview.NewMockIdempotencyRepository()
+		txManager := codereview.NewMockTransactionManager(products, repo)
+
+		cart.SetCart("user1", []codereview.CartItem{
+			{ProductID: "p1", Quantity: 2, UnitPrice: 1000},
+			{ProductID: "p1", Quantity: 3, UnitPrice: 1000},
+		})
+
+		improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+		_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+			CartOwnerID:    "user1",
+			IdempotencyKey: "dup-cart-success",
+		})
+		if err != nil {
+			t.Fatalf("Checkout should succeed: %v", err)
+		}
+
+		stock, _ := products.GetStock(context.Background(), "p1")
+		if stock != 0 {
+			t.Errorf("Final stock should be 0 (5 - 2 - 3), got %d", stock)
+		}
+		if len(repo.GetOrders(context.Background())) != 1 {
+			t.Errorf("Expected 1 order created, got %d", len(repo.GetOrders(context.Background())))
+		}
+	})
+
+	t.Run("fails and rolls back when accumulated reservation exceeds stock", func(t *testing.T) {
+		repo := codereview.NewMockOrderRepository()
+		products := codereview.NewMockProductRepository(map[string]int{"p1": 4})
+		notify := codereview.NewMockNotificationSender()
+		logger := codereview.NewMockLogger()
+		cart := newTestCartSource()
+		idem := codereview.NewMockIdempotencyRepository()
+		txManager := codereview.NewMockTransactionManager(products, repo)
+
+		cart.SetCart("user1", []codereview.CartItem{
+			{ProductID: "p1", Quantity: 2, UnitPrice: 1000},
+			{ProductID: "p1", Quantity: 3, UnitPrice: 1000},
+		})
+
+		improved := codereview.NewCheckoutImproved(repo, products, notify, logger, cart, idem, txManager)
+		_, err := improved.Checkout(context.Background(), codereview.Principal{UserID: "user1"}, codereview.CheckoutCommand{
+			CartOwnerID:    "user1",
+			IdempotencyKey: "dup-cart-fail",
+		})
+		if err == nil {
+			t.Fatal("Expected checkout to fail due to insufficient accumulated stock")
+		}
+
+		stock, _ := products.GetStock(context.Background(), "p1")
+		if stock != 4 {
+			t.Errorf("Final stock should remain 4, got %d", stock)
+		}
+		if len(repo.GetOrders(context.Background())) != 0 {
+			t.Errorf("Expected 0 orders created, got %d", len(repo.GetOrders(context.Background())))
+		}
+	})
+}
+
+func TestIdempotencyRepository_StateMachineDirect(t *testing.T) {
+	idem := codereview.NewMockIdempotencyRepository()
+	ctx := context.Background()
+
+	key := "test-state-key"
+	hash1 := "hash-1"
+	hash2 := "hash-2"
+
+	// 1. First claim: transitions to PROCESSING
+	status, resp, err := idem.Claim(ctx, key, hash1)
+	if err != nil {
+		t.Fatalf("First claim failed: %v", err)
+	}
+	if status != codereview.IdempotencyStatusProcessing || resp != nil {
+		t.Errorf("Expected PROCESSING and nil resp, got status=%s resp=%v", status, resp)
+	}
+
+	// 2. Second claim with same hash while PROCESSING: ErrDuplicateRequest
+	_, _, err = idem.Claim(ctx, key, hash1)
+	if !errors.Is(err, codereview.ErrDuplicateRequest) {
+		t.Errorf("Expected ErrDuplicateRequest while processing, got %v", err)
+	}
+
+	// 3. Second claim with different hash: ErrIdempotencyConflict
+	_, _, err = idem.Claim(ctx, key, hash2)
+	if !errors.Is(err, codereview.ErrIdempotencyConflict) {
+		t.Errorf("Expected ErrIdempotencyConflict for payload mismatch, got %v", err)
+	}
+
+	// 4. Mark completed
+	mockResp := &codereview.CheckoutResponse{Success: true, OrderID: "order-1", Total: 5000}
+	if err := idem.MarkCompleted(ctx, key, mockResp); err != nil {
+		t.Fatalf("MarkCompleted failed: %v", err)
+	}
+
+	// 5. Claim again after COMPLETED: returns cached response
+	status, cachedResp, err := idem.Claim(ctx, key, hash1)
+	if err != nil {
+		t.Fatalf("Claim after completion failed: %v", err)
+	}
+	if status != codereview.IdempotencyStatusCompleted {
+		t.Errorf("Expected COMPLETED status, got %s", status)
+	}
+	if cachedResp == nil || cachedResp.OrderID != "order-1" {
+		t.Errorf("Expected cached response with orderID 'order-1', got %v", cachedResp)
 	}
 }
 

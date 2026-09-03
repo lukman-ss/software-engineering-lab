@@ -61,12 +61,16 @@ func (c *CheckoutImproved) Checkout(ctx context.Context, principal Principal, cm
 		return nil, ErrEmptyCart
 	}
 
+	seen := make(map[string]struct{})
 	productIDs := make([]string, 0, len(cartItems))
 	for _, item := range cartItems {
 		if item.Quantity <= 0 {
 			return nil, ErrInvalidQuantity
 		}
-		productIDs = append(productIDs, item.ProductID)
+		if _, ok := seen[item.ProductID]; !ok {
+			seen[item.ProductID] = struct{}{}
+			productIDs = append(productIDs, item.ProductID)
+		}
 	}
 
 	hash := c.hashRequest(principal.UserID, cartItems)

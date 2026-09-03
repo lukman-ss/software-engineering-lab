@@ -188,7 +188,9 @@ func (r *PostgresWalletRepo) TransferWithLock(ctx context.Context, fromID, toID 
 	return tx.Commit()
 }
 
-func wrapTxError(action string, err error) error {
+// WrapTxError wraps transaction errors with sentinel errors while preserving the original error chain.
+// It preserves both errors.Is(err, ErrSerializationFailure) and errors.As(err, &pq.Error) semantics.
+func WrapTxError(action string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -242,7 +244,7 @@ func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID,
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
-		return wrapTxError("begin tx", err)
+		return WrapTxError("begin tx", err)
 	}
 	defer tx.Rollback()
 
@@ -257,21 +259,21 @@ func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID,
 
 	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
 	if err != nil {
-		return wrapTxError("deduct", err)
+		return WrapTxError("deduct", err)
 	}
 
 	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
 	if err != nil {
-		return wrapTxError("add", err)
+		return WrapTxError("add", err)
 	}
 
 	_, err = tx.ExecContext(ctx, "INSERT INTO isolation_transfer_audit (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", fromID, toID, amount)
 	if err != nil {
-		return wrapTxError("audit", err)
+		return WrapTxError("audit", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return wrapTxError("commit", err)
+		return WrapTxError("commit", err)
 	}
 
 	return nil
@@ -285,7 +287,7 @@ func (r *PostgresWalletRepo) TransferSerializable(ctx context.Context, fromID, t
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
-		return wrapTxError("begin tx", err)
+		return WrapTxError("begin tx", err)
 	}
 	defer tx.Rollback()
 
@@ -300,21 +302,21 @@ func (r *PostgresWalletRepo) TransferSerializable(ctx context.Context, fromID, t
 
 	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance - $1 WHERE id = $2", amount, fromID)
 	if err != nil {
-		return wrapTxError("deduct", err)
+		return WrapTxError("deduct", err)
 	}
 
 	_, err = tx.ExecContext(ctx, "UPDATE isolation_accounts SET balance = balance + $1 WHERE id = $2", amount, toID)
 	if err != nil {
-		return wrapTxError("add", err)
+		return WrapTxError("add", err)
 	}
 
 	_, err = tx.ExecContext(ctx, "INSERT INTO isolation_transfer_audit (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", fromID, toID, amount)
 	if err != nil {
-		return wrapTxError("audit", err)
+		return WrapTxError("audit", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return wrapTxError("commit", err)
+		return WrapTxError("commit", err)
 	}
 
 	return nil
@@ -324,7 +326,18 @@ type TxOperation func(ctx context.Context) error
 
 type RetryPolicy struct {
 	BaseDelay time.Duration
+	MaxDelay  time.Duration
 	RandSrc   func() float64
+	Sleep     func(ctx context.Context, d time.Duration) error
+}
+
+func defaultSleep(ctx context.Context, d time.Duration) error {
+	select {
+	case <-time.After(d):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func RetryTransaction(
@@ -342,9 +355,18 @@ func RetryTransaction(
 	if policy.BaseDelay <= 0 {
 		policy.BaseDelay = 10 * time.Millisecond
 	}
+	if policy.MaxDelay <= 0 {
+		policy.MaxDelay = 1 * time.Second
+	}
+	if policy.Sleep == nil {
+		policy.Sleep = defaultSleep
+	}
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err := operation(ctx)
 		if err == nil {
 			return nil
@@ -352,16 +374,13 @@ func RetryTransaction(
 		lastErr = err
 
 		if IsRetryableTxError(err) && attempt < maxAttempts {
-			factor := float64(int(1) << uint(attempt-1))
-			jitter := 0.5 + policy.RandSrc()*0.5
-			sleep := time.Duration(float64(policy.BaseDelay) * factor * jitter)
-
-			select {
-			case <-time.After(sleep):
-				continue
-			case <-ctx.Done():
-				return ctx.Err()
+			delayUpper := float64(policy.BaseDelay) * float64(int(1) << uint(attempt-1))
+			if delayUpper > float64(policy.MaxDelay) {
+				delayUpper = float64(policy.MaxDelay)
 			}
+			delay := time.Duration(delayUpper * policy.RandSrc())
+			policy.Sleep(ctx, delay)
+			continue
 		}
 		break
 	}
@@ -375,6 +394,7 @@ func RetryTransaction(
 func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxAttempts int) error {
 	return r.TransferSerializableWithRetryPolicy(ctx, fromID, toID, amount, maxAttempts, RetryPolicy{
 		BaseDelay: 10 * time.Millisecond,
+		MaxDelay:  1 * time.Second,
 		RandSrc:   rand.Float64,
 	})
 }
