@@ -290,6 +290,9 @@ func (r *PostgresWalletRepo) TransferRepeatableRead(ctx context.Context, fromID,
 
 // TransferSerializable: SSI (Serializable Snapshot Isolation)
 func (r *PostgresWalletRepo) TransferSerializable(ctx context.Context, fromID, toID int, amount int64) error {
+	if fromID == toID {
+		return ErrSameAccountTransfer
+	}
 	if amount <= 0 {
 		return ErrNegativeTransferAmount
 	}
