@@ -188,7 +188,7 @@ Expected = (Min + 4 × MostLikely + Max) / 6
 
 ---
 
-## 8. Effort vs Duration
+## 9. Effort vs Duration
 
 Bedakan **Effort** (total jam/hari kerja aktual) dengan **Duration** (durasi di kalender).
 
@@ -217,7 +217,7 @@ Duration: 31–43 working days (~6–9 minggu kalender)
 
 ---
 
-## 9. Contingency (Bukan Rumus Wajib)
+## 10. Contingency (Bukan Rumus Wajib)
 
 Contingency adalah buffer yang ditambahkan berdasarkan *risk profile*. Ini harus dikaitkan dengan ketidakpastian yang nyata, **bukan sekadar "tambah 20% tanpa alasan"**.
 
@@ -229,7 +229,7 @@ Contingency adalah buffer yang ditambahkan berdasarkan *risk profile*. Ini harus
 
 ---
 
-## 10. Assumptions & Risk
+## 11. Assumptions & Risk
 
 Final estimate **wajib** mencantumkan asumsi (kondisi ideal yang diharapkan) dan risiko (apa yang bisa membuat estimasi meleset).
 
@@ -252,13 +252,13 @@ Final estimate **wajib** mencantumkan asumsi (kondisi ideal yang diharapkan) dan
 
 ---
 
-## 11. Final Estimate Communication
+## 12. Final Estimate Communication
 
 Senior engineer tidak sekadar memberikan satu angka. Mereka mengkomunikasikan **range + assumptions + risks + unknowns**.
 
 Contoh cara mengkomunikasikan hasil estimasi:
 
-> "Berdasarkan requirement saat ini, estimasi waktu penyelesaian (Duration) adalah sekitar **3–4 minggu kalender** (15-23 hari kerja).
+> "Berdasarkan requirement saat ini, estimasi waktu penyelesaian (Duration) adalah sekitar **3–4 minggu kalender** (15–23 hari kerja).
 > 
 > Estimasi ini menggunakan **asumsi** bahwa desain UI sudah final, credential sandbox vendor sudah tersedia, dan tidak ada perubahan requirement besar di tengah jalan.
 > 
@@ -266,7 +266,7 @@ Contoh cara mengkomunikasikan hasil estimasi:
 
 ---
 
-## 12. Failure Scenarios (Validasi Model)
+## 13. Failure Scenarios (Validasi Model)
 
 | No | Scenario | Expected |
 |----|----------|----------|
@@ -298,7 +298,7 @@ Test menjalankan skenario validasi di atas dan case study Aplikasi Booking Servi
 
 ---
 
-## 13. Exercise
+## 14. Exercise
 
 Kerjakan estimasi untuk case study "Aplikasi Booking Servis". Jangan melihat contoh acuan sebelum Anda mengerjakannya secara mandiri.
 
