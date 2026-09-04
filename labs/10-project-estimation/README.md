@@ -6,126 +6,54 @@
 
 ---
 
-## Problem
+## 1. Problem
 
-Junior engineer sering menganggap estimasi sebagai "berapa hari ini fitur selesai". Pendekatan ini:
+Junior engineer sering menganggap estimasi sebagai "berapa hari fitur selesai". Pendekatan ini:
 
-1. **Single-point estimate** - hanya satu angka (misal: "5 hari")
-2. **Tanpa risk analysis** - tidak mempertimbangkan ketidakpastian
-3. **Tanpa breakdown** - langsung menebak seluruh fitur
+1. **Single-point estimate** — hanya satu angka (misal: "5 hari")
+2. **Tanpa risk analysis** — tidak mempertimbangkan ketidakpastian
+3. **Tanpa breakdown** — langsung menebak seluruh fitur
 4. **Sangat sensitive** terhadap requirement change
 
 Hasil: Estimasi tidak pernah akurat, deadline sering terlewat, tim frustrasi.
 
 ---
 
-## Perbandingan: Naive vs Structured Estimation
+## 2. Initial Requirement
 
-### Naive (Junior Mindset)
+Studi kasus yang dipakai di seluruh lab ini:
 
-```text
-10 halaman
-× 1 hari per halaman
-= 10 hari
+> **Aplikasi Booking Servis** — sistem untuk pelanggan melakukan booking servis kendaraan dengan memilih cabang, memilih mekanik, melakukan pembayaran online, menerima notifikasi WhatsApp, dan bagi admin tersedia dashboard serta laporan Excel.
 
-Yang diabaikan:
-- Risk
-- Uncertainty
-- Multiple engineer
-- Availability
-- Contingency
-```
+Fitur yang harus diestimasi:
 
-### Structured (Senior Mindset)
-
-```text
-Requirement Analysis          → 2 engineer-days
-Backend/API Design            → 3 engineer-days
-Frontend Implementation       → 4 engineer-days
-Validation & Testing          → 2 engineer-days
-Code Review                   → 1 engineer-day
-Deployment                    → 1 engineer-day
-UAT                           → 1 engineer-day
-Risk Buffer                   → 1.5 engineer-days (25%)
-Spike for Unknown API         → 1 engineer-day
-
-Implementation Effort: 14–18 engineer-days
-Spike: 1 engineer-day
-Contingency: 4 engineer-days
-
-Final Effort: 19–23 engineer-days
-
-1 engineer at 70% availability:
-Calendar Duration: 27–33 working days (~5–7 weeks)
-```
-
-> Perhatikan: jumlah halaman bukan proxy untuk complexity. Struktur proyek memandu total effort.
+- Login
+- Booking Online
+- Pilih Cabang
+- Pilih Mekanik
+- Payment Gateway
+- WhatsApp Notification
+- Dashboard Admin
+- Laporan Excel
 
 ---
 
-## Important: Decision Support, Not Guarantees
+## 3. Task Breakdown
 
-**PERT, contingency, confidence, dan risk score adalah medium komunikasi untuk membagikan ketidakpastian, bukan jaminan tanggal selesai.**
+Feature besar dipecah menjadi task kecil yang dapat diukur (bukan dihitung per halaman).
 
-- **PERT Expected Value**: rumus statistik, bukan prediksi pasti
-- **Contingency Buffer**: estimasi berbasis risiko, tidak cukup untuk memprediksi delay
-- **Confidence Level**: skala komunikasi (High/Medium/Low), bukan probabilitas
-- **Risk Score**: ukuran relative, bukan peluang yang bisa dihitung
-
-Gunakan estimasi ini untuk:
-1. Mendiskusikan rasa workshop dengan stakeholder
-2. Merancang proyek dengan buffer yang wajar
-3. Mengidentifikasi area ketidakpastian yang perlu spike
-
-JANGAN gunakan untuk:
-- Menjadwalkan sprint dengan presisi
-- Membuat kontrak delivery date
-- Menilai kinerja tim
-
----
-
-## Cara Berpikir Senior
-
-```
-Skill Breakdown
-↓
-Risk Assessment  
-↓
-Range Estimation (Min/MostLikely/Max)
-↓
-Spike for Unknowns
-↓
-PERT Calculation
-↓
-Calendar Duration (Effort ≠ Duration)
-↓
-Contingency Buffer
-↓
-Assumptions Documentation
-↓
-Confidence Level
-```
-
----
-
-## Task Breakdown
-
-Representasikan feature menjadi task-task kecil yang dapat diukur.
-
-### Contoh: Aplikasi Booking Servis
-
-| No | Feature | Activities |
-|----|---------|------------|
+| No | Feature | Task kecil (contoh) |
+|----|---------|---------------------|
 | 1 | Login | Backend/API, Validation, Testing |
 | 2 | Booking Online | Database, Backend/API, Validation, Testing |
 | 3 | Pilih Cabang | Frontend, Backend/API |
 | 4 | Pilih Mekanik | Frontend, Backend/API |
-| 5 | Payment Gateway | Backend/API, External API, Testing, Spike |
-| 6 | WhatsApp Notification | Backend/API, External API, Spike |
+| 5 | Payment Gateway | Backend/API, External API, Webhook, Testing, **Spike** |
+| 6 | WhatsApp Notification | Backend/API, External API, **Spike** |
 | 7 | Dashboard Admin | Frontend, Backend/API, Testing |
-| 8 | Laporan Excel | Backend/API, Database |
+| 8 | Laporan Excel | Backend/API, Database, Export |
 
-Setiap task dapat dijabarkan lebih lanjut:
+Aktivitas lintas task yang biasa muncul:
 
 ```
 Requirement Analysis
@@ -141,22 +69,12 @@ UAT
 
 ---
 
-## Risk & Uncertainty
+## 4. Known vs Unknown
 
-| Risk Level | Kriteria | Contoh |
-|------------|----------|--------|
-| **Low** | Well-known, proven tech | Tambah field, CRUD biasa |
-| **Medium** | Complexity menengah, butanya ada integrasi | API endpoint baru, query kompleks |
-| **High** | Dependencies kunci, high cost of failure | Database migration besar, cache strategy |
-| **Unknown** | Belum pernah dibuat, teknologi baru | Payment gateway baru, API vendor |
-
-> **Unknown berarti ada sesuatu yang belum cukup dipahami untuk dipercaya sebagai implementation estimate final. Spike adalah mekanisme eksplisit untuk mengurangi uncertainty.**
-
----
-
-## Unknown != Zero
-
-Unknown tidak boleh dianggap 0 effort. Gunakan **Spike**.
+| Status | Arti | Perlakuan |
+|--------|------|-----------|
+| **Known** | Tech & pattern sudah familiar, effort bisa di-range | Langsung estimasi Min/MostLikely/Max |
+| **Unknown** | Tech/API/vendor baru, belum jelas effort-nya | Wajib **Spike** dulu sebelum estimasi implementasi |
 
 ```go
 task := Task{
@@ -168,36 +86,65 @@ task := Task{
 }
 ```
 
-**Spike** = waktu yang diperlukan untuk mengungkap ketidakpastian.
+> **Unknown != 0**. Unknown berarti tidak cukup dipahami untuk dipercaya sebagai estimasi implementasi final.
 
 ---
 
-## Spike
+## 5. Risk & Dependency
 
-Spike adalah eksplorasi teknis untuk mengatasi unknown.
+| Risk Level | Kriteria | Contoh |
+|------------|----------|--------|
+| **Low** | Well-known, proven tech | Tambah field, CRUD biasa |
+| **Medium** | Complexity menengah, ada integrasi ringan | API endpoint baru, query kompleks |
+| **High** | Dependency kunci, high cost of failure | Database migration besar, cache strategy |
+| **Unknown** | Belum pernah dibuat, teknologi baru | Payment gateway baru, API vendor |
 
-### Alur:
+**External dependency** (di studi kasus ini):
+
+- Payment gateway (vendor) → butuh credential, sandbox, dokumentasi.
+- WhatsApp provider (vendor) → butuh API key, template, dokumentasi.
+- Internal: tim UI/Design, requirement owner, environment Dev/Prod.
+
+**Risiko yang dapat membuat estimasi berubah:**
+
+- Dokumentasi payment gateway tidak sesuai kondisi aktual
+- Flow webhook membutuhkan perubahan desain
+- Requirement booking berubah
+- Dependency eksternal terlambat
+
+---
+
+## 6. Spike
+
+Spike = eksplorasi teknis timeboxed untuk mengubah **unknown** menjadi **estimatable work**.
+
+### Contoh alur:
 
 ```
 Payment Gateway Vendor API
 ↓
-Unknown Risk (0 effort)
+Unknown Risk (0 effort implementasi)
 ↓
-Spike: 1-2 days
+Spike 1–2 hari
 ↓
-Baru dapat estimasi implementasi:
-- Min: 3 days
-- MostLikely: 5 days  
-- Max: 8 days (jika ada masalah integrasi)
+Implementasi Min/MostLikely/Max dapat diestimasi
 ```
 
-Spike harus tercatat secara eksplisit di estimation model.
+**Spike cukup berupa eksplorasi timeboxed untuk menjawab:**
+
+- authentication mechanism
+- create payment flow
+- webhook flow
+- retry/error behavior
+- sandbox availability
+
+**Jangan bangun integrasi payment gateway penuh di spike.** Output spike adalah informasi yang cukup untuk mengubah unknown menjadi estimatable work.
 
 ---
 
-## Estimate Range
+## 7. Estimate Range (Effort)
 
-Gunakan 3-point estimation untuk mewakili ketidakpastian.
+Gunakan range, bukan angka presisi palsu.
 
 ```go
 type EstimateRange struct {
@@ -207,9 +154,11 @@ type EstimateRange struct {
 }
 ```
 
-### PERT Formula
+### PERT Formula (alat bantu komunikasi, bukan jaminan)
 
+```
 Expected = (Min + 4 × MostLikely + Max) / 6
+```
 
 ```go
 func (r EstimateRange) Expected() float64 {
@@ -221,24 +170,23 @@ func (r EstimateRange) Expected() float64 {
 
 ---
 
-## Effort vs Calendar Duration
+## 8. Effort vs Duration
 
-Bedakan effort dengan durasi kalender.
+Bedakan effort (engineer-days) dengan durasi kalender (working days / weeks).
 
 ```
 Effort: 18–24 engineer-days
-↓
++
 Spike: 2.5 days
-↓
+=
 Base Effort: 20.5–26.5 engineer-days
-↓
++
 Contingency: 15%
-↓
+=
 Final Effort: 22–30 engineer-days
 
-1 engineer
-70% productivity
-
+1 engineer @ 70% availability
+↓
 Calendar Duration: 31–43 working days (~6–9 weeks)
 ```
 
@@ -253,63 +201,95 @@ type DurationRange struct {
 calendarDays = finalEffort / (engineerCount * availability)
 ```
 
-**Jangan menyamakan effort dengan tanggal selesai!**
+> **Jangan menyamakan effort dengan tanggal selesai.**
 
 ---
 
-## Contingency
+## 9. Contingency
 
-Buffer berdasarkan risiko project.
+Buffer berbasis profil risiko (contoh, bukan rumus wajib).
 
-### Default Buffer:
+| Risk Level | Contingency (contoh) |
+|------------|----------------------|
+| High / Unknown | 20–25% |
+| Medium | 10–15% |
+| Low | 5–10% |
 
-| Risk Level | Contingency |
-|------------|-------------|
-| High/Unkown| 25%         |
-| Medium     | 15%         |
-| Low        | 10%         |
-
-**Perbedaan Auto vs Manual Contingency:**
-
-- `AutoContingency = true`: derive otomatis dari risk level
-- `AutoContingency = false` + `ContingencyRate = 0`: NO buffer (intentional)
+`AutoContingency = true` → derive dari risk level tertinggi.
+`AutoContingency = false` + `ContingencyRate = 0` → NO buffer (intentional).
 
 ---
 
-## Assumptions
+## 10. Assumptions
 
 Estimasi tanpa assumptions akan punya confidence rendah.
+
+Contoh assumptions yang ditulis di project:
 
 ```go
 project := Project{
     Assumptions: []string{
-        "UI design final",
-        "Vendor sandbox API accessible",
-        "1 engineer dedicated with 70% allocation",
-        "No major requirement changes",
+        "UI design sudah tersedia",
+        "Sandbox payment gateway tersedia",
+        "Credential API tersedia",
+        "Requirement tidak berubah signifikan",
+        "Tidak ada dependency eksternal yang terlambat",
     },
 }
 ```
 
 ---
 
-## Confidence Level
+## 11. Final Estimate (Contoh Output)
 
-| Confidence | Conditions |
-|------------|------------|
-| **High**   | Semua task low/medium risk, assumptions documented, no unknown dependencies |
-| **Medium** | Ada task medium risk, contingency dihitung, beberapa assumptions |
-| **Low**    | Ada unknown risk, atau tidak ada assumptions |
+Contoh final estimate untuk dikomunikasikan ke stakeholder (bukan standar universal):
 
-**Confidence adalah communication aid, bukan probabilitas statistik.** 
-Gunakan untuk mengkomunikasikan seberapa handal estimasi kita.
+```text
+Task Breakdown
+- Login: 1–2 hari
+- Booking: 2–3 hari
+- Pilih Cabang: 1 hari
+- Pilih Mekanik: 1–2 hari
+- Payment Gateway: perlu spike
+- WhatsApp Notification: 1–2 hari
+- Dashboard Admin: 2–3 hari
+- Laporan Excel: 1 hari
+- Testing/UAT: 2–3 hari
+
+Known Effort:
+11–17 hari
+
+Payment Gateway Spike:
+1 hari
+
+Contingency:
+10–20% (contoh berdasarkan profil risiko)
+
+Estimated Duration:
+sekitar 3–4 minggu
+
+Assumptions:
+- UI/design sudah tersedia
+- Sandbox payment gateway tersedia
+- Credential API tersedia
+- Requirement tidak berubah signifikan
+- Tidak ada dependency eksternal yang terlambat
+
+Risks:
+- Dokumentasi payment gateway tidak sesuai kondisi aktual
+- Flow webhook membutuhkan perubahan desain
+- Requirement booking berubah
+- Dependency eksternal terlambat
+```
+
+> Angka-angka di atas adalah **contoh** berdasarkan asumsi tertentu. Mereka bukan standar universal.
 
 ---
 
-## Failure Scenarios
+## 12. Failure Scenarios (Validasi Model)
 
-| No | Scenario | Expected Behavior |
-|----|----------|-------------------|
+| No | Scenario | Expected |
+|----|----------|----------|
 | 1 | Invalid range: min > mostLikely | Error |
 | 2 | Invalid range: mostLikely > max | Error |
 | 3 | Negative estimate | Error |
@@ -318,12 +298,12 @@ Gunakan untuk mengkomunikasikan seberapa handal estimasi kita.
 | 6 | Availability > 1 | Error |
 | 7 | Negative contingency | Error |
 | 8 | Empty project | Error |
-| 9 | Invalid risk level (e.g., "Critical") | Error |
-| 10 | Unknown risk without SpikeDays > 0 | Error |
+| 9 | Invalid risk level | Error |
+| 10 | Unknown risk tanpa SpikeDays > 0 | Error |
 | 11 | EngineerCount = 0 | Error |
 | 12 | EngineerCount < 0 | Error |
 | 13 | Empty task name | Error |
-| 14 | Unknown risk with SpikeDays = 0 but non-zero implementation estimate | **Allowed** - spike reduces uncertainty |
+| 14 | Unknown risk dengan SpikeDays = 0 tapi estimasi implementasi non-zero | Allowed (spike sudah selesai) |
 
 ---
 
@@ -334,81 +314,43 @@ cd labs/10-project-estimation
 go test -v ./...
 ```
 
+Test menjalankan skenario validasi di atas dan case study Aplikasi Booking Servis untuk mengilustrasikan alur estimasi.
+
 ---
 
-## Exercise
+## 13. Exercise
 
-1. Breakdown requirement "Aplikasi Booking Servis" (Login, Booking, Pilih Cabang, Pilih Mekanik, Payment Gateway, WA Notif, Admin, Laporan Excel) menjadi task.
-2. Tandai task dengan risiko tinggi (High/Unknown).
-3. Tentukan task mana yang butuh Spike dan berapa hari.
-4. Buat estimation range (Min/Most Likely/Max) untuk tiap task.
-5. Tulis asumsi-asumsi (Assumptions) yang mendasari estimasi Anda.
-6. Tulis minimal 3 risiko (Risks) yang bisa membuat estimasi meleset.
-7. Buat Final Stakeholder Estimate (Effort range, Spike, Contingency, Expected Duration, Assumptions, Risks) untuk dipresentasikan.
+Kerjakan estimasi untuk case study "Aplikasi Booking Servis" (atau variasi requirement baru). Jangan melihat solusi di atas sebelum Anda mengerjakannya.
 
-```
-Project Estimate
-
-Implementation Effort:
-17–49 engineer-days
-
-Spike:
-2.5 engineer-days
-
-Contingency:
-8.2 engineer-days
-
-Final Effort:
-24.4–64.4 engineer-days
-
-Calendar Duration:
-35–92 working days (7.0–18.4 weeks)
-
-Technical Risk:
-High
-
-Confidence:
-Low
-
-Spikes Required:
-- Payment Gateway API (1.5 days)
-- WhatsApp Provider API (0.5 days)
-
-Assumptions:
-- UI design final
-- Payment sandbox available
-- 1 engineer at 70% allocation
-- No major requirement changes
-```
-
-Semua test PASS (29 tests):
-
-```
-=== RUN   TestNaiveEstimator
---- PASS: TestNaiveEstimator (0.00s)
-=== RUN   TestNaiveEstimatorZeroPages
---- PASS: TestNaiveEstimatorZeroPages (0.00s)
-=== RUN   TestNaiveEstimatorNegativePages
---- PASS: TestNaiveEstimatorNegativePages (0.00s)
-... (semua test passing)
-PASS
-```
+1. **Breakdown** requirement menjadi task kecil (hindari estimasi berbasis jumlah halaman).
+2. Tandai **Known vs Unknown** untuk setiap task.
+3. Identifikasi **technical risk** dan **external dependency**.
+4. Tentukan task mana butuh **Spike** (timeboxed) + tujuan spike-nya.
+5. Buat **estimation range** (Min/Most Likely/Max) untuk tiap task.
+6. Hitung **Effort vs Calendar Duration** (akunkan availability engineer).
+7. Tambahkan **contingency** secara masuk akal (berbasis risiko, bukan rumus wajib).
+8. Tuliskan **minimal 3 assumptions** yang mendasari estimasi.
+9. Tuliskan **minimal 3 risks** yang bisa membuat estimasi berubah.
+10. Susun **Final Stakeholder Estimate** yang siap dipresentasikan.
 
 ---
 
 ## Senior Engineer Takeaways
 
-1. **Estimasi bukan prediction, tapi range-based analysis** - Selalu berikan batas bawah, yang paling mungkin, dan batas atas
-2. **Unknown != 0** - Jika tidak yakin, buat spike dulu
-3. **Effort ≠ Calendar Duration** - Account availability (70% productivity is realistic)
-4. **Risk profile menentu contingency** - High/Unknown = 25%, Medium = 15%, Low = 10%
-5. **AutoContingency vs Manual** - 0 = intentional no-buffer, not magic value
-6. **Range ordering matter** - Min ≤ Expected ≤ Max (PERT formula)
-7. **Validation is explicit** - Invalid inputs return errors, not silent failures
-8. **EngineerCount must be ≥ 1** - Invalid planning input = explicit error
-9. **Empty TaskName is invalid** - Every task must have a name for communication
-10. **Confidence is communication aid** - Not statistical probability
-11. **Deterministic testing** - Core estimation logic tidak perlu network atau DB
+1. **Estimasi bukan prediction, tapi range-based analysis** — selalu berikan Min / MostLikely / Max.
+2. **Unknown != 0** — kalau belum jelas, spike dulu.
+3. **Effort ≠ Calendar Duration** — akuntasi availability engineer.
+4. **Risk profile memengaruhi contingency** — contoh: High/Unknown 20–25%, Medium 10–15%, Low 5–10%.
+5. **Contingency adalah buffer risiko, bukan rumus wajib** — pilih yang masuk akal untuk konteks Anda.
+6. **Range ordering** — Min ≤ Expected ≤ Max.
+7. **Validation explicit** — input invalid → error, bukan silent failure.
+8. **EngineerCount ≥ 1** — invalid planning input harus error.
+9. **TaskName wajib** — setiap task butuh nama untuk dikomunikasi.
+10. **Confidence adalah alat komunikasi** — bukan probabilitas statistik.
+11. **Deterministic testing** — logika estimasi tidak butuh network/DB.
+
+> **Estimasi ≠ menebak lama coding.**
+> **Estimasi = breakdown + effort + uncertainty + risk + dependency + assumptions + communication.**
 
 ---
 
