@@ -15,5 +15,5 @@ When a conflict occurs, the operation can be retried with jitter/backoff a limit
 
 ## Navigasi
 
-- **Previous**: [Lab 11 — Pessimistic Locking](../11-pessimistic-locking/)
+- **Previous**: [Lab 18 — Pessimistic Locking](../18-pessimistic-locking/)
 - **Next**: [Lab 13 — Deadlock](../13-deadlock/)

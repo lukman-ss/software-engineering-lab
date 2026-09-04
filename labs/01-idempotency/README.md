@@ -161,7 +161,7 @@ Request B → create payment → ??? (race condition)
 
 Application-level check saja tidak cukup. Database harus memiliki **unique constraint**.
 
-> **Catatan**: Topik concurrency mendalam dibahas lebih lanjut pada **Lab 11 — Pessimistic Locking**.
+> **Catatan**: Topik concurrency mendalam dibahas lebih lanjut pada **Lab 18 — Pessimistic Locking**.
 
 ---
 

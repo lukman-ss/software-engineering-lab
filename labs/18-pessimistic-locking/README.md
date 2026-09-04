@@ -1,4 +1,4 @@
-# Lab 11 — Pessimistic Locking
+# Lab 18 — Pessimistic Locking
 
 Pessimistic locking prevents concurrency conflicts by acquiring an exclusive lock on the data before reading and modifying it (`SELECT ... FOR UPDATE`).
 

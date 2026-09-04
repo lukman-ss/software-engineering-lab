@@ -33,7 +33,7 @@ Setiap lab berfokus pada **satu failure mode spesifik** dan **satu mental model 
 Batasan kepemilikan konsep antar lab:
 - **Lab 01 Idempotency** → berfokus pada *repeated logical operation* & *retry safety* (tidak mengajarkan locking mendalam).
 - **Lab 05 Race Condition** → berfokus pada memahami bagaimana concurrent access dapat merusak business invariant.
-- **Lab 11 Pessimistic Locking** → menjaga critical read-modify-write dengan database locking.
+- **Lab 18 Pessimistic Locking** → menjaga critical read-modify-write dengan database locking.
 - **Lab 03 Database Transaction & Distributed Transaction Boundary** → berfokus pada *atomic multi-step database changes*, *transaction boundary*, *partial failure* dengan external systems, serta pengantar *event, retry, saga, compensation, dan outbox*.
 - **Lab 04 Caching** → berfokus pada *cache stampede, stale reads, and consistency*.
 - **Lab 12 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.

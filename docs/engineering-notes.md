@@ -98,7 +98,7 @@ business_payment_total{status, provider}
 
 **Choice**: Cache Aside with Single Flight for high-traffic endpoints.
 
-### Optimistic vs Pessimistic Locking (Lab 11/12)
+### Optimistic vs Pessimistic Locking (Lab 18/12)
 | Approach | Pros | Cons |
 |----------|------|------|
 | Optimistic | No lock wait, high throughput | Retry on conflict, not for high contention |
