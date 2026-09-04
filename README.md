@@ -222,18 +222,19 @@ make lint          # go vet
 - [x] 09 Code Review
 - [x] 10 Project Estimation
 - [x] 11 Pessimistic Locking
-- [x] 12 Optimistic Locking
+- [x] 12 Feature Flags
 - [x] 13 Deadlock
 - [x] 14 Outbox Pattern
 - [x] 15 Retry
 - [x] 16 Circuit Breaker
 - [x] 17 Rate Limiting
+- [x] 18 Pessimistic Locking
+- [x] 19 Optimistic Locking
 
 ### Phase 2: Extended Topics
 - Bulkhead pattern
 - Saga pattern
 - Leader election
-- Feature flags
 - Graceful shutdown
 
 ## What This Is Not
