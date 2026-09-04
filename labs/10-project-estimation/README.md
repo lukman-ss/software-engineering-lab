@@ -137,9 +137,22 @@ Total Implementation Effort: 3–6 hari (Known)
 
 ---
 
-## 7. Estimate Range (Effort)
+## 7. Estimate Range (Uncertainty)
 
-Gunakan range, bukan angka presisi palsu.
+Estimasi harus merepresentasikan **ketidakpastian (uncertainty)** melalui *range*. 
+
+Hindari memberikan angka tunggal yang seolah-olah pasti:
+- ❌ Payment Gateway = 3 hari pasti.
+- ✅ Payment Gateway = 2–4 hari.
+- ✅ Payment Gateway = belum dapat diestimasi (butuh spike 1 hari).
+
+**Penting:** Angka estimasi sangat bergantung pada:
+- Requirement yang ada
+- Pengalaman engineer yang mengerjakan
+- Kondisi codebase existing
+- Kesiapan environment
+- Proses review & testing
+- Dependensi eksternal
 
 ```go
 type EstimateRange struct {
@@ -155,118 +168,83 @@ type EstimateRange struct {
 Expected = (Min + 4 × MostLikely + Max) / 6
 ```
 
-```go
-func (r EstimateRange) Expected() float64 {
-    return (r.Min + 4.0*r.MostLikely + r.Max) / 6.0
-}
-```
-
-> Ini adalah **model estimasi**, bukan jaminan tanggal selesai.
-
 ---
 
-## 8. Effort vs Duration (Engineer-days vs Calendar Days)
+## 8. Effort vs Duration
 
-Bedakan **Effort** (engineer-days, kerja sekumulatif sampai selesai) dengan **Duration** (working days pada kalender, tergantung availability).
+Bedakan **Effort** (total jam/hari kerja aktual) dengan **Duration** (durasi di kalender).
 
-Contoh perhitungan:
+Misalnya:
+- **Effort:** 10–14 engineer-days
+- **Duration:** sekitar 3 minggu kalender
+
+Mengapa berbeda? Karena dalam hari kerja selalu ada:
+- Code review
+- Meeting
+- UAT
+- Deployment
+- Menunggu dependency
+- Context switching
+
+Contoh perhitungan Duration dengan asumsi availability engineer 70%:
 
 ```
-Implementation Effort: 18–24 engineer-days
-Spike: 2.5 hari (termasuk dalam effort)
-Base Effort: 20.5–26.5 engineer-days
-Contingency: 15%
 Final Effort: 22–30 engineer-days
-
-1 engineer @ 70% availability (realistis)
+1 engineer @ 70% availability (0.7)
 ↓
-Calendar Duration = Final Effort / (1 × 0.7)
+Calendar Duration = Final Effort / 0.7
 ↓
-Duration: 31–43 working days (~6–9 weeks)
+Duration: 31–43 working days (~6–9 minggu kalender)
 ```
-
-> **Jangan menyamakan effort (jumlah jam kerja) dengan duration (hari kalender).**
 
 ---
 
-## 9. Contingency
+## 9. Contingency (Bukan Rumus Wajib)
 
-Buffer berbasis profil risiko (contoh, bukan rumus wajib).
+Contingency adalah buffer yang ditambahkan berdasarkan *risk profile*. Ini harus dikaitkan dengan ketidakpastian yang nyata, **bukan sekadar "tambah 20% tanpa alasan"**.
 
-| Risk Level | Contingency (contoh) |
-|------------|----------------------|
-| High / Unknown | 20–25% |
+| Risk Level | Contingency (contoh, bukan aturan wajib) |
+|------------|------------------------------------------|
+| High / Unknown | 20–25% (karena banyak dependensi API luar) |
 | Medium | 10–15% |
 | Low | 5–10% |
 
-`AutoContingency = true` → derive dari risk level tertinggi.
-`AutoContingency = false` + `ContingencyRate = 0` → NO buffer (intentional).
+---
+
+## 10. Assumptions & Risk
+
+Final estimate **wajib** mencantumkan asumsi (kondisi ideal yang diharapkan) dan risiko (apa yang bisa membuat estimasi meleset).
+
+**Contoh Assumptions:**
+- Desain UI final sudah tersedia.
+- Lingkungan sandbox payment gateway siap dipakai.
+- Credential vendor tersedia sejak hari H.
+- Dikerjakan oleh 1 engineer tanpa interruption.
+- Tidak ada perubahan requirement besar di tengah jalan.
+- API eksternal berjalan persis seperti dokumentasi.
+
+**Contoh Risk (Risiko yang memengaruhi estimasi):**
+- Dokumentasi payment gateway tidak akurat dengan kondisi sandbox.
+- Webhook vendor memiliki *behavior* yang tidak terduga.
+- Requirement booking dari stakeholder berubah.
+
+**Note:** Bedakan Risk dan Dependency.
+- **Dependency:** Credential payment gateway, API vendor, desain UI.
+- **Risk:** Dokumentasi vendor tidak akurat, behavior webhook tidak standar.
 
 ---
 
-## 10. Assumptions
+## 11. Final Estimate Communication
 
-Estimasi tanpa assumptions akan punya confidence rendah.
+Senior engineer tidak sekadar memberikan satu angka. Mereka mengkomunikasikan **range + assumptions + risks + unknowns**.
 
-Contoh assumptions yang ditulis di project:
+Contoh cara mengkomunikasikan hasil estimasi:
 
-```go
-project := Project{
-    Assumptions: []string{
-        "UI design sudah tersedia",
-        "Sandbox payment gateway tersedia",
-        "Credential API tersedia",
-        "Requirement tidak berubah signifikan",
-        "Tidak ada dependency eksternal yang terlambat",
-    },
-}
-```
-
----
-
-## 11. Final Estimate (Contoh Output)
-
-Contoh final estimate untuk dikomunikasikan ke stakeholder (bukan standar universal):
-
-```text
-Task Breakdown
-- Login: 1–2 hari
-- Booking: 2–3 hari
-- Pilih Cabang: 1 hari
-- Pilih Mekanik: 1–2 hari
-- Payment Gateway: perlu spike
-- WhatsApp Notification: 1–2 hari
-- Dashboard Admin: 2–3 hari
-- Laporan Excel: 1 hari
-- Testing/UAT: 2–3 hari
-
-Known Effort:
-11–17 hari
-
-Payment Gateway Spike:
-1 hari
-
-Contingency:
-10–20% (contoh berdasarkan profil risiko)
-
-Estimated Duration:
-sekitar 3–4 minggu
-
-Assumptions:
-- UI/design sudah tersedia
-- Sandbox payment gateway tersedia
-- Credential API tersedia
-- Requirement tidak berubah signifikan
-- Tidak ada dependency eksternal yang terlambat
-
-Risks:
-- Dokumentasi payment gateway tidak sesuai kondisi aktual
-- Flow webhook membutuhkan perubahan desain
-- Requirement booking berubah
-- Dependency eksternal terlambat
-```
-
-> Angka-angka di atas adalah **contoh** berdasarkan asumsi tertentu. Mereka bukan standar universal.
+> "Berdasarkan requirement saat ini, estimasi waktu penyelesaian (Duration) adalah sekitar **3–4 minggu kalender** (15-23 hari kerja).
+> 
+> Estimasi ini menggunakan **asumsi** bahwa desain UI sudah final, credential sandbox vendor sudah tersedia, dan tidak ada perubahan requirement besar di tengah jalan.
+> 
+> **Risiko terbesar** ada di integrasi payment gateway dan webhook-nya. Bagian ini belum bisa kami estimasi (unknown), sehingga **membutuhkan Spike selama 1 hari** terlebih dahulu. Setelah spike selesai, kami bisa memberikan estimasi implementasi pastinya untuk bagian tersebut."
 
 ---
 
@@ -304,18 +282,66 @@ Test menjalankan skenario validasi di atas dan case study Aplikasi Booking Servi
 
 ## 13. Exercise
 
-Kerjakan estimasi untuk case study "Aplikasi Booking Servis". Jangan melihat solusi di atas sebelum Anda mengerjakannya.
+Kerjakan estimasi untuk case study "Aplikasi Booking Servis". Jangan melihat contoh acuan sebelum Anda mengerjakannya secara mandiri.
 
-1. **Breakdown** requirement (misal "Payment Gateway" dipecah: auth, create transaction, webhook, sandbox testing). Jangan gunakan jumlah halaman.
-2. Tandai **Known vs Unknown**.
-3. Identifikasi **technical risk** dan **external dependency**.
-4. Tentukan task mana butuh **Spike** (timeboxed, misal 1-2 hari) + tujuan spike-nya (misal: "mempelajari behavior webhook").
-5. Buat **estimation range** (Min/Most Likely/Max) untuk tiap task.
-6. Hitung **Effort vs Calendar Duration** (akunkan availability engineer).
-7. Tambahkan **contingency** secara masuk akal (buffer risiko, bukan rumus wajib).
-8. Tuliskan **minimal 3 assumptions** yang mendasari estimasi.
-9. Tuliskan **minimal 3 risks** yang bisa membuat estimasi berubah.
-10. Susun **Final Stakeholder Estimate** yang merangkum hasil.
+### Instruksi:
+1. **Break down** fitur Aplikasi Booking Servis menjadi task-task kecil yang konkret.
+2. Tandai mana task **Known** dan mana yang **Unknown**.
+3. Identifikasi **external dependency** (vendor credentials, API sandbox, dll).
+4. Identifikasi **high-risk task**.
+5. Pilih task yang membutuhkan **Spike** (timeboxed), tentukan durasi dan tujuannya.
+6. Buat **effort estimate** dalam bentuk range (Min/Most Likely/Max).
+7. Hitung dan bedakan antara **effort** (engineer-days) dan **calendar duration** (working days/weeks).
+8. Tentukan **contingency** yang wajar berdasarkan risiko yang teridentifikasi.
+9. Tuliskan **assumptions** yang mendasari estimasi Anda.
+10. Tuliskan **minimal 3 risks** yang dapat memengaruhi estimasi.
+11. Buat **final estimate** yang siap dikomunikasikan ke stakeholder.
+
+---
+
+## Reference Example
+
+*Bagian ini dapat digunakan sebagai pembanding setelah Anda selesai mengerjakan Exercise.*
+
+<details>
+<summary>Lihat Reference Example (Solusi Acuan)</summary>
+
+```text
+Task Breakdown & Estimation Range (Known):
+- Login: 1–2 hari (Low Risk)
+- Booking Online: 2–4 hari (Medium Risk)
+- Pilih Cabang: 1 hari (Low Risk)
+- Pilih Mekanik: 1–2 hari (Medium Risk)
+- WhatsApp Notification: 1–2 hari (Unknown -> Spike 0.5 hari)
+- Dashboard Admin: 2–3 hari (Medium Risk)
+- Laporan Excel: 1–2 hari (Medium Risk)
+- Testing / UAT: 2–3 hari
+
+Unknown / Spike:
+- Payment Gateway API: Spike 1 hari (eksplorasi auth, sandbox, webhook)
+
+Known Implementation Effort: 11–19 engineer-days
+Spike Effort: 1.5 engineer-days
+Contingency (15% buffer): ~2–3 hari
+
+Total Effort: ~15–23 engineer-days
+
+Calendar Duration (1 engineer @ 70% availability):
+15 / 0.7 = ~21 hari kerja (sekitar 3–4 minggu kalender)
+
+Assumptions:
+- UI design sudah final
+- Credentials & sandbox Payment Gateway sudah siap
+- 1 engineer dedicated dengan availability 70%
+- API eksternal berjalan sesuai spesifikasi dokumentasi
+
+Risks:
+- Dokumentasi payment gateway tidak akurat dengan sandbox
+- Behavior webhook vendor memerlukan perubahan arsitektur receiver
+- Requirement alokasi slot booking berubah di tengah proyek
+```
+
+</details>
 
 ---
 
@@ -341,4 +367,4 @@ Kerjakan estimasi untuk case study "Aplikasi Booking Servis". Jangan melihat sol
 ## Navigasi
 
 - **Previous**: [Lab 09 — Code Review](../09-code-review/)
-- **Next**: [Lab 11 — Pessimistic Locking](../11-pessimistic-locking/)
+- **Next**: [Lab 11 — Debugging Sistem Production: Hypothesis-Driven Debugging](../11-debugging-production/)
