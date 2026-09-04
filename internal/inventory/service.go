@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 

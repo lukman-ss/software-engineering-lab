@@ -38,7 +38,8 @@ func (r *pgRepo) UpdateBalance(ctx context.Context, walletID string, amount int6
 
 	// Lock the wallet row
 	row := tx.QueryRowContext(ctx, `SELECT balance, version FROM wallets WHERE id=$1 FOR UPDATE`, walletID)
-	var balance, version int
+	var balance int64
+	var version int
 	if err := row.Scan(&balance, &version); err != nil {
 		return err
 	}

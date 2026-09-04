@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 

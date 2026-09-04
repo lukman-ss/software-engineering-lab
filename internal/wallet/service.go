@@ -2,10 +2,6 @@ package wallet
 
 import (
 	"context"
-	"errors"
-	"fmt"
-
-	"github.com/lukman-ss/software-engineering-lab/pkg/util"
 )
 
 type appService struct {
