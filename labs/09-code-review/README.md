@@ -141,6 +141,9 @@ func (c *CheckoutNaive) Checkout(ctx context.Context, userID string) (*CheckoutR
 - Validasi kuantitas sebelum proses
 - Total harga harus akurat
 
+**Mendeteksi Missing State Handling:**
+Jika sebuah endpoint menandai status pesanan menjadi `PAID` atau `COMPLETED`, reviewer harus bertanya: *"Bagaimana kalau statusnya sudah PAID?"* Code harus melindungi state tersebut. Response HTTP-nya bergantung *contract* sistem (bisa 200 OK Idempotent, bisa 409 Conflict, dll). Yang penting, reviewer mendeteksi ketiadaan *state handling* tersebut.
+
 ### [ ] Apakah invariant tetap terjaga?
 
 - Stock >= 0 (tidak boleh negatif)
@@ -174,6 +177,8 @@ Reviewer sering menganggap duplicate code otomatis harus di-*extract* menjadi me
 - Extract jika *behavior* memang sama dan kemungkinan berubah bersama.
 - Jangan membuat abstraction hanya karena code kebetulan terlihat mirip secara struktur.
 - Pilih solusi paling sederhana yang cukup.
+
+Dalam hal **Maintainability**: Buat *intent* (tujuan) kode jelas melalui penamaan yang baik dan *readability*. Jangan sembunyikan setiap logika percabangan di dalam method baru jika itu hanya membuat developer harus melompat antar file. Jangan *abstract without need*.
 
 Terapkan YAGNI secara ketat.
 
@@ -288,16 +293,27 @@ Tidak semua kemungkinan harus memiliki test. Prioritaskan behavior yang berubah 
 
 - [ ] Empty cart
 - [ ] Product tidak ditemukan
-- [ ] kuantitas tidak valid
+- [ ] Kuantitas tidak valid
 - [ ] Stock tidak cukup
+
+Reviewer harus membedakan kegagalan:
+- **Transient** (misal: network timeout) → mungkin aman untuk retry/idempotency
+- **Permanent** (misal: invalid input, stock habis) → fail fast, jangan retry
 
 ### [ ] Apakah logs punya context?
 
-Logging harus mencakup:
-- User ID
-- Product ID
-- Quantity
-- Hasil operasi
+Logging harus terstruktur dan membantu investigasi, bukan sekadar noise.
+
+```go
+// BURUK: Sulit diinvestigasi
+c.logger.Error(ctx, "checkout failed", "error", err)
+
+// BAIK: Membawa context
+c.logger.Error(ctx, "checkout transaction failed", 
+    "userID", principal.UserID, 
+    "idempotencyKey", scopedKey, 
+    "error", err)
+```
 
 ## Improved Implementation
 
