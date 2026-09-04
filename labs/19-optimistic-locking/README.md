@@ -1,4 +1,4 @@
-# Lab 12 — Optimistic Locking
+# Lab 19 — Optimistic Locking
 
 Optimistic locking assumes that data contention is infrequent. Instead of locking rows preemptively, it reads the record with a `version` (or timestamp), and upon update, verifies that the version has not changed.
 

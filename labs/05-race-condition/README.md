@@ -214,7 +214,7 @@ WHERE id = $2
 
 Jika `0 rows affected`, artinya record sudah diubah transaksi lain sejak terakhir dibaca. Aplikasi bisa melakukan *retry* atau return error. Cocok untuk environment dengan read yang banyak tapi tingkat konflik/update (contention) rendah.
 
-> **Catatan:** Optimistic locking adalah salah satu strategi concurrency control. Lab ini tidak mengimplementasikannya secara penuh — lihat [`labs/12-optimistic-locking`](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/12-optimistic-locking) untuk production-ready implementation.
+> **Catatan:** Optimistic locking adalah salah satu strategi concurrency control. Lab ini tidak mengimplementasikannya secara penuh — lihat [`labs/19-optimistic-locking`](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/19-optimistic-locking) untuk production-ready implementation.
 
 ---
 

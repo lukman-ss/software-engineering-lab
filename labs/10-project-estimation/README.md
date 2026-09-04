@@ -38,7 +38,25 @@ Fitur yang harus diestimasi:
 
 ---
 
-## 3. Task Breakdown
+## 3. Naive Estimation (Mindset Junior)
+
+Contoh pendekatan naif yang sering gagal:
+
+```text
+Hitung halaman: 8 fitur / 8 halaman
+Asumsi: 1 hari per halaman
+Estimasi total: 8 hari (pasti)
+```
+
+**Kelemahan pendekatan naif:**
+- Mengabaikan integrasi eksternal (Payment Gateway & WhatsApp)
+- Mengasumsikan 100% waktu habis untuk coding tanpa code review / meeting / testing
+- Mengabaikan risiko ketidaksesuaian dokumentasi API pihak ketiga
+- Tidak memiliki buffer (contingency) jika terjadi kendala tak terduga
+
+---
+
+## 4. Task Breakdown
 
 Feature besar dipecah menjadi task-task kecil yang konkret dan dapat diukur, bukan dihitung per halaman atau dianggap satu task atomik.
 
@@ -67,7 +85,7 @@ Misalnya, **"Payment Gateway"** bukan satu task atomik ("Payment Gateway: 5 hari
 
 ---
 
-## 4. Known vs Unknown
+## 5. Known vs Unknown
 
 Membedakan apa yang sudah kita pahami dengan pasti (Known) dan apa yang belum jelas (Unknown):
 
@@ -84,7 +102,7 @@ Membedakan apa yang sudah kita pahami dengan pasti (Known) dan apa yang belum je
 
 ---
 
-## 5. Risk & Dependency
+## 6. Risk & Dependency
 
 Setiap task memiliki tingkat risiko teknis dan ketergantungan eksternal:
 
@@ -162,7 +180,7 @@ type EstimateRange struct {
 }
 ```
 
-### PERT Formula (alat bantu komunikasi, bukan jaminan)
+### Kalkulasi Sederhana Range (Bukan Jaminan)
 
 ```
 Expected = (Min + 4 × MostLikely + Max) / 6
