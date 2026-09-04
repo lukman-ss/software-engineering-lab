@@ -336,7 +336,15 @@ go test -v ./...
 
 ---
 
-## Expected Result
+## Exercise
+
+1. Breakdown requirement "Aplikasi Booking Servis" (Login, Booking, Pilih Cabang, Pilih Mekanik, Payment Gateway, WA Notif, Admin, Laporan Excel) menjadi task.
+2. Tandai task dengan risiko tinggi (High/Unknown).
+3. Tentukan task mana yang butuh Spike dan berapa hari.
+4. Buat estimation range (Min/Most Likely/Max) untuk tiap task.
+5. Tulis asumsi-asumsi (Assumptions) yang mendasari estimasi Anda.
+6. Tulis minimal 3 risiko (Risks) yang bisa membuat estimasi meleset.
+7. Buat Final Stakeholder Estimate (Effort range, Spike, Contingency, Expected Duration, Assumptions, Risks) untuk dipresentasikan.
 
 ```
 Project Estimate

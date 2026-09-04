@@ -39,8 +39,9 @@ Standar ANSI/ISO SQL-92 mendefinisikan 4 tingkat isolasi berdasarkan anomali yan
 Standar SQL hanyalah spesifikasi minimum. Database engine memiliki implementasi internal yang dapat lebih kuat daripada spesifikasi ANSI. Di lab ini (PostgreSQL):
 - **Default Isolation Level**: `READ COMMITTED`.
 - **READ UNCOMMITTED**: PostgreSQL **tidak memiliki** implementasi Read Uncommitted yang mengizinkan Dirty Read. Jika aplikasi meminta `READ UNCOMMITTED`, PostgreSQL secara diam-diam mengeksekusinya setara dengan `READ COMMITTED`.
-- **REPEATABLE READ**: Menggunakan snapshot MVCC statis di awal transaksi. Oleh karena itu, *secara otomatis mencegah Phantom Read klasik*, meskipun standar ANSI masih mengizinkannya di level ini.
-- **SERIALIZABLE**: Tidak dilakukan dengan sekadar locking global satu per satu. PostgreSQL menggunakan **Serializable Snapshot Isolation (SSI)**.
+- **READ COMMITTED**: Menggunakan snapshot baru pada setiap statement SQL yang dieksekusi.
+- **REPEATABLE READ**: Menggunakan snapshot MVCC statis di awal transaksi (transaction snapshot) sehingga PostgreSQL tidak mengizinkan Phantom Read klasik. Namun, level ini **masih dapat mengalami serialization anomaly** (seperti Write Skew) dan akan menggagalkan transaksi concurrent dengan error `SQLSTATE 40001 (serialization_failure)` jika terjadi benturan update pada baris yang sama.
+- **SERIALIZABLE**: Bukan berarti semua transaksi benar-benar dijalankan satu per satu atau semua operasi dikunci secara global. PostgreSQL Serializable menggunakan **Serializable Snapshot Isolation (SSI)**: transaksi concurrent tetap dieksekusi paralel, dan database membatalkan salah satu transaksi dengan `serialization_failure` (40001) apabila execution tidak dapat diserialisasi.
 
 *(Catatan: Karakteristik locking/anomali pada engine lain seperti MySQL InnoDB berbeda. InnoDB defaultnya REPEATABLE READ dan menggunakan Gap Locks/Next-Key Locks).*
 

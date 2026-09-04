@@ -18,6 +18,7 @@ Pada banyak tim engineering, code review menjadi bagian signifikan dari pekerjaa
 
 ## Pendekatan Code Review
 
+### Alur Analisis Masalah
 Dalam code review, jangan langsung memilih pattern atau teknologi. Urutannya:
 
 1. Code
@@ -26,6 +27,24 @@ Dalam code review, jangan langsung memilih pattern atau teknologi. Urutannya:
 4. Perbaikan paling sederhana yang cukup
 
 Contoh: Jangan langsung berkata "Gunakan distributed lock." Mulai dari: "Dua checkout bersamaan dapat membaca stok yang sama dan menyebabkan overselling." Baru setelah risiko jelas, tentukan mekanisme paling sederhana yang menyelesaikannya.
+
+### Review Perubahan, Bukan Hanya File
+
+Reviewer perlu memahami tujuan PR sebelum menilai implementasinya:
+
+1. Requirement
+2. Diff
+3. Behavior yang berubah
+4. Risiko
+
+Pertanyaan Senior Reviewer:
+> *"Apakah perubahan ini benar-benar menyelesaikan masalah yang diminta tanpa mengubah behavior lain yang tidak diperlukan?"*
+
+Code yang secara teknis benar tetap bisa salah jika tidak sesuai requirement.
+
+- Perubahan CSS/HTML → low risk
+- Perubahan Payment/Inventory → high risk
+- Jumlah baris kode ≠ tingkat risiko.
 
 ## Business Case: Checkout Sistem
 
