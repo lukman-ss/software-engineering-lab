@@ -14,6 +14,18 @@ Pada banyak tim engineering, code review menjadi bagian signifikan dari pekerjaa
 - **Error Handling**
 - **Security**
 - **Performance**
+- **Testing Adequacy**
+
+## Pendekatan Code Review
+
+Dalam code review, jangan langsung memilih pattern atau teknologi. Urutannya:
+
+1. Code
+2. Failure mode
+3. Impact
+4. Perbaikan paling sederhana yang cukup
+
+Contoh: Jangan langsung berkata "Gunakan distributed lock." Mulai dari: "Dua checkout bersamaan dapat membaca stok yang sama dan menyebabkan overselling." Baru setelah risiko jelas, tentukan mekanisme paling sederhana yang menyelesaikannya.
 
 ## Business Case: Checkout Sistem
 
@@ -85,6 +97,8 @@ func (c *CheckoutNaive) Checkout(ctx context.Context, userID string) (*CheckoutR
 | 9 | Error handling buruk (selalu return success) | MAJOR |
 | 10 | Logging/context tidak memadai | NIT |
 | 11 | Notification sebagai side effect berbahaya | MINOR |
+| 12 | Duplicate code berlebihan pada validasi | NIT |
+| 13 | Hardcoded environment value | MINOR |
 
 ## Severity Classification
 
@@ -134,7 +148,30 @@ Jika langkah ke-6 gagal, *business transaction sudah sukses*, namun *idempotency
 
 Dalam lab ini, error ini didemonstrasikan dengan mengembalikan error khusus: `ErrIdempotencyFinalize`.
 
+## Duplicate Code & YAGNI
+
+Reviewer sering menganggap duplicate code otomatis harus di-*extract* menjadi method/service/helper. Ini bisa menjadi *premature abstraction*. Duplicate code adalah **signal untuk diperiksa**, bukan perintah otomatis membuat abstraction.
+
+- Extract jika *behavior* memang sama dan kemungkinan berubah bersama.
+- Jangan membuat abstraction hanya karena code kebetulan terlihat mirip secara struktur.
+- Pilih solusi paling sederhana yang cukup.
+
+Terapkan YAGNI secara ketat.
+
+## Hardcode Configuration
+
+Environment-specific value tidak boleh tersebar sebagai hardcoded value di application code. Arahkan via configuration, misalnya `config('services.payment.url')`, dan jadikan environment variable sebagai *sumber nilai* configuration.
+
 ## Concurrency Review
+
+Reviewer harus mengenali *failure mode* terlebih dahulu. Jangan jadikan Transaction, Idempotency, dan Lock sebagai *checklist* yang semuanya harus dipakai sekaligus. Solusi bisa berupa:
+- transaction,
+- atomic update,
+- row lock,
+- idempotency,
+- atau kombinasi yang memang diperlukan.
+
+Fokuslah pada kemampuan menemukan risiko.
 
 ### [ ] Apakah concurrent request aman?
 
@@ -209,6 +246,22 @@ for _, item := range cartItems {
 productsMap, err := c.products.GetProducts(ctx, productIDs) // 1 batch query
 ```
 Dibuktikan via call counter di test `TestNaiveCheckout_NPlusOneProductLookups` vs `TestImprovedCheckout_BatchLoadsProducts` (dan `TestImprovedCheckout_BatchLoadUsesUniqueProductIDs`).
+
+## Test Coverage Review
+
+Saat mereview, pertanyaan bukan:
+"Apakah ada test?"
+
+Tetapi:
+"Apakah behavior yang berubah dilindungi test?"
+
+Contoh minimal (pada checkout):
+- checkout normal
+- stok tidak cukup
+- product tidak ditemukan
+- order gagal dibuat
+
+Tidak semua kemungkinan harus memiliki test. Prioritaskan behavior yang berubah dan failure path yang memiliki risiko.
 
 ## Error Handling & Logging
 
