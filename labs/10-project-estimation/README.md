@@ -155,7 +155,7 @@ Total Implementation Effort: 3–6 hari (Known)
 
 ---
 
-## 7. Estimate Range (Uncertainty)
+## 8. Estimate Range (Uncertainty)
 
 Estimasi harus merepresentasikan **ketidakpastian (uncertainty)** melalui *range*. 
 
