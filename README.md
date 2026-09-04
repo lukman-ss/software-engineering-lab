@@ -128,12 +128,14 @@ infrastructure/ # Cross-cutting (db, observability, resilience)
 | 09 | Code Review: identifying bugs before production |
 | 10 | Project Estimation: breakdown, uncertainty, risk, spikes, ranges, effort vs duration, and contingency |
 | 11 | Lock contention causing delays |
-| 12 | Optimistic locking for concurrent updates |
+| 12 | Feature flags |
 | 13 | Deadlocks hanging the system |
 | 14 | Outbox Pattern: transactional outbox deep dive, retry, DLQ, idempotency, recovery |
 | 15 | Retry storms amplifying failures |
 | 16 | Circuit Breaker: cascading failures from downstream |
 | 17 | Rate Limiting: token bucket, client limits, resource protection |
+| 18 | Pessimistic locking |
+| 19 | Optimistic locking for concurrent updates |
 
 ## How to Run
 
