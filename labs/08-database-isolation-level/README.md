@@ -68,8 +68,20 @@ ERROR: could not serialize access due to concurrent update (SQLSTATE 40001)
 
 Aplikasi **wajib** menangkap error ini dan melakukan *Bounded Retry*.
 
-### Analogi Serializable
-Beberapa orang tetap boleh bekerja bersamaan. Namun sebelum hasil pekerjaan dianggap sah, sistem memastikan hasil gabungannya masih setara dengan pekerjaan yang dilakukan secara berurutan. Jika tidak, salah satu pekerjaan dibatalkan dan harus diulang.
+##### Analogi SERIALIZABLE (yang akurat)
+Transaksi concurrent dapat berjalan bersamaan. Namun hasil commit harus ekuivalen dengan suatu serial execution; database dapat membatalkan transaksi dan perlu di-retry jika terjadi serialization conflict. Buktinya: *TestSerializable_ConcurrentUpdate_SerializationFailure*.
+
+## Wallet Transfer: REPEATABLE READ BUKAN solusi otomatis untuk read-check-write
+
+Pola `read balance → validate → write balance` di bawah `REPEATABLE READ`:
+- *Snapshot consistency* aman untuk pembacaan berulang.
+- Namun, dua transaksi masih bisa membaca saldo yang sama, dan yang pertama commit berhasil. Yang kedua akan gagal dengan `40001` **hanya jika benturan pada UPDATE yang sama**.
+- Jika aplikasi hanya `read` untuk validasi lalu lakukan logika lokal (bukan *check-modify-write* pada baris yang sama), tidak ada transaction conflict.
+
+Untuk pola read-check-write kritis, pertimbangkan:
+- `SELECT ... FOR UPDATE` (pessimistic locking), atau
+- Atomic conditional update (`WHERE balance >= check_value`), atau  
+- `SERIALIZABLE` + retry (optimistic locking).
 
 ## SELECT FOR UPDATE
 Mekanisme Pessimistic Locking eksplisit. Mengambil row-level exclusive lock pada baris terpilih:
