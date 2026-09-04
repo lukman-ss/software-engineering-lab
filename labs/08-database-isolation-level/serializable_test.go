@@ -120,4 +120,8 @@ func TestSerializable_ConcurrentUpdate_SerializationFailure(t *testing.T) {
 	if successCount != 1 || serializationFailureCount != 1 {
 		t.Fatalf("expected exactly 1 success and 1 serialization failure (40001), got success=%d, failures=%d", successCount, serializationFailureCount)
 	}
+
+	t.Logf("Result: 1 TX Success, 1 TX Failure (SQLSTATE 40001).")
+	t.Logf("This proves SERIALIZABLE does not 'just lock globally', but aborts conflicts.")
+	t.Logf("Applications MUST catch 40001 and retry.")
 }

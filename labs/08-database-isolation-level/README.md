@@ -3,7 +3,7 @@
 ## Problem
 Banyak engineer berasumsi bahwa membungkus sederet query SQL di dalam `BEGIN TRANSACTION` dan `COMMIT` secara otomatis membuat aplikasi bebas dari race condition dan data anomaly. Di production dengan ratusan request per detik, asumsi ini sering kali menyebabkan saldo bocor, overbooking, double spending, hingga laporan keuangan yang tidak konsisten.
 
-`BEGIN TRANSACTION` dan `COMMIT` menentukan scope dari suatu transaksi. Transaksi ini tetap dieksekusi di bawah suatu **Isolation Level**. Membungkus operasi dengan transaksi tidak otomatis memberikan isolasi yang sesuai dengan business invariant. Kebenaran concurrent transaction tetap bergantung pada: isolation level, locking strategy, database engine, business invariant, dan retry strategy untuk serialization/deadlock failure.
+`BEGIN TRANSACTION` dan `COMMIT` hanya menentukan **transaction boundary** (cakupan atomisitas). Kebenaran (correctness) aplikasi di bawah eksekusi *concurrent* tetap bergantung pada: **isolation level**, cara membaca/mengunci data (*locking strategy*), *business invariant*, dan penanganan *serialization conflict* (retry strategy).
 
 ## Apa itu Isolation
 Isolation adalah komponen "I" dalam ACID yang menentukan sejauh mana perubahan yang dilakukan oleh satu transaksi dapat dilihat atau diinterferensi oleh transaksi lain yang berjalan secara bersamaan.
@@ -34,18 +34,19 @@ Standar ANSI/ISO SQL-92 mendefinisikan 4 tingkat isolasi berdasarkan anomali yan
 | **REPEATABLE READ** | Dicegah | Dicegah | Diizinkan (Standard ANSI) |
 | **SERIALIZABLE** | Dicegah | Dicegah | Dicegah |
 
-### Catatan Penting Implementasi PostgreSQL
-- **READ UNCOMMITTED**: PostgreSQL tidak benar-benar menyediakan Dirty Read; diperlakukan secara internal persis seperti `READ COMMITTED`.
-- **REPEATABLE READ**: Menggunakan stable MVCC snapshot sehingga classic phantom read tidak terlihat dalam transaksi yang sama. Perilaku ini berbeda antar database engine.
+### Default Behavior & Implementation Reality (PostgreSQL)
+
+Standar SQL hanyalah spesifikasi minimum. Database engine memiliki implementasi internal yang dapat lebih kuat daripada spesifikasi ANSI. Di lab ini (PostgreSQL):
+- **Default Isolation Level**: `READ COMMITTED`.
+- **READ UNCOMMITTED**: PostgreSQL **tidak memiliki** implementasi Read Uncommitted yang mengizinkan Dirty Read. Jika aplikasi meminta `READ UNCOMMITTED`, PostgreSQL secara diam-diam mengeksekusinya setara dengan `READ COMMITTED`.
+- **REPEATABLE READ**: Menggunakan snapshot MVCC statis di awal transaksi. Oleh karena itu, *secara otomatis mencegah Phantom Read klasik*, meskipun standar ANSI masih mengizinkannya di level ini.
+- **SERIALIZABLE**: Tidak dilakukan dengan sekadar locking global satu per satu. PostgreSQL menggunakan **Serializable Snapshot Isolation (SSI)**.
+
+*(Catatan: Karakteristik locking/anomali pada engine lain seperti MySQL InnoDB berbeda. InnoDB defaultnya REPEATABLE READ dan menggunakan Gap Locks/Next-Key Locks).*
 
 ## PostgreSQL dan MVCC
 
-PostgreSQL mengimplementasikan transaksi menggunakan **Multi-Version Concurrency Control (MVCC)**. Dalam MVCC, setiap penulisan data menghasilkan versi tuple baru (`xmin`, `xmax`) tanpa menimpa data lama secara langsung. Dengan demikian, ordinary MVCC reads umumnya tidak memblokir writes dan sebaliknya, tetapi explicit locking, DDL, row locks, dan operasi tertentu tetap dapat menyebabkan blocking.
-
-Perbedaan penting implementasi PostgreSQL dibanding database lain:
-- **READ UNCOMMITTED**: PostgreSQL **tidak mendukung Dirty Read**. Secara standar ia memiliki jaminan isolasi paling lemah, tetapi karakteristik performa dan implementasinya bergantung pada database engine. Jika Anda menjalankan `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;`, PostgreSQL secara internal memperlakukannya sama persis seperti `READ COMMITTED`.
-- **REPEATABLE READ**: PostgreSQL mengambil snapshot MVCC **sekali saja pada awal statement pertama dalam transaksi**. Karena snapshot ini statis sepanjang transaksi, PostgreSQL REPEATABLE READ **secara otomatis mencegah Phantom Read klasik**. Jangan berasumsi Repeatable Read selalu memunculkan Phantom Read di semua database engine!
-- **SERIALIZABLE**: PostgreSQL Serializable menggunakan **Serializable Snapshot Isolation (SSI)**. Predicate/SIREAD locks digunakan untuk mendeteksi dependency dan tidak memblokir writer secara langsung. Namun transaksi Serializable tetap dapat mengalami blocking akibat row locks/table locks biasa dari operasi SQL yang dilakukan. Serializable tidak berarti semua transaksi dijalankan satu per satu secara literal, melainkan menjamin bahwa hasil akhirnya ekuivalen dengan suatu serial execution.
+PostgreSQL mengimplementasikan transaksi menggunakan **Multi-Version Concurrency Control (MVCC)**. Dalam MVCC, setiap penulisan data menghasilkan versi tuple baru (`xmin`, `xmax`) tanpa menimpa data lama secara langsung. Pembacaan ordinary `SELECT` tidak memblokir penulisan `UPDATE`, dan sebaliknya.
 
 ## Read Committed
 Level default di PostgreSQL. Setiap query SQL dalam transaksi mengambil **snapshot baru** dari data yang telah di-commit pada saat query tersebut dieksekusi.
@@ -57,9 +58,14 @@ Snapshot database diambil hanya satu kali saat transaksi pertama kali membaca da
 - Jika transaksi mencoba meng-`UPDATE` baris yang telah di-update & di-commit oleh transaksi lain setelah snapshot diambil, PostgreSQL akan menggagalkan transaksi dengan error code `SQLSTATE 40001 (serialization_failure)`.
 
 ## Serializable
-Tingkat isolasi tertinggi. PostgreSQL Serializable menggunakan **Serializable Snapshot Isolation (SSI)**. Concurrent transactions tetap dapat berjalan secara paralel. Database mendeteksi dependency yang dapat menghasilkan hasil yang tidak serializable. Jika ditemukan dangerous structure/conflict, salah satu transaksi dapat dibatalkan dengan `SQLSTATE 40001 (serialization_failure)`. Hasil concurrent execution dijamin ekuivalen dengan suatu valid serial execution.
+Tingkat isolasi tertinggi. PostgreSQL Serializable menggunakan **Serializable Snapshot Isolation (SSI)**.
 
-Serializable dapat mempunyai biaya berupa transaction abort, retry, contention, dan tambahan tracking dependency, bukan karena PostgreSQL secara literal mengeksekusi semua transaksi satu per satu.
+**PERINGATAN KONSEP**: Serializable **tidak** berarti database engine akan mengunci seluruh tabel dan mengeksekusi request murni satu-per-satu secara literal (Global Locking). SSI membiarkan transaksi concurrent berjalan paralel. Database hanya akan *mendeteksi dependency/conflict cycle*. Jika hasilnya **tidak ekuivalen** dengan suatu valid serial execution, database akan menggagalkan salah satu transaksi dengan melemparkan error:
+```text
+ERROR: could not serialize access due to concurrent update (SQLSTATE 40001)
+```
+
+Aplikasi **wajib** menangkap error ini dan melakukan *Bounded Retry*.
 
 ### Analogi Serializable
 Beberapa orang tetap boleh bekerja bersamaan. Namun sebelum hasil pekerjaan dianggap sah, sistem memastikan hasil gabungannya masih setara dengan pekerjaan yang dilakukan secara berurutan. Jika tidak, salah satu pekerjaan dibatalkan dan harus diulang.
@@ -96,6 +102,15 @@ Ketika menggunakan `REPEATABLE READ` atau `SERIALIZABLE`, PostgreSQL menolak eks
 ERROR: could not serialize access due to concurrent update (SQLSTATE 40001)
 ```
 Aplikasi yang menggunakan isolation level tinggi **wajib menyiapkan mekanisme retry terarah** (bounded retries dengan exponential backoff dan jitter).
+
+Contoh implementasi Retry Wrapper yang aman ada pada `isolation.RetryTransaction()`:
+```go
+func (r *PostgresWalletRepo) TransferSerializableWithRetry(ctx context.Context, fromID, toID int, amount int64, maxAttempts int) error {
+	return RetryTransaction(ctx, maxAttempts, policy, func(ctx context.Context) error {
+		return r.TransferSerializable(ctx, fromID, toID, amount)
+	})
+}
+```
 
 ## Database Engine vs Standard SQL
 Penjelasan di README ini membedakan secara tegas antara **ANSI/ISO SQL-92 Standard** dengan perilaku konkret **PostgreSQL engine** (MVCC & SSI). Karakteristik performa dan penguncian pada database lain (misalnya MySQL InnoDB yang memiliki Gap Locks / Next-Key Locks) dapat berbeda dan memiliki perilaku anomali/locking tersendiri.
@@ -148,6 +163,8 @@ go test -v ./...
 
 ## Running Tests
 
+Jalankan tiap skenario untuk melihat visualisasi dan perilaku engine:
+
 ```bash
 # Non-Repeatable Read
 go test -v -run TestReadCommitted_NonRepeatableRead ./...
@@ -169,7 +186,7 @@ go test -v -run TestBidirectionalTransfers_DeadlockFree ./...
 # 100 Concurrent Transfers Stress Test
 go test -v -run TestHighContention_100ConcurrentTransfers ./...
 
-# Serializable Conflict & Retry
+# Serializable Conflict (Bukti 40001) & Retry
 go test -v -run TestSerializable_ConcurrentUpdate_SerializationFailure ./...
 ```
 
@@ -207,6 +224,25 @@ Tidak ada isolation level yang otomatis benar hanya karena domain-nya financial.
 | Wallet transfer dengan high contention | `Read Committed` + `SELECT ... FOR UPDATE` (Pessimistic) |
 | Concurrent update dengan snapshot statis | `Repeatable Read` + retry (Optimistic) |
 | Complex multi-row invariant / Pencegahan Write Skew | `Serializable` + retry (SSI) |
+
+## FAQs: Lab Hari #8
+
+1. **Isolation level apa yang paling masuk akal untuk wallet transfer?**
+   `READ COMMITTED` dipadukan dengan `SELECT ... FOR UPDATE` (Pessimistic Locking) dan Deterministic Lock Ordering. Skenario wallet umumnya memiliki contention tinggi pada row user tertentu.
+2. **Apa risiko jika menggunakan READ COMMITTED tanpa mekanisme tambahan?**
+   *Lost Update*. Dua transaksi yang melakukan "read-calculate-write" secara bersamaan akan menimpa satu sama lain, menyebabkan saldo tercipta atau menguap dari kehampaan.
+3. **Kapan menggunakan SELECT ... FOR UPDATE?**
+   Ketika aplikasi melakukan *Check-Then-Act* business logic yang kritis terhadap suatu state (misal saldo >= 0), dan keputusan tidak boleh didasarkan pada data *stale*.
+4. **Bagaimana menguji dua transfer concurrent?**
+   Jangan mengandalkan `time.Sleep()`. Gunakan *barrier synchronization* (seperti `sync.WaitGroup` atau blocking channel) agar semua goroutine tertahan di titik query, lalu lepaskan serentak untuk memaksimalkan tabrakan.
+5. **Mengapa BEGIN TRANSACTION saja belum menjamin saldo benar?**
+   Transaksionalitas (`A`tomicity) hanya menjamin semua query sukses bersama atau gagal bersama. Namun cara transaksi memandang transaksi *lain* bergantung pada `I`solation level.
+6. **Apa perbedaan snapshot consistency dan row locking?**
+   Snapshot (`REPEATABLE READ`) memberi jaminan data *terbaca* tidak berubah (consistency statis optimis). Row locking (`FOR UPDATE`) mencegah transaksi lain *memodifikasi* row sampai lock dilepas (konsistensi pesimis).
+7. **Mengapa SERIALIZABLE bukan pilihan default untuk seluruh aplikasi?**
+   Serializable memakan *cost* tinggi: abort rate akibat conflict `40001` akan meroket di skenario high-contention, memerlukan *retry logic* mutlak di aplikasi, dan overhead dependency tracking.
+8. **Mengapa application mungkin perlu retry ketika menggunakan SERIALIZABLE?**
+   Karena *Serializable* pada SSI PostgreSQL beroperasi optimis: membiarkan concurrency terjadi dan baru akan membatalkan salah satu dengan `SQLSTATE 40001 (serialization_failure)` jika ditemukan conflict cycle.
 
 ## Senior Engineer Checklist
 - [ ] Apakah business invariant telah didefinisikan secara eksplisit sebelum memilih solusi?
