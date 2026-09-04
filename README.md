@@ -36,7 +36,7 @@ Batasan kepemilikan konsep antar lab:
 - **Lab 18 Pessimistic Locking** → menjaga critical read-modify-write dengan database locking.
 - **Lab 03 Database Transaction & Distributed Transaction Boundary** → berfokus pada *atomic multi-step database changes*, *transaction boundary*, *partial failure* dengan external systems, serta pengantar *event, retry, saga, compensation, dan outbox*.
 - **Lab 04 Caching** → berfokus pada *cache stampede, stale reads, and consistency*.
-- **Lab 12 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
+- **Lab 19 Optimistic Locking** → berfokus pada *concurrent modification/version conflict*.
 
 Tujuan repository adalah *progressive learning*, bukan menyelesaikan semua masalah dalam satu lab.
 
