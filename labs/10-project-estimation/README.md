@@ -126,7 +126,7 @@ Setiap task memiliki tingkat risiko teknis dan ketergantungan eksternal:
 
 ---
 
-## 6. Spike
+## 7. Spike
 
 Spike adalah eksplorasi teknis yang **di-timebox** (dibatasi waktu secara ketat) untuk menjawab ketidakpastian spesifik.
 
