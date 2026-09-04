@@ -133,12 +133,66 @@ func (s *SafeInvoiceService) ProcessWithDeps(ctx context.Context, invoiceID stri
 
 ---
 
-## Golden Signals
+## Hubungan Golden Signals (Di Lab vs Production)
 
-- **Latency**: Waktu yang dibutuhkan untuk melayani request (`lab07_http_request_duration_seconds`, `lab07_dependency_duration_seconds`).
-- **Traffic**: Ukuran beban pada sistem (`lab07_http_requests_total`).
-- **Errors**: Tingkat kegagalan request (`lab07_http_request_errors_total`, `lab07_dependency_errors_total`).
-- **Saturation proxy**: Seberapa penuh kapasitas layanan diestimasi melalui concurrency pressure (`lab07_http_in_flight_requests`). Catatan: di production, resource saturation yang sebenarnya biasanya dilihat dari metrik seperti *database connection pool utilization*, *queue depth*, *worker/goroutine utilization*, atau *CPU throttling*.
+Meskipun di lab ini kita menggunakan simulasi (sleep/timer) dan local observability stack, metrik-metrik ini memetakan kondisi sebenarnya di production:
+
+1. **Latency**
+   - **Lab:** Waktu total request invoice & waktu eksekusi dependency (misal `pdf.generate` 4800ms).
+   - **Production:** Request duration user-facing API & latency real-world (slow query, API third-party lelet).
+2. **Traffic**
+   - **Lab:** Jumlah hit HTTP Request ke endpoint.
+   - **Production:** Request per Second (RPS) pada API Gateway / Service.
+3. **Errors**
+   - **Lab:** HTTP 5xx dan metric Dependency Error.
+   - **Production:** Kegagalan payment, database connection reset, timeout ke external API.
+4. **Saturation (Proxy)**
+   - **Lab:** Seberapa banyak in-flight request pada aplikasi kita.
+   - **Production:** CPU load penuh, kehabisan memori, antrean worker kepenuhan, max DB connection tercapai.
+
+---
+
+## Investigation Story: Troubleshooting Seperti Engineer Beneran
+
+**Kasus:** Customer mengeluh, *"Kadang-kadang generate invoice lambat banget, sampai 20 detik."*
+
+Sebagai engineer, kamu nggak perlu nebak. Ikuti jejak telemetri ini (kamu bisa coba lakukan dengan skenario `slow-pdf` di bawah):
+
+1. **Metrics memberitahu ADA masalah:**
+   Buka Grafana, lihat panel p95 Latency API naik drastis (dari 95ms jadi ~4.8s).
+2. **Metrics mempersempit area:**
+   Lihat panel dependency metric, *ternyata komponen PDF yang naik grafiknya*. Database & inventory normal.
+3. **Tracing memberitahu DI MANA persisnya:**
+   Buka Jaeger, filter request yang butuh > 4s. Buka Trace ID-nya. Terlihat jelas dari "waterfall" view bahwa span `pdf.generate` memakan 99% durasi.
+4. **Correlation ID menghubungkan kepingan:**
+   Dari Jaeger, copy `Trace ID` atau `Request ID` (`demo-slow-pdf-001`).
+5. **Logs memberi detail APA yang terjadi:**
+   Cari ID tersebut di Logs. Kamu akan melihat jejak yang ditinggalkan setiap fungsi, durasi spesifiknya per baris, dan apakah ada pesan ERROR khusus (misal "PDF template invalid").
+
+**Expected Mental Model:**
+- **Metrics** → "Ada masalah, latency sistem naik."
+- **Tracing** → "Masalahnya di service PDF."
+- **Logs** → "Detailnya, worker kehabisan memori saat render template X."
+- **Correlation ID** → Tali yang mengikat semuanya jadi satu cerita utuh.
+
+---
+
+## Observability Bukan Sekadar Install Tools
+
+Ingat: Observability **bukanlah** sekadar meng-install Prometheus, Grafana, atau Jaeger. Tools bisa ganti (Datadog, New Relic, ELK), tapi konsep dasarnya sama:
+
+> **System → menghasilkan Telemetry (Logs/Metrics/Traces) → Engineer melakukan diagnosa internal state.**
+
+---
+
+## Common Observability Mistakes
+
+Hindari anti-pattern berikut saat bekerja:
+- **Logging semua hal (Verbose):** Noise terlalu tinggi, tagihan log storage bengkak, susah cari error sungguhan.
+- **Log tanpa context (Opaque):** `"Error saving to DB"`. Request ID berapa? User ID siapa?
+- **Semua log pakai ERROR:** Warning/Info dicatat sebagai ERROR, membuat alert fatigue (engineer jadi kebal/cuek dengan notifikasi error).
+- **Nggak pakai Request ID:** Gagal melacak perjalanan satu request lintas service/goroutine.
+- **Baru memikirkan monitoring setelah Production down:** Panik pas incident karena blind-spot.
 
 ---
 
@@ -294,27 +348,31 @@ Jalankan perintah berikut untuk menguji berbagai skenario I/O:
 
 ```bash
 # 1. Normal scenario (~95ms)
+# Pembelajaran: Baseline system yang sehat
 curl -i -X POST \
   -H "X-Request-ID: demo-normal-001" \
   "http://localhost:8087/invoices/INV-1001/process?scenario=normal"
 
 # 2. Slow PDF scenario (~4800ms bottleneck)
+# Pembelajaran: Mendeteksi bottleneck pada application/internal processing (CPU/Mem heavy task)
 curl -i -X POST \
   -H "X-Request-ID: demo-slow-pdf-001" \
   "http://localhost:8087/invoices/INV-1001/process?scenario=slow-pdf"
 
 # 3. Slow Database scenario (~3000ms bottleneck)
+# Pembelajaran: Mendeteksi bottleneck pada internal infrastructure dependency (slow query/DB contention)
 curl -i -X POST \
   -H "X-Request-ID: demo-slow-db-001" \
   "http://localhost:8087/invoices/INV-1001/process?scenario=slow-database"
 
 # 4. Slow External Notification scenario (~3500ms downstream HTTP delay)
-# Catatan: slow-external benar-benar melewati HTTP network boundary via HTTPNotificationClient
+# Pembelajaran: Mendeteksi bottleneck pada third-party API latency (melewati HTTP network boundary via HTTPNotificationClient)
 curl -i -X POST \
   -H "X-Request-ID: demo-slow-ext-001" \
   "http://localhost:8087/invoices/INV-1001/process?scenario=slow-external"
 
 # 5. PDF Error scenario (502 Bad Gateway)
+# Pembelajaran: Memeriksa error telemetry (error span ter-record, http 5xx, structured error log)
 curl -i -X POST \
   -H "X-Request-ID: demo-pdf-err-001" \
   "http://localhost:8087/invoices/INV-1001/process?scenario=pdf-error"
