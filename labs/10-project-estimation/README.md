@@ -40,105 +40,100 @@ Fitur yang harus diestimasi:
 
 ## 3. Task Breakdown
 
-Feature besar dipecah menjadi task kecil yang dapat diukur (bukan dihitung per halaman).
+Feature besar dipecah menjadi task-task kecil yang konkret dan dapat diukur, bukan dihitung per halaman atau dianggap satu task atomik.
 
-| No | Feature | Task kecil (contoh) |
-|----|---------|---------------------|
-| 1 | Login | Backend/API, Validation, Testing |
-| 2 | Booking Online | Database, Backend/API, Validation, Testing |
-| 3 | Pilih Cabang | Frontend, Backend/API |
-| 4 | Pilih Mekanik | Frontend, Backend/API |
-| 5 | Payment Gateway | Backend/API, External API, Webhook, Testing, **Spike** |
-| 6 | WhatsApp Notification | Backend/API, External API, **Spike** |
-| 7 | Dashboard Admin | Frontend, Backend/API, Testing |
-| 8 | Laporan Excel | Backend/API, Database, Export |
+Misalnya, **"Payment Gateway"** bukan satu task atomik ("Payment Gateway: 5 hari"). Seorang Senior Engineer memecahnya menjadi:
 
-Aktivitas lintas task yang biasa muncul:
+- Memahami dokumentasi API vendor
+- Authentication mechanism (API key, OAuth, signature)
+- Create transaction / payment request flow
+- Payment callback & webhook handling
+- Error handling & edge cases (expired, duplicate payment)
+- Retry behavior & idempotency
+- Testing di environment sandbox
 
-```
-Requirement Analysis
-Database Schema
-Backend/API
-Frontend
-Validation
-Testing
-Code Review
-Deployment
-UAT
-```
+### Breakdown Fitur Aplikasi Booking Servis
+
+| No | Fitur | Task Konkret |
+|----|-------|--------------|
+| 1 | Login | Auth endpoint, password hashing/token, validasi input, unit test |
+| 2 | Booking Online | DB schema booking, API create & list booking, business validation (slot availability), unit test |
+| 3 | Pilih Cabang | Master data cabang API, selector UI/endpoint, caching |
+| 4 | Pilih Mekanik | Relasi cabang-mekanik, availability check, filter & list endpoint |
+| 5 | Payment Gateway | **Spike eksplorasi**, create transaction API, webhook receiver, retry/idempotency, sandbox testing |
+| 6 | WhatsApp Notification | Template message, vendor API client, queue/async worker, error retry |
+| 7 | Dashboard Admin | Metrics query/aggregator, summary endpoint, UI dashboard |
+| 8 | Laporan Excel | Query data filter, Excel generator stream/library, download endpoint |
 
 ---
 
 ## 4. Known vs Unknown
 
-| Status | Arti | Perlakuan |
-|--------|------|-----------|
-| **Known** | Tech & pattern sudah familiar, effort bisa di-range | Langsung estimasi Min/MostLikely/Max |
-| **Unknown** | Tech/API/vendor baru, belum jelas effort-nya | Wajib **Spike** dulu sebelum estimasi implementasi |
+Membedakan apa yang sudah kita pahami dengan pasti (Known) dan apa yang belum jelas (Unknown):
 
-```go
-task := Task{
-    Name: "Payment Gateway Vendor API",
-    Estimate: EstimateRange{Min: 0, MostLikely: 0, Max: 0},
-    Risk: RiskUnknown,
-    SpikeDays: 1.5, // Wajib untuk eksplorasi
-    Assumptions: []string{"Vendor sandbox available"},
-}
-```
+| Kategori | Karakteristik | Contoh di Kasus Ini | Perlakuan |
+|----------|---------------|---------------------|-----------|
+| **Known** | Pola & tech stack sudah familiar, tim pernah mengerjakan | Login, Dashboard sederhana, Export Excel | Langsung buat estimasi range (Min/Most Likely/Max) |
+| **Unknown** | Vendor API baru, belum jelas flow/webhook/auth-nya | API Payment Gateway baru, behavior webhook vendor | **Wajib Spike** terlebih dahulu |
 
-> **Unknown != 0**. Unknown berarti tidak cukup dipahami untuk dipercaya sebagai estimasi implementasi final.
+> **PENTING:**
+> - `unknown != 0 hari` (mengabaikan unknown akan meledak di tengah proyek)
+> - `unknown != langsung ditebak` (menebak tanpa dasar menghasilkan angka palsu)
+> 
+> Unknown harus diubah menjadi Known melalui **Spike** sebelum dapat diestimasi dengan akurat.
 
 ---
 
 ## 5. Risk & Dependency
 
+Setiap task memiliki tingkat risiko teknis dan ketergantungan eksternal:
+
 | Risk Level | Kriteria | Contoh |
 |------------|----------|--------|
-| **Low** | Well-known, proven tech | Tambah field, CRUD biasa |
-| **Medium** | Complexity menengah, ada integrasi ringan | API endpoint baru, query kompleks |
-| **High** | Dependency kunci, high cost of failure | Database migration besar, cache strategy |
-| **Unknown** | Belum pernah dibuat, teknologi baru | Payment gateway baru, API vendor |
+| **Low** | Well-known, proven tech, minim dependensi | CRUD cabang, login standar |
+| **Medium** | Kompleksitas menengah atau ada integrasi internal | Availability slot booking, aggregasi dashboard |
+| **High** | Core engine, perubahan skema besar, high cost of failure | Transaksi settlement, logic penugasan mekanik |
+| **Unknown** | Belum pernah digunakan, dependensi eksternal pihak ketiga | Vendor Payment Gateway, WhatsApp API provider |
 
-**External dependency** (di studi kasus ini):
+### External Dependency
+- **Payment Gateway Vendor**: butuh akun sandbox, API credentials, webhook URL publik.
+- **WhatsApp Provider**: butuh registrasi template WhatsApp, API token, quota pesan.
+- **Dependency Tim Internal**: desain UI/UX final, requirement spesifik dari product owner.
 
-- Payment gateway (vendor) → butuh credential, sandbox, dokumentasi.
-- WhatsApp provider (vendor) → butuh API key, template, dokumentasi.
-- Internal: tim UI/Design, requirement owner, environment Dev/Prod.
-
-**Risiko yang dapat membuat estimasi berubah:**
-
-- Dokumentasi payment gateway tidak sesuai kondisi aktual
-- Flow webhook membutuhkan perubahan desain
-- Requirement booking berubah
-- Dependency eksternal terlambat
+### Technical & Project Risks
+- Dokumentasi payment gateway tidak sesuai dengan kondisi aktual di sandbox
+- Flow webhook membutuhkan perubahan arsitektur (misal: butuh reverse proxy / webhook queue)
+- Requirement booking dan alokasi slot mekanik berubah di tengah jalan
+- Keterlambatan approval atau penerbitan API credential dari vendor pihak ketiga
 
 ---
 
 ## 6. Spike
 
-Spike = eksplorasi teknis timeboxed untuk mengubah **unknown** menjadi **estimatable work**.
+Spike adalah eksplorasi teknis yang **di-timebox** (dibatasi waktu secara ketat) untuk menjawab ketidakpastian spesifik.
 
-### Contoh alur:
+### Contoh Spike: Payment Gateway
+- **Timebox:** Maksimal 1 hari (atau 1–2 hari)
+- **Tujuan Spike:**
+  1. Cek authentication mechanism (signature / token).
+  2. Coba flow create transaction di sandbox.
+  3. Pahami payload & verifikasi signature pada webhook/callback.
+  4. Cek ketersediaan dan reliabilitas sandbox vendor.
+  5. Identifikasi error handling & retry behavior saat payment timeout/gagal.
+- **Output Spike:**
+  Informasi yang cukup untuk mengubah **Unknown** menjadi **Estimatable Work** (bukan membangun integrasi production siap rilis). Jangan membuat mock infrastructure atau abstraksi yang tidak diperlukan.
 
 ```
-Payment Gateway Vendor API
-↓
-Unknown Risk (0 effort implementasi)
-↓
-Spike 1–2 hari
-↓
-Implementasi Min/MostLikely/Max dapat diestimasi
+Payment Gateway (Unknown)
+   ↓
+Spike 1 hari (eksplorasi timeboxed)
+   ↓
+Task konkret teridentifikasi:
+- Auth & create transaction: 1–2 hari
+- Webhook receiver & signature: 1–2 hari
+- Error retry & sandbox testing: 1–2 hari
+Total Implementation Effort: 3–6 hari (Known)
 ```
-
-**Spike cukup berupa eksplorasi timeboxed untuk menjawab:**
-
-- authentication mechanism
-- create payment flow
-- webhook flow
-- retry/error behavior
-- sandbox availability
-
-**Jangan bangun integrasi payment gateway penuh di spike.** Output spike adalah informasi yang cukup untuk mengubah unknown menjadi estimatable work.
 
 ---
 
@@ -170,38 +165,27 @@ func (r EstimateRange) Expected() float64 {
 
 ---
 
-## 8. Effort vs Duration
+## 8. Effort vs Duration (Engineer-days vs Calendar Days)
 
-Bedakan effort (engineer-days) dengan durasi kalender (working days / weeks).
+Bedakan **Effort** (engineer-days, kerja sekumulatif sampai selesai) dengan **Duration** (working days pada kalender, tergantung availability).
+
+Contoh perhitungan:
 
 ```
-Effort: 18–24 engineer-days
-+
-Spike: 2.5 days
-=
+Implementation Effort: 18–24 engineer-days
+Spike: 2.5 hari (termasuk dalam effort)
 Base Effort: 20.5–26.5 engineer-days
-+
 Contingency: 15%
-=
 Final Effort: 22–30 engineer-days
 
-1 engineer @ 70% availability
+1 engineer @ 70% availability (realistis)
 ↓
-Calendar Duration: 31–43 working days (~6–9 weeks)
+Calendar Duration = Final Effort / (1 × 0.7)
+↓
+Duration: 31–43 working days (~6–9 weeks)
 ```
 
-```go
-type DurationRange struct {
-    MinDays      float64
-    ExpectedDays float64
-    MaxDays      float64
-}
-
-// Calendar Duration = Effort / (Engineers × Availability)
-calendarDays = finalEffort / (engineerCount * availability)
-```
-
-> **Jangan menyamakan effort dengan tanggal selesai.**
+> **Jangan menyamakan effort (jumlah jam kerja) dengan duration (hari kalender).**
 
 ---
 
@@ -320,18 +304,18 @@ Test menjalankan skenario validasi di atas dan case study Aplikasi Booking Servi
 
 ## 13. Exercise
 
-Kerjakan estimasi untuk case study "Aplikasi Booking Servis" (atau variasi requirement baru). Jangan melihat solusi di atas sebelum Anda mengerjakannya.
+Kerjakan estimasi untuk case study "Aplikasi Booking Servis". Jangan melihat solusi di atas sebelum Anda mengerjakannya.
 
-1. **Breakdown** requirement menjadi task kecil (hindari estimasi berbasis jumlah halaman).
-2. Tandai **Known vs Unknown** untuk setiap task.
+1. **Breakdown** requirement (misal "Payment Gateway" dipecah: auth, create transaction, webhook, sandbox testing). Jangan gunakan jumlah halaman.
+2. Tandai **Known vs Unknown**.
 3. Identifikasi **technical risk** dan **external dependency**.
-4. Tentukan task mana butuh **Spike** (timeboxed) + tujuan spike-nya.
+4. Tentukan task mana butuh **Spike** (timeboxed, misal 1-2 hari) + tujuan spike-nya (misal: "mempelajari behavior webhook").
 5. Buat **estimation range** (Min/Most Likely/Max) untuk tiap task.
 6. Hitung **Effort vs Calendar Duration** (akunkan availability engineer).
-7. Tambahkan **contingency** secara masuk akal (berbasis risiko, bukan rumus wajib).
+7. Tambahkan **contingency** secara masuk akal (buffer risiko, bukan rumus wajib).
 8. Tuliskan **minimal 3 assumptions** yang mendasari estimasi.
 9. Tuliskan **minimal 3 risks** yang bisa membuat estimasi berubah.
-10. Susun **Final Stakeholder Estimate** yang siap dipresentasikan.
+10. Susun **Final Stakeholder Estimate** yang merangkum hasil.
 
 ---
 
