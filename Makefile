@@ -11,6 +11,7 @@
 	lab-08-test lab-08-test-race lab-08-vet \
 	lab-09-test lab-09-test-race lab-09-vet \
 	lab-10-project-estimation-test lab-10-project-estimation-test-race lab-10-project-estimation-vet \
+	lab-12-test lab-12-test-race lab-12-vet \
 	lab-14-test lab-14-test-race lab-14-vet \
 	lab-15-test lab-15-test-race lab-15-vet \
 	lab-16-test lab-16-test-race lab-16-vet \
@@ -32,15 +33,15 @@ run: fmt vet
 	@go run ./cmd/api
 
 # Run tests
-test: lab-07-test lab-08-test lab-09-test lab-14-test lab-15-test lab-16-test lab-17-test
+test: lab-07-test lab-08-test lab-09-test lab-12-test lab-14-test lab-15-test lab-16-test lab-17-test
 	@echo "Running unit tests..."
 	@go test ./... -short
 
-test-race: lab-05-test-race lab-07-test-race lab-08-test-race lab-09-test-race lab-14-test-race lab-15-test-race lab-16-test-race lab-17-test-race
+test-race: lab-05-test-race lab-07-test-race lab-08-test-race lab-09-test-race lab-12-test-race lab-14-test-race lab-15-test-race lab-16-test-race lab-17-test-race
 	@echo "Running tests with race detector..."
 	@go test -race ./... -short
 
-lint: lab-07-vet lab-08-vet lab-09-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
+lint: lab-07-vet lab-08-vet lab-09-vet lab-12-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
 	@echo "Running linter..."
 	@go vet ./...
 
@@ -50,7 +51,7 @@ fmt:
 	@cd labs/04-caching && go fmt ./...
 	@cd labs/05-race-condition && go fmt ./...
 
-vet: lab-03-vet lab-04-vet lab-05-vet lab-07-vet lab-08-vet lab-09-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
+vet: lab-03-vet lab-04-vet lab-05-vet lab-07-vet lab-08-vet lab-09-vet lab-12-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
 	@echo "Running go vet..."
 	@go vet ./...
 
@@ -242,6 +243,20 @@ lab-08-vet:
 lab-08-integration:
 	@echo "=== Testing Lab 08 (Integration) ==="
 	@cd labs/08-database-isolation-level && REQUIRE_POSTGRES=1 go test -v -count=1 ./...
+
+# ==================== Lab 12: Feature Flags ====================
+
+lab-12-test:
+	@echo "=== Testing Lab 12: Feature Flags ==="
+	@cd labs/12-feature-flags && go test -v -count=1 ./...
+
+lab-12-test-race:
+	@echo "=== Testing Lab 12 (Race Detector) ==="
+	@cd labs/12-feature-flags && go test -race -v -count=1 ./...
+
+lab-12-vet:
+	@echo "=== Vet Lab 12 ==="
+	@cd labs/12-feature-flags && go vet ./...
 
 # ==================== Lab 14: Outbox Pattern ====================
 

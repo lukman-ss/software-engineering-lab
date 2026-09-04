@@ -132,3 +132,4 @@ go test ./labs/17-rate-limiting/... -v
 ## Navigasi
 
 - **Previous**: [Lab 16 — Circuit Breaker](../16-circuit-breaker/)
+- **Next**: [Lab 18 — Pessimistic Locking](../18-pessimistic-locking/)
