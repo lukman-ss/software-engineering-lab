@@ -15,6 +15,16 @@ func TestFeatureService_GlobalOff(t *testing.T) {
 	}
 }
 
+func TestFeatureService_ZeroPercentRollout(t *testing.T) {
+	fs := NewFeatureService([]Flag{
+		{Key: "online_booking", Enabled: true, RolloutPercentage: 0},
+	})
+
+	if fs.IsEnabled("online_booking", "user-123") {
+		t.Error("Feature harus OFF ketika RolloutPercentage = 0")
+	}
+}
+
 func TestFeatureService_InternalRollout(t *testing.T) {
 	fs := NewFeatureService([]Flag{
 		{Key: "online_booking", Enabled: true, InternalUsers: []string{"internal-team"}},
@@ -65,7 +75,7 @@ func TestFeatureService_DeterministicSameBucket(t *testing.T) {
 
 	userID := "consistent-user"
 	runs := make([]bool, 10)
-	
+
 	// Setiap request user yang sama harus dapat hasil yang sama
 	for i := 0; i < 10; i++ {
 		runs[i] = fs.IsEnabled("online_booking", userID)
@@ -86,17 +96,18 @@ func TestFeatureService_RolloutIncrease_NoRegression(t *testing.T) {
 
 	userID := "test-user"
 
-	// Dulu OFF (bucket > 9 untuk rollout 10%)
-	oldResult := fs.IsEnabled("online_booking", userID)
+	// Dulu mungkin OFF (tergantung bucket)
+	resultBefore := fs.IsEnabled("online_booking", userID)
 
 	// Naik ke 50% (bucket 0-49 = ON)
-	fs.UpdateFlag(Flag{Key: "online_booking", Enabled: true, RolloutPercentage: 50})
-	newResult := fs.IsEnabled("online_booking", userID)
+	fs.SetFlag(Flag{Key: "online_booking", Enabled: true, RolloutPercentage: 50})
+	resultAfter := fs.IsEnabled("online_booking", userID)
 
-	// User yang dulu OFF tidak boleh balik ke OFF karena rollout increase
-	// (kasus ini tergantung pada bucket-nya)
-	_ = oldResult
-	_ = newResult
+	// Jika dulu ON, harus tetap ON
+	// Jika dulu OFF, bisa jadi ON sekarang (naik ke 50%)
+	if resultBefore && !resultAfter {
+		t.Error("User yang dulu ON tidak boleh kehilangan feature setelah rollout naik")
+	}
 }
 
 func TestFeatureService_KillSwitch(t *testing.T) {
@@ -110,7 +121,7 @@ func TestFeatureService_KillSwitch(t *testing.T) {
 	}
 
 	// Kill switch: Set Enabled = false
-	fs.UpdateFlag(Flag{Key: "online_booking", Enabled: false})
+	fs.SetFlag(Flag{Key: "online_booking", Enabled: false})
 
 	if fs.IsEnabled("online_booking", "user-123") {
 		t.Error("Fitur harus OFF setelah kill switch")
@@ -129,11 +140,15 @@ func TestBookingService_FlagOff(t *testing.T) {
 	fs := NewFeatureService([]Flag{
 		{Key: "online_booking", Enabled: false},
 	})
-	bs := NewBookingService(fs)
+	metrics := NewMetrics()
+	bs := NewBookingService(fs, metrics)
 
 	resp := bs.CreateBooking(BookingRequest{UserID: "user-123"})
 	if resp.Flow != "legacy" {
 		t.Errorf("Expected flow 'legacy', got '%s'", resp.Flow)
+	}
+	if !resp.Success {
+		t.Error("Expected legacy flow to succeed")
 	}
 }
 
@@ -141,10 +156,38 @@ func TestBookingService_FlagOn(t *testing.T) {
 	fs := NewFeatureService([]Flag{
 		{Key: "online_booking", Enabled: true, RolloutPercentage: 100},
 	})
-	bs := NewBookingService(fs)
+	metrics := NewMetrics()
+	bs := NewBookingService(fs, metrics)
 
 	resp := bs.CreateBooking(BookingRequest{UserID: "user-123"})
 	if resp.Flow != "online_booking" {
 		t.Errorf("Expected flow 'online_booking', got '%s'", resp.Flow)
+	}
+	if !resp.Success {
+		t.Error("Expected online booking flow to succeed")
+	}
+}
+
+func TestBookingService_KillSwitch_Scenario(t *testing.T) {
+	fs := NewFeatureService([]Flag{
+		{Key: "online_booking", Enabled: true, RolloutPercentage: 100},
+	})
+	metrics := NewMetrics()
+	bs := NewBookingService(fs, metrics)
+
+	// Skenario: Bug di production! Kita nyalakan simulated failure
+	bs.SetSimulateFail(true)
+
+	resp1 := bs.CreateBooking(BookingRequest{UserID: "user-123"})
+	if resp1.Flow != "online_booking" || resp1.Success {
+		t.Error("Expected online booking to fail when bug is active")
+	}
+
+	// KILL SWITCH: feature OFF (tanpa deploy)
+	fs.SetFlag(Flag{Key: "online_booking", Enabled: false})
+
+	resp2 := bs.CreateBooking(BookingRequest{UserID: "user-123"})
+	if resp2.Flow != "legacy" || !resp2.Success {
+		t.Error("Expected legacy fallback to succeed after kill switch")
 	}
 }

@@ -231,11 +231,26 @@ make lint          # go vet
 - [x] 18 Pessimistic Locking
 - [x] 19 Optimistic Locking
 
-### Phase 2: Extended Topics
-- Bulkhead pattern
-- Saga pattern
-- Leader election
-- Graceful shutdown
+### Target Audience
+
+The target audience of this lab repository includes:
+- **Mid to Senior Engineers**: Looking to solidify distributed systems concepts
+- **Tech Leads**: Seeking reference implementations for production failures
+- **Teams**: Using these labs as practical discussion points
+
+### Feature Flags
+
+See [Lab 12 - Feature Flags](./labs/12-feature-flags/) for a deep dive into rollout and blast radius management.
+
+### Expected Learning Outcome
+
+Memahami: **Develop ≠ Deploy ≠ Release**
+
+**Success Workflow:**
+Code Complete → Deploy → Feature OFF → Internal → 10% → Observe → 50% → Observe → 100% → Stable → Remove Flag
+
+**Failure Path:**
+10% Rollout → Metrics Memburuk → STOP ROLLOUT → Kill Switch → Legacy Flow → Investigate
 
 ## What This Is Not
 

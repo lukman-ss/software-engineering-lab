@@ -258,6 +258,10 @@ lab-12-vet:
 	@echo "=== Vet Lab 12 ==="
 	@cd labs/12-feature-flags && go vet ./...
 
+lab-12-demo:
+	@echo "=== Running Lab 12 Demo ==="
+	@cd labs/12-feature-flags && go run ./cmd/simulate
+
 # ==================== Lab 14: Outbox Pattern ====================
 
 lab-14-test:
