@@ -114,9 +114,9 @@ func (c *CheckoutNaive) Checkout(ctx context.Context, userID string) (*CheckoutR
 | 7 | Product tidak ditemukan tidak ditangani | MAJOR |
 | 8 | Empty cart tidak divalidasi | MINOR |
 | 9 | Error handling buruk (selalu return success) | MAJOR |
-| 10 | Logging/context tidak memadai | NIT |
+| 10 | Logging/context tidak memadai | SUGGESTION |
 | 11 | Notification sebagai side effect berbahaya | MINOR |
-| 12 | Duplicate code berlebihan pada validasi | NIT |
+| 12 | Duplicate code berlebihan pada validasi | SUGGESTION |
 | 13 | Hardcoded environment value | MINOR |
 
 ## Severity Classification
@@ -131,7 +131,9 @@ func (c *CheckoutNaive) Checkout(ctx context.Context, userID string) (*CheckoutR
 | BLOCKER | Risiko data korupsi, kehilangan data, atau security critical | Race condition overselling, double charge |
 | MAJOR | Masalah bisa menyebabkan error di production | No transaction boundary, missing rollback |
 | MINOR | Masalah performa atau user experience | N+1 query lookup, sub-optimal UI feedback |
-| NIT | Formatting, naming yang tidak konsisten | Inconsistent naming |
+| SUGGESTION | Formatting, naming, atau readability | Inconsistent naming, unnecessary abstraction |
+
+Reviewer harus mengalokasikan waktu dan energi sesuai *Severity*. Jangan memperlakukan bug pembayaran (Blocker) dan nama variable (Suggestion) dengan bobot diskusi yang sama.
 
 ## Business Logic Review
 
