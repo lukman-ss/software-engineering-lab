@@ -1,41 +1,34 @@
-# Research Plan
+# Research Plan: Backward Compatibility in Production Systems
 
 ## Research Topic
-Backward Compatibility — Cara Mengembangkan Sistem Lama Tanpa Merusak Production
+Backward Compatibility — How to safely evolve legacy systems in production without breaking existing clients, databases, background workers, and integrated consumers.
 
 ## Objective
-Riset bagaimana engineer mengembangkan sistem lama yang sudah berjalan di production tanpa merusak client, service, database consumer, API consumer, worker, mobile app, reporting, dan integration yang masih bergantung pada contract lama.
+Analyze, evaluate, and formalize best practices, deployment sequences, data migration patterns, and architecture principles that allow production changes without downtime or breaking existing contracts.
 
 ## Research Questions
-1. Apa itu backward compatibility?
-2. Apa bedanya dengan forward compatibility?
-3. Apa yang membuat sebuah perubahan menjadi breaking change?
-4. Bagaimana Expand → Migrate → Contract bekerja?
-5. Bagaimana melakukan schema migration tanpa downtime?
-6. Kapan dual read dibutuhkan?
-7. Apa risiko dual write?
-8. Bagaimana melakukan backfill secara aman?
-9. Bagaimana menjaga compatibility saat rolling deployment?
-10. Bagaimana mengetahui consumer lama masih aktif?
-11. Kapan field, column, atau endpoint lama boleh dihapus?
-12. Bagaimana observability membantu migration?
-13. Bagaimana feature flag membantu rollout dan rollback?
-14. Bagaimana rollback memengaruhi desain migration?
-15. Apa failure mode paling umum dalam backward-compatible migration?
-16. Bagaimana membuat migration resumable dan idempotent?
-17. Apa yang harus diuji sebelum contract lama dihapus?
-18. Apa perbedaan database compatibility dan API compatibility?
+1. What defines backward compatibility versus forward compatibility in distributed systems?
+2. What transitions convert a non-breaking change into a breaking change?
+3. How does the Expand -> Migrate -> Contract pattern work for APIs, data models, and event schemas?
+4. How can zero-downtime database migrations safely execute without table locking or data loss?
+5. When should dual read, dual write, and fallback read strategies be used, and what are their trade-offs?
+6. How do rolling deployments, blue-green deployments, and rollbacks complicate schema migrations?
+7. What failure modes commonly occur during backward-compatible migrations, and how can they be mitigated?
+8. How can backward compatibility be measured, tested, and monitored using observability and feature flags?
 
 ## Search Strategy
-Mencari sumber terpercaya tier-1 dan tier-2 (Martin Fowler, dokumentasi Stripe) untuk mengumpulkan best practice dalam menangani API versioning, database schema evolution, backward compatibility, dan expand/contract pattern.
+1. Review primary architecture literature (Martin Fowler on Parallel Change and Evolutionary Database Design).
+2. Review vendor documentation and production engineering case studies (Stripe API versioning, Prisma expand-and-contract, GitHub/GitLab schema migration guides).
+3. Synthesize architectural constraints, deployment workflows, and failure scenarios.
+4. Construct real-world case studies for schema transitions (Customer Phones, Invoice Mechanics, Multi-Currency).
 
 ## Expected Primary Sources
-- Martin Fowler's "Evolutionary Database Design"
-- Martin Fowler's "Parallel Change"
-- Stripe API Versioning Blog Post
-- Official documentation vendor-specific untuk zero-downtime database migration
+- Martin Fowler, *Parallel Change* / *Evolutionary Database Design*
+- Stripe Engineering Blog, *APIs as infrastructure: future-proofing Stripe with versioning*
+- Prisma Data Guide, *Using the expand and contract pattern for schema changes*
+- Production database engineering best practices (PostgreSQL, MySQL zero-downtime practices)
 
 ## Risks / Unknowns
-- Kinerja dual write pada database berskala sangat besar.
-- Waktu yang dibutuhkan untuk menghentikan consumer lama.
-- Perbedaan dukungan schema changes antara PostgreSQL, MySQL, dan database lainnya (NoSQL vs SQL).
+- Latency and data race risks during dual-write phases.
+- Rollback safety when target schemas add non-null constraints or split tables.
+- Consumer lag and silent dependencies that prevent reaching the contract phase.
