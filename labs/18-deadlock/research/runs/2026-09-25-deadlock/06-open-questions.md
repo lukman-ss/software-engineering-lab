@@ -1,0 +1,3 @@
+- Seberapa besar perbedaan _overhead_ antara algoritma deteksi deadlock secara agresif dengan optimistik wait (`deadlock_timeout` di Postgres vs. deteksi 5 detik di SQL Server)?
+- Bagaimana penanganan deadlock pada sistem database non-relasional atau arsitektur _NewSQL_ (seperti Spanner atau CockroachDB) dengan transaksi terdistribusi murni?
+- Bagaimana merancang _integration test_ yang deterministik untuk mendeteksi _flaky_ deadlock dalam pipeline CI?
