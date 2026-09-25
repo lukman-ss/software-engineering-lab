@@ -1,17 +1,20 @@
-## Docs vs Code Audit
+# Docs vs Code Audit
 
-- README states:
-  - CLOSED -> Normal operational state. Successes reset failure count. Failures increment counter. When failures >= FailureThreshold, transitions to OPEN. Matches code (`internal/circuitbreaker/circuit_breaker.go:120`).
-  - OPEN -> Tripped state. Calls fail immediately with `ErrCircuitOpen`. Matches code (`internal/circuitbreaker/circuit_breaker.go:80`).
-  - HALF-OPEN -> Probe state after OpenTimeout. Matches code (`internal/circuitbreaker/circuit_breaker.go:65`).
-  - Probe succeeds: resets failure count and transitions to CLOSED. Matches code (`internal/circuitbreaker/circuit_breaker.go:104`).
-  - Probe fails: transitions back to OPEN. Matches code (`internal/circuitbreaker/circuit_breaker.go:95`).
-- Demo script:
-  - Scenarios 1-4 match the output and structure outlined in the README.
-  - Fail-fast takes negligible time (<1µs), exactly matching the documentation.
-- Engineering notes match the implemented logic and tests.
-- Research claims match implementation details (CLOSED, OPEN, HALF-OPEN states, configurable thresholds, cooldown time, fail-fast behavior).
+## Consistency Review
 
-Assessment:
-- No doc-code mismatches found.
-- No research-implementation mismatches found.
+### README vs Implementation
+- Claim: Breaker transitions CLOSED -> OPEN -> HALF_OPEN -> CLOSED.
+  - Matches: `internal/circuitbreaker/circuit_breaker.go`.
+- Claim: Cooldown timer (`OpenTimeout`) and probe limits (`HalfOpenMaxCalls`).
+  - Matches: Config fields and execution logic.
+- Claim: Demo output structure.
+  - Matches: Exact scenario structure and output formatting produced by `cmd/demo/main.go`.
+
+### Research vs Implementation
+- Research states: CLOSED, OPEN, HALF_OPEN states with fail-fast semantics.
+  - Matches: Enums and state machine flow.
+- Research states: Probes limited to avoid overwhelming downstream.
+  - Matches: `HalfOpenMaxCalls` enforcement.
+
+### Mismatches Found
+- None. All claims documented in README and research are implemented and tested.

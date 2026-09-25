@@ -1,49 +1,46 @@
-## Code Audit
+# Code Audit
 
-### Finding 1
-Location: internal/circuitbreaker/circuit_breaker.go:64
-Claimed Behavior: OpenTimeout elapses -> StateHalfOpen, HalfOpenMaxCalls allowed.
-Observed Implementation: State check in checkStateTransitionLocked correctly moves to StateHalfOpen. `cb.halfOpenCalls` is reset. The logic allows up to `HalfOpenMaxCalls` concurrent probes because it increments `cb.halfOpenCalls` before unlocking when in `StateHalfOpen` (lines 83-88).
+## Finding 1
+
+Location: internal/circuitbreaker/circuit_breaker.go:61-140
+Claimed Behavior: State transitions follow CLOSED -> OPEN -> HALF_OPEN -> CLOSED/OPEN.
+Observed Implementation: Handled accurately with timeout-based transition check and result evaluation.
 Assessment: PASS
 Severity: LOW
-Notes: The logic correctly handles concurrency for probe calls.
+Notes: Clean state machine implementation matching research.
 
-### Finding 2
-Location: internal/circuitbreaker/circuit_breaker.go:102
-Claimed Behavior: Probe succeeds -> resets failure count and transitions to CLOSED.
-Observed Implementation: Success in `StateHalfOpen` increments `consecutiveSuccesses`. When it reaches `HalfOpenMaxCalls`, state becomes `StateClosed`. Note that if `HalfOpenMaxCalls` is >1, it requires that many consecutive successes. README mentions "Dispatches canary probe. If probe returns 200 OK, breaker transitions to CLOSED". The implementation requires `HalfOpenMaxCalls` number of successful probes. If `HalfOpenMaxCalls` is 1, this matches exactly. This is acceptable as `consecutiveSuccesses` is reset when half open state is entered.
+## Finding 2
+
+Location: internal/circuitbreaker/circuit_breaker.go:48-140
+Claimed Behavior: Safe concurrent access without race conditions.
+Observed Implementation: All mutations and checks guarded by `cb.mu.Lock()`.
 Assessment: PASS
 Severity: LOW
-Notes: Works as expected.
+Notes: Race detector confirms zero data races under concurrent calls.
 
-### Finding 3
-Location: internal/circuitbreaker/circuit_breaker.go:94
-Claimed Behavior: Probe fails -> transitions back to OPEN.
-Observed Implementation: If a probe fails (err != nil), it immediately goes to `StateOpen`, resets counters, and updates `lastStateChange`.
+## Finding 3
+
+Location: internal/circuitbreaker/circuit_breaker.go:66-70
+Claimed Behavior: Fail-fast immediately when OPEN without calling downstream dependency.
+Observed Implementation: Returns `ErrCircuitOpen` before executing downstream function.
 Assessment: PASS
 Severity: LOW
-Notes: Works as expected.
+Notes: Minimal overhead verified via microsecond execution times in demo.
 
-### Finding 4
-Location: internal/circuitbreaker/circuit_breaker.go:120
-Claimed Behavior: failures >= FailureThreshold -> OPEN.
-Observed Implementation: Failure in `StateClosed` increments `failureCount`. If `>= cb.config.FailureThreshold`, state changes to `StateOpen`.
+## Finding 4
+
+Location: internal/circuitbreaker/circuit_breaker.go:71-110
+Claimed Behavior: Limit probe calls in HALF_OPEN to prevent downstream flooding.
+Observed Implementation: `halfOpenCalls` counter blocks requests exceeding `HalfOpenMaxCalls`.
 Assessment: PASS
 Severity: LOW
-Notes: Matches documentation exactly.
+Notes: Consecutive successes required to close the circuit.
 
-### Finding 5
-Location: internal/circuitbreaker/circuit_breaker.go:81
-Claimed Behavior: Fails fast in OPEN state.
-Observed Implementation: If `cb.state == StateOpen`, immediately returns `ErrCircuitOpen` without calling `fn`.
+## Finding 5
+
+Location: internal/circuitbreaker/circuit_breaker.go:80-92, 114-126
+Claimed Behavior: Downstream panics must not corrupt internal state or freeze mutex.
+Observed Implementation: Defers recovery, updates failure count or trips breaker to OPEN, then re-panics.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly implemented fail-fast mechanism.
-
-### Finding 6
-Location: internal/circuitbreaker/circuit_breaker.go:88
-Claimed Behavior: Thread safety.
-Observed Implementation: Uses `sync.Mutex` correctly. `checkStateTransitionLocked` is called under lock. State changes and counter updates are protected by the mutex. The actual network call `fn()` is executed outside the mutex to prevent blocking other fast-failing calls, which is correct. Re-acquires mutex to process result. 
-Assessment: PASS
-Severity: LOW
-Notes: Concurrency safety is properly handled.
+Notes: Properly avoids leaving the breaker in an invalid intermediate state.
