@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/safe"
+	"github.com/lukman-ss/software-engineering-lab/labs/98-outbox-pattern/safe"
 )
 
 // TestConcurrentOutboxWorkers ensures multiple workers don't create duplicate deliveries.

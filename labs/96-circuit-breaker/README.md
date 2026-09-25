@@ -1,4 +1,4 @@
-# Lab 16: Circuit Breaker Pattern
+# Lab 96: Circuit Breaker Pattern
 
 A circuit breaker prevents cascading failures by failing fast when a downstream service is struggling.
 
@@ -97,5 +97,5 @@ if errors.Is(err, breaker.ErrCircuitOpen) {
 
 ## Navigasi
 
-- **Previous**: [Lab 15 — Retry](../15-retry/)
-- **Next**: [Lab 17 — Rate Limiting](../17-rate-limiting/)
+- **Previous**: [Lab 97 — Retry](../97-retry/)
+- **Next**: [Lab 95 — Rate Limiting](../95-rate-limiting/)

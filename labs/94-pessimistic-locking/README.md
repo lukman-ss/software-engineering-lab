@@ -1,4 +1,4 @@
-# Lab 18 — Pessimistic Locking
+# Lab 94 — Pessimistic Locking
 
 Pessimistic locking prevents concurrency conflicts by acquiring an exclusive lock on the data before reading and modifying it (`SELECT ... FOR UPDATE`).
 
@@ -23,4 +23,4 @@ Holding a pessimistic lock for too long (e.g., executing slow queries, HTTP call
 ## Navigasi
 
 - **Previous**: [Lab 10 — Project Estimation](../10-project-estimation/)
-- **Next**: [Lab 19 — Optimistic Locking](../19-optimistic-locking/)
+- **Next**: [Lab 93 — Optimistic Locking](../93-optimistic-locking/)

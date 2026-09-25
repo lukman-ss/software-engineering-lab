@@ -10,8 +10,8 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/unsafe"
-	_ "github.com/lukman-ss/software-engineering-lab/labs/14-outbox-pattern/unsafe/order"
+	"github.com/lukman-ss/software-engineering-lab/labs/98-outbox-pattern/unsafe"
+	_ "github.com/lukman-ss/software-engineering-lab/labs/98-outbox-pattern/unsafe/order"
 )
 
 // setupTestDB creates a test database connection.

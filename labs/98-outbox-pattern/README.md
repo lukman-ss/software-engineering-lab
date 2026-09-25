@@ -1,4 +1,4 @@
-# Lab 14: Outbox Pattern - Dual Write Problem
+# Lab 98: Outbox Pattern - Dual Write Problem
 
 This lab demonstrates the dual write problem and its solution using the transactional outbox pattern.
 
@@ -127,12 +127,12 @@ Run tests against a local PostgreSQL database:
 
 ```bash
 docker-compose up -d postgres
-go test ./labs/14-outbox-pattern/... -v
+go test ./labs/98-outbox-pattern/... -v
 ```
 
 ---
 
 ## Navigasi
 
-- **Previous**: [Lab 13 — Deadlock](../13-deadlock/)
-- **Next**: [Lab 15 — Retry](../15-retry/)
+- **Previous**: [Lab 99 — Deadlock](../99-deadlock/)
+- **Next**: [Lab 97 — Retry](../97-retry/)

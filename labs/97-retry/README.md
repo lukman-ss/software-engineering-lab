@@ -1,4 +1,4 @@
-# Lab 15: Retry Patterns
+# Lab 97: Retry Patterns
 
 This lab explores safe retry mechanisms for handling transient failures.
 
@@ -114,7 +114,7 @@ for _, req := range requests {
 ## Running the Tests
 
 ```bash
-go test ./labs/15-retry/... -v
+go test ./labs/97-retry/... -v
 ```
 
 Example output:
@@ -129,5 +129,5 @@ Example output:
 
 ## Navigasi
 
-- **Previous**: [Lab 14 — Outbox Pattern](../14-outbox-pattern/)
-- **Next**: [Lab 16 — Circuit Breaker](../16-circuit-breaker/)
+- **Previous**: [Lab 98 — Outbox Pattern](../98-outbox-pattern/)
+- **Next**: [Lab 96 — Circuit Breaker](../96-circuit-breaker/)

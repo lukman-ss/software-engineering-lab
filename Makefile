@@ -12,10 +12,10 @@
 	lab-09-test lab-09-test-race lab-09-vet \
 	lab-10-project-estimation-test lab-10-project-estimation-test-race lab-10-project-estimation-vet \
 	lab-12-test lab-12-test-race lab-12-vet \
-	lab-14-test lab-14-test-race lab-14-vet \
-	lab-15-test lab-15-test-race lab-15-vet \
-	lab-16-test lab-16-test-race lab-16-vet \
-	lab-17-test lab-17-test-race lab-17-vet
+	lab-98-test lab-98-test-race lab-98-vet \
+	lab-97-test lab-97-test-race lab-97-vet \
+	lab-96-test lab-96-test-race lab-96-vet \
+	lab-95-test lab-95-test-race lab-95-vet
 
 DB_NAME ?= se_lab
 DB_HOST ?= localhost
@@ -33,15 +33,15 @@ run: fmt vet
 	@go run ./cmd/api
 
 # Run tests
-test: lab-07-test lab-08-test lab-09-test lab-12-test lab-14-test lab-15-test lab-16-test lab-17-test
+test: lab-07-test lab-08-test lab-09-test lab-12-test lab-98-test lab-97-test lab-96-test lab-95-test
 	@echo "Running unit tests..."
 	@go test ./... -short
 
-test-race: lab-05-test-race lab-07-test-race lab-08-test-race lab-09-test-race lab-12-test-race lab-14-test-race lab-15-test-race lab-16-test-race lab-17-test-race
+test-race: lab-05-test-race lab-07-test-race lab-08-test-race lab-09-test-race lab-12-test-race lab-98-test-race lab-97-test-race lab-96-test-race lab-95-test-race
 	@echo "Running tests with race detector..."
 	@go test -race ./... -short
 
-lint: lab-07-vet lab-08-vet lab-09-vet lab-12-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
+lint: lab-07-vet lab-08-vet lab-09-vet lab-12-vet lab-98-vet lab-97-vet lab-96-vet lab-95-vet
 	@echo "Running linter..."
 	@go vet ./...
 
@@ -51,7 +51,7 @@ fmt:
 	@cd labs/04-caching && go fmt ./...
 	@cd labs/05-race-condition && go fmt ./...
 
-vet: lab-03-vet lab-04-vet lab-05-vet lab-07-vet lab-08-vet lab-09-vet lab-12-vet lab-14-vet lab-15-vet lab-16-vet lab-17-vet
+vet: lab-03-vet lab-04-vet lab-05-vet lab-07-vet lab-08-vet lab-09-vet lab-12-vet lab-98-vet lab-97-vet lab-96-vet lab-95-vet
 	@echo "Running go vet..."
 	@go vet ./...
 
@@ -262,33 +262,33 @@ lab-12-demo:
 	@echo "=== Running Lab 12 Demo ==="
 	@cd labs/12-feature-flags && go run ./cmd/simulate
 
-# ==================== Lab 14: Outbox Pattern ====================
+# ==================== Lab 98: Outbox Pattern ====================
 
-lab-14-test:
-	@echo "=== Testing Lab 14: Outbox Pattern ==="
-	@go test -v ./labs/14-outbox-pattern/...
+lab-98-test:
+	@echo "=== Testing Lab 98: Outbox Pattern ==="
+	@go test -v ./labs/98-outbox-pattern/...
 
-lab-14-test-race:
-	@echo "=== Testing Lab 14 (Race Detector) ==="
-	@go test -race -v ./labs/14-outbox-pattern/...
+lab-98-test-race:
+	@echo "=== Testing Lab 98 (Race Detector) ==="
+	@go test -race -v ./labs/98-outbox-pattern/...
 
-lab-14-vet:
-	@echo "=== Vet Lab 14 ==="
-	@go vet ./labs/14-outbox-pattern/...
+lab-98-vet:
+	@echo "=== Vet Lab 98 ==="
+	@go vet ./labs/98-outbox-pattern/...
 
-# ==================== Lab 15: Retry ====================
+# ==================== Lab 97: Retry ====================
 
-lab-15-test:
-	@echo "=== Testing Lab 15: Retry ==="
-	@go test -v ./labs/15-retry/...
+lab-97-test:
+	@echo "=== Testing Lab 97: Retry ==="
+	@go test -v ./labs/97-retry/...
 
-lab-15-test-race:
-	@echo "=== Testing Lab 15 (Race Detector) ==="
-	@go test -race -v ./labs/15-retry/...
+lab-97-test-race:
+	@echo "=== Testing Lab 97 (Race Detector) ==="
+	@go test -race -v ./labs/97-retry/...
 
-lab-15-vet:
-	@echo "=== Vet Lab 15 ==="
-	@go vet ./labs/15-retry/...
+lab-97-vet:
+	@echo "=== Vet Lab 97 ==="
+	@go vet ./labs/97-retry/...
 
 # ==================== Lab 09: Code Review ====================
 
@@ -304,19 +304,19 @@ lab-09-vet:
 	@echo "=== Vet Lab 09 ==="
 	@cd labs/09-code-review && go vet ./...
 
-# ==================== Lab 16: Circuit Breaker ====================
+# ==================== Lab 96: Circuit Breaker ====================
 
-lab-16-test:
-	@echo "=== Testing Lab 16: Circuit Breaker ==="
-	@cd labs/16-circuit-breaker && go test -v -count=1 ./...
+lab-96-test:
+	@echo "=== Testing Lab 96: Circuit Breaker ==="
+	@cd labs/96-circuit-breaker && go test -v -count=1 ./...
 
-lab-16-test-race:
-	@echo "=== Testing Lab 16 (Race Detector) ==="
-	@cd labs/16-circuit-breaker && go test -race -v -count=1 ./...
+lab-96-test-race:
+	@echo "=== Testing Lab 96 (Race Detector) ==="
+	@cd labs/96-circuit-breaker && go test -race -v -count=1 ./...
 
-lab-16-vet:
-	@echo "=== Vet Lab 16 ==="
-	@cd labs/16-circuit-breaker && go vet ./...
+lab-96-vet:
+	@echo "=== Vet Lab 96 ==="
+	@cd labs/96-circuit-breaker && go vet ./...
 
 # ==================== Lab 10: Project Estimation (root module, no nested go.mod) ====================
 
@@ -332,16 +332,16 @@ lab-10-project-estimation-vet:
 	@echo "=== Vet Lab 10 ==="
 	@cd labs/10-project-estimation && go vet ./...
 
-# ==================== Lab 17: Rate Limiting ====================
+# ==================== Lab 95: Rate Limiting ====================
 
-lab-17-test:
-	@echo "=== Testing Lab 17: Rate Limiting ==="
-	@cd labs/17-rate-limiting && go test -count=1 ./...
+lab-95-test:
+	@echo "=== Testing Lab 95: Rate Limiting ==="
+	@cd labs/95-rate-limiting && go test -count=1 ./...
 
-lab-17-test-race:
-	@echo "=== Testing Lab 17 (Race Detector) ==="
-	@cd labs/17-rate-limiting && go test -race -v -count=1 ./...
+lab-95-test-race:
+	@echo "=== Testing Lab 95 (Race Detector) ==="
+	@cd labs/95-rate-limiting && go test -race -v -count=1 ./...
 
-lab-17-vet:
-	@echo "=== Vet Lab 17 ==="
-	@cd labs/17-rate-limiting && go vet ./...
+lab-95-vet:
+	@echo "=== Vet Lab 95 ==="
+	@cd labs/95-rate-limiting && go vet ./...

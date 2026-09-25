@@ -1,4 +1,4 @@
-# Lab 19 — Optimistic Locking
+# Lab 93 — Optimistic Locking
 
 Optimistic locking assumes that data contention is infrequent. Instead of locking rows preemptively, it reads the record with a `version` (or timestamp), and upon update, verifies that the version has not changed.
 
@@ -15,5 +15,5 @@ When a conflict occurs, the operation can be retried with jitter/backoff a limit
 
 ## Navigasi
 
-- **Previous**: [Lab 18 — Pessimistic Locking](../18-pessimistic-locking/)
-- **Next**: [Lab 13 — Deadlock](../13-deadlock/)
+- **Previous**: [Lab 94 — Pessimistic Locking](../94-pessimistic-locking/)
+- **Next**: [Lab 99 — Deadlock](../99-deadlock/)

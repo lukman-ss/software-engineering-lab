@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/17-rate-limiting"
+	"github.com/lukman-ss/software-engineering-lab/labs/95-rate-limiting"
 )
 
 func TestRedisRateLimiterConcept(t *testing.T) {

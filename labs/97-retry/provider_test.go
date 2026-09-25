@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lukman-ss/software-engineering-lab/labs/15-retry"
+	"github.com/lukman-ss/software-engineering-lab/labs/97-retry"
 )
 
 func TestMockProviderFailModes(t *testing.T) {
