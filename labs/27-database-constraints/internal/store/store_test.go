@@ -207,6 +207,37 @@ func TestConcurrentRegistration_Safe_EnforcesUniqueness(t *testing.T) {
 	}
 }
 
+func TestConcurrentRegistration_Unsafe_SuffersRaceCondition(t *testing.T) {
+	eng := engine.NewEngine()
+	s := store.NewUnsafeStore(eng)
+	ctx := context.Background()
+
+	goroutines := 20
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	targetEmail := "unsafe_concurrent@example.com"
+
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			_, _ = s.RegisterUser(ctx, model.User{
+				Email:    targetEmail,
+				Username: fmt.Sprintf("unsafe_user_%d", idx),
+				Age:      25,
+				Status:   "active",
+			})
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Without database constraints, read-then-write check permits duplicate inserts under concurrency
+	if eng.GetUsersCount() <= 1 {
+		t.Errorf("expected race condition causing >1 user entries, got %d", eng.GetUsersCount())
+	}
+}
+
 func TestErrorClassification(t *testing.T) {
 	nnErr := dberr.NewNotNullViolation("users", "email", "nn_idx")
 	if !dberr.IsConstraintViolation(nnErr, dberr.SQLStateNotNullViolation) {

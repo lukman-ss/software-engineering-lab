@@ -29,6 +29,19 @@ func NewEngine() *Engine {
 	}
 }
 
+// InsertUserUnsafe inserts a record bypassing index/unique constraints (for unsafe demo).
+func (e *Engine) InsertUserUnsafe(u model.User) (model.User, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if u.ID == 0 {
+		u.ID = e.userSeq.Add(1)
+	}
+
+	e.users[u.ID] = u
+	return u, nil
+}
+
 // InsertUser evaluates NOT NULL, CHECK, UNIQUE, and PARTIAL UNIQUE constraints atomically.
 func (e *Engine) InsertUser(u model.User, usePartialUniqueIndex bool) (model.User, error) {
 	e.mu.Lock()

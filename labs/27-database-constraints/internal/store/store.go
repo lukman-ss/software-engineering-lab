@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/dberr"
 	"github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/engine"
@@ -33,12 +34,15 @@ func (s *UnsafeStore) RegisterUser(ctx context.Context, u model.User) (model.Use
 		}
 	}
 
+	// Artificial yield to exacerbate read-then-write race window under CPU scheduling
+	time.Sleep(1 * time.Millisecond)
+
 	if duplicateFound {
 		return model.User{}, fmt.Errorf("app check failed: email %s already taken", u.Email)
 	}
 
 	// Engine insert bypassing unique constraints (simulating unconstrained table)
-	res, err := s.eng.InsertUser(u, true) // partial unique deactivated for unsafe demo
+	res, err := s.eng.InsertUserUnsafe(u)
 	return res, err
 }
 
