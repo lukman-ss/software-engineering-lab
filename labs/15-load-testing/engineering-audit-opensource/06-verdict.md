@@ -6,52 +6,57 @@ Audit Date: 2026-09-26
 ## Summary
 
 Code Files Reviewed: 4
-- cmd/demo/main.go
-- internal/server/server.go
-- internal/loadtest/runner.go
-- internal/loadtest/metrics.go
+- labs/15-load-testing/internal/server/server.go
+- labs/15-load-testing/internal/loadtest/runner.go
+- labs/15-load-testing/internal/loadtest/metrics.go
+- labs/15-load-testing/cmd/demo/main.go
 
-Tests Reviewed: 2
-- internal/loadtest/metrics_test.go (3 tests)
-- tests/loadtest_test.go (5 tests)
+Tests Reviewed: 8 tests across 2 files
+- labs/15-load-testing/internal/loadtest/metrics_test.go (TestCalculateMetrics, TestCalculateMetrics_Empty, TestCalculateMetrics_Invariants)
+- labs/15-load-testing/tests/loadtest_test.go (TestLoadTest_SmokeVsStress, TestLoadTest_ErrorCount, TestLoadTest_DialError, TestServer_MethodNotAllowed, TestServer_ContextCanceled)
 
 Commands Executed:
-- go test -v ./... — ALL PASS
-- go test -race ./... — ALL PASS (no race conditions)
-- go run ./cmd/demo — PASS (smoke vs stress comparison shown)
+- `go build ./...` — success, no output
+- `go test -v ./...` — PASS (8/8 tests)
+- `go test -race ./...` — PASS (no races)
+- `go run ./cmd/demo` — runs cleanly; stress P95/P99 >> smoke P95/P99 (invariant holds across 2 sample runs)
 
 Failures: 0
-Warnings: 5
+Warnings: 6 (3 doc/code terminology mismatches LOW; 4 missing-test gaps)
 
 ## Quality Gates
 
-| Gate | Status |
-|------|--------|
-| Compilation | PASS |
-| Tests | PASS |
-| Race Detector | PASS |
-| Demo | PASS |
-| Research Alignment | PASS |
-| Documentation Accuracy | WARNING |
+Compilation: PASS
+Tests: PASS
+Race Detector: PASS
+Demo: PASS (Smoke-vs-Stress latency divergence proven)
+Research Alignment: NOT_APPLICABLE (research not audited per pipeline override)
+Documentation Accuracy: WARNING (3 low-severity DOC_CODE_MISMATCH findings; documented below)
 
 ## Blocking Issues
-None. No HIGH or CRITICAL severity findings.
+
+None. No CRITICAL or HIGH severity issues found. No broken implementation, no race conditions, no fabricated demo, no unhandled errors on critical paths.
 
 ## Non-Blocking Issues
-1. **DOC_CODE_MISMATCH (MEDIUM)**: `engineering/02-implementation-notes.md:16` claims tail latency is "strictly a function of queuing time," but `server.go:68-73` adds a 10% random slow-query (25x duration) when over capacity. This makes the documentation inaccurate.
-2. **MISSING_TEST (MEDIUM)**: No unit test covers the server's random slow-query behavior.
-3. **MISSING_TEST (MEDIUM)**: No test asserts P99 degradation under stress (design doc claims P99 should spike).
-4. **MISSING_TEST (LOW)**: No test for VUs <= 0 defaulting to 1 in NewRunner.
-5. **MISSING_TEST (LOW)**: No test verifying TotalRequests == SuccessCount + ErrorCount invariant.
+
+1. (LOW) DOC_CODE_MISMATCH — design.md describes LoadTester with "iterations" but implementation uses `Duration`. No functional impact.
+2. (LOW) DOC_CODE_MISMATCH — design.md describes a "MetricsAggregator: Thread-safe latency collector"; the code uses a pure `CalculateMetrics` function with per-VU collection. Race-free, but wording is inaccurate.
+3. (LOW) DOC_CODE_MISMATCH — implementation-notes says server mock wait is "fixed (20ms)" but `DBQueryDuration` is configurable (demo uses 20ms).
+4. (MEDIUM) MISSING_TEST — no direct assertion that the semaphore enforces the `MaxDBConnections` hard concurrency bound.
+5. (LOW) MISSING_TEST — no unit test for RPS calculation against a known duration.
+6. (LOW) MISSING_TEST — no single-sample (len==1) percentile edge case; no end-to-end assertion of `SuccessCount + ErrorCount == TotalRequests`.
 
 ## Required Revisions
-1. Fix `engineering/02-implementation-notes.md` line 16: update the claim about tail latency to reflect the random slow-query behavior, OR remove the random slow-query in server.go if the documentation's intent is to isolate queuing-only effects.
-2. Add a unit test in `tests/loadtest_test.go` covering the random slow-query behavior in server.go.
-3. Add a P99 assertion in `TestLoadTest_SmokeVsStress` to validate stress-induced P99 degradation.
-4. Add edge-case tests for default VUs and TotalRequests invariant.
+
+None required for approval. The non-blocking issues are recommendations for future hardening:
+
+- Align design.md term "iterations" to "Duration" (or implement an optional iteration field).
+- Reword the "MetricsAggregator" component to reflect the per-VU + pure-function design.
+- Clarify that 20ms is the demo's value, not a server constant.
+- Add a test that instruments peak in-flight request count against `MaxDBConnections` to directly prove the connection-pool limit.
 
 ## Final Status
 
 APPROVED_WITH_WARNINGS
 
-The implementation compiles, all tests pass (including race detector), and the demo proves the core research claims (smoke vs stress latency, tail latency masking). However, the engineering implementation notes contain an inaccurate claim about tail latency being "strictly a function of queuing time" when the code adds random slow-query simulation. This is a documentation accuracy issue. No code defects prevent approval.
+Rationale: compilation, full test suite (including race detector), and the demo all execute successfully and prove the core claim (stress tail latency P95/P99 significantly exceeds smoke latency, demonstrating percentile masking of resource saturation). There are no HIGH/CRITICAL issues. The remaining issues are low-severity documentation terminology drift and minor test-coverage omissions that do not undermine the lab's trustworthiness or the correctness of the demonstrated behavior. The lab is trustworthy and ready for handoff to the Technical Writer once the recommended doc wording is tidied.

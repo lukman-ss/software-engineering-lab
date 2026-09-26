@@ -1,147 +1,99 @@
-# Docs vs Code Comparison
+# Docs vs Code Audit
+
+Lab: labs/15-load-testing
+
+## Sources Compared
+- README.md (project overview and instructions)
+- engineering/01-design.md (design doc)
+- engineering/02-implementation-notes.md (implementation notes)
+- Code: internal/server/server.go, internal/loadtest/*.go, cmd/demo/main.go
+- Tests: internal/loadtest/metrics_test.go, tests/loadtest_test.go
+- Demo output: actual `go run ./cmd/demo` runs (2 samples)
+
+## Methodology
+Each finding records the document location, the claimed behavior, the observed implementation/demo/test, and an assessment. Severity levels per GAP types: LOW, MEDIUM, HIGH, CRITICAL. Only discrepancies between documentation and implementation/test/demo are recorded. Per pipeline override, research/ and content/ are not audited.
+
+---
 
 ## Finding 1
-Document: README.md, line 6
-Claim: "Entry point running comparative Smoke vs. Stress test scenarios."
-Code: cmd/demo/main.go runs smoke test (2 VUs) then stress test (50 VUs) and prints results
-Assessment: PASS
+Location: engineering/01-design.md:32 (Component #2 LoadTester description)
+Claim: "LoadTester: Concurrency orchestrator generating HTTP traffic with specified virtual users (VUs) and iterations."
+Observed: The `loadtest.Config` struct has `VUs` and `Duration` fields; no "iterations" field exists. The runner executes requests for a duration, not a fixed iteration count. The demo uses `Duration: testDuration`.
+Assessment: DOC_CODE_MISMATCH (terminology only)
 Severity: LOW
-Notes: The demo exactly matches the documented behavior.
+Notes: The term "iterations" appears to be a documentation artifact; the implementation and demo are time-based. This does not affect correctness or the demonstration of load vs stress.
 
 ## Finding 2
-Document: README.md, line 8
-Claim: "Mock service with constrained connection pool capacity to demonstrate saturation."
-Code: internal/server/server.go uses a buffered channel as semaphore with capacity = MaxDBConnections
-Assessment: PASS
+Location: engineering/01-design.md:33 (Component #3 MetricsAggregator description)
+Claim: "MetricsAggregator: Thread-safe latency collector sorting durations to derive accurate percentiles."
+Observed: There is no `MetricsAggregator` struct. Latency collection is performed per-VU in `runner.go` (each goroutine appends to a private slice). After all VUs finish, slices are concatenated and passed to `CalculateMetrics` (a pure function) which sorts and computes percentiles. The system is thread-safe due to lack of shared mutable state during the run, but there is no active "collector" with internal locking.
+Assessment: DOC_CODE_MISMATCH (terminology/abstraction level)
 Severity: LOW
-Notes: Correct implementation of connection pool bottleneck.
+Notes: The description slightly overstates the structure; the function `CalculateMetrics` correctly sorts and computes percentiles as claimed. The ponytail in metrics.go confirms the exact-sort approach.
 
 ## Finding 3
-Document: README.md, line 9
-Claim: "Built-in concurrency runner and percentile calculator."
-Code: internal/loadtest/runner.go (concurrency orchestrator) and internal/loadtest/metrics.go (percentile calculator)
-Assessment: PASS
+Location: engineering/02-implementation-notes.md:16 (Implementation-Specific Choices)
+Claim: "Wait durations in server mock are fixed (20ms), making the tail latency strictly a function of queuing time when VUs exceed max DB connections."
+Observed: `server.New(cfg)` defaults `DBQueryDuration` to 10 * time.Millisecond if `cfg.DBQueryDuration <= 0`. The demo in `cmd/demo/main.go` sets `DBQueryDuration: 20 * time.Millisecond`. Thus the wait duration is configurable, not fixed at 20ms in the server implementation; it is fixed only for the demo run.
+Assessment: DOC_CODE_MISMATCH (contextual accuracy)
 Severity: LOW
-Notes: Matches documentation exactly.
+Notes: The claim holds true for the demo as executed, but the server implementation itself allows configuration. The wording in the notes is accurate when read in the context of the demo, but could be misinterpreted as a server-wide constant.
 
 ## Finding 4
-Document: engineering/01-design.md, line 26-28
-Claim: Architecture: internal/server (HTTP server with constrained connection pool), internal/loadtest (load test harness), cmd/demo (executable running smoke then stress test)
-Code: Exactly matches the claimed architecture
+Location: engineering/01-design.md:22 (Expected Behavior)
+Claim: "**Smoke Load (low VUs)**: All requests process within normal latency limits. Average and P95 are close. Error rate is 0%."
+Observed: Demo output (2 sample runs):
+- Run 1: Smoke Avg 21.25ms, P50 21.21ms, P95 21.37ms, P99 22.28ms, Errors 0.
+- Run 2: Smoke Avg 21.14ms, P50 21.21ms, P95 21.55ms, P99 21.77ms, Errors 0.
+Avg and P50/P95/P99 are within ~1-2ms of each other (jitter from scheduling/GC). Error rate 0%. Matches claim.
 Assessment: PASS
-Severity: LOW
-Notes: No deviation from documented architecture.
+Severity: N/A (match)
 
 ## Finding 5
-Document: engineering/01-design.md, line 31-33
-Claim: Components: BookingServer (HTTP handler with configurable concurrency limit), LoadTester (generates HTTP traffic), MetricsAggregator (thread-safe latency collector)
-Code: Server = BookingServer, Runner = LoadTester, CalculateMetrics = MetricsAggregator
+Location: engineering/01-design.md:22 (Expected Behavior)
+Claim: "**Stress Load (high VUs)**: Concurrent requests exceed server resource capacity (connection pool limit). Tail requests queue up. P95 and P99 latency spikes significantly, while average latency degrades less severely, proving the masking effect of averages."
+Observed: Demo output:
+- Run 1: Stress Avg 739ms, P50 669ms, P95 1.35s, P99 1.58s (P95/P99 >> Avg/P50).
+- Run 2: Stress Avg 470ms, P50 586ms, P95 774ms, P99 1.16s (P95/P99 > Avg/P50).
+In both runs, P95 and P99 significantly exceed the average (and smoke latencies), demonstrating tail spikes and the averaging masking effect. Errors 0. Matches claim.
 Assessment: PASS
-Severity: LOW
-Notes: Component mapping is accurate.
+Severity: N/A (match)
 
 ## Finding 6
-Document: engineering/01-design.md, line 50
-Claim: "Hand-rolled percentile calculation over standard arrays rather than adding HdrHistogram dependency."
-Code: internal/loadtest/metrics.go uses sort.Slice on a copied array
+Location: engineering/01-design.md:23 (Failure Scenario)
+Claim: "Under excessive concurrent load, queuing behind a constrained resource (connection pool) causes high latency and severe tail degradation for the 95th and 99th percentiles."
+Observed: Same as Finding 5; the latency spikes are directly attributable to queuing on the semaphore (max 5 connections). The design's mechanism (semaphore) is verified in code.
 Assessment: PASS
-Severity: LOW
-Notes: Matches documented decision.
+Severity: N/A (match)
 
 ## Finding 7
-Document: engineering/01-design.md, line 51
-Claim: "Semaphore pattern (buffered channel) used in the server handler to simulate database connection pool bottlenecks"
-Code: internal/server/server.go line 41: semaphore := make(chan struct{}, cfg.MaxDBConnections)
+Location: engineering/01-design.md:24-25 (Success Criteria)
+Claim: "Automated benchmarks and tests execute without external dependencies."
+Observed: All tests use `httptest.NewServer`; no external services required. `go test -v ./...` succeeds offline.
 Assessment: PASS
-Severity: LOW
-Notes: Exactly matches documentation.
+Severity: N/A (match)
 
 ## Finding 8
-Document: engineering/01-design.md, line 52
-Claim: "Per-goroutine slices in load generator to avoid mutex contention, aggregating once on completion"
-Code: internal/loadtest/runner.go line 48-53: type vuResult { latencies []time.Duration; errors int }, line 107-112: aggregation after wg.Wait()
+Location: engineering/01-design.md:24-25 (Success Criteria)
+Claim: "Load generator computes Min, Max, Average, P50, P90, P95, and P99 latencies accurately."
+Observed: `TestCalculateMetrics` validates exact values for a known sequence. Demo output shows plausible Min/Max/Avg/Pxx relationships (Min <= P50 <= P95 <= P99 <= Max) with rough alignment to the 20ms base (e.g., smoke Min~21ms, stress Min~470ms due to queuing).
 Assessment: PASS
-Severity: LOW
-Notes: Exactly matches documented implementation.
+Severity: N/A (match)
 
 ## Finding 9
-Document: engineering/01-design.md, line 54
-Claim: "Simulated external network latency is omitted to isolate the connection pool bottleneck"
-Code: No artificial network delay is added in either server or client
+Location: engineering/01-design.md:24-25 (Success Criteria)
+Claim: "Demonstration clearly contrasts Smoke test metrics against Stress test metrics."
+Observed: Demo prints two tables with clear labels; stress latencies are 20x-50x higher than smoke for tail percentiles.
 Assessment: PASS
-Severity: LOW
-Notes: Confirmed by inspection.
+Severity: N/A (match)
 
 ## Finding 10
-Document: engineering/01-design.md, line 55
-Claim: "Used standard net/http client which carries its own connection pooling limits; overridden using a custom http.Transport"
-Code: internal/loadtest/runner.go line 31-34: Custom http.Transport with MaxIdleConns=1000, MaxIdleConnsPerHost=1000
+Location: engineering/01-design.md:24-25 (Success Criteria)
+Claim: "All tests pass with zero race conditions (`go test -race ./...`)."
+Observed: Verified by actual execution: `go test -race ./...` reports zero races for all packages.
 Assessment: PASS
-Severity: LOW
-Notes: Exactly matches documented decision and implementation match.
+Severity: N/A (match)
 
-## Finding 11
-Document: engineering/01-design.md, line 23-24 (Expected Behavior)
-Claim: "**Smoke Load (low VUs)**: All requests process within normal latency limits. Average and P95 are close. Error rate is 0%." "**Stress Load (high VUs)**: Concurrent requests exceed server resource capacity (connection pool limit). Tail requests queue up. P95 and P99 latency spikes significantly, while average latency degrades less severely, proving the masking effect of averages."
-Code: Demo output shows:
-  Smoke: Avg=21.2ms, P95=21.6ms (close), Errors=0
-  Stress: Avg=612ms, P95=1105ms, P99=1486ms (significant tail spike)
-Assessment: PASS
-Severity: LOW
-Notes: The demo output precisely matches the expected behavior described.
+## Summary
 
-## Finding 12
-Document: engineering/02-implementation-notes.md, line 16
-Claim: "Wait durations in server mock are fixed (20ms), making the tail latency strictly a function of queuing time when VUs exceed max DB connections."
-Code: internal/server/server.go lines 68-73: Base duration = DBQueryDuration, but with 10% chance of 25x duration when activeReq > MaxDBConnections
-Assessment: DOC_CODE_MISMATCH
-Severity: MEDIUM
-Notes: The documentation claims tail latency is "strictly a function of queuing time" but the implementation adds random slow queries (25x duration 10% of the time when over capacity). This is a mismatch between documented claims and actual code behavior. While the random behavior is realistic, it violates the explicit claim made in the notes.
-
-## Finding 13
-Document: engineering/02-implementation-notes.md, line 20-21
-Claim: "Percentile algorithm is exact-sort, memory footprint scales linearly with request count; unsuitable for hour-long multi-million RPS benchmarks, but perfect for a 2-second lab test."
-Code: internal/loadtest/metrics.go lines 45-49: Copy slice, sort.Slice
-Assessment: PASS
-Severity: LOW
-Notes: Matches documentation exactly.
-
-## Finding 14
-Document: engineering/02-implementation-notes.md, line 31
-Claim: "Measuring P50, P95, and P99 percentiles manually."
-Code: internal/loadtest/metrics.go calculates P50, P90, P95, P99
-Assessment: PASS
-Severity: LOW
-Notes: Correct.
-
-## Finding 15
-Document: engineering/02-implementation-notes.md, line 32
-Claim: "Smoke load executing linearly (fast average, fast P95)."
-Code: Demo output shows smoke test has low latency and close P95/Avg
-Assessment: PASS
-Severity: LOW
-Notes: Validated by demo.
-
-## Finding 16
-Document: engineering/02-implementation-notes.md, line 33
-Claim: "Stress load queuing behind a saturation point (connection pool limit), forcing P95 to severely degrade."
-Code: Demo output shows stress P95 (1105ms) >> smoke P95 (21.6ms)
-Assessment: PASS
-Severity: LOW
-Notes: Validated by demo.
-
-## Finding 17
-Document: README.md, lines 20-23
-Claim: Instructions for running tests and race detector: go test -v ./..., go test -race ./...
-Code: These commands work and produce successful output
-Assessment: PASS
-Severity: LOW
-Notes: Documentation matches executable commands.
-
-## Finding 18
-Document: README.md, line 12
-Claim: "Go 1.22+"
-Code: go.mod specifies go 1.22
-Assessment: PASS
-Severity: LOW
-Notes: Version requirement matches.
+Three LOW-severity DOC_CODE_MISMATCH findings were identified, all relating to minor terminology or abstraction level discrepancies in the design and implementation notes. No TEST_CLAIM_MISMATCH or RESEARCH_IMPLEMENTATION_MISMATCH (per override) was found. The documentation accurately captures the core behavior, structure, and success criteria; the code and demo fulfill all claims.

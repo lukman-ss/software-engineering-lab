@@ -1,28 +1,51 @@
 # Code Audit
 
+Target Lab: labs/15-load-testing
+
 ## Finding 1
 
-Location: `internal/loadtest/runner.go:48-53, 68`
-Claimed Behavior: Concurrently collect VU metrics without lock contention or race conditions.
-Observed Implementation: Each VU goroutine appends locally to its own slice (`lats`) and writes to an indexed position in `results[vuID]` upon exit. WaitGroup ensures completion before combining.
+Location: `internal/loadtest/runner.go:48-53`, `runner.go:107-113`
+Claimed Behavior: Thread-safe, low-contention aggregation of concurrent request results across virtual users (VUs).
+Observed Implementation: Each VU worker writes solely to its allocated `results[vuID]` slice without sharing mutexes or atomic variables during iteration. Results are combined after `wg.Wait()`.
 Assessment: PASS
 Severity: LOW
-Notes: Clean concurrent architecture; avoids mutex contention under load.
+Notes: Pattern eliminates lock contention during load generation.
 
 ## Finding 2
 
-Location: `internal/loadtest/metrics.go:45-64`
-Claimed Behavior: Accurately compute percentiles (P50, P90, P95, P99) and summary statistics.
-Observed Implementation: Makes a defensive copy of latencies slice, sorts it via `sort.Slice`, and calculates percentiles by mapping `(len-1) * pct / 100`. Returns zero metrics gracefully on empty input.
+Location: `internal/server/server.go:60-66`
+Claimed Behavior: Simulated connection pool bounding concurrency and handling client context cancellations without leaking semaphore tokens.
+Observed Implementation: Buffered channel semaphore of size `cfg.MaxDBConnections`. When acquiring slot, `select` checks `s.semaphore <- struct{}{}` and `<-r.Context().Done()`. Release is deferred right after acquisition (`defer func() { <-s.semaphore }()`).
 Assessment: PASS
 Severity: LOW
-Notes: Correct standard percentile calculation and defensive against mutation of input slices.
+Notes: Properly avoids channel token leak if context is canceled before acquiring semaphore.
 
 ## Finding 3
 
-Location: `internal/server/server.go:61-76`
-Claimed Behavior: Simulate DB connection saturation with context cancellation support.
-Observed Implementation: Uses buffered channel semaphore to bound concurrent DB slots. Accurately aborts on `r.Context().Done()`. Defers slot release.
+Location: `internal/server/server.go:68-81`
+Claimed Behavior: Tail latency degradation under overload with context cancellation support during DB query sleep.
+Observed Implementation: Uses `time.NewTimer` with `defer t.Stop()` and `select` listening to both `t.C` and `r.Context().Done()`. Under overload (`activeReq > MaxDBConnections`), random 10% tail penalty simulates slow queries.
 Assessment: PASS
 Severity: LOW
-Notes: Properly handles context cancellation and limits concurrency to `MaxDBConnections`.
+Notes: Timer cleanup prevents timer leaks on canceled requests.
+
+## Finding 4
+
+Location: `internal/loadtest/metrics.go:23-42`, `metrics.go:67-73`
+Claimed Behavior: Accurate calculation of percentiles and summary statistics, safe on empty slices.
+Observed Implementation:
+- Handled empty latencies and zero duration gracefully without dividing by zero.
+- Percentile index uses standard nearest rank: `idx := int(float64(len(sorted)-1) * (pct / 100.0))`.
+- Copies slice before sorting to prevent mutating input slice.
+Assessment: PASS
+Severity: LOW
+Notes: Math and bounds checks verified.
+
+## Finding 5
+
+Location: `internal/loadtest/runner.go:85-89`
+Claimed Behavior: Don't miscount expected test cancellations at end of duration as server errors.
+Observed Implementation: Inspects `ctx.Err() == nil` before incrementing `errs` on request failures.
+Assessment: PASS
+Severity: LOW
+Notes: Distinguishes natural timeout cutoff from genuine server/network errors.

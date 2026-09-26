@@ -1,27 +1,33 @@
 # Engineering Audit Plan
 
 Target Lab: labs/15-load-testing
-Implementation Files: 
-- cmd/demo/main.go
-- internal/server/server.go
-- internal/loadtest/runner.go
-- internal/loadtest/metrics.go
+Implementation Files:
+- labs/15-load-testing/internal/server/server.go
+- labs/15-load-testing/internal/loadtest/runner.go
+- labs/15-load-testing/internal/loadtest/metrics.go
+- labs/15-load-testing/cmd/demo/main.go
 Tests:
-- tests/loadtest_test.go
-- internal/loadtest/metrics_test.go
-Executable/Demo: cmd/demo/main.go
-Approved Research Inputs: engineering/01-design.md, engineering/02-implementation-notes.md
+- labs/15-load-testing/internal/loadtest/metrics_test.go
+- labs/15-load-testing/tests/loadtest_test.go
+Executable/Demo: labs/15-load-testing/cmd/demo/main.go
+Approved Research Inputs: 
+- labs/15-load-testing/engineering/01-design.md
+- labs/15-load-testing/engineering/03-execution-result.md
 Main Claims To Verify:
-1. Load testing reveals boundaries, saturation, and degradation patterns
-2. Average response time conceals tail latency spikes; percentiles (P95, P99) are necessary
-3. Incremental test stages (smoke vs stress) differentiate baseline performance from resource exhaustion
-4. Downstream resource saturation causes non-linear latency degradation for tail requests
+1. Code compiles successfully
+2. All tests pass (unit and integration)
+3. No race conditions detected with -race flag
+4. Demo output shows Smoke Test vs Stress Test latency divergence (P95/P99)
+5. Load test harness correctly calculates percentiles (P50, P95, P99)
+6. Server simulates connection pool exhaustion correctly via semaphore
+7. README matches implementation (structure, running instructions)
 Commands To Run:
-- go test ./...
+- go build ./...
+- go test -v ./...
 - go test -race ./...
 - go run ./cmd/demo
 Primary Risks:
-- Race conditions in concurrent metrics collection
-- Incorrect percentile calculations
-- Demo not showing expected smoke vs stress differences
-- Tests not validating core behavior claims
+- Inaccurate percentile calculation due to sorting approach (acceptable for scale <1M samples)
+- Context cancellation handling in load test runner may undercount errors
+- Server's activeReq increment/decrement not atomic in all code paths? Actually it is atomic via AddInt64.
+- Potential resource leak if context canceled while holding semaphore? The defer func() { <-s.semaphore }() is after the semaphore acquire but before the timer; if context.Done() fires in the select, we return without releasing the semaphore. This is a bug.

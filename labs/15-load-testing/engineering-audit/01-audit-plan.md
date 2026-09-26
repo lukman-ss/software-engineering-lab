@@ -2,34 +2,30 @@
 
 Target Lab: labs/15-load-testing
 Implementation Files:
+- `internal/server/server.go`
 - `internal/loadtest/metrics.go`
 - `internal/loadtest/runner.go`
-- `internal/server/server.go`
-
+- `cmd/demo/main.go`
+- `go.mod`
 Tests:
 - `internal/loadtest/metrics_test.go`
 - `tests/loadtest_test.go`
-
 Executable/Demo:
 - `cmd/demo/main.go`
-
 Approved Research Inputs:
-- `research/05-report.md`
-- `research-audit/07-verdict.md` (APPROVED)
-
+- `labs/15-load-testing/research/05-report.md`
+- `labs/15-load-testing/research-audit/07-verdict.md`
 Main Claims To Verify:
-1. Load test runner simulates VUs concurrently and records latencies/errors.
-2. Metrics module calculates P50, P90, P95, and P99 percentiles correctly.
-3. Server bottleneck simulation via Semaphore accurately reflects connection pool contention and latency degradation.
-4. Concurrency safety (race detector clean).
-5. README claims match executable demo and test execution instructions.
-
+1. Smoke load with low VUs within capacity yields baseline latency with low tail deviation (P95 ≈ Avg).
+2. Stress load exceeding capacity causes queue saturation and tail latency explosion (P95, P99 >> Avg).
+3. Metric calculations (Min, Max, Avg, P50, P90, P95, P99, RPS) are mathematically sound and handle edge cases (empty inputs, zero duration).
+4. Concurrency runner operates safely under high VUs without race conditions or deadlocks.
+5. Error accounting tracks HTTP 4xx/5xx and dial/network errors correctly without miscounting context cancellations.
 Commands To Run:
-- `go test ./...`
+- `go test -v ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
-
 Primary Risks:
-- Race conditions during concurrent slice appending or metric calculation in loadtest runner.
-- Miscalculation of percentiles (off-by-one or non-sorted input handling).
-- Discrepancy between README documented behavior and actual runtime results.
+- Race conditions during concurrent metric aggregation or request execution.
+- Flaky tests if assertion bounds are too narrow under variable CPU load.
+- Inaccurate percentile computation or slice index out-of-bounds on edge cases.
