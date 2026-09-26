@@ -1,38 +1,16 @@
 # Docs vs Code Audit
 
-Target Lab: `labs/20-zero-downtime-deployment`
+Target Lab: labs/20-zero-downtime-deployment
 
-## Documented vs Implemented Comparison
+## Comparison Matrix
 
-### 1. Database (`internal/db`)
-- **README Claim**: Demonstrates the "Expand and Contract" pattern (Parallel Change). Supports writing dual schema versions (legacy `Name` and modern `FirstName`/`LastName`) and transparent fallback logic.
-- **Code Reality**: `internal/db/db.go` implements `InsertLegacy`, `SaveExpand`, and `GetUser` with fallback logic.
-- **Verdict**: MATCH.
-
-### 2. HTTP Server (`internal/server`)
-- **README Claim**: Exposes Liveness and Readiness probes. When a shutdown signal is sent, executes configurable `preStop` delay to simulate load balancer detachment latency, then performs graceful shutdown ensuring in-flight requests complete.
-- **Code Reality**: `internal/server/server.go` implements `/healthz/live`, `/healthz/ready`, `preStop` timer check during `Shutdown(ctx)`, and graceful drain via `s.srv.Shutdown(ctx)` + `s.wg.Wait()`.
-- **Verdict**: MATCH.
-
-### 3. Background Worker (`internal/worker`)
-- **README Claim**: Background daemon pulling jobs from a queue. Upon receiving shutdown signal, stops pulling new jobs but continues processing active jobs until completion.
-- **Code Reality**: `internal/worker/worker.go` implements buffered queue, worker pool, atomic state toggle, channel close, and graceful drain timeout.
-- **Verdict**: MATCH.
-
-### 4. Demo CLI (`cmd/demo`)
-- **README Claim**: Orchestrator wiring components together, simulating startup initialization, executing in-flight workloads, and sending termination signal to demonstrate zero-downtime draining behavior.
-- **Code Reality**: `cmd/demo/main.go` runs worker, server, initial sleep for readiness, in-flight work request, mock `SIGTERM`, and orderly component shutdown.
-- **Verdict**: MATCH.
-
-### 5. Running Commands
-- **README Claim**:
-  ```bash
-  go run ./cmd/demo
-  go test -v ./...
-  go test -race ./...
-  ```
-- **Code Reality**: All specified commands run without error or divergence.
-- **Verdict**: MATCH.
+| Component / Claim | README & Design Claim | Code & Test Implementation | Status |
+|---|---|---|---|
+| Database (`internal/db`) | In-memory Expand & Contract pattern with dual schema support and fallback reads | `internal/db/db.go` implements `SaveExpand`, `InsertLegacy`, and `GetUser` with fallback logic; tested in `tests/db_test.go` | PASS |
+| Server (`internal/server`) | Readiness/Liveness probes, preStop delay simulation, connection draining | `internal/server/server.go` exposes `/healthz/live`, `/healthz/ready`, `/work`, configurable preStop, and graceful `Shutdown`; tested in `tests/server_test.go` | PASS |
+| Worker (`internal/worker`) | Background worker gracefully draining active jobs upon stop signal | `internal/worker/worker.go` implements concurrency, mutex-protected queue stop, and graceful drain with timeout fallback; tested in `tests/worker_test.go` | PASS |
+| Demo (`cmd/demo`) | CLI orchestrator demonstrating end-to-end ZDD lifecycle | `cmd/demo/main.go` runs all components and terminates cleanly on SIGTERM | PASS |
+| Commands | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | All documented commands execute successfully | PASS |
 
 ## Discrepancies Found
-- None. Documentation matches the actual implementation.
+None. Documentation accurately reflects the codebase, test capabilities, and execution results.
