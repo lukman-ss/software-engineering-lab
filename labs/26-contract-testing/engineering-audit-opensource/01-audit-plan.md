@@ -1,43 +1,29 @@
 # Engineering Audit Plan
 
-Target Lab:
-- `labs/26-contract-testing`
-
+Target Lab: labs/26-contract-testing
 Implementation Files:
-- `go.mod`
-- `internal/model/order.go` (domain models + V1/Breaking/V2 DTOs)
-- `internal/contract/verifier.go` (CDC verifier engine)
-- `internal/consumer/client.go` (consumer client + contract generator)
-- `internal/provider/server.go` (ProviderV1 / ProviderBreaking / ProviderDual HTTP handlers)
-- `cmd/demo/main.go` (multi-stage demo executable)
-
+- internal/consumer/client.go (MobileOrderClient, GenerateMobileContract)
+- internal/contract/verifier.go (Contract, Interaction, Verifier.Verify, diffValues)
+- internal/model/order.go (Order, OrderResponseV1/Breaking/V2)
+- internal/provider/server.go (ProviderV1, ProviderBreaking, ProviderDual)
+- cmd/demo/main.go (4-stage demo: generate, V1 pass, breaking block, dual pass)
 Tests:
-- `tests/contract_test.go`
-
-Executable/Demo:
-- `cd labs/26-contract-testing && go run ./cmd/demo`
-
-Approved Research Inputs:
-- N/A (audit scope limited to implementation + tests + README; research not verified here)
-
+- tests/contract_test.go (5 tests: generation, V1 success, breaking fail, dual success, concurrent)
+Executable/Demo: cmd/demo/main.go
+Approved Research Inputs: PIPELINE OVERRIDE - research/content audit skipped in this stage
 Main Claims To Verify:
-1. Consumer-Driven Contract (CDC) engine verifies provider responses against consumer expectations.
-2. Provider V1 satisfies the MobileApp contract (verification PASS).
-3. Provider "Breaking" is detected and blocked (status casing, field rename, int-vs-string type change).
-4. Dual provider (V1 + V2) preserves backwards-compatible V1 contract.
-5. Verifier is concurrency-safe under parallel verification.
-6. Demo output reflects actual verification results.
-
+1. Consumer generates minimal contract (id, status, customer.name, total)
+2. Provider V1 passes verification (CI gate ALLOWED)
+3. Breaking provider (enum casing, field rename, int->string) fails with >=3 diffs (CI gate BLOCKED)
+4. Dual provider preserves V1 compatibility while exposing V2 (CI gate ALLOWED)
+5. Mobile client parses V1/dual, rejects breaking schema
+6. Concurrent verification safe under race detector
 Commands To Run:
-- `go build ./...`
-- `go vet ./...`
-- `go test -v -count=1 ./...`
-- `go test -race -count=1 ./...`
-- `go run ./cmd/demo`
-
+- go test ./...
+- go test -race ./...
+- go run ./cmd/demo
 Primary Risks:
-- Unimplemented/claimed behavior not exercised by tests.
-- Verification logic that silently passes when it should fail (or vice-versa).
-- Non-thread-safe HTTP client/verifier state under concurrency.
-- Demo output diverging from code behavior.
-- README claiming test/demo coverage the suite does not provide.
+- diffValues lacks slice/array recursion (known GAP-01, out of scope for single-resource contract)
+- Verifier ignores response headers despite contract declaring Content-Type
+- Verifier uses shared http.Client concurrently (read-only use, likely safe)
+- Client status validation hardcodes enum allowlist (brittle but matches contract)

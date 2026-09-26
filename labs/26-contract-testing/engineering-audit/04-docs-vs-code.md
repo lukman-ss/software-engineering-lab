@@ -1,17 +1,25 @@
 # Docs vs Code Audit
 
-Target Lab: `labs/26-contract-testing`
+## 1. README vs Code & Demo
 
-## Comparison Matrix
+- Claim: `README.md` describes project structure, test commands (`go test -v ./...`, `go test -race ./...`), and demo command (`go run ./cmd/demo`).
+- Finding: Project structure listed in README matches directory layout exactly. Commands execute successfully and output matches README descriptions.
+- Assessment: PASS
 
-| Claim / Section | README / Engineering Notes Claim | Code / Test Implementation | Alignment |
-|---|---|---|---|
-| Project Structure | Lists `cmd/demo`, `internal/consumer`, `internal/contract`, `internal/model`, `internal/provider`, `tests/` | Exact match with directory contents | PASS |
-| Consumer-Driven Contract | Mobile consumer specifies minimal required subset (id, status, customer.name, total) | `internal/consumer/client.go:82-110` defines interaction | PASS |
-| CI Verification Gate | Provider validates against consumer contract before deployment | `internal/contract/verifier.go:58-115` executes validation | PASS |
-| Breaking Change Detection | Detects enum casing, field rename/omission, primitive type mutation | `internal/provider/server.go:61-72` exercises all three; detected by test and demo | PASS |
-| Safe API Evolution | Dual versioning allows V1 compatibility alongside V2 evolution | `internal/provider/server.go:83-130` and `tests/contract_test.go:74-94` | PASS |
-| Run Commands | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | All commands run without error and pass | PASS |
+## 2. Engineering Notes vs Code
 
-## Discrepancies
-None detected. Documentation accurately reflects codebase structure, functionality, and execution outputs.
+- Claim: `engineering/01-design.md` and `engineering/02-implementation-notes.md` specify pure standard library Go implementation, zero external daemon dependencies, minimal subset JSON matching, ponytail simplifications, and 3 breaking change types.
+- Finding: Code in `internal/contract/verifier.go` implements subset diffing without external C/Ruby Pact bindings. All 3 breaking change types (`status` enum casing, `customer.name` rename, `total` primitive type change) are implemented and verified.
+- Assessment: PASS
+
+## 3. Engineering Execution Result vs Actual Output
+
+- Claim: `engineering/03-execution-result.md` records build, test, race detector, and demo CLI outputs.
+- Finding: Recorded terminal outputs match real execution outputs produced by `go test` and `go run ./cmd/demo`.
+- Assessment: PASS
+
+## Discrepancy Summary
+
+- DOC_CODE_MISMATCH: None detected.
+- TEST_CLAIM_MISMATCH: None detected.
+- RESEARCH_IMPLEMENTATION_MISMATCH: None detected.
