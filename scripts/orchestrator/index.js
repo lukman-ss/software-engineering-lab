@@ -23,6 +23,15 @@ const MODEL_CRITICAL = "9router/ag-combo";
 const MODEL_FALLBACK = "9router/ag-combo";
 const MODEL_AUDITOR_OS = "9router/auditor-opensource-combo";
 
+let gitMutex = Promise.resolve();
+function acquireGitLock() {
+    let release;
+    const p = new Promise(resolve => { release = resolve; });
+    const oldMutex = gitMutex;
+    gitMutex = oldMutex.then(() => p);
+    return oldMutex.then(() => release);
+}
+
 // CPU Throttling Logic
 function getCPUInfo() {
     const cpus = os.cpus();
@@ -121,26 +130,18 @@ async function runOpencode(lab, stage, promptFile, instruction, model = MODEL_DE
         const execAsync = util.promisify(exec);
         const labName = path.basename(lab);
         
-        // Mutex queue using a retry loop for git index.lock
-        let retries = 5;
-        while (retries > 0) {
-            try {
-                const { stdout: statusOut } = await execAsync(`git status --porcelain ${lab}`, { cwd: REPO_ROOT });
-                if (statusOut.trim().length > 0) {
-                    await execAsync(`git add ${lab}`, { cwd: REPO_ROOT });
-                    await execAsync(`git commit -m "feat(${labName}): auto-commit after ${stage}"`, { cwd: REPO_ROOT });
-                    console.log(`[GIT] Auto-committed changes for ${labName} after ${stage}.`);
-                }
-                break; // success
-            } catch (err) {
-                if (err.message.includes('index.lock')) {
-                    retries--;
-                    await sleep(2000);
-                } else {
-                    console.error(`[GIT ERROR] for ${labName}:`, err.message);
-                    break;
-                }
+        const release = await acquireGitLock();
+        try {
+            const { stdout: statusOut } = await execAsync(`git status --porcelain ${lab}`, { cwd: REPO_ROOT });
+            if (statusOut.trim().length > 0) {
+                await execAsync(`git add ${lab}`, { cwd: REPO_ROOT });
+                await execAsync(`git commit -m "feat(${labName}): auto-commit after ${stage}"`, { cwd: REPO_ROOT });
+                console.log(`[GIT] Auto-committed changes for ${labName} after ${stage}.`);
             }
+        } catch (err) {
+            console.error(`[GIT ERROR] for ${labName}:`, err.message);
+        } finally {
+            release();
         }
     }
 
@@ -382,6 +383,12 @@ async function main() {
     
     const queue = [...pendingTasks];
     let activeWorkers = 0;
+    
+    // CPU REAL-TIME MONITORING
+    setInterval(() => {
+        const usage = updateCPUUsage();
+        console.log(`[CPU MONITOR] Usage: ${usage}% | Active Workers: ${activeWorkers} | Pending Labs: ${queue.length}`);
+    }, 10000);
 
     async function workerLoop(id) {
         console.log(`[WORKER ${id}] Started.`);
