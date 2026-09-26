@@ -1,31 +1,46 @@
 # Engineering Audit Plan
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
 Implementation Files:
-- internal/inventory/model.go
-- internal/inventory/store.go
-- internal/inventory/service.go
-- cmd/demo/main.go
+- `internal/inventory/model.go`
+- `internal/inventory/store.go`
+- `internal/inventory/service.go`
+- `go.mod`
+
 Tests:
-- tests/locking_test.go
+- `tests/locking_test.go`
+
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
+
 Approved Research Inputs:
-- engineering/01-design.md
-- engineering/02-implementation-notes.md
-- engineering/03-execution-result.md
+- `research/01-plan.md`
+- `research/02-sources.md`
+- `research/03-evidence.md`
+- `research/04-contradictions.md`
+- `research/05-report.md`
+- `research-audit/07-verdict.md`
+- `engineering/01-design.md`
+
 Main Claims To Verify:
-1. Naive read-modify-write pattern causes lost updates under concurrent execution.
-2. Pessimistic locking (simulating SELECT ... FOR UPDATE) guarantees data consistency under concurrent writes.
-3. Optimistic locking correctly detects version mismatch conflicts and rejects stale writes without state corruption.
-4. Optimistic locking with exponential backoff retry converges all operations under high concurrency.
-5. Atomic single-statement updates maintain exact state invariants safely.
-6. Clean compilation, zero race conditions via `go test -race ./...`, and truthful executable demo output.
+1. Unsynchronized read-modify-write causes lost update anomalies under concurrent goroutines.
+2. Pessimistic row-level locking (`SELECT ... FOR UPDATE` equivalent) prevents lost updates and serializes access cleanly.
+3. Optimistic locking with version checks detects concurrent conflicts, rejects stale writes, and prevents silent corruption.
+4. Optimistic locking with jittered exponential backoff retries converges successfully under contention.
+5. Atomic conditional updates (`UPDATE ... SET stock = stock - qty WHERE stock >= qty`) guarantee consistency without explicit application-level row lock holding.
+6. Zero race conditions occur across the codebase under Go `-race` analysis.
+7. Documentation and demo output reflect real executable behavior.
+
 Commands To Run:
-- go test -v ./...
-- go test -v -race ./...
-- go run ./cmd/demo
+```bash
+go build ./...
+go test -v -count=1 ./...
+go test -race -count=1 ./...
+go run ./cmd/demo
+```
+
 Primary Risks:
-- Race conditions or shared memory hazards during concurrent store operations.
-- Flaky tests dependent on non-deterministic micro-sleep timings.
-- Unhandled errors or version overflow issues during high retry volume.
+- Race conditions in mock storage mutex handling or metrics counters.
+- Flaky concurrency tests if artificial sleep / contention timings are poorly calibrated.
+- Unhandled negative quantity or insufficient stock edge cases.
+- Documentation overclaiming feature capabilities not implemented in code.

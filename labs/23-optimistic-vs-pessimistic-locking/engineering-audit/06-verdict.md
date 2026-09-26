@@ -1,21 +1,26 @@
 # Engineering Audit Verdict
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
 Audit Date: 2026-09-26
 
 ## Summary
 
 Code Files Reviewed:
-- internal/inventory/model.go
-- internal/inventory/store.go
-- internal/inventory/service.go
-- cmd/demo/main.go
+- `internal/inventory/model.go`
+- `internal/inventory/store.go`
+- `internal/inventory/service.go`
+- `cmd/demo/main.go`
+- `go.mod`
+
 Tests Reviewed:
-- tests/locking_test.go
+- `tests/locking_test.go`
+
 Commands Executed:
-- go test -v -count=1 ./...
-- go test -v -race -count=1 ./...
-- go run ./cmd/demo
+- `go build ./...`
+- `go test -v -count=1 ./...`
+- `go test -race -count=1 ./...`
+- `go run ./cmd/demo`
+
 Failures: 0
 Warnings: 0
 
@@ -32,7 +37,7 @@ Documentation Accuracy: PASS
 None.
 
 ## Non-Blocking Issues
-None.
+1. (Minor) Missing explicit test case for maximum retry exhaustion returning `ErrOptimisticLock` under infinite simulated conflict.
 
 ## Required Revisions
 None.
