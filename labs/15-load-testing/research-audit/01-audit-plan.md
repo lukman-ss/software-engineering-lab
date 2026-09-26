@@ -1,9 +1,10 @@
-# Audit Plan — Research Audit: Load Testing (Lab 15)
+# Audit Plan: Research Audit for Lab 15 (Load Testing)
 
-Target Lab: `labs/15-load-testing`  
-Audit Scope: Research artifacts only (`labs/15-load-testing/research/`)  
-Auditor Role: Independent Technical Research Auditor  
-Audit Date: 2026-09-26  
+## Target Lab
+`labs/15-load-testing`
+
+## Audit Scope
+Research artifact audit only (per pipeline override). Implementation/code execution excluded.
 
 ## Files Reviewed
 - `labs/15-load-testing/research/01-plan.md`
@@ -14,28 +15,27 @@ Audit Date: 2026-09-26
 - `labs/15-load-testing/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Standard definitions & distinct purposes of 4 core performance test types (Average-Load, Stress, Spike, Soak/Endurance).
-2. RED Method (Rate, Errors, Duration) and Four Golden Signals (Latency, Traffic, Errors, Saturation) applicability in load testing.
-3. Tail latency / Percentiles (P95, P99) superiority over arithmetic averages.
-4. SLO codification via threshold assertions (`p(95)<200`, `rate<0.01`).
-5. Tool characteristics & suitability: k6 (JS/Go, API/HTTP), Locust (Python/gevent, distributed), JMeter (Java/XML, multi-protocol), Gatling (Scala/JVM).
-6. Multi-layer bottleneck triage strategy (Application vs Database vs External API/Downstream).
-7. External dependency testing tradeoffs: real sandbox calls vs latency-injected mocking.
-8. Common pitfalls: `/health` only testing, inadequate dataset scaling, server unmonitored during tests, unquantified targets.
-9. Progressive testing workflow: Smoke → Load → Stress → Soak.
+1. Six industry test types: smoke, average-load, stress, soak/endurance, spike, breakpoint.
+2. Percentile monitoring (P50/P95/P99) + throughput + error rate + resource utilization.
+3. Bottleneck isolation methodology (TTFB vs connecting time vs external dependencies).
+4. Load calculation method for VUs ($Sessions/sec \times Duration$).
+5. Tool selection characteristics (k6 JS vs Locust Python vs JMeter GUI vs Gatling Scala).
+6. Common pitfalls (health-only testing, synthetic/low data, unmonitored infrastructure).
+7. SDLC timing for performance testing.
 
-## Code Execution
-- NOT APPLICABLE in this research-only audit phase per pipeline override.
+## Code To Execute
+None (Research-only audit per instruction).
 
 ## Primary Risks
-- Inaccessible or paywalled sources cited without full text access (e.g. ISO/IEC 25010, Gatling documentation HTTP 403, JMeter timeout).
-- Overgeneralization of vendor-specific capabilities or guidelines as universal standards.
-- Synthesized troubleshooting trees presented without formal citation backing.
+- Inaccurate citation or stray references from previous labs (e.g. Spring DI mentions).
+- Tool-specific claims overgeneralized as universal truths.
+- Arbitrary numeric recommendations (e.g. ramp-up 5-15%, specific soak durations).
+- Source availability/tier accuracy.
 
 ## Audit Strategy
-1. Cross-examine all 25 entries in `02-sources.md` against claims in `03-evidence.md` and `05-report.md`.
-2. Verify primary vs secondary source integrity and reachability disclaimers.
-3. Evaluate whether evidence claims strictly match the scope and text of cited sources.
-4. Assess resolution of apparent contradictions in `04-contradictions.md`.
-5. Identify unverified assertions, gaps, and open questions in `06-gaps.md`.
-6. Formulate formal audit verdict in `07-verdict.md`.
+1. Examine all 21 sources listed in `02-sources.md` for relevance, reachability, tier classification, and scope match.
+2. Cross-check claims in `03-evidence.md` and `05-report.md` against cited sources.
+3. Identify unsupported, overgeneralized, or erroneous claims.
+4. Evaluate contradictions recorded in `04-contradictions.md`.
+5. Check research completeness and gaps in `06-open-questions.md`.
+6. Deliver final quality verdict.

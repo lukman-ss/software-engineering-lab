@@ -1,40 +1,43 @@
 # Contradictions Audit
 
-Target Lab: `labs/15-load-testing`  
-Audit Scope: Conflict Analysis in `labs/15-load-testing/research/04-contradictions.md` and related research files.  
+## Contradiction 1: Test Type Terminology Variations
+Statement A: k6 states "no consensus even exists about the names of these test types" (surge, scale, stamina, limit testing).  
+Location: `research/04-contradictions.md:3-9`, Source 1  
+Statement B: Azure documentation adopts unified terms without mentioning industry variants.  
+Location: `research/04-contradictions.md:7`, Source 11  
+Type: SOURCE_CONFLICT  
+Impact: MINOR  
+Assessment: Non-conflicting nuance. Nomenclature in industry varies across tool vendors.
 
 ---
 
-## Evaluation of Research Contradiction Analysis
-
-The Research Agent identified and reconciled 6 potential contradictions:
-
-### 1. k6 Tooling Capabilities vs Azure Load Testing Engine Support
-- **Issue:** k6 is widely recommended for modern load testing, yet Azure Load Testing natively supports only JMeter and Locust.
-- **Auditor Verification:** Valid distinction. k6 is a standalone CLI/Go engine; Azure Load Testing is a proprietary managed PaaS harness. No conflict exists.
-
-### 2. Mocking vs Real External API Invocations Under Load
-- **Issue:** Industry best practice advises mocking external systems to prevent flaky tests and isolate units, whereas Azure Well-Architected recommends real calls to reveal latency.
-- **Auditor Verification:** Resolved soundly. Context matters: baseline staging/sandbox validation requires real integration calls to discover real upstream latency; high-volume extreme stress testing requires deterministic stubs with injected delays to avoid financial billing and ToS blacklisting.
-
-### 3. Staging Mirroring vs Direct Production Testing
-- **Issue:** Guidance insists staging must mirror production, but elsewhere asserts that only production testing reveals true user behavior.
-- **Auditor Verification:** Resolved correctly as a progressive testing ladder: staging catches major architectural and regression bugs; canary/off-peak production testing validates multi-tenant network and real-world traffic quirks.
-
-### 4. Stress Test Load Sizing Guidelines
-- **Issue:** Rule-of-thumb specifies 50-100% above average load, but documentation states there is no fixed percentage.
-- **Auditor Verification:** k6 documentation acknowledges 50-100% as a common initial heuristic while explicitly stressing that stress thresholds must be tailored to specific spike/overload risk models.
-
-### 5. Multi-Tool Ecosystem Programming Languages
-- **Issue:** Divergent tool implementations (JS in k6, Python in Locust, Java/XML in JMeter).
-- **Auditor Verification:** Natural ecosystem variance. Tradeoffs accurately mapped to developer personas.
-
-### 6. Test Plateau Durations (Average-Load vs Soak Testing)
-- **Issue:** Average-load testing suggests a plateau of 5x ramp-up (minutes), whereas Soak testing demands hours or days.
-- **Auditor Verification:** Distinct test objectives. Soak testing explicitly isolates gradual memory leaks and connection leaks over time.
+## Contradiction 2: Source 15 Index vs URL Mismatch
+Statement A: Source 15 in `02-sources.md` is titled "A Collection of Best Practices for Production Services" with URL `https://sre.google/sre-book/service-best-practices/`.  
+Location: `research/02-sources.md:145-148`  
+Statement B: Evidence 2 and Finding 4 cite Source 15 as k6 Thresholds documentation with URL `https://grafana.com/docs/k6/latest/using-k6/thresholds/`.  
+Location: `research/03-evidence.md:29`, `research/05-report.md:80, 99`  
+Type: INTERNAL  
+Impact: MEDIUM  
+Assessment: Internal numbering slip in research files where k6 Thresholds was referenced as Source 15 instead of creating a distinct source entry.
 
 ---
 
-## Auditor Finding on Contradictions
+## Contradiction 3: Cross-Lab Contamination (Spring DI)
+Statement A: Source 16 lists "Introduction to the Spring IoC Container and Beans" and Contradiction 6 mentions "Service Locator vs DI Pattern".  
+Location: `research/02-sources.md:155-162`, `research/04-contradictions.md:43-47`  
+Statement B: The research plan and scope explicitly target load testing for the Booking Bengkel app.  
+Location: `research/01-plan.md:3-15`  
+Type: INTERNAL  
+Impact: LOW  
+Assessment: Stray residue from Lab 16. The researcher explicitly noted "Excluded from active evidence" and "Not applicable to load testing", so it does not corrupt conclusions.
 
-No unresolved internal contradictions, source conflicts, or documentation mismatches remain in the research corpus. All investigated tensions have been properly contextualized.
+---
+
+## Contradiction 4: Breakpoint Testing in Elastic Cloud
+Statement A: k6 advises turning off cloud elasticity during breakpoint testing to prevent infinite billing and masked saturation.  
+Location: `research/04-contradictions.md:19-26`, Source 6  
+Statement B: Azure presents breakpoint testing without elasticity warnings.  
+Location: `research/04-contradictions.md:23`, Source 11  
+Type: SOURCE_CONFLICT  
+Impact: MINOR  
+Assessment: k6 provides operational risk guidance, whereas Azure provides architectural definitions. Complementary, not contradictory.
