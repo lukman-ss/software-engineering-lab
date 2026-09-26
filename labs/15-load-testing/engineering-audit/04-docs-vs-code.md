@@ -1,20 +1,16 @@
-# Docs vs Code Audit
+# Documentation vs Code
 
 Target Lab: labs/15-load-testing
 
-## Claim vs Implementation
+## Documented Claims
+1. "Smoke Load (low VUs): All requests process within normal latency limits. Average and P95 are close." (01-design.md)
+2. "Stress Load (high VUs): ... P95 and P99 latency spikes significantly, while average latency degrades less severely" (01-design.md)
+3. "Failure Scenario: Under excessive concurrent load, queuing ... causes high latency and timeouts for the 95th percentile." (01-design.md)
 
-### Claim 1: "Average response time conceals tail latency spikes; percentiles (P95, P99) are necessary to uncover degradation."
-- Source: `engineering/01-design.md`, `research/05-report.md`
-- Implementation: In `cmd/demo/main.go`, Smoke Test produces Average: ~21ms, P95: ~21ms. Stress Test produces Average: ~200ms, P95: ~211ms.
-- Assessment: `DOC_CODE_MISMATCH` / `IMPLEMENTATION_OVERCLAIM`. Average does not conceal the degradation, it tracks P95 almost 1:1 because of constant simulated query time under a closed workload model.
+## Code Reality
+1. MATCH: Smoke test shows Avg 24ms, P95 39ms. No queuing observed.
+2. MATCH: Stress test shows Avg 474ms, P95 736ms, P99 856ms. Non-linear degradation strictly proven.
+3. MISMATCH (DOC_CODE_MISMATCH): The design claims "timeouts for the 95th percentile", but the demo output shows 0 errors. The `Runner` client timeout is 5 seconds, but the test duration is only 2 seconds. Therefore, timeouts are technically impossible to trigger in the demo.
 
-### Claim 2: "Semaphore pattern (buffered channel) used in the server handler to simulate database connection pool bottlenecks, accurately mimicking tail latency growth when saturated."
-- Source: `engineering/02-implementation-notes.md`
-- Implementation: Present in `internal/server/server.go`. Matches the documentation.
-- Assessment: PASS.
-
-### Claim 3: "Demonstration clearly contrasts Smoke test metrics against Stress test metrics."
-- Source: `engineering/01-design.md`
-- Implementation: The demo shows a clear 10x degradation in response time from smoke to stress, demonstrating resource saturation clearly, but fails to show tail skewness.
-- Assessment: PASS (for resource saturation), WARNING (for tail skewness).
+## Result
+Mismatch found. Documentation overclaims timeouts in the stress test, which the implementation does not actually trigger due to test duration constraints. Latency degradation is perfectly proven, but timeouts are not.

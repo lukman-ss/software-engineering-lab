@@ -70,7 +70,9 @@ func (r *Runner) Run(ctx context.Context) Result {
 				default:
 					req, err := http.NewRequestWithContext(ctx, r.cfg.Method, r.cfg.URL, bytes.NewReader(r.cfg.Body))
 					if err != nil {
-						errs++
+						if ctx.Err() == nil {
+							errs++
+						}
 						continue
 					}
 					if r.cfg.ContentType != "" {

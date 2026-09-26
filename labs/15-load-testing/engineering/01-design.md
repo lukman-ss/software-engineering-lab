@@ -14,7 +14,7 @@ Research Status: APPROVED
 - **Stress Load (high VUs)**: Concurrent requests exceed server resource capacity (connection pool limit). Tail requests queue up. P95 and P99 latency spikes significantly, while average latency degrades less severely, proving the masking effect of averages.
 
 ## Failure Scenario
-- Under excessive concurrent load, queuing behind a constrained resource (connection pool) causes high latency and timeouts for the 95th percentile.
+- Under excessive concurrent load, queuing behind a constrained resource (connection pool) causes high latency and severe tail degradation for the 95th and 99th percentiles.
 
 ## Success Criteria
 - Automated benchmarks and tests execute without external dependencies.

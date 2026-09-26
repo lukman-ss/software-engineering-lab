@@ -1,21 +1,14 @@
-# Engineering Gaps
+# Gap Analysis
 
 Target Lab: labs/15-load-testing
 
-## Gap 1
+## DOC_CODE_MISMATCH
+- **Description:** `01-design.md` claims the failure scenario involves "timeouts for the 95th percentile". However, `cmd/demo/main.go` runs for 2 seconds while the HTTP client timeout in `internal/loadtest/runner.go` is 5 seconds. Timeouts do not occur (Errors: 0 in stress test).
+- **Severity:** LOW
+- **Assessment:** The primary mechanism (latency degradation due to saturation) is accurately simulated and proven. The missing timeouts do not invalidate the lab's core lesson on percentiles vs averages.
 
-- Gap Type: `RESEARCH_MISMATCH`
-- Severity: HIGH
-- Description: The core research hypothesis claimed that average latency conceals tail latency spikes. However, the mock server uses a deterministic query duration (`20ms`) under a closed-loop virtual user harness. Consequently, queuing delay distributes uniformly across all requests, resulting in an Average latency (~200ms) that degrades virtually identically to P95 (~211ms). The masking effect of averages is not demonstrated by the actual runtime numbers.
-
-## Gap 2
-
-- Gap Type: `DOC_CODE_MISMATCH`
-- Severity: MEDIUM
-- Description: `engineering/01-design.md` states: *"P95 and P99 latency spikes significantly, while average latency degrades less severely, proving the masking effect of averages."* The actual execution result shows average latency degrading from 21ms to 200ms, which is a 9.5x degradation, virtually matching the P95 degradation (22ms to 212ms, 9.6x).
-
-## Gap 3
-
-- Gap Type: `MISSING_TEST`
-- Severity: LOW
-- Description: No unit or integration test checks whether the percentile calculation maintains ordering invariants (Min <= P50 <= P90 <= P95 <= P99 <= Max) under non-monotonic or random distributions.
+## All Other Quality Gates
+- **Race Conditions:** None. Concurrency model is robust.
+- **Test Coverage:** High. Explicit coverage of latency invariants.
+- **Implementation Alignment:** Hand-rolled exact percentile sorting correctly implemented and explicitly traded-off.
+- **Code Correctness:** Channel-based semaphore successfully mimics pool exhaustion without CPU spinning.

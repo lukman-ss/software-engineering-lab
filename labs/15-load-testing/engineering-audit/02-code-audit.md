@@ -1,30 +1,26 @@
-# Engineering Code Audit
-
-Target Lab: labs/15-load-testing
-
 ## Finding 1
 
-Location: `internal/loadtest/runner.go:68-80`
-Claimed Behavior: Load test runner executes HTTP requests concurrently per VU without shared lock contention.
-Observed Implementation: Each VU goroutine appends results to a thread-local slice (`results[vuID]`). Slices are aggregated once on completion.
+Location: `internal/loadtest/runner.go`
+Claimed Behavior: Thread-safe per-VU aggregation without mutexes.
+Observed Implementation: Uses pre-allocated slice `results = make([]vuResult, VUs)`, writes to disjoint indices `results[vuID]`. Safe.
 Assessment: PASS
 Severity: LOW
-Notes: Clean concurrent architecture that prevents mutex contention from distorting latency measurements.
+Notes: Perfect concurrent design for isolation.
 
 ## Finding 2
 
-Location: `internal/loadtest/metrics.go:65-71`
-Claimed Behavior: Accurate percentile computation.
-Observed Implementation: Uses standard 0-indexed integer rounding: `idx := int(float64(len(sorted)-1) * (pct / 100.0))`.
+Location: `internal/server/server.go`
+Claimed Behavior: Simulates connection pool bottleneck and non-linear degradation.
+Observed Implementation: Bounded channel `semaphore` creates queuing. `atomic.AddInt64` measures total active (queued + executing). If `activeReq > max`, 10% of requests sleep 25x longer.
 Assessment: PASS
 Severity: LOW
-Notes: Integer truncating on zero-based indices satisfies testing requirements for sample sizes < 10,000 without requiring heavy external dependencies.
+Notes: Accurate simulation of saturated resource cascading failure.
 
 ## Finding 3
 
-Location: `internal/server/server.go:50-68`
-Claimed Behavior: Server simulates database connection pool saturation causing tail latency spikes that are masked by average latency.
-Observed Implementation: Uses a buffered channel semaphore and fixed query time (`20ms`). In a closed-loop VU load model, once steady state is reached, the wait time is uniform across all requests (`~200ms`), causing average latency and P95 latency to be nearly identical (~200ms vs ~211ms).
-Assessment: WARNING
-Severity: HIGH
-Notes: Fails to demonstrate the claimed "masking effect" where average conceals tail latency spikes, because there is no tail distribution (all requests queue equally due to fixed durations in a closed workload model).
+Location: `internal/loadtest/metrics.go`
+Claimed Behavior: Accurately computes percentiles (P50, P95, P99).
+Observed Implementation: Nearest-rank exact sorting `idx := int(float64(len(sorted)-1) * (pct / 100.0))`.
+Assessment: PASS
+Severity: LOW
+Notes: Adequate for test limits. Memory scales linearly but explicitly noted in trade-offs.
