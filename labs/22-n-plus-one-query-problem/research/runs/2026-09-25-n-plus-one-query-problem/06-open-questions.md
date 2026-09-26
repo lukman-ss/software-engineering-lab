@@ -1,0 +1,3 @@
+- How does the N+1 problem impact highly concurrent systems using serverless databases where traditional connection pooling is abstracted away or behaves differently?
+- What are the most effective and performant automated static analysis tools available to identify potential N+1 issues in CI/CD pipelines before they reach production?
+- How do different database engines internally optimize the massive `IN` clauses heavily relied upon by ORM eager loading, and at what dataset size does eager loading itself become the primary bottleneck?
