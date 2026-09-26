@@ -1,5 +1,6 @@
-# Code Audit
+# 05 - Code Audit
 
-Scope: Research Audit Only (Pipeline Override).
+Per the active Pipeline Override:
+**"Audit research only. Do not audit implementation/code in this stage."**
 
-Code audit is not applicable at this stage. Execution and verification of Go implementation and tests will take place during the engineering audit stage.
+The code audit is explicitly deferred to a subsequent stage. No implementation or test execution is evaluated in this document.

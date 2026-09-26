@@ -1,69 +1,40 @@
-# Research Plan
+# 01 — Research Plan
 
 ## Research Topic
-Dependency Injection (DI) & Inversion of Control (IoC) — Writing Testable and Evolvable Code
+Dependency Injection (DI) & Inversion of Control (IoC) — principles, patterns, trade-offs, and practices for testable and evolvable software. Target lab: `labs/16-dependency-injection`.
 
 ## Objective
-Investigate the principles, patterns, benefits, trade-offs, and best practices of Dependency Injection and Inversion of Control in software engineering. Provide evidence-based findings to guide implementation decisions for the target lab.
+Investigate DI/IoC fundamentals, container mechanics, interface-based design, testing benefits, lifecycle management, and anti-patterns. Collect authoritative evidence, cross-check claims, and produce audit-ready report without implementation.
 
 ## Research Questions
-
-### Core Concepts
-1. What is the formal definition of Dependency Injection vs Inversion of Control?
-2. What are the three main types of DI (Constructor, Setter, Interface)?
-3. How does IoC Container differ from manual DI?
-
-### Benefits & Trade-offs
-4. What empirical evidence exists for DI improving testability?
-5. What empirical evidence exists for DI reducing coupling?
-6. What are the performance overheads of DI/IoC containers?
-7. When does DI add unnecessary complexity (over-engineering)?
-
-### Patterns & Anti-patterns
-8. What are the recognized anti-patterns (Service Locator, God Object, Circular Dependencies)?
-9. How do interface-based contracts enable Liskov Substitution Principle?
-10. What is the relationship between DI and Clean Architecture / Hexagonal Architecture?
-
-### Implementation Concerns
-11. How do different languages/frameworks implement DI (Java Spring, .NET Core, Go, PHP Laravel, Node.js)?
-12. What are the trade-offs between compile-time vs runtime DI?
-13. How to handle configuration/dependency graphs in large applications?
-
-### Testing Impact
-14. How does DI enable unit testing with mocks/stubs?
-15. What are the differences between mocking frameworks across ecosystems?
-16. What is the test pyramid implication of DI?
+1. What are DI and IoC definitions and their relationship?
+2. What are the recognized forms of DI (constructor, setter, interface) and when to use each?
+3. How do IoC containers work (binding, resolution, auto-wiring, lifetimes)?
+4. Why does DI improve testability and evolvability (vendor swap, mock)?
+5. What is Interface vs implementation principle and PSR-11 standard?
+6. How does Service Locator differ from DI and why is it discouraged?
+7. When NOT to use DI and what are over-injection / Service Locator smells?
+8. What do Laravel, Spring, .NET containers demonstrate in practice?
 
 ## Search Strategy
-
-### Primary Sources (Tier 1)
-- Martin Fowler's original articles on DI/IoC
-- Robert C. Martin (Uncle Bob) Clean Architecture publications
-- Official framework documentation (Spring, .NET Core, Laravel, NestJS, Go Wire)
-- Academic papers on coupling/cohesion metrics
-- Design Pattern literature (Gang of Four)
-
-### Secondary Sources (Tier 2)
-- Technical conference talks (GOTO, Devoxx, etc.)
-- Established engineering blogs (Google, Netflix, Uber engineering)
-- Refactoring.guru pattern catalog
-- Microsoft/Google architecture guidelines
-
-### Community Sources (Tier 3) - For Discovery Only
-- Stack Overflow high-voted answers
-- Reddit r/softwareengineering discussions
-- Personal blogs with code examples
+- Tier 1 priority: Fowler canonical article, Spring Framework docs, Laravel Container docs, PSR-11 spec, Microsoft .NET DI docs, PHP interfaces manual
+- Tier 2: Wikipedia for terminology baseline (cross-checked with Fowler/Spring)
+- Fetch full source pages (not snippets), extract verbatim evidence with URLs
+- Cross-check each significant claim with 2+ independent sources
 
 ## Expected Primary Sources
-- Martin Fowler: "Inversion of Control Containers and the Dependency Injection pattern" (2004)
-- Robert C. Martin: "Clean Architecture" (2017)
-- Mark Seemann: "Dependency Injection in .NET" (2011/2020)
-- Framework official docs: Spring Framework Reference, .NET Core DI, Laravel Container, NestJS Providers
-- IEEE/ACM papers on coupling metrics
+- martinfowler.com/articles/injection.html (Fowler 2004)
+- martinfowler.com/bliki/InversionOfControl
+- docs.spring.io/spring-framework/reference/core/beans/introduction.html
+- laravel.com/docs/container
+- php-fig.org/psr/psr-11
+- learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection
+- php.net/manual/en/language.oop5.interfaces.php
+- en.wikipedia.org/wiki/Dependency_injection, en.wikipedia.org/wiki/Inversion_of_control
 
 ## Risks / Unknowns
-- Conflicting definitions between Fowler and other authors
-- Framework-specific terminology differences
-- Lack of quantitative empirical studies on DI impact
-- Evolution of DI patterns (functional approaches, effect systems)
-- Overlap with Service Locator pattern confusion
+- Empirical impact of DI on defect rate / velocity not in docs (likely NOT VERIFIED)
+- Performance overhead of containers not quantified
+- TypeScript/NestJS evidence weaker (fetch failure)
+- 12-parameter heuristic from topic spec not in primary sources
+- Value-object vs service boundary is heuristic, not formal standard

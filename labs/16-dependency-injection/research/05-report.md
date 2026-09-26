@@ -1,107 +1,106 @@
 # Research Report
 
 ## Research Question
-What are the principles, patterns, benefits, trade-offs, and best practices of Dependency Injection (DI) and Inversion of Control (IoC) for writing testable, evolvable software?
+What are the principles, patterns, benefits, trade-offs, and practices of Dependency Injection (DI) and Inversion of Control (IoC) for writing testable, evolvable software? How do these apply to the topic specification (PaymentService/PPOB/NotificationService examples, interface-based design, container bindings, testing with mocks)?
 
 ## Executive Summary
-Dependency Injection is a specific application of the broader Inversion of Control principle for service assembly. DI enables loose coupling by inverting dependency creation: objects declare dependencies (via constructor, setter, or interface), and a container supplies implementations at runtime. All authoritative sources (Fowler 2004, Spring 7.x, Microsoft .NET 2026, Laravel 12.x, PSR-11) agree on the core mechanics and benefits: decoupling, testability via mock/stub substitution, and explicit separation of configuration from use. The Service Locator pattern is an alternative that achieves similar decoupling but is explicitly discouraged by PSR-11 and considered inferior for components consumed by external applications. Modern practice converges on constructor injection as primary, setter injection as fallback, and has largely abandoned interface injection. Service lifetimes (singleton, scoped/request, transient/prototype) are universally supported. The main anti-patterns are: using the container as a Service Locator (passing container into classes), over-injecting dependencies (signaling SRP violations), and injecting value objects that have no substitution need.
+DI is a specialized form of IoC for service assembly: objects declare dependencies on abstractions (constructor/setter), and an external injector/container supplies implementations at runtime. Consensus across Fowler 2004, Spring 7.x, Microsoft .NET 2026, Laravel 12.x/13.x, PSR-11, and PHP interfaces manual: DI reduces coupling, makes configuration swappable per deployment, and enables mock/stub testing. Service Locator achieves similar decoupling but creates a locator dependency in every consumer and is discouraged by PSR-11. Modern practice: constructor injection default, setter fallback, interface injection obsolete. Containers manage lifetimes (singleton/scoped/transient). Anti-patterns: container-as-locator, over-injection (design smell), injecting value objects unnecessarily.
 
 ## Findings
 
-### Finding 1 — DI Definition and Core Mechanics
-**Claim**: DI is a pattern where objects define dependencies only through constructor arguments, factory method arguments, or properties set after construction; the container injects dependencies when creating the bean. The object does not look up its dependencies or know their location/class.
-**Evidence**: Spring Framework 7.0.9 explicitly defines DI this way: "Dependency injection (DI) is a process whereby objects define their dependencies... only through constructor arguments, arguments to a factory method, or properties that are set on the object instance after it is constructed... The container then injects those dependencies when it creates the bean."
-**Sources**: Spring (Source 5), Fowler (Source 1), Microsoft .NET (Source 3)
-**Confidence**: HIGH
+### Finding 1
+Claim: DI separates construction from use; object receives dependencies from external injector instead of creating them; yields loose coupling.
+Evidence: Wikipedia DI definition verbatim; Spring "objects define dependencies only through constructor/factory args or properties; container injects at bean creation"; .NET three-step (abstract, register, inject).
+Sources: https://en.wikipedia.org/wiki/Dependency_injection, https://docs.spring.io/spring-framework/reference/core/beans/introduction.html, https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection, https://martinfowler.com/articles/injection.html
+Confidence: HIGH
 
-### Finding 2 — Three Forms of DI
-**Claim**: The three recognized forms are Constructor Injection, Setter Injection, and Interface Injection. Modern frameworks primarily use Constructor and Setter; Interface Injection has fallen out of practice.
-**Evidence**: Fowler (2004) names all three with code examples. Spring docs 7.0.9 document "Constructor-based dependency injection" and "Setter-based dependency injection" as "two major variants" without mentioning interface injection. Microsoft .NET focuses on constructor injection.
-**Sources**: Fowler (Source 1), Spring (Source 5), Microsoft (Source 3)
-**Confidence**: HIGH
+### Finding 2
+Claim: IoC is broader (framework calls user code; Hollywood Principle); DI is one IoC form for dependency implementations. "IoC container" conflates the two senses.
+Evidence: Wikipedia IoC; Fowler settled on "Dependency Injection" name because IoC too generic (UI main loop vs plugin lookup inversion).
+Sources: https://en.wikipedia.org/wiki/Inversion_of_control, https://martinfowler.com/articles/injection.html
+Confidence: HIGH
 
-### Finding 3 — DI vs Service Locator
-**Claim**: Both achieve decoupling from concrete implementations. DI avoids a dependency on the locator; Service Locator requires every consumer to depend on the locator API. For components used by external applications, DI is preferred. PSR-11 explicitly discourages Service Locator ("Users SHOULD NOT pass a container into an object...").
-**Evidence**: Fowler (2004) provides detailed comparison; PSR-11 (Source 6) mandates "SHOULD NOT" per RFC 2119.
-**Sources**: Fowler (Source 1), PSR-11 (Source 6)
-**Confidence**: HIGH
+### Finding 3
+Claim: Three historical DI forms: constructor, setter, interface (type 3/2/1). Modern frameworks support constructor + setter; interface injection obsolete.
+Evidence: Fowler full taxonomy with PicoContainer/Spring/Avalon examples; Spring lists only constructor-based and setter-based as two major variants; .NET/Laravel focus constructor.
+Sources: https://martinfowler.com/articles/injection.html, https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
+Confidence: HIGH
 
-### Finding 4 — DI Improves Testability
-**Claim**: DI enables unit testing by allowing replacement of real implementations with stubs/mocks without modifying the class under test.
-**Evidence**: Spring: "classes become easier to test... allow for stub or mock implementations." Microsoft .NET: "the app should use a mock or stub... which isn't possible with this approach" (hard-coded deps). Fowler: "both [DI and SL] are very amenable to stubbing" — testing benefit is shared but DI is simpler default.
-**Sources**: Spring (Source 5), Microsoft (Source 3), Fowler (Source 1)
-**Confidence**: HIGH
+### Finding 4
+Claim: Prefer constructor injection (valid object at birth, immutable fields); switch to setter when many params, multiple valid combos, string params needing names, inheritance explosion.
+Evidence: Fowler detailed constructor-vs-setter analysis with Kent Beck reference; .NET constructor primary with selection rules.
+Sources: https://martinfowler.com/articles/injection.html, https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection
+Confidence: HIGH
 
-### Finding 5 — Constructor vs Setter Injection Trade-offs
-**Claim**: Prefer constructor injection for valid-object-at-construction-time and immutable fields; switch to setter injection when: multiple valid construction configurations exist, many constructor parameters (no keyword args in Java historically), primitive/string parameters needing named disambiguation, or inheritance creates constructor forwarding complexity.
-**Evidence**: Fowler (2004) provides detailed analysis. Modern languages (PHP 8, C#, Kotlin) have named constructor args, reducing some setter advantages.
-**Sources**: Fowler (Source 1), Microsoft (Source 3 — constructor primary)
-**Confidence**: HIGH
+### Finding 5
+Claim: Both DI and Service Locator decouple from concrete impl; DI avoids locator dependency; DI preferred for externally-consumed components; locator OK for app-internal code with known locator API.
+Evidence: Fowler comparison + segregated-interface/dynamic-locator variants; PSR-11 SHOULD NOT pass container into objects.
+Sources: https://martinfowler.com/articles/injection.html, https://www.php-fig.org/psr/psr-11/
+Confidence: HIGH
 
-### Finding 6 — Service Lifetimes (Scopes)
-**Claim**: All major containers support at least three lifetimes: Singleton (app-wide), Scoped/Request (per lifecycle boundary), Transient/Prototype (new instance per resolve).
-**Evidence**: .NET: `AddSingleton`, scoped per request. Laravel: `singleton()`, `scoped()` per request/job. Spring: bean scopes singleton, prototype, request, session.
-**Sources**: Microsoft (Source 3), Laravel (Source 4), Spring (Source 5)
-**Confidence**: HIGH
+### Finding 6
+Claim: DI enables mock/stub unit testing in isolation without real external calls; often first benefit noticed. (Locator equally stub-able if well-designed, per Fowler.)
+Evidence: Wikipedia testing section; .NET "use mock or stub... isn't possible with hard-coded"; Laravel "easily mock when testing"; Fowler nuance.
+Sources: https://en.wikipedia.org/wiki/Dependency_injection, https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection, https://laravel.com/docs/container
+Confidence: HIGH
 
-### Finding 7 — IoC is Broader than DI
-**Claim**: Inversion of Control is a general framework principle (framework calls user code: UI events, template methods, EJB lifecycle). DI is one specific form of IoC used by containers for service assembly. "IoC Container" is a misnomer conflating the two.
-**Evidence**: Fowler (2005): "Inversion of Control is a common phenomenon... the specific styles of inversion of control (such as dependency injection) that these containers use."
-**Sources**: Fowler (Source 2)
-**Confidence**: HIGH
+### Finding 7
+Claim: Containers support singleton (app-wide), scoped/request (per lifecycle), transient/prototype (per resolve). Misuse (scoped-from-root, scoped-into-singleton) caught by validation in dev.
+Evidence: .NET AddSingleton/AddScoped/AddTransient + scope validation; Laravel singleton()/scoped()/instance(); Spring bean scopes.
+Sources: https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection, https://laravel.com/docs/container, https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
+Confidence: HIGH
 
-### Finding 8 — PSR-11 Standard
-**Claim**: PSR-11 standardizes ContainerInterface with `get($id)` and `has($id)`. A non-existent id MUST throw `NotFoundExceptionInterface`. The standard explicitly discourages Service Locator usage.
-**Evidence**: PSR-11 document (Source 6) ratified by PHP-FIG.
-**Sources**: PHP-FIG (Source 6)
-**Confidence**: HIGH
+### Finding 8
+Claim: Program to interfaces: PHP interfaces define contracts; multiple impls interchangeable (payment gateways, DB, cache); consumer unchanged on swap.
+Evidence: PHP manual explicitly lists "multiple payment gateways... swapped without changes to code that uses them"; Laravel bind(Interface, Impl); Fowler MovieFinder interface + plugin.
+Sources: https://www.php.net/manual/en/language.oop5.interfaces.php, https://laravel.com/docs/container, https://martinfowler.com/articles/injection.html
+Confidence: HIGH
 
-### Finding 9 — Anti-Pattern: Service Locator Overuse
-**Claim**: Passing container into classes so they call `container.get()` or `app()->make()` hides dependencies, makes them unclear from signatures, and violates separation of configuration from use.
-**Evidence**: PSR-11 "SHOULD NOT"; Fowler "separation of configuration from use"; Topic spec "❌ Menggunakan Service Locator di Mana-mana".
-**Sources**: PSR-11 (Source 6), Fowler (Source 1), Topic Spec
-**Confidence**: HIGH
+### Finding 9
+Claim: PSR-11 standardizes get/has; unknown id MUST throw NotFoundException; passing container into objects (Service Locator) discouraged.
+Evidence: PSR-11 sections 1.1.2/1.2/1.3 verbatim; Laravel PSR-11 compliance section.
+Sources: https://www.php-fig.org/psr/psr-11/, https://laravel.com/docs/container
+Confidence: HIGH
 
-### Finding 10 — Anti-Pattern: Constructor Over-injection
-**Claim**: Excessive constructor parameters (e.g., 12+) signal design problems (too many responsibilities, SRP violation).
-**Evidence**: Topic spec explicitly states "Kalau constructor berisi 12 parameter... Biasanya ada masalah desain." Fowler: "If you have a lot of constructor parameters things can look messy... often a sign of an over-busy object that should be split."
-**Sources**: Topic Spec, Fowler (Source 1)
-**Confidence**: MEDIUM (specific number "12" from topic spec, not independently verified)
+### Finding 10
+Claim: DI costs: config burden, harder tracing, reflection hurts IDE, upfront effort, framework lock-in risk. IoC hard to understand/debug; justify over simpler alternative.
+Evidence: Wikipedia disadvantages list; Fowler "inversion comes at a price... hard to understand... leads to problems debugging... prefer to avoid unless needed."
+Sources: https://en.wikipedia.org/wiki/Dependency_injection, https://martinfowler.com/articles/injection.html
+Confidence: MEDIUM (criticisms listed, single-source each)
 
-### Finding 11 — When NOT to Use DI
-**Claim**: Value objects without external dependencies or substitution needs (DateTime, Money, Address) can be created directly. DI is appropriate for services with external dependencies: Database, HTTP Client, Payment Gateway, Cache, Queue, Email, Storage, cross-module services.
-**Evidence**: Topic spec provides this guidance explicitly. Fowler discusses principle (separation of configuration from use) but does not give a concrete checklist.
-**Sources**: Topic Spec
-**Confidence**: MEDIUM (guidance from spec, not independently verified primary source)
+### Finding 11
+Claim: Over-injection signals SRP violation; industry guidance is qualitative (Fowler: "lot of params... sign of over-busy object"); the 12-parameter threshold is a lab-specific heuristic, not an industry standard.
+Evidence: Fowler "lot of params... sign of over-busy object that should be split"; topic spec 12-param rule.
+Sources: https://martinfowler.com/articles/injection.html + topic spec (Lab Requirement/Heuristic)
+Confidence: MEDIUM (number 12 not in primary source)
+
+### Finding 12
+Claim: Don't inject value objects (stateful domain data); inject external-boundary services (DB/HTTP/gateway/cache/queue/email/storage). The specific examples (DateTime/Money/Address) are lab heuristics, not a universal standard.
+Evidence: Topic spec list; Fowler distinction between entities and value objects (no concrete list); Wikipedia new-keyword diminished except value objects.
+Sources: Topic spec (Lab Requirement/Heuristic); https://martinfowler.com/articles/injection.html (principle)
+Confidence: MEDIUM (list from spec, principle corroborated)
 
 ## Areas of Agreement
-All authoritative sources agree on:
-1. DI definition: container injects dependencies declared by object
-2. Three DI forms historically; constructor + setter are the practical pair
-3. DI vs Service Locator distinction (locator dependency vs no locator dependency)
-4. DI enables testability via mock/stub substitution
-5. Service lifetimes (singleton, scoped, transient) exist in all containers
-6. PSR-11 explicitly discourages Service Locator
-7. IoC is broader; DI is specific IoC for service assembly
+1. DI definition and construction/use separation
+2. Constructor + setter as practical pair; interface injection historical
+3. DI vs Locator distinction (locator dependency)
+4. Testability via substitution
+5. Lifetimes singleton/scoped/transient
+6. PSR-11 discourages locator
+7. IoC broader; DI specific
 
-## Areas of Disagreement / Divergence
-- **Testing benefit exclusivity**: Fowler states Service Locator is equally amenable to stubbing if well-designed; Spring/Microsoft present DI as the solution to testing difficulties. (Divergence in emphasis, not fact.)
-- **Interface Injection**: Fowler includes as third form; modern framework docs omit entirely. (Evolution, not contradiction.)
-- **Configuration mechanism**: Fowler (2004) advocates programmatic builders over XML; modern frameworks use annotations/attributes that blur the line.
-- **"12 parameter" threshold**: Topic spec cites specific number; Fowler says "a lot" qualitatively. (Heuristic vs principle.)
+## Areas of Disagreement
+- Testing exclusivity (Fowler: locator equally stub-able; vendors present DI as fix)
+- Interface injection (Fowler includes; modern docs omit — evolution)
+- Config mechanism (Fowler programmatic preference vs modern annotation/attribute hybrids)
+- 12-param threshold (spec heuristic vs Fowler qualitative)
 
 ## Limitations
-- Primary sources are documentation and Fowler's articles; no empirical studies on DI impact on defect rates, velocity, or maintainability were found in this research.
-- NestJS documentation fetch failed to retrieve code examples; TypeScript ecosystem evidence is weaker.
-- The topic specification's practical heuristics (value objects list, 12-parameter threshold) are not independently cross-checked against primary sources.
-- DI performance overhead (container resolution cost) not quantified in sources reviewed.
+- No empirical studies on defect/velocity impact found — NOT VERIFIED
+- Container performance overhead not quantified — NOT VERIFIED
+- NestJS/TS evidence weaker (fetch failure)
+- Spec heuristics (value-object list, 12 params) not independently verified
+- PHP interface property hooks (8.4) tangential, not DI-specific
 
 ## Conclusion
-Dependency Injection is a mature, cross-platform pattern for achieving loose coupling and testability. The consensus across .NET, Java Spring, PHP Laravel, and PHP-FIG standards is:
-1. Declare dependencies on abstractions (interfaces) via constructor injection as default.
-2. Use an IoC container for automatic resolution and lifetime management.
-3. Avoid Service Locator (passing container into classes).
-4. Separate configuration (bindings) from use (consumer classes).
-5. Watch for constructor over-injection as a design smell.
-
-The topic specification's practical exercises (PPOB system, identifying injectable dependencies, creating interfaces, mocking for tests) directly align with these findings. The remaining open questions concern empirical validation and language-specific nuances.
+DI is mature cross-platform consensus: depend on abstractions via constructor, container resolves lifetimes, separate bindings from consumers, avoid locator, watch over-injection. Topic spec examples (PaymentService→gateway interface→container bind→mock test; PPOB provider swap; notification provider swap) align directly with findings. Open quantification and language-nuance questions remain.

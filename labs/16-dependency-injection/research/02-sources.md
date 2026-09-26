@@ -1,69 +1,73 @@
-# Research Sources
+# 02 — Sources
 
-## Research Topic
-Dependency Injection (DI) & Inversion of Control (IoC)
-
-## Source List
-
-### Source 1
+## Source 1
 Title: Inversion of Control Containers and the Dependency Injection pattern
-Publisher: Martin Fowler (martinfowler.com)
+Publisher: Martin Fowler (Thoughtworks)
 URL: https://martinfowler.com/articles/injection.html
-Published: 23 January 2004
-Accessed: 26 September 2026
-Source Tier: Tier 1 (Foundational Authority)
-Relevance: Definitive article coining the "Dependency Injection" term; defines three forms (constructor, setter, interface injection), contrasts DI with Service Locator, discusses configuration vs. use separation.
+Published: 2004-01-23
+Accessed: 2026-09-26
+Source Tier: Tier 1 (canonical)
+Relevance: Defines DI patterns, forms (constructor/setter/interface), Service Locator comparison, configuration-vs-use separation principle
 
-### Source 2
-Title: Inversion Of Control (Bliki)
-Publisher: Martin Fowler (martinfowler.com)
-URL: https://martinfowler.com/bliki/InversionOfControl.html
-Published: 26 June 2005
-Accessed: 26 September 2026
-Source Tier: Tier 1 (Foundational Authority)
-Relevance: Distinguishes Inversion of Control as general principle (frameworks) from the specific DI pattern used by IoC containers; provides etymology (Johnson & Foote 1988, Gang of Four, Hollywood Principle).
+## Source 2
+Title: Inversion of Control
+Publisher: Wikipedia
+URL: https://en.wikipedia.org/wiki/Inversion_of_control
+Published: 2005-06-28 (last edited 2026-08-12)
+Accessed: 2026-09-26
+Source Tier: Tier 2 (secondary encyclopedia)
+Relevance: IoC definition, Hollywood Principle, history, relationship to DI
 
-### Source 3
-Title: Dependency injection - .NET
-Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection/overview
-Published: 26 January 2026 (last updated 23 April 2026)
-Accessed: 26 September 2026
-Source Tier: Tier 1 (Official Documentation)
-Relevance: Practical .NET implementation of DI via IServiceCollection/IServiceProvider; defines hard-coded dependency problems, constructor injection, service lifetimes (singleton/scoped/transient), scope validation, keyed services.
-
-### Source 4
-Title: Service Container
-Publisher: Laravel (laravel.com)
-URL: https://laravel.com/docs/12.x/container
-Published: Laravel 12.x documentation
-Accessed: 26 September 2026
-Source Tier: Tier 1 (Official Documentation)
-Relevance: Laravel's PSR-11 compliant IoC container; describes binding interfaces to implementations, contextual binding, tagging, zero-configuration resolution, singleton/scoped lifetimes, automatic injection.
-
-### Source 5
+## Source 3
 Title: Dependency Injection
-Publisher: Spring Framework Documentation (spring.io)
-URL: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
-Published: Spring Framework 7.0.9
-Accessed: 26 September 2026
-Source Tier: Tier 1 (Official Documentation)
-Relevance: Java ecosystem DI via Spring Container; constructor-based and setter-based DI, autowiring, bean scopes, factory-method injection; emphasizes object does not know location/class of dependencies.
+Publisher: Wikipedia
+URL: https://en.wikipedia.org/wiki/Dependency_injection
+Published: 2006-11-05 (last edited 2025-12)
+Accessed: 2026-09-26
+Source Tier: Tier 2 (secondary encyclopedia)
+Relevance: DI roles (service/client/interface/injector), types, advantages/disadvantages, framework examples across languages
 
-### Source 6
+## Source 4
+Title: Service Container
+Publisher: Laravel
+URL: https://laravel.com/docs/container
+Published: 2024-2026 (Laravel 12.x/13.x)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official docs)
+Relevance: PHP DI container implementation, binding interfaces to implementations, contextual binding, PSR-11
+
+## Source 5
+Title: Introduction to the Spring IoC Container and Beans
+Publisher: VMware/Spring (Spring Framework 7.0.9)
+URL: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
+Published: 2026 (current version)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official docs)
+Relevance: DI definition, IoC inversion, BeanFactory/ApplicationContext, DI as specialized IoC form
+
+## Source 6
 Title: PSR-11: Container interface
-Publisher: PHP Framework Interop Group (PHP-FIG)
+Publisher: PHP-FIG
 URL: https://www.php-fig.org/psr/psr-11/
-Published: PSR-11 Standard
-Accessed: 26 September 2026
-Source Tier: Tier 1 (Standards)
-Relevance: Standardizes container interface (`get`, `has`); explicitly RECOMMENDS NOT using container as Service Locator ("Users SHOULD NOT pass a container into an object so that the object can retrieve its own dependencies").
+Published: 2014-2016 (PSR-11 ratified)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (standard)
+Relevance: Standardized ContainerInterface, Service Locator discouragement
 
-### Source 7
-Title: NestJS Documentation - Providers
-Publisher: NestJS (nestjs.com)
-URL: https://docs.nestjs.com/providers
-Published: NestJS v11 documentation
-Accessed: 26 September 2026
-Source Tier: Tier 2 (Reputable Technical Publication)
-Relevance: TypeScript/Node.js DI framework based on Angular DI; demonstrates providers, modules, scoped providers — shows cross-language DI patterns.
+## Source 7
+Title: Dependency Injection (Overview)
+Publisher: Microsoft (.NET)
+URL: https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection/overview
+Published: 2026-01-26 (updated 2026-04-23)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official docs)
+Relevance: .NET built-in DI, constructor injection, service lifetimes (singleton/scoped/transient)
+
+## Source 8
+Title: Object Interfaces
+Publisher: PHP
+URL: https://www.php.net/manual/en/language.oop5.interfaces.php
+Published: ongoing (PHP 8.4.26)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official docs)
+Relevance: Interface definition, `implements`, contract-based design, type declarations

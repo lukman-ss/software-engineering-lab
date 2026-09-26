@@ -1,12 +1,12 @@
-# Audit Plan: Research Artifacts for Lab 16 (Dependency Injection)
+# 01 - Audit Plan
 
 ## Target Lab
 `labs/16-dependency-injection`
 
-## Pipeline Scope
-Research Audit stage only (implementation/code audit explicitly excluded by pipeline override).
-
-## Files Reviewed
+## Scope
+Pipeline Override Active: **Audit research only**.
+Implementation, tests, and demo code are out of scope for this stage.
+Files under review:
 - `research/01-plan.md`
 - `research/02-sources.md`
 - `research/03-evidence.md`
@@ -14,28 +14,33 @@ Research Audit stage only (implementation/code audit explicitly excluded by pipe
 - `research/05-report.md`
 - `research/06-open-questions.md`
 
+## Files Reviewed
+- `labs/16-dependency-injection/research/01-plan.md`
+- `labs/16-dependency-injection/research/02-sources.md`
+- `labs/16-dependency-injection/research/03-evidence.md`
+- `labs/16-dependency-injection/research/04-contradictions.md`
+- `labs/16-dependency-injection/research/05-report.md`
+- `labs/16-dependency-injection/research/06-open-questions.md`
+
 ## Claims To Verify
-1. Definition of Dependency Injection vs Inversion of Control (Fowler 2004, 2005; Spring 7.0.9; Microsoft .NET).
-2. Three forms of DI (Constructor, Setter, Interface) and the obsolescence of Interface Injection in modern frameworks.
-3. Separation of Configuration from Use principle.
-4. DI vs Service Locator comparison and PSR-11's RFC 2119 recommendation against using containers as Service Locators.
-5. Unit testability enablement and whether mock/stub substitution is exclusive to DI or shared with Service Locator.
-6. Service lifetimes (Singleton, Scoped, Transient/Prototype) across containers.
-7. Constructor over-injection threshold ("12 parameters") origin and validity.
-8. Injectable dependencies checklist (Database, Gateway vs Value Objects) origin and authority.
+1. **Core DI Concept**: DI separates construction from use, yields loose coupling; four roles (services, clients, interfaces, injectors).
+2. **IoC vs DI Terminology**: IoC is a broad principle (Hollywood Principle); DI is a specific form applied to dependency inversion.
+3. **DI Forms**: Three primary types historically identified (Constructor, Setter, Interface); modern frameworks focus on Constructor and Setter; Interface injection is obsolete.
+4. **Service Locator vs DI**: Both decouple concrete classes, but Service Locator couples every client to the locator interface/registry; PSR-11 discourages container passing (`SHOULD NOT`).
+5. **Testing Implications**: DI facilitates testing with test doubles (stubs/mocks), though Service Locator can theoretically be stubbed if modular.
+6. **Container Capabilities**: Lifetimes (Singleton, Scoped, Transient); contextual binding, auto-wiring, scope validation.
+7. **Heuristics & Anti-Patterns**: Constructor over-injection (the "12-parameter threshold" as a project heuristic vs Fowler's qualitative observation), bypassing DI for value objects (Money, DateTime, Address).
 
 ## Code To Execute
-None (Pipeline override: research audit only).
+None (Pipeline override: research only).
 
 ## Primary Risks
-1. Overgeneralizing the claim that Service Locator inherently prevents testing (Fowler 2004 refutes this).
-2. Citing unverified numbers (e.g. 12 parameters) as verified factual thresholds rather than heuristic conventions.
-3. Treating framework-specific features (e.g. Laravel attributes, .NET scope validation) as universal architectural rules.
-4. Citing sources where content was not retrievable (e.g. NestJS docs JS-rendered blank shell).
+1. **Over-generalization**: Presenting framework-specific patterns (.NET/Laravel) or local guidelines (e.g., 12 parameters) as universal software engineering standards.
+2. **Misquoting Standards**: Mischaracterizing RFC 2119 keywords in specs like PSR-11 (e.g., `MUST NOT` vs `SHOULD NOT`).
+3. **Source Reliability**: Reliance on secondary encyclopedia sources (Wikipedia) without corroborating against canonical documentation.
 
 ## Audit Strategy
-1. Live fetch and verify all URLs cited in `02-sources.md`.
-2. Cross-reference quoted text in `03-evidence.md` and `05-report.md` against official upstream source text.
-3. Audit contradictions analysis in `04-contradictions.md` for completeness and impartiality.
-4. Audit gap analysis and open questions in `06-open-questions.md`.
-5. Classify findings into Quality Gates and determine verdict.
+1. **Source Inspection**: Verify publisher, accessibility, relevance, and tiering classification for Sources 1 through 8.
+2. **Evidence/Claim Verification**: Cross-reference the extracted claims in `03-evidence.md` and `05-report.md` against authoritative texts and cited sources.
+3. **Contradiction Verification**: Check that identified contradictions reflect genuine architectural divergences and are accurately categorized.
+4. **Gap Analysis**: Assess whether known limitations and unanswered questions are clearly delineated and transparently documented.

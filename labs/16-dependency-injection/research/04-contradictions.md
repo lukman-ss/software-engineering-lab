@@ -1,49 +1,39 @@
-# Contradictions & Uncertainties
+# 04 — Contradictions & Divergences
 
-## 1. DI membuat test lebih mudah — setuju atau tidak?
+## Contradiction 1
+**Source A (Microsoft .NET)**: Presents DI as a solution to hard-coded `new`, emphasizing that "the app should use a mock or stub... which isn't possible with this approach" (contrasting hard-coded `new MessageWriter = new()`).
+**Source B (Fowler 2004, Section "Using a Service Locator")**: States "both [DI and Service Locator] are very amenable to stubbing" if well-designed, and DI is not uniquely about testing.
+**Assessment**: The difference is emphasis, not factual contradiction. Microsoft frames DI primarily as a testing solution. Fowler notes testing is the "first benefit noticed" but Service Locator can be equally testable. The core capability (substitution via abstraction) is shared.
 
-- **Fowler (2004)**: "both [DI and Service Locator] are very amenable to stubbing. ... I suspect this observation [that DI makes testing easier] comes from projects where people don't make the effort to ensure that their service locator can be easily substituted."
-- **Spring docs (2024-2026)**: "your classes become easier to test, particularly when the dependencies are on interfaces..." (menyatakan DI secara umum memudahkan testing).
-- **Microsoft .NET docs (2026)**: menyatakan hard-coded dependencies membuat unit test sulit; DI memungkinkan mock/stub.
+## Divergence 1
+**Source A (Fowler 2004, Wikipedia DI article)**: Lists three forms — Constructor Injection, Setter Injection, Interface Injection.
+**Source B (Spring 7.0.9 docs, Microsoft .NET docs, Laravel docs)**: Only document Constructor and Setter injection as the practical two. Interface injection is absent from modern framework documentation.
+**Assessment**: Evolution of practice — Interface injection historically used (Avalon framework), but modern practice favors constructor/setter due to simplicity and explicit dependencies. Not a contradiction; an observed shift.
 
-### Assessment
-Kesepakatan luar biasa: DI **memungkinkan** testing dengan mock. Perbedaan adalah Fowler menekankan bahwa **Service Locator yang dirancang baik juga bisa di-mock**, jadi keuntungan testing bukan eksklusif milik DI — melainkan pola yang dipilih. Microsoft/Spring menyederhanakan dengan beralih ke DI yang direkomendasikan. Ini adalah perbedaan penekanan, bukan fakta bertolak belok.
+## Divergence 2
+**Source A (Fowler 2004)**: Advocates programmatic builders over XML configuration: "people are over-eager to define configuration files... a programming language makes a straightforward and powerful configuration mechanism."
+**Source B (Spring 2006 docs, modern Laravel, .NET)**: Frameworks offer XML, annotations, attributes, and PHP 8 attributes as configuration mechanisms, blurring the "code vs file" distinction.
+**Assessment**: Technical evolution. Early 2000s debate (XML vs code) evolved into hybrid approaches (annotations for simple, builders/config for complex). Not a contradiction; a shift in available options.
 
-## 2. Interface Injection
+## Divergence 3
+**Source A (Topic specification)**: States "Kalau constructor berisi 12 parameter... Biasanya ada masalah desain" (12+ parameters indicate design problem).
+**Source B (Fowler 2004)**: Qualitatively says "If you have a lot of constructor parameters things can look messy... often a sign of an over-busy object."
+**Assessment**: Same principle expressed differently. Topic spec provides a heuristic threshold (12). Fowler describes the problem qualitatively. The difference is specificity, not contradiction on the underlying design signal.
 
-- **Fowler (2004)**: Mendeskripsikan Interface Injection sebagai salah satu dari tiga form DI utama. Menyebutkan Avalon sebagai contoh framework yang menggunakannya.
-- **Spring Framework 7.0.9 docs**: Hanya mendokumentasikan Constructor-based DI dan Setter-based DI. Tidak menyebut Interface Injection sama sekali.
-- **Microsoft .NET docs (2026)**: Fokus pada constructor injection.
-- **Laravel 12.x docs (2024)**: Menggunakan constructor/setter + attributes (PHP 8). Interface Injection tidak disebut.
+## Divergence 4
+**Source A (Topic specification)**: Provides a definitive list of when NOT to use DI: "DateTime, Money, Address" as examples.
+**Source B (Fowler 2004)**: Discusses "value objects which represent entities in the program's domain" but provides no concrete list.
+**Source C (Wikipedia DI)**: States DI "reduces boilerplate code, since all dependency creation is handled by a singular component" implying value objects might still be created manually.
+**Assessment**: Topic spec provides practical heuristics without independent cross-check. The concept exists (value objects vs services), but the specific examples/lines are internal guidance rather than external standard. Weak evidence.
 
-### Assessment
-Interface Injection dihapuskan dari praktik modern. Fowler sendiri pada 2004 memprediksi: "Interface Injection is more invasive since you have to write a lot of interfaces..." dan framework lightweight modern tidak memilih pendekatan ini. Ini adalah evolusi, bukan kontradiksi — konsensus modern telah memilih constructor+setter injection.
+## Divergence 5
+**Source A (PSR-11)**: Uses "SHOULD NOT" (RFC 2119) for "Users SHOULD NOT pass a container into an object."
+**Source B (Java Service Locator implementations, some legacy codebases)**: Service Locator used extensively even with DI containers available.
+**Assessment**: PSR-11 is a PHP standard; "SHOULD NOT" is a strong recommendation (not a strict prohibition) for compliant implementations. Legacy/existing Java usage differs. Not a contradiction; PSR-11 explicitly chose to discourage the pattern for interoperability and testability reasons. The difference is in the standard's intent vs actual practice in some ecosystems.
 
-## 3. "12 parameter" sebagai ambang batas constructor over-injection
-
-- **Spesifikasi topik lab**: Menyebutkan "Kalau constructor berisi 12 parameter ... biasanya ada masalah desain."
-- **Fowler (2004)**: Menyebutkan "you have a lot of constructor parameters things can look messy" dan "it's often a sign of an over-busy object that should be split" — tetapi **tidak memberikan angka spesifik**.
-
-### Assessment
-Angka "12" berasal dari spesifikasi topik, **bukan sumber primer**. Fowler memberi sinyal kualitatif (banyak, berantakan), tetapi tidak menetapkan ambang numerik. Klaim spesifikasi tidak terverifikasi secara independen. Ini harus ditandai sebagai **interpretasi/Heuristik** bukan fakta yang diverifikasi.
-
-## 4. NestJS DI Documentation Retrieval
-
-- **NestJS docs (Source 7)**: Saat di-fetch, halaman hanya mengembalikan redirect ke "Documentation | NestJS". Konten kode spesifik `@Injectable()`, `@Module` tidak tersedia secara penuh dari fetch.
-- **Claim pada Evidence 14**: Menggambarkan pola NestJS berdasarkan pengetahuan umum, tetapi **bukan dari konten yang berhasil dibuka**.
-
-### Assessment
-NestJS dipasangkan sebagai contoh ekivalensi pola (Decorator-based DI), tetapi **bukti spesifik tidak berhasil diperoleh dari webfetch**. Confidence diturunkan ke MEDIUM. Perlu verifikasi ulang jika dibutuhkan.
-
-## 5. Kapan harus / tidak pakai DI — nilai tambah yang tak terverifikasi
-
-- **Spesifikasi topik**: Memberikan aturan praktis ("Gunakan DI terutama untuk: Database, HTTP Client, ...") dan nilai tambah ("Object sederhana tidak perlu di-inject").
-- **Fowler (2004)**: Hanya prinsip — "separating configuration from use" — dan "leave it up to the user".
-
-### Assessment
-Spesifikasi topik berisi **pedoman heuristik praktis**, tetapi **tidak ada sumber primer yang secara eksplisit mengklasifikasikan daftar objek mana yang "harus" di-inject vs. dibuat langsung**. Fowler memberikan prinsip, bukan checklist. Klaim ini kategori perkiraan/desain, bukan fakta teknis yang terverifikasi.
-
----
-
-## Kesimpulan
-Tidak ada **material contradictions** — semua sumber utama saling mendukung pada inti definisi DI/IoC, tiga bentuk DI, DI vs Service Locator, dan peran Service Locator sebagai anti-pattern (PSR-11 eksplisit). Perbedaan utama adalah **luasnya penekanan** dan **evolusi praktik** (Interface Injection ditinggalkan, angka spesifik 12 param berasal dari spesifikasi topik bukan sumber primer, NestJS evidence parsial).
+## No Material Contradictions Discovered For:
+- DI definition (all sources agree)
+- Three DI forms (historically recognized; modern docs omit interface)
+- DI benefits (coupling reduction, testability)
+- Service lifetimes (singleton/scoped/transient across all containers)
+- IoC is broader than DI (Fowler, Wikipedia)

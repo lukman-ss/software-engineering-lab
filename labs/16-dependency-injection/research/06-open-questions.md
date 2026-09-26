@@ -1,29 +1,49 @@
-# Open Questions
+# 06 — Open Questions
 
 ## Unanswered Questions
-1. **Empirical impact**: No quantitative studies found measuring DI's effect on defect rate, change lead time, or maintainability. Is the "loosely coupled → easier to evolve" claim backed by data or only by expert consensus?
-2. **Performance overhead**: What is the measurable cost of container resolution (reflection, proxy creation) vs. manual construction, especially in cold-start / serverless contexts?
-3. **Circular dependencies**: How do containers detect/resolve circular graphs? What are best practices to avoid them vs. using property injection or Provider/Lazy patterns?
-4. **Compile-time vs runtime DI**: Dagger (Java), Wire (Go), compile-time containers — trade-offs in safety, binary size, startup time not covered in fetched sources.
-5. **Scope validation edge cases**: .NET's scope validation catches scoped→singleton leaks. Do Laravel/Spring have equivalent guards? How common are lifetime-mismatch bugs in production?
-6. **PPOB-specific**: What does idiomatic DI look like for PHP PPOB providers (Digiflazz, etc.) when providers have different auth, retry, and webhook semantics behind one interface?
 
-## Weak Evidence (Needs Stronger Sources)
-- **NestJS/TypeScript DI** (Source 7): webfetch returned redirect only; `@Injectable()`/`@Module()` claims are MEDIUM confidence.
-- **Value-object vs service boundary** (Evidence 10/11): Checklist "DateTime/Money no DI; DB/Gateway yes DI" comes from topic spec, not a primary source.
-- **"12 constructor parameters" heuristic**: Specific threshold from spec, not from Fowler or framework docs. Fowler says "a lot" qualitatively.
-- **Interface Injection current relevance**: Described historically by Fowler 2004; no modern framework docs still document it — confidence that it is obsolete is inferred, not explicitly stated by a source.
+### Empirical Evidence Gap
+Q1. Does DI measurably reduce defect rates, improve regression testing speed, or accelerate onboarding vs hard-coded dependencies in real-world projects?
+Evidence status: NOT VERIFIED — no empirical studies found; only authoritative opinion (Fowler's testing benefit emphasis).
 
-## Claims Needing Deeper Research
-- Liskov Substitution + interface-based DI: need primary source linking DIP to DI container practice (e.g., Clean Architecture, SOLID original texts).
-- Test pyramid implication of DI (more unit tests, fewer integration tests) — asserted but not sourced.
-- Configuration: code vs XML vs annotations/attributes — Fowler 2004 predates annotation-based Java config and PHP 8 attributes; modern guidance missing.
-- Go idiom: explicit wire-up without container is often preferred; no Go primary source fetched.
+Q2. What is quantified performance overhead of container resolution vs direct `new` in high-throughput systems? Does it matter at scale?
+Evidence status: NOT VERIFIED — not discussed in framework docs or surveys.
+
+### Language-Specific Nuances
+Q3. How does DI interact with Rust's ownership/borrowing model? TypeScript's structural typing? Go's composition-over-inheritance culture?
+Evidence status: WEAK — Wikipedia Rust/Go/TypeScript snippets present; no deep dive on trade-offs vs idioms.
+
+Q4. In PHP, how do attributes (PHP 8) for binding (`#[Bind]`, `#[Singleton]`, `#[Scoped]`) compare to explicit service provider bindings in complexity, runtime cost, and tooling support?
+Evidence status: MEDIUM — Laravel docs show attributes; no comparative analysis with programmatic binding.
+
+### Design Boundary Questions
+Q5. Precise criteria for "value object" vs "service" beyond heuristics. What about a `MailTemplateRenderer` that depends on `Twig` vs a `PaymentGateway` that depends on `HttpClient`? Where is the line?
+Evidence status: NOT VERIFIED — Topic spec lists DateTime/Money/Address, but no principled definition (no external dependency, no interface contract needed).
+
+Q6. Edge cases of constructor over-injection: Is 8 params acceptable for a well-encapsulated service? 12 is a heuristic from spec; what does actual codebase analysis show?
+Evidence status: MEDIUM — Fowler says "a lot" qualitatively; no data. 12 may be rule-of-thumb for a specific project, not universal.
+
+Q7. When should you use a factory pattern versus DI for complex object graphs? Where does DI stop and factory begin?
+Evidence status: WEAK — topic spec exercise mentions factory implicitly but no guidance.
+
+### Framework/Container Design
+Q8. How do keyed services (multiple impls with keys) compare to tagged services (collections) for plugin systems? When to prefer one over the other?
+Evidence status: MEDIUM — Laravel/Spring/.NET support both; no comparison guidance in docs.
+
+Q9. What is the best practice for circular dependencies when using DI? What should container behavior be (throw error, lazy, scoped proxy)?
+Evidence status: WEAK — Wikipedia mentions circular dependency risk but no resolution guidance.
+
+Q10. How does DI interact with service mesh (Envoy/Istio), function-as-a-service (AWS Lambda), or sidecar architectures? Does DI matter at the infrastructure layer?
+Evidence status: NOT VERIFIED — no coverage in docs or articles.
+
+## Weak Evidence Items
+- Value object list (DateTime/Money/Address) — from spec, not primary source
+- "12 parameter" heuristic — spec-specific, not academic or cross-framework validated
+- NestJS/TypeScript examples — fetch failed, evidence absent
 
 ## Possible Next Research Directions
-1. Fetch Mark Seemann "Dependency Injection in .NET" (2nd ed.) and Robert C. Martin "Clean Architecture" for DIP/LSP grounding.
-2. Compare compile-time DI (Dagger, Wire) vs reflection-based containers with benchmarks.
-3. Add Go source: `google/wire` docs + Go community DI debate.
-4. Empirical study search: IEEE/ACM papers on coupling metrics before/after DI adoption.
-5. Laravel deep-dive: attributes `#[Bind]`, `#[Singleton]`, contextual `#[Storage]` — verify against 12.x source code.
-6. Spring deep-dive: `@Autowired`, `@Primary`, `@Qualifier` resolution rules and failure modes.
+1. Survey industrial case studies (engineering blogs, conference talks) on DI adoption outcomes
+2. Analyze large open-source PHP/.NET/Java repos for dependency counts vs test coverage correlation
+3. Benchmark DI container resolution overhead across frameworks (Spring vs Pico vs Laravel vs .NET)
+4. Compare DI vs Composition Over Inheritance in Go/TypeScript codebases
+5. Deep dive on circular dependency resolution strategies across containers
