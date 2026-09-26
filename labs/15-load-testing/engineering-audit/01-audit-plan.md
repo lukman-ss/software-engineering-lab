@@ -3,29 +3,31 @@
 Target Lab: labs/15-load-testing
 Implementation Files:
 - `internal/server/server.go`
-- `internal/loadtest/metrics.go`
 - `internal/loadtest/runner.go`
-- `cmd/demo/main.go`
-- `go.mod`
+- `internal/loadtest/metrics.go`
 Tests:
 - `internal/loadtest/metrics_test.go`
 - `tests/loadtest_test.go`
 Executable/Demo:
 - `cmd/demo/main.go`
 Approved Research Inputs:
-- `labs/15-load-testing/research/05-report.md`
-- `labs/15-load-testing/research-audit/07-verdict.md`
+- `research/05-report.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
 Main Claims To Verify:
-1. Smoke load with low VUs within capacity yields baseline latency with low tail deviation (P95 ≈ Avg).
-2. Stress load exceeding capacity causes queue saturation and tail latency explosion (P95, P99 >> Avg).
-3. Metric calculations (Min, Max, Avg, P50, P90, P95, P99, RPS) are mathematically sound and handle edge cases (empty inputs, zero duration).
-4. Concurrency runner operates safely under high VUs without race conditions or deadlocks.
-5. Error accounting tracks HTTP 4xx/5xx and dial/network errors correctly without miscounting context cancellations.
+1. Smoke vs Stress differentiation: Smoke (low VUs) exhibits low latency and zero queuing; Stress (high VUs) saturates the mock DB connection pool and drives non-linear tail latency inflation (P95/P99).
+2. Percentile accuracy: `CalculateMetrics` correctly derives Min, Max, Average, P50, P90, P95, and P99 latencies and RPS across sample sets.
+3. Concurrency safety: Load runner executes parallel VUs and aggregates metrics without race conditions (`go test -race ./...`).
+4. Resource bound enforcement: Mock server constrains concurrent DB operations to `MaxDBConnections` via a semaphore channel.
+5. Error handling and propagation: Network failure/dial error, non-2xx status codes, and HTTP method rejections are counted and recorded accurately without panic or lockup.
+6. Honest demo execution: `cmd/demo/main.go` dynamically exercises the mock server and prints genuine runtime statistics matching documented behaviors.
 Commands To Run:
 - `go test -v ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
 Primary Risks:
-- Race conditions during concurrent metric aggregation or request execution.
-- Flaky tests if assertion bounds are too narrow under variable CPU load.
-- Inaccurate percentile computation or slice index out-of-bounds on edge cases.
+- Race conditions during concurrent metric collection across goroutines.
+- Flaky tests caused by nondeterministic timing or jitter under heavy stress load.
+- Inaccurate percentile calculation logic (off-by-one or non-monotonic ordering).
+- Unhandled request timeouts or connection leaks in custom HTTP client transports.

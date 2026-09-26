@@ -1,33 +1,115 @@
 # Open Questions
 
 ## Unanswered Questions
-1. **Gatling specifics:** Capabilities, architecture, Scala DSL details not verified — docs returned 403. How does Gatling compare quantitatively to k6/Locust/JMeter?
-2. **Initial VU selection:** How to determine starting VU count for Booking Bengkel app? No source provided formula linking business traffic (e.g., concurrent bookings) to VU count.
-3. **Bottleneck triage decision tree:** No single authoritative source provides step-by-step to distinguish app vs DB vs external API bottleneck when P95 spikes. Synthesized from fragments (Evidence 29, MEDIUM).
-4. **JMeter vs Locust vs k6 head-to-head benchmarks:** No independent benchmark comparing same API under same load for throughput, resource overhead, max VUs per generator.
-5. **Cost/fidelity tradeoff for prod-like env:** When is scaled-down staging sufficient vs exact prod mirror? Azure says "depends on risk profile" but no quantitative cost-benefit model.
-6. **Soak test minimal duration threshold:** k6 lists 3h–72h as typical, but no source defines when 3h is enough vs 24h required.
-7. **Real incident case studies:** Netflix/Uber blogs blocked (403/404). No primary case study of HR absensi massal or CMMS WhatsApp bottleneck verified externally.
 
-## Weak Evidence
-- **Evidence 15 (Gatling):** MEDIUM (reviser 2026-09-26: vendor page https://gatling.io/open-source/ verified; primary docs still 403)
-- **Evidence 14 (JMeter multi-protocol):** MEDIUM-HIGH (reviser 2026-09-26: Azure docs provide authoritative confirmation; direct JMeter component ref still timed out)
-- **Evidence 29 (P95 300ms→2.5s investigation steps):** MEDIUM — synthesized best-practice, not single-source authoritative procedure
-- **Source 24 (ISO/IEC 25010):** DISCLAIMED — paywalled, not directly verified, excluded from primary evidence list; cited sub-characteristics require further investigation with full-text access or removal from formal sources
+### 1. How to calculate realistic concurrent users for the specific Booking Bengkel workflow?
 
-## Claims Needing Deeper Research
-- Quantitative percentile thresholds: Is P95 <500ms with Error <1% appropriate for Booking Bengkel? Industry SLA benchmarks by domain (HR, CMMS, booking) not found.
-- Database connection pool exhaustion vs query slowness: No source details how to distinguish DB bottleneck subtypes during load test.
-- Queue behavior under spike: How to test message queue (e.g., WhatsApp notification queue) specifically? Not covered.
-- Locust greenlet overhead limits: At what VU count does single Locust process degrade? Needs empirical test.
-- Azure Load Testing auto-stop thresholds: Not investigated in detail.
+The research confirms the general methodology (peak sessions per second × average session duration) but does not provide specific figures for a typical Booking Bengkel scenario. The exact parameters depend heavily on:
+- Number of workshops/branches per session
+- Average booking process steps (login → select branch → select service → choose time → payment → confirmation)
+- Average duration of each booking workflow
+- Peak traffic patterns for a workshop booking application
 
-## Possible Next Research Directions
-1. Bench same endpoint with k6/Locust/JMeter — measure generator CPU, max RPS, accuracy.
-2. Access Gatling docs via alternate mirror; interview Gatling enterprise users.
-3. Retrieve Google SRE Workbook chapters on overload/capacity planning for deeper bottleneck methodology.
-4. Collect public postmortems where load testing absent — quantify impact (e.g., 504 at 2.5k concurrent users).
-5. Research observability integration: OpenTelemetry tracing correlation during load test to pinpoint layer (app/DB/external) automatically.
-6. Investigate data seeding strategies for realistic DB state (millions of rows, index warmup).
-7. Study chaos + load testing intersection (k6 + xk6-disruptor, Azure Chaos Studio) for resilience validation.
-8. Survey senior engineers on Booking Bengkel exercise answers to validate Investigation Plan (question 5).
+**Confidence:** LOW — Methodology is verified, but no concrete scenario parameters available.
+
+**Next Steps:** Instrument production-like data or consult business stakeholders for realistic concurrent user projections.
+
+---
+
+### 2. What is the optimal threshold for each test type's pass/fail criteria?
+
+The research confirms that thresholds (P95 < 200ms, error rate < 1%, etc.) are essential but does not provide industry-standard baselines.
+
+**Confidence:** MEDIUM — Best practice is to define thresholds, but no universal "correct" thresholds exist.
+
+**Next Steps:** Establish thresholds based on business SLAs and user experience research.
+
+---
+
+### 3. How to handle WhatsApp API latency in load testing?
+
+The original lab scenario mentions "WhatsApp Konfirmasi" as a bottleneck source. The research identifies external API latency as a bottleneck category, but:
+
+**Confidence:** LOW — Need specific guidance on testing with external API dependencies.
+
+**Next Steps:** Research dependency testing strategies and fallback patterns for third-party APIs during load testing.
+
+---
+
+### 4. Memory leak detection during soak testing — specific metric thresholds?
+
+The research confirms soak tests detect memory leaks over 3-72 hours but does not specify how much memory growth constitutes a leak that needs investigation.
+
+**Confidence:** MEDIUM — Methodology known, threshold criteria not defined.
+
+**Next Steps:** Look into memory profiling tooling and industry standards for acceptable memory growth rates.
+
+---
+
+### 5. Correlation methodology: When does P95 degradation indicate an actual problem?
+
+The research shows P95 should be monitored but does not specify at what degradation point (e.g., 20% increase, 2x increase) requires investigation.
+
+**Confidence:** LOW — No specific thresholds provided for degradation detection.
+
+**Next Steps:** Correlate with business impact metrics and user experience data.
+
+---
+
+### 6. Optimal ramp-up duration relative to system warm-up time?
+
+The k6 documentation mentions ramp-up should be "5-15% of total test duration" but does not define the relationship to application warm-up time (JIT compilation, cache warming, connection pool initialization).
+
+**Confidence:** MEDIUM — General guidance exists (5-15%) but system-specific optimal values unknown.
+
+**Next Steps:** Measure warm-up characteristics of the specific application and infrastructure.
+
+---
+
+### 7. Database-specific load testing metrics for connection pooling?
+
+While the research mentions "Database Connection" as a metric to monitor, it does not detail specific metrics like:
+- Active connections vs. pooled connections
+- Connection acquisition time
+- Pool saturation rate
+- Query response time percentiles per query type
+
+**Confidence:** LOW — Covered conceptually but no specific DB metrics defined.
+
+**Next Steps:** Research database-specific performance counters for the DB backend in use (MySQL, PostgreSQL, etc.).
+
+---
+
+### 8. Distributed load testing coordination and result aggregation?
+
+The research mentions distributed load testing as a concept but does not detail:
+- How to coordinate multiple load injectors
+- How to aggregate and interpret results across distributed runners
+- Network overhead considerations in distributed load testing
+
+**Confidence:** LOW — Concept acknowledged, detailed methodology not available in current sources.
+
+**Next Steps:** Research distributed/load testing orchestration patterns for k6, Locust, or JMeter.
+
+---
+
+### 9. Impact of authentication and session management on load test accuracy?
+
+For the Booking Bengkel app with a Login feature, how session management (JWT tokens, session stores, auth database lookups) affects load test results and whether synthetic sessions accurately represent real user behavior.
+
+**Confidence:** LOW — Not specifically addressed in sources.
+
+**Next Steps:** Research session-aware load testing patterns and authentication token management in load testing tools.
+
+---
+
+### 10. CI/CD pipeline integration patterns for automated load testing?
+
+The research mentions k6 automated performance testing in CI/CD but does not detail:
+- Gate criteria for blocking deployments
+- Frequency of automated tests in the pipeline
+- Handling of flaky test results in automated contexts
+
+**Confidence:** MEDIUM — Mentioned but not detailed adequately.
+
+**Next Steps:** Research industry best practices for CI/CD load testing gates and false-positive reduction.

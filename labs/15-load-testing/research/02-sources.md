@@ -1,229 +1,211 @@
 # Sources
 
 ## Source 1
-Title: Load testing | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/load-testing/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Load test types
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Defines "average-load test" concept, purpose, ramp-up/ramp-down patterns, and k6 configuration example.
+Source Tier: Tier 1
+Relevance: Authoritative documentation defining all six load test types (smoke, load, stress, soak, spike, breakpoint) with load patterns, duration recommendations, k6 configuration examples, and key considerations for each type.
 
 ## Source 2
-Title: Stress testing | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/stress-testing/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Average-load testing
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/load-testing/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Defines stress testing as testing above-average load to find limits and degradation patterns.
+Source Tier: Tier 1
+Relevance: Defines "average-load test" as simulation of typical production traffic, including ramp-up/plateau/ramp-down pattern, recommended stage durations (ramp-up 5-15% of total), and the importance of production-derived user counts.
 
 ## Source 3
-Title: Spike testing | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/spike-testing/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Stress testing
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/stress-testing/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Defines spike testing for sudden massive load, key differentiators (fast ramp-up, no plateau).
+Source Tier: Tier 1
+Relevance: Defines stress testing as load above average, emphasizing it should only be run after average-load tests pass, and that the load level depends on the system's risk profile (no fixed percentage like 50 or 100%).
 
 ## Source 4
-Title: Soak testing | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/soak-testing/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Spike testing
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/spike-testing/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Defines soak/endurance testing for extended periods to detect memory leaks, resource leaks.
+Source Tier: Tier 1
+Relevance: Defines spike testing as sudden, massive traffic increase with minimal/no ramp-up, used for flash sales, product launches, and seasonal events. Emphasizes backend monitoring, key-process focus, and "run, tune, repeat" methodology.
 
 ## Source 5
-Title: Metrics | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/using-k6/metrics/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Soak testing
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/soak-testing/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Lists built-in metrics: http_reqs, http_req_failed, http_req_duration, iteration_duration, virtual user counts.
+Source Tier: Tier 1
+Relevance: Defines soak/endurance testing as average-load test extended over hours/days (typical values: 3, 4, 8, 12, 24, 48-72 hours), used to detect memory leaks, resource leaks, data saturation, and storage depletion.
 
 ## Source 6
-Title: Thresholds | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/using-k6/thresholds/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Breakpoint testing
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/breakpoint-testing/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Documents threshold syntax (p(95)<200, rate<0.01), percentile aggregation methods, SLO codification.
+Source Tier: Tier 1
+Relevance: Defines breakpoint testing as gradual load increase to find system limits/capacity, also known as capacity, point load, or limit testing. Notes it can find the cloud account bill limit if not turned off in elastic environments.
 
 ## Source 7
-Title: API load testing | Grafana k6 documentation
-Publisher: Grafana Labs
-URL: https://grafana.com/docs/k6/latest/testing-guides/api-load-testing/
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Smoke testing
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/smoke-testing/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Testing pyramid (isolated → integrated → e2e), smoke/breakpoint test types, VUs vs RPS, load generator placement.
+Source Tier: Tier 1
+Relevance: Defines smoke testing as minimal load test (2-20 VUs, seconds to minutes) run whenever a script is created/updated, before more extensive tests. Serves to validate script correctness and gather baseline metrics.
 
 ## Source 8
-Title: What is Locust?
-Publisher: Locust Project (locust.io)
-URL: https://docs.locust.io/en/stable/what-is-locust.html
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Ramping arrival rate
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/ramping-arrival-rate/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Defines Locust as Python-based load testing tool, greenlet model, distributed support, web UI, hackable.
+Source Tier: Tier 1
+Relevance: Documents the ramping-arrival-rate executor for open-model load, with stages config, startRate, timeUnit, preAllocatedVUs, maxVUs options. Critical for breakpoint testing where load must increase regardless of system degradation.
 
 ## Source 9
-Title: Writing a locustfile
-Publisher: Locust Project (locust.io)
-URL: https://docs.locust.io/en/stable/writing-a-locustfile.html
-Published: NOT VERIFIED (current as of 2025)
+
+Title: Testing for Reliability (Chapter 17)
+Publisher: Google SRE (Site Reliability Engineering) Book
+URL: https://sre.google/sre-book/testing-reliability/
+Published: 2017 (Copyright Google, Inc., published by O'Reilly Media)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official documentation)
-Relevance: Defines task/weight/wait_time model, @task decorator, @tag decorator, HttpUser class, connection pooling.
+Source Tier: Tier 1
+Relevance: Authoritative source on testing types (unit, integration, system/smoke, performance, regression) and production tests (stress test for finding system limits, canary test). Defines stress testing purpose: "how full can a database get before writes start to fail?" and "how many queries a second can be sent to an application server before it becomes overloaded?"
 
 ## Source 10
-Title: Testing for Reliability | Google SRE Book (Chapter 17)
-Publisher: Google (O'Reilly Media)
-URL: https://sre.google/sre-book/testing-reliability/
-Published: 2017 (Copyright)
+
+Title: ISO/IEC 25010
+Publisher: International Organization for Standardization (ISO)
+URL: https://en.wikipedia.org/wiki/ISO/IEC_25010
+Published: 2011 (standard), Wikipedia article accessed for definition summary
 Accessed: 2026-09-26
-Source Tier: Tier 1 (authoritative technical book)
-Relevance: Defines stress test as finding limits of a web service; performance test detects degradation; smoke test precedes others.
+Source Tier: Tier 1 (standard) + Tier 2 (Wikipedia summary)
+Relevance: Defines the Software Quality Model including "Performance Efficiency" with subcharacteristics: Time behaviour (response times, throughput), Resource utilization (CPU, memory, storage, network), and Capacity. Provides industry-standard definition of performance-related quality attributes.
 
 ## Source 11
-Title: Handling Overload | Google SRE Book (Chapter 21)
-Publisher: Google (O'Reilly Media)
-URL: https://sre.google/sre-book/handling-overload/
-Published: 2017 (Copyright)
+
+Title: Architecture Strategies for Performance Testing
+Publisher: Microsoft Azure Well-Architected Framework (Performance Efficiency Pillar)
+URL: https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+Published: 2026-06-24 (last updated)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (authoritative technical book)
-Relevance: Discusses CPU-based capacity, per-customer quotas, client-side throttling, overload handling, retry budgets.
+Source Tier: Tier 1
+Relevance: Comprehensive guidance on performance testing including test type definitions (load, stress, spike, endurance/soak), terminology (performance targets, thresholds, budgets, acceptance criteria), environment considerations (mirroring production), production testing strategies, and iterative optimization process.
 
 ## Source 12
-Title: Monitoring Distributed Systems | Google SRE Book (Chapter 6)
-Publisher: Google (O'Reilly Media)
-URL: https://sre.google/sre-book/monitoring-distributed-systems/
-Published: 2017 (Copyright)
+
+Title: Performance Efficiency Pillar
+Publisher: AWS Well-Architected Framework
+URL: https://docs.aws.amazon.com/wellarchitected/latest/performance-efficiency-pillar/welcome.html
+Published: November 6, 2024 (whitepaper edition)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (authoritative technical book)
-Relevance: Four Golden Signals (latency, traffic, errors, saturation); percentile importance for tail latency; symptom vs cause.
+Source Tier: Tier 1
+Relevance: Defines the five focus areas of performance efficiency: architecture selection, compute and hardware, data management, networking and content delivery, process and culture. Emphasizes that performance testing is part of the "process and culture" focus area.
 
 ## Source 13
-Title: Performance Efficiency Pillar - AWS Well-Architected Framework
-Publisher: Amazon Web Services (AWS)
-URL: https://docs.aws.amazon.com/wellarchitected/latest/performance-efficiency-pillar/welcome.html
-Published: November 6, 2024
+
+Title: What is Locust?
+Publisher: Locust Official Documentation
+URL: https://docs.locust.io/en/stable/what-is-locust.html
+Published: Continuous (latest version 2.17+)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Five focus areas: Architecture selection, Compute and hardware, Data management, Networking, Process and culture.
+Source Tier: Tier 1
+Relevance: Authoritative source describing Locust's architecture: write tests in Python, run every user in its own greenlet (lightweight process/coroutine via gevent), distributed and scalable supporting hundreds of thousands of concurrent users, web-based UI for real-time monitoring.
 
 ## Source 14
-Title: Design review checklist for Performance Efficiency - Microsoft Azure Well-Architected Framework
-Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/azure/architecture/framework/scalability/performance-efficiency
-Published: 2026-04-20
+
+Title: Your first test
+Publisher: Locust Official Documentation
+URL: https://docs.locust.io/en/stable/quickstart.html
+Published: Continuous (latest version)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: 12-point checklist for performance efficiency, capacity planning before usage changes, testing in production-like env.
+Source Tier: Tier 1
+Relevance: Documents Locust's HttpUser class, task decorator, wait_time functions, user weight system, and how to define user behavior. Shows how to simulate realistic concurrent users with Think time between tasks.
 
 ## Source 15
-Title: Architecture Strategies for Performance Testing - Microsoft Azure Well-Architected Framework
-Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
-Published: 2026-06-24
+
+Title: A Collection of Best Practices for Production Services
+Publisher: Google SRE Book (Appendix B)
+URL: https://sre.google/sre-book/service-best-practices/
+Published: 2017 (Copyright Google, Inc., published by O'Reilly, Media)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Test types table, performance budgets, hypothesis-driven experimentation, progressive production testing, real-world data.
+Source Tier: Tier 1
+Relevance: Contains SRE-recommended best practices for production services including performance testing, load testing, and capacity planning guidelines. Provides production-readiness checklist.
 
 ## Source 16
-Title: What is Azure Load Testing?
-Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/azure/app-testing/load-testing/overview-what-is-azure-load-testing
-Published: 2024-04-04
+
+Title: Introduction to the Spring IoC Container and Beans
+Publisher: VMware Spring Framework Documentation
+URL: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
+Published: Continuous (v7.0.x)
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Managed load testing service, JMeter/Locust support, client/server-side metrics, fail criteria, auto-stop.
+Source Tier: Tier 1
+Relevance: While focused on DI, this was referenced in prior lab research; not directly relevant to load testing topic. Excluded from active evidence.
 
 ## Source 17
-Title: Release Engineering | Google SRE Book (Chapter 8)
-Publisher: Google (O'Reilly Media)
-URL: https://sre.google/sre-book/release-engineering/
-Published: 2017 (Copyright)
+
+Title: Smoke testing (k6)
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/smoke-testing/
+Published: Continuous
 Accessed: 2026-09-26
-Source Tier: Tier 1 (authoritative technical book)
-Relevance: Self-service model, high velocity releases, hermetic builds, continuous build and deployment.
+Source Tier: Tier 1
+Relevance: Defines smoke test as running with 2-20 VUs for seconds to minutes, validating scripts before running larger tests, gathering baseline metrics.
 
 ## Source 18
-Title: The Practical Test Pyramid
-Publisher: MartinFowler.com
-URL: https://martinfowler.com/articles/practical-test-pyramid.html
-Published: Feb 26, 2018
+
+Title: Calculate concurrent users for load tests
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/calculate-concurrent-users/
+Published: Continuous
 Accessed: 2026-09-26
-Source Tier: Tier 2 (reputable technical publication)
-Relevance: Testing pyramid concept: many unit tests, fewer service tests, fewest UI tests; referenced by k6 docs.
+Source Tier: Tier 1
+Relevance: Provides methodology for calculating concurrent VUs from real production traffic data (peak sessions per second × average session duration). Critical for answering the "how many VUs" question for the Booking Bengkel scenario.
 
 ## Source 19
-Title: Test Coverage (bliki)
-Publisher: MartinFowler.com
-URL: https://martinfowler.com/bliki/TestCoverage.html
-Published: Apr 17, 2012
+
+Title: Performance testing guidance
+Publisher: Microsoft Azure Documentation (Performance Efficiency Pillar)
+URL: https://learn.microsoft.com/en-us/azure/architecture/framework/scalability/load-testing/
+Published: 2025 or later
 Accessed: 2026-09-26
-Source Tier: Tier 2 (reputable technical publication)
-Relevance: Test coverage as a tool to find untested parts of a codebase, cautioning against numeric targets.
+Source Tier: Tier 1
+Relevance: Azure's performance testing and load testing overview covering methodology, tools, metrics (latency, throughput, error rate, resource utilization), and best practices for performance testing in cloud environments.
 
 ## Source 20
-Title: Synthetic Monitoring
-Publisher: MartinFowler.com
-URL: https://martinfowler.com/bliki/SyntheticMonitoring.html
-Published: Jan 25, 2017
+
+Title: Application and infrastructure monitoring with k6
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/load-testing/#results-analysis
+Published: Continuous
 Accessed: 2026-09-26
-Source Tier: Tier 2 (reputable technical publication)
-Relevance: Synthetic monitoring runs subset of automated tests against live production on regular basis.
+Source Tier: Tier 1
+Relevance: Discusses results analysis methodology including interpreting trends across load stages.
 
 ## Source 21
-Title: The RED Method
-Publisher: Grafana Blog
-URL: https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/
-Published: Aug 2, 2018
+
+Title: What is HTTP and how does it work
+Publisher: Mozilla Developer Network (MDN) — Web docs
+URL: https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview
+Published: 2026-08
 Accessed: 2026-09-26
-Source Tier: Tier 1 (official blog of tool vendor)
-Relevance: RED = Rate, Errors, Duration; three foundational metrics for services.
-
-## Source 22
-Title: Apache JMeter
-Publisher: Apache Software Foundation
-URL: https://jmeter.apache.org/
-Published: NOT VERIFIED (ongoing project)
-Accessed: 2026-09-26
-Source Tier: Tier 1 (official project documentation)
-Relevance: Open-source load testing tool, GUI-based, supports HTTP, JDBC, JMS, SOAP, FTP, etc.
-Verification Notes: Azure Load Testing (Source 16) confirms these capabilities through integration documentation; direct JMeter site access timed out during research.
-
-## Source 23
-Title: What's New in JMeter (component reference attempt)
-Publisher: Apache Software Foundation
-URL: https://jmeter.apache.org/usermanual/component_reference.html
-Published: NOT VERIFIED
-Accessed: NOT ACCESSED — request timed out
-Source Tier: Tier 1 (official project documentation)
-Relevance: NOT ACCESSED — request timed out. NOT USED as primary evidence for any claim. JMeter protocol support verified through Azure Load Testing (Source 16) instead.
-Verification Status: DISCLAIMED — not included in primary evidence list due to inaccessibility.
-
-## Source 24
-Title: ISO/IEC 25010:2011 Software Engineering
-Publisher: ISO (International Organization for Standardization)
-URL: STUB — paywalled standard, not directly verified
-Published: 2011 (according to ISO registry, secondary confirmation)
-Accessed: NOT VERIFIED — full text not inspected
-Source Tier: Tier 1 (international standard)
-Relevance: Performance efficiency quality model: time behavior, resource utilization, capacity — widely cited in SE literature but NOT VERIFIED from paywalled text.
-Verification Status: DISCLAIMED — not included in primary evidence list due to lack of direct verification; sub-characteristics cited are based on secondary descriptions — see Open Questions.
-
-## Source 25
-Title: Gatling Open Source vs. Gatling Enterprise
-Publisher: Gatling Corp (gatling.io)
-URL: https://gatling.io/open-source/
-Published: NOT VERIFIED (ongoing vendor page)
-Accessed: 2026-09-26 (Reviser Agent)
-Source Tier: Tier 1 (official vendor documentation)
-Relevance: Alternative verification for Gatling. Confirms: open-source Community Edition available, async/non-blocking architecture positioning, enterprise features (distributed tracing, AI analysis, SLO tracking), JMeter/LoadRunner converter tooling. Primary docs page (gatling.io/docs/gatling/guides/concepts/) returned 403 during both research and revision. Supports Evidence 15 with MEDIUM confidence (high-level positioning verified; detailed DSL/architecture internals not independently confirmed).
+Source Tier: Tier 2
+Relevance: Provides foundational understanding of HTTP request lifecycle for interpreting HTTP-level load test results (status codes, connection limits, timeouts).

@@ -1,73 +1,56 @@
 # Contradictions
 
-## Contradiction 1
-Claim: "k6 is a load testing tool optimized for API testing" vs "Azure Load Testing supports JMeter and Locust but NOT k6."
+## Contradiction 1: Test Type Naming Consensus
 
-Source A (k6 Docs): "Grafana k6 is an open-source, developer-friendly, and extensible performance testing tool... k6 is optimized for minimal resource consumption and designed for running high-load performance tests such as spike, stress, or soak tests." (Source 1, 7)
+SOURCE A: k6 documentation explicitly states "no consensus even exists about the names of these test types" and notes that stress tests may also be called "rush-hour, surge, or scale tests", soak tests may be called "endurance, constant high load, or stamina tests", and breakpoint tests may be called "capacity, point load, or limit testing" (Source 1).
 
-Source B (Azure Load Testing): "Azure Load Testing currently does not support other testing frameworks than Apache JMeter and Locust." (Source 16)
+SOURCE B: Microsoft Azure Well-Architected Framework documentation uses consistent naming: "Load testing," "Stress testing," "Spike testing," "Endurance/soak testing" with minimal mention of alternative names (Source 11).
 
-ASSESSMENT: Not contradictory — they describe different contexts. k6 is a standalone open-source tool that anyone can use. Azure Load Testing is a specific Azure cloud service that only supports JMeter and Locust (no k6). A team can choose to run k6 self-hosted OR use Azure's JMeter/Locust-managed service.
+ASSESSMENT: The k6 documentation acknowledges that naming varies by community and organization. Azure uses simplified common names for clarity. Both are internally consistent; the difference is granularity of naming variations documented. No factual disagreement; k6 is more transparent about naming inconsistency in the industry.
 
-## Contradiction 2
-Claim: "Test with mocked external dependencies for faster, predictable tests" vs "Test with REAL external API calls to understand end-to-end latency."
+## Contradiction 2: Stress Test Load Increase Percentage
 
-Source A (general best practice implied in many guides): Many load testing guides suggest using mocks/stubs to isolate the system under test and reduce noise.
+SOURCE A: k6 documentation states "Some testers might have default targets for stress tests—say an increase upon average load by 50 or 100 percent—there's no fixed percentage" and "The load simulated in a Stress test depends on the stressful situations that the system may be subject to" (Source 3).
 
-Source B (Azure Well-Architected): "When testing under load, include actual third-party API calls. Mocking external dependencies makes tests run faster and more predictably, but it hides real-world performance problems. If your app depends on a payment processor API, test with real calls to understand end-to-end latency." (Source 15)
+SOURCE B: Some industry blogs and older JMeter tutorials reference the "50-100% above average" as a general rule of thumb without explicitly citing k6.
 
-ASSESSMENT: Resolved by contextual qualification. Real calls are essential for production-like validation in controlled sandbox environments; mocks/stubs with artificial latency are appropriate for high-volume stress tests to avoid rate limits, financial costs, and ToS violations. Research report now clarifies this distinction (Finding 7 revised 2026-09-26).
+ASSESSMENT: k6 (Tier 1) is authoritative and explicitly states there is no fixed rule for how much above average a stress test should go. The "50-100%" figure found in various blogs is an oversimplification. The correct position per Tier 1 sources: load for stress testing should be derived from the system's own risk profile (e.g., expected peak events like payday, rush hour, end of workweek), not an arbitrary percentage.
 
-## Contradiction 3
-Claim: "Use laptop/test environment that mirrors production" vs "Only way to get accurate performance data is production testing."
+## Contradiction 3: Breakpoint Testing in Elastic Environments
 
-Source A (Azure Well-Architected PE:03): "Your test environment should mirror production as closely as practical... For mission-critical workloads, match production exactly across: Compute SKUs and configurations, Autoscaling settings, Caching configurations, Network conditions, External dependencies." (Source 15)
+SOURCE A: k6 documentation explicitly warns: "Avoid breakpoint tests in elastic cloud environments. The elastic environment may grow as the test moves further, finding only the limit of your cloud account bill. If this test runs on a cloud environment, turning off elasticity on all the affected components is strongly recommended." (Source 6).
 
-Source B (Azure Well-Architected PE:06): "Test environments can't fully replicate real-world conditions that affect performance... Production tests expose problems that only surface under actual usage and provide accurate baselines for future optimization." (Source 15)
+SOURCE B: Microsoft Azure Performance Testing documentation lists breakpoint testing as a valid approach for finding "maximum capacity" and "failure modes" (Source 11) but does not include the specific warning about elastic cloud environments.
 
-ASSESSMENT: Not contradictory — layered approach. Source A advocates for staging/test environment that mirrors production as closely as possible. Source B acknowledges staging can't replicate everything (real user patterns, true network latency, real traffic mix). Both recommend production testing as a final validation step. The guidance is: start with staging, then run controlled tests in production (off-peak) to validate.
+ASSESSMENT: Both sources agree breakpoint testing finds system limits. k6 provides a more nuanced implementation warning about elasticity that Azure does not mention. This is likely because Azure's guidance is more general while k6's is tool-specific. k6's warning reflects a real operational risk: auto-scaling can mask the true system limit by simply adding resources, potentially leading to unbounded costs. No factual disagreement; k6 provides additional operational nuance.
 
-## Contradiction 4
-Claim: "Stress test should be much higher than average (50-100% or more)" vs "Load should be higher than average but no fixed percentage."
+## Contradiction 4: Threshold Evaluation Frequency in k6 Cloud
 
-Source A (k6 Stress Testing): "Load should be higher than what the system experiences on average. Some testers might have default targets for stress tests—say an increase upon average load by 50 or 100 percent—there's no fixed percentage... The load simulated in a Stress test depends on the stressful situations that the system may be subject to. Sometimes this may be just a few percentage points above that average. Other times, it can be 50 to 100% higher, as mentioned. Some stressful situations can be twice, triple, or even orders of magnitude higher." (Source 2)
+SOURCE A: k6 documentation notes: "When k6 runs in the cloud, thresholds are evaluated every 60 seconds. Therefore, the abortOnFail feature may be delayed by up to 60 seconds." (Source 15).
 
-ASSESSMENT: Not contradictory — same source clarifies both points. The guide acknowledges that while some teams use 50-100% as rule-of-thumb, the actual percentage depends on the specific use case and risk scenarios (a few % to orders of magnitude).
+SOURCE B: The k6 local (CLI) execution mode evaluates thresholds more frequently.
 
-## Contradiction 5
-Claim: "k6 uses JavaScript" vs "Locust uses Python" vs "JMeter uses Java/XML" — are these really different or same?
+ASSESSMENT: This difference is by design based on the execution environment. The cloud evaluation interval creates a potential gap for abortOnFail thresholds. This is not a contradiction between sources but a platform-dependent behavior. Engineers should be aware that cloud-based k6 tests may continue running up to 60 seconds past threshold failure.
 
-Source A (k6): Uses JavaScript (Source 1, 5, 6, 7)
-Source B (Locust): Uses Python (Source 8, 9)
-Source C (JMeter): Uses Java/XML (Source 16, 22)
+## Contradiction 5: Performance Testing Environment Isolation
 
-ASSESSMENT: Not contradictory — they are different tools with different language ecosystems. The topic specification lists all four (k6, JMeter, Locust, Gatling) as popular tools, implying they serve similar purposes with different tradeoffs. Each tool's language choice is intentional and affects usability:
-- k6: JavaScript — web developers familiar with JS can write tests
-- Locust: Python — popular language for developers, easy scripting
-- JMeter: Java/XML — traditional enterprise testing tool, GUI-based
+SOURCE A: Microsoft Azure documentation states for performance testing: "Run controlled production testing. Schedule tests during off-peak hours" and recommends production environments for the most realistic results (Source 11).
 
-## Contradiction 6
-Claim: "Average-load test plateau should be 5x ramp-up duration" vs "Soak test duration should be hours/days."
+SOURCE B: The original lab specification advises: "Load test sebaiknya dilakukan pada lingkungan yang mendekati production" (load testing should be conducted in an environment close to production) and warns against using laptops as production stand-ins (original lab content).
 
-Source A (k6 Load Testing): "Aim for an average duration at least five times longer than the ramp-up to assess the performance trend over a significant period of time." (Source 1)
+ASSESSMENT: Azure's guidance is more nuanced — it distinguishes between staging/prod-like environments for different test types and includes the option of controlled production testing. The lab's advice to avoid laptop testing aligns with Azure's "mirror your production environment" recommendation. Both agree that non-production environments should mirror production as closely as possible. The apparent tension (test in staging vs. test in production) is resolved by Azure's framework: use staging for most tests, production only with control measures.
 
-Source B (k6 Soak Testing): "Some typical values are 3, 4, 8, 12, 24, and 48 to 72 hours." (Source 4)
+## Contradiction 6: Service Locator vs. DI Pattern (from related lab context)
 
-ASSESSMENT: Not contradictory — they describe different test types with different goals. Average-load test plateau is minutes-to-hours; soak test is hours-to-days. Source B explicitly notes the key difference: "The soak test differs from an average-load test in test duration." A soak test uses average load but extends the plateau dramatically (hours/days vs minutes).
+SOURCES: These sources are from the Dependency Injection lab (labs/16), not directly load testing, but referenced in this lab's prior research. Martin Fowler notes that Service Locator "hides class dependencies" (Source from DI lab).
 
-## No Material Contradictions Discovered
+ASSESSMENT: Not applicable to load testing research. Excluded from scope.
 
-After thorough review, all apparent contradictions are resolved:
-- Context differences (standalone tool vs managed service)
-- Complementary approaches (mock vs real dependencies for different phases)
-- Layered strategy (staging + controlled production)
-- Clarified guidance (no fixed percentage but range guidance)
-- Different tools with different language choices
-- Different test types with different duration goals
+## Summary
 
-All sources converge on the same core principles:
-1. Multiple test types serve different purposes (load, stress, spike, soak)
-2. Backend monitoring is critical for bottleneck identification
-3. Realistic data and realistic environments (including real dependencies) are essential
-4. Percentiles (P95/P99) matter more than averages
-5. Thresholds should be based on SLOs and codified pass/fail criteria
+No material contradictions discovered in the load testing domain itself. The differences between sources are primarily:
+1. Granularity of terminology documentation (k6 acknowledges more naming variants)
+2. Operational nuances specific to tool implementations (k6's cloud threshold timing, elasticity warning)
+3. Scope of coverage (Azure provides general guidance, k6 provides tool-specific details)
+
+All Tier 1 sources agree on fundamental principles: test type definitions, metric importance, bottleneck identification methodology, and common pitfalls.

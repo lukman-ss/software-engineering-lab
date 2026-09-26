@@ -1,51 +1,86 @@
 # Code Audit
 
 Target Lab: labs/15-load-testing
+Audit Scope: `internal/server/server.go`, `internal/loadtest/runner.go`, `internal/loadtest/metrics.go`, `cmd/demo/main.go`
 
-## Finding 1
+---
 
-Location: `internal/loadtest/runner.go:48-53`, `runner.go:107-113`
-Claimed Behavior: Thread-safe, low-contention aggregation of concurrent request results across virtual users (VUs).
-Observed Implementation: Each VU worker writes solely to its allocated `results[vuID]` slice without sharing mutexes or atomic variables during iteration. Results are combined after `wg.Wait()`.
-Assessment: PASS
-Severity: LOW
-Notes: Pattern eliminates lock contention during load generation.
+## Finding 1: Concurrency Control in Mock Server Connection Pool
 
-## Finding 2
-
-Location: `internal/server/server.go:60-66`
-Claimed Behavior: Simulated connection pool bounding concurrency and handling client context cancellations without leaking semaphore tokens.
-Observed Implementation: Buffered channel semaphore of size `cfg.MaxDBConnections`. When acquiring slot, `select` checks `s.semaphore <- struct{}{}` and `<-r.Context().Done()`. Release is deferred right after acquisition (`defer func() { <-s.semaphore }()`).
-Assessment: PASS
-Severity: LOW
-Notes: Properly avoids channel token leak if context is canceled before acquiring semaphore.
-
-## Finding 3
-
-Location: `internal/server/server.go:68-81`
-Claimed Behavior: Tail latency degradation under overload with context cancellation support during DB query sleep.
-Observed Implementation: Uses `time.NewTimer` with `defer t.Stop()` and `select` listening to both `t.C` and `r.Context().Done()`. Under overload (`activeReq > MaxDBConnections`), random 10% tail penalty simulates slow queries.
-Assessment: PASS
-Severity: LOW
-Notes: Timer cleanup prevents timer leaks on canceled requests.
-
-## Finding 4
-
-Location: `internal/loadtest/metrics.go:23-42`, `metrics.go:67-73`
-Claimed Behavior: Accurate calculation of percentiles and summary statistics, safe on empty slices.
+Location: `internal/server/server.go:18,46,67,71`
+Claimed Behavior: Bounded database connection pool capacity using a semaphore to simulate resource saturation under concurrent load.
 Observed Implementation:
-- Handled empty latencies and zero duration gracefully without dividing by zero.
-- Percentile index uses standard nearest rank: `idx := int(float64(len(sorted)-1) * (pct / 100.0))`.
-- Copies slice before sorting to prevent mutating input slice.
+- Server initializes `semaphore: make(chan struct{}, cfg.MaxDBConnections)`.
+- Handlers push to `s.semaphore` before simulated query and pop on completion (`defer func() { <-s.semaphore }()`).
+- Context cancellation during queue waiting (`select { case s.semaphore <- struct{}{}: ... case <-r.Context().Done(): return }`) safely releases slots.
 Assessment: PASS
 Severity: LOW
-Notes: Math and bounds checks verified.
+Notes: Correctly models resource contention without leaking channel tokens on request abortion.
 
-## Finding 5
+---
 
-Location: `internal/loadtest/runner.go:85-89`
-Claimed Behavior: Don't miscount expected test cancellations at end of duration as server errors.
-Observed Implementation: Inspects `ctx.Err() == nil` before incrementing `errs` on request failures.
+## Finding 2: Per-VU Metric Buffers and Race Prevention
+
+Location: `internal/loadtest/runner.go:48-53,60-101,107-114`
+Claimed Behavior: Virtual users run concurrently without mutex lock contention or data races during latency recording.
+Observed Implementation:
+- `results := make([]vuResult, r.cfg.VUs)` preallocates distinct per-VU result slots.
+- Each goroutine (`vuID`) writes exclusively to its own slice/counters in `results[vuID]`.
+- Aggregation is performed sequentially after `wg.Wait()`.
 Assessment: PASS
 Severity: LOW
-Notes: Distinguishes natural timeout cutoff from genuine server/network errors.
+Notes: Clean lock-free pattern for load generation. Confirmed race-free via `-race`.
+
+---
+
+## Finding 3: Percentile Calculation Correctness and Monotonicity
+
+Location: `internal/loadtest/metrics.go:45-73`
+Claimed Behavior: Accurately compute Min, Max, Average, P50, P90, P95, and P99 percentiles from collected latency durations.
+Observed Implementation:
+- Copies slice to avoid mutating input, sorts with standard `sort.Slice`.
+- Percentile index computed via `int(float64(len(sorted)-1) * (pct / 100.0))`.
+- Empty slice, single sample, and monotonic invariant checks are handled robustly.
+Assessment: PASS
+Severity: LOW
+Notes: Index arithmetic maps correctly across 0 to len-1 bounds.
+
+---
+
+## Finding 4: HTTP Client Connection Pooling and Transport Tuning
+
+Location: `internal/loadtest/runner.go:30-41`
+Claimed Behavior: Avoid load runner client-side connection pooling bottlenecks during high-VU load tests.
+Observed Implementation:
+- Sets `MaxIdleConns: 1000` and `MaxIdleConnsPerHost: 1000` in `http.Transport`.
+- Sets client timeout to 5 seconds to prevent unbounded hanging goroutines.
+- Responses read and closed reliably with `io.Copy(io.Discard, resp.Body)` and `resp.Body.Close()`.
+Assessment: PASS
+Severity: LOW
+Notes: Correctly isolates server-side bottleneck from client transport constraints.
+
+---
+
+## Finding 5: Context Termination and Timeout Handling in VU Loops
+
+Location: `internal/loadtest/runner.go:55,66-70,85-88`
+Claimed Behavior: Load test runs for the specified duration and terminates all workers gracefully without falsely reporting context expiration as server errors.
+Observed Implementation:
+- `context.WithTimeout(ctx, r.cfg.Duration)` controls loop lifecycle.
+- Workers inspect `ctx.Err()` to distinguish intentional test termination from genuine HTTP/network failures.
+Assessment: PASS
+Severity: LOW
+Notes: Prevents false positive error rate inflation when load run finishes.
+
+---
+
+## Finding 6: Demo Scenario Structure and Realism
+
+Location: `cmd/demo/main.go:16-59`
+Claimed Behavior: Live execution running Smoke (2 VUs) vs. Stress (50 VUs) scenarios against a 5-connection constrained server.
+Observed Implementation:
+- Starts actual `httptest.NewServer`, runs standard HTTP POST requests with realistic JSON payloads.
+- Outputs clean tabular comparison with actual measured RPS, Average, P50, P95, and P99 metrics.
+Assessment: PASS
+Severity: LOW
+Notes: No hardcoded output or synthetic results; output is computed directly from live test execution.

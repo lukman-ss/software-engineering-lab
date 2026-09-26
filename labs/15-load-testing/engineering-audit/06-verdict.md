@@ -7,10 +7,9 @@ Audit Date: 2026-09-26
 
 Code Files Reviewed:
 - `internal/server/server.go`
-- `internal/loadtest/metrics.go`
 - `internal/loadtest/runner.go`
+- `internal/loadtest/metrics.go`
 - `cmd/demo/main.go`
-- `go.mod`
 
 Tests Reviewed:
 - `internal/loadtest/metrics_test.go`
