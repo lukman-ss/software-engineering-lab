@@ -1,16 +1,24 @@
-# Documentation vs Code Audit
+# Documentation vs Code Verification
 
-## Comparison Matrix
+## 1. README vs Code Comparison
 
-| Claim in Documentation | Implementation File | Test / Verification | Status |
-| :--- | :--- | :--- | :--- |
-| NOT NULL (`23502`) enforcement on `email`, `username`, `user_id` | `internal/engine/engine.go:51-56, 128-130` | `TestNotNullConstraints` | MATCH |
-| CHECK (`23514`) enforcement on `age >= 18`, `status`, `total_cents > 0` | `internal/engine/engine.go:59-68, 133-135` | `TestCheckConstraints` | MATCH |
-| UNIQUE (`23505`) enforcement & race condition prevention | `internal/engine/engine.go:78-83` | `TestUniqueConstraint`, `TestConcurrentRegistration_Safe_EnforcesUniqueness` | MATCH |
-| FOREIGN KEY (`23503`) integrity | `internal/engine/engine.go:138-140` | `TestForeignKeyConstraint` | MATCH |
-| Partial Unique Index (`WHERE deleted_at IS NULL`) | `internal/engine/engine.go:71-77, 102-120` | `TestPartialUniqueIndex` | MATCH |
-| Demo and test commands | `README.md:17, 24, 32` | Verified executable via bash | MATCH |
+| README Claim | Code / Demo Reality | Assessment |
+| :--- | :--- | :--- |
+| **NOT NULL (`23502`)**: Ensures required columns cannot accept null/empty values | Enforced in `engine.go:51-56` & `engine.go:128-130`. Validated in `TestNotNullConstraints` & Demo Step [1]. | PASS |
+| **CHECK Constraints (`23514`)**: Evaluates boolean predicate logic on row data | Enforced in `engine.go:60-68` & `engine.go:133-135`. Validated in `TestCheckConstraints` & Demo Step [2]. | PASS |
+| **UNIQUE Constraints (`23505`)**: Enforces single occurrence across rows and prevents concurrent read-then-write race conditions | Enforced in `engine.go:78-83`. Validated in `TestUniqueConstraint`, `TestConcurrentRegistration_Safe_EnforcesUniqueness`, & Demo Step [5]. | PASS |
+| **FOREIGN KEY Constraints (`23503`)**: Enforces referential integrity preventing orphan rows | Enforced in `engine.go:138-140`. Validated in `TestForeignKeyConstraint` & Demo Step [3]. | PASS |
+| **PARTIAL UNIQUE INDEX**: Demonstrates conditional uniqueness (`WHERE deleted_at IS NULL`) | Enforced in `engine.go:73-77`. Validated in `TestPartialUniqueIndex` & Demo Step [4]. | PASS |
+| **Run Commands**: `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | Executed directly during audit. All commands compiled and executed cleanly without error. | PASS |
 
-## Findings
-- No discrepancies detected between README.md, engineering design documents, demo output, and underlying code implementation.
-- All SQLSTATE error codes and descriptions match standard PostgreSQL semantics.
+## 2. Research Claims vs Implementation Comparison
+
+| Research Claim | Implementation Reality | Assessment |
+| :--- | :--- | :--- |
+| PostgreSQL SQLSTATE codes (`23502`, `23514`, `23505`, `23503`) should be defined and tested | Defined in `internal/dberr/errors.go` and verified in tests & demo outputs. | PASS |
+| Application-level check-then-act fails under concurrency, DB constraints succeed | Demonstrated in `UnsafeStore` vs `SafeStore` in `store_test.go` and `cmd/demo/main.go`. | PASS |
+| Soft delete + re-registration requires partial unique index `WHERE deleted_at IS NULL` | Simulated in `engine.go` active email map index management during insert and soft delete operations. | PASS |
+
+## Discrepancies Found
+
+None. `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, and `RESEARCH_IMPLEMENTATION_MISMATCH` are all clean with zero occurrences.
