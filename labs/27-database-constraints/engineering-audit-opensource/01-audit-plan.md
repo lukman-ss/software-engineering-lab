@@ -10,9 +10,18 @@ Implementation Files:
 - internal/model/model.go (20 lines)
 - internal/dberr/errors.go (100 lines)
 - cmd/demo/main.go (99 lines)
+- go.mod (module: github.com/lukman/software-engineering-lab/labs/27-database-constraints)
 
 Tests:
-- internal/store/store_test.go (261 lines, 8 tests)
+- internal/store/store_test.go (8 tests):
+  1. TestNotNullConstraints
+  2. TestCheckConstraints
+  3. TestUniqueConstraint
+  4. TestForeignKeyConstraint
+  5. TestPartialUniqueIndex
+  6. TestConcurrentRegistration_Safe_EnforcesUniqueness
+  7. TestConcurrentRegistration_Unsafe_SuffersRaceCondition
+  8. TestErrorClassification
 
 Executable/Demo:
 - cmd/demo/main.go (`go run ./cmd/demo`)
@@ -27,17 +36,18 @@ Main Claims To Verify:
 5. PARTIAL UNIQUE allows email reuse after soft-delete, blocks double-active
 6. Error taxonomy maps 23502/23503/23505/23514 to domain errors
 7. UnsafeStore demonstrates read-then-write duplicate race; SafeStore prevents it
+8. README accurately describes all implemented constraints and run commands
 
 Commands To Run:
 - go build ./...
-- go test ./...
-- go test -v ./...
+- go test -v -count=1 ./...
 - go test -race -count=1 ./...
-- go test -run TestConcurrentRegistration_Unsafe -count=10 ./internal/store/
+- go test -race -run TestConcurrentRegistration_Unsafe -count=10 ./internal/store/
 - go run ./cmd/demo
 
 Primary Risks:
-- Logical race demo flakiness (sleep-based, not data race)
-- Mapped domain errors losing SQLSTATE type info
-- PK duplicate-ID overwrite (no explicit-ID guard)
-- Stale execution log omitting 1 test
+- Design doc (engineering/01-design.md) references package names that do not match actual package layout
+- Execution result log (engineering/03-execution-result.md) shows 7 tests but claims 8
+- MapToDomainError loses ConstraintError type info, breaking IsConstraintViolation on mapped errors
+- InsertUser allows caller-supplied non-zero ID to silently overwrite existing records
+- Stale execution log may mislead Technical Writer about test coverage
