@@ -17,7 +17,7 @@ Tests Reviewed:
 
 Commands Executed:
 - `go test -v ./...`
-- `go test -race ./...`
+- `go test -race -v ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
