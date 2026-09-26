@@ -102,7 +102,7 @@ Relevance: Primary source on backpressure, load shedding, and overload handling 
 
 ## Source 11
 
-Title: Cloudflare's Rate Limiting Documentation (Redis rate limiter)
+Title: Redis Rate Limiter Pattern Documentation
 Publisher: Redis Documentation
 URL: https://redis.io/docs/latest/develop/use-cases/rate-limiter/
 Published: N/A (Documentation)
@@ -122,10 +122,10 @@ Relevance: Primary source on leaky bucket algorithm, alternative to token bucket
 
 ## Source 13
 
-Title: RabbitMQ Tutorials
+Title: Consumer Prefetch & Queue Flow Control
 Publisher: RabbitMQ (Broadcom)
-URL: https://www.rabbitmq.com/tutorials
+URL: https://www.rabbitmq.com/docs/consumer-prefetch
 Published: N/A (Documentation)
 Accessed: 2026-09-26
 Source Tier: Tier 1 - Official documentation
-Relevance: Primary source on queue-based message processing patterns
+Relevance: Primary source on RabbitMQ consumer prefetch and queue-based backpressure/flow control

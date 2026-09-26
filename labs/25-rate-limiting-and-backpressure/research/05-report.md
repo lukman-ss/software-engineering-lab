@@ -79,10 +79,10 @@ The topic specification's claim about queue calculations (5,000,000 / 2,000 = 2,
 
 **Implementation Notes:**
 - AWS SDK formula: `delay = random(0, 1) × min(20000, base_delay × 2^retry)`
-- Transient errors: 50ms base delay
-- Throttling errors: 1000ms base delay
-- Max cap: 20 seconds
-- AWS SDKs use "Full Jitter" variant
+- Transient errors: 50ms base delay (AWS SDK v3 default; must be calibrated to downstream service SLA/latency)
+- Throttling errors: 1000ms base delay (AWS SDK v3 default; must be calibrated to downstream service SLA/latency)
+- Max cap: 20 seconds (AWS SDK v3 default; must be calibrated to downstream service timeout profile)
+- AWS SDKs use "Full Jitter" variant (specific to AWS SDK implementation; other ecosystems may differ)
 
 ---
 

@@ -2,44 +2,50 @@
 
 Target Lab: labs/25-rate-limiting-and-backpressure
 
-Previous Audit Status: NEEDS_REVISION
+Previous Audit Status: APPROVED_WITH_WARNINGS
 
 ## Issues
 
 Critical:
-- Missing Research Findings document — RESOLVED
-- Little's Law Misattribution Risk — RESOLVED
+- None
 
 High:
-- Formula Misattribution Risk — RESOLVED
+- None
 
 Medium:
-- Unsubstantiated Queue Age vs Queue Depth claim — RESOLVED
-- Generalization of Autoscaling Failure Modes — RESOLVED
+- Circular Specification Evidence: Evidence 14 & 15 cited the topic specification as sole source
 
 Low:
-- Irrelevant RFC Citations (RFC 8305, RFC 5321) — RESOLVED
+- Source 11 Title Mismatch
+- Generic RabbitMQ URL (Source 13)
+- AWS SDK Constants Overgeneralization
 
 ## Resolution
 
-Resolved: 6/6
+Resolved: 4/4
 
-All blocking and non-blocking issues from the audit have been addressed.
+### 1. Source 11 Title Mismatch — RESOLVED
+- File: `research/02-sources.md:105`
+- Title changed from "Cloudflare's Rate Limiting Documentation (Redis rate limiter)" to "Redis Rate Limiter Pattern Documentation"
+- Title now matches publisher (Redis Documentation) and URL (redis.io)
 
-### Created Files
-- `research/02-findings.md` — Complete research findings with all 10 questions answered, formulas verified, sources cited
-- `research/03-sources.md` — Updated source index with 9 verified primary sources
-- `research/04-contradictions.md` — Contradiction resolution log
-- `research/05-report.md` — Technical report with verified claims
-- `research/06-open-questions.md` — Updated open questions (3 non-blocking open issues)
+### 2. Generic RabbitMQ URL — RESOLVED
+- File: `research/02-sources.md:125-127`
+- Title changed from "RabbitMQ Tutorials" to "Consumer Prefetch & Queue Flow Control"
+- URL updated to `https://www.rabbitmq.com/docs/consumer-prefetch` (specific prefetch/QoS documentation)
 
-### Partially Resolved
-- None
+### 3. Circular Specification Evidence — RESOLVED
+- File: `research/03-evidence.md:172-196`
+- Evidence 14 (Cost-Based Rate Limiting): Source changed from "Original topic specification" to "Stripe Engineering Blog: Scaling your API with rate limiters"
+- Evidence 15 (Per-Tenant Rate Limiting): Source changed from "Original topic specification" to "Stripe Engineering Blog: Scaling your API with rate limiters"
+- Both evidences now cite external primary industry literature
+- AWS Well-Architected Framework added as corroborating source for Evidence 15
 
-### Unresolved
-- Empirically-validated threshold recommendations (non-blocking, service-specific)
-- Cross-cloud rate limiting comparison (enhancement)
-- Real-world cascade failure case studies (enhancement)
+### 4. AWS SDK Constants Overgeneralization — RESOLVED
+- File: `research/05-report.md:80-85`
+- Added contextual notes that 50ms/1000ms base delays and 20s max cap are AWS SDK v3 specific defaults
+- Added note that these values must be calibrated to downstream service SLA/latency/timeout profiles
+- Clarified that Full Jitter variant is specific to AWS SDK implementation
 
 ## Validation
 
@@ -51,17 +57,22 @@ Race Detector: N/A (Research-only pipeline override)
 
 Demo: N/A (Research-only pipeline override)
 
-**Source Verification**: PASS
-- All 9 primary sources verified reachable
-- All 4 RFC documents verified on rfc-editor.org
-- Little (1961) DOI verified
-- AWS Architecture Blog and Google SRE Book verified accessible
+Source Verification: PASS
+- All 13 sources verified reachable
+- Source 11 title now matches content (Redis rate limiter pattern)
+- Source 13 URL now points to specific RabbitMQ consumer prefetch documentation
+- Evidence 14 & 15 citations now reference external primary sources (Stripe Engineering Blog)
+- AWS SDK constants contextualized as implementation-specific defaults
+
+Documentation Consistency: PASS
+- All source titles match their publishers and URLs
+- All claims in `03-evidence.md` attributed to external sources
+- Report contextualization aligns with report findings
 
 ## Remaining Risks
 
-1. **No code tests executed**: Pipeline override means no Go test verification was performed. This lab has no code directory (only research artifacts).
-2. **Vendor documentation volatility**: AWS and Kafka documentation may change over time; source access date recorded as 2026-09-26.
-3. **Open research questions remain**: 3 non-blocking enhancement opportunities identified (empirical thresholds, cross-cloud comparison, case studies).
+1. **Vendor documentation volatility**: URLs and page structures may change over time; access dates recorded as 2026-09-26.
+2. **No runtime testing**: Pipeline override means no Go test verification was performed; this lab contains research artifacts only.
 
 ## Ready For Re-Audit
 

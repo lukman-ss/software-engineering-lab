@@ -2,37 +2,31 @@
 
 Target Lab: labs/25-rate-limiting-and-backpressure
 
-Previous Audit Status: NEEDS_REVISION
+Previous Audit Status: APPROVED_WITH_WARNINGS
 
-## Blocking Issues
+## Non-Blocking Issues (from research-audit/07-verdict.md)
 
-1. **Missing Research Findings**: Only `research/01-plan.md` exists. The core research findings document (`02-findings.md`) containing evidence extraction and source synthesis has not been generated.
+1. **Source 11 Title Mismatch** (LOW): Source 11 title in `02-sources.md` mentions "Cloudflare's Rate Limiting Documentation (Redis rate limiter)" while URL points to `redis.io/docs/latest/develop/use-cases/rate-limiter/`.
 
-2. **Formula Misattribution Risk**: Risk of confusing Little's Law ($L = \lambda W$) with deterministic queue accumulation ($(\text{arrival} - \text{processing}) \times \text{time}$).
+2. **Generic RabbitMQ URL** (LOW): Source 13 links to generic `rabbitmq.com/tutorials` index rather than specific QoS/consumer prefetch page.
 
-## Non-Blocking Issues
+3. **Circular Specification Evidence** (MEDIUM): Evidences 14 & 15 in `03-evidence.md` cite the prompt/topic specification as their sole evidentiary source instead of external industry literature.
 
-1. **Unsubstantiated Operational Metric Claim**: The assertion that queue age is superior to queue depth lacks explicit broker/observability citations (AWS SQS `ApproximateAgeOfOldestMessage`, Kafka consumer lag / timestamp metrics).
-
-2. **Generalization of Autoscaling Failure Modes**: Needs specific architectural framing on downstream database/dependency capacity constraints.
+4. **AWS SDK Constants Overgeneralization** (LOW): Report highlights AWS SDK specific constants (50ms/1000ms base delays, 20s max cap) without explicit contextual note that these are AWS SDK defaults, not universal distributed systems constants.
 
 ## Files To Modify
 
-- `research/02-findings.md` — **CREATE** new findings document
-- `research/03-sources.md` — **CREATE** updated source index
-- `research/04-contradictions.md` — **UPDATE** with resolved contradictions
-- `research/05-report.md` — **UPDATE** with verified claims
-- `research/06-open-questions.md` — **UPDATE** with resolved/remaining questions
+- `research/02-sources.md` — Fix Source 11 title and Source 13 URL
+- `research/03-evidence.md` — Re-attribute Evidence 14 & 15 to external primary sources
+- `research/05-report.md` — Add contextual note for AWS SDK constants
 
 ## Verification Plan
 
-- [x] Source verification: AWS Exponential Backoff & Jitter blog (Marc Brooker, 2015) - confirmed
-- [x] Source verification: Google SRE Book - Cascading Failures chapter - confirmed
-- [x] Source verification: Little's Law original paper (Little, 1961) - DOI verified
-- [x] Source verification: RFC 6585 (429), RFC 9110 (HTTP semantics), RFC 2697 (srTCM), RFC 6598 (CGNAT) - all reachable
-- [ ] SQS CloudWatch metrics: `ApproximateAgeOfOldestMessage` - need to cite
-- [ ] Kafka documentation: consumer lag metrics - need to cite
-- [ ] Tests: N/A (Pipeline Override - research only)
-- [ ] Build: N/A (Pipeline Override - research only)
-- [ ] Demo: N/A (Pipeline Override - research only)
-- [ ] Documentation consistency: Plan → Findings → Report alignment
+- [ ] Source verification: Source 11 title matches publisher/URL
+- [ ] Source verification: Source 13 URL points to specific consumer prefetch documentation
+- [ ] Source verification: Evidence 14 & 15 cite external primary sources (Stripe, AWS Well-Architected, Kubernetes)
+- [ ] Content verification: AWS SDK constants contextualized in report
+- [ ] Documentation consistency: All files internally consistent after changes
+- [ ] Source list updated in 02-sources.md
+- [ ] Validation: All sources verified reachable
+- [ ] Result: READY_FOR_RESEARCH_REAUDIT

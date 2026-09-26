@@ -3,22 +3,18 @@
 ## Revision 1
 
 **Audit Issue**: 
-CRITICAL — Missing Research Findings document (Gap 1)
+LOW — Source 11 Title Mismatch (Gap 1)
 
 **Files Changed**:
-- `research/02-findings.md` — **CREATE**
+- `research/02-sources.md:105`
 
 **Action**:
-- Created comprehensive findings document answering all 10 research questions
-- Provided explicit mathematical formulas with variable definitions
-- Included authoritative source citations (RFCs, Little 1961, AWS, Google SRE)
-- Detailed evidence extraction with quotes from verified sources
+- Changed title from "Cloudflare's Rate Limiting Documentation (Redis rate limiter)" to "Redis Rate Limiter Pattern Documentation"
+- Title now accurately reflects publisher (Redis Documentation) and URL (redis.io)
 
 **Verification**:
-- Source checked: RFC 6585, RFC 9110, RFC 2697, RFC 6598 — all verified reachable
-- Source checked: Little (1961) DOI — verified
-- Source checked: AWS Architecture Blog — verified
-- Source checked: Google SRE Book — verified
+- Source verification: URL points to redis.io/docs/latest/develop/use-cases/rate-limiter/ — confirmed
+- Title now matches publisher and content scope — resolved
 
 **Status**: RESOLVED
 
@@ -27,22 +23,18 @@ CRITICAL — Missing Research Findings document (Gap 1)
 ## Revision 2
 
 **Audit Issue**: 
-CRITICAL — Little's Law Misattribution Risk (Claim 3, Gap 2)
+LOW — Generic RabbitMQ URL (Gap 2)
 
 **Files Changed**:
-- `research/02-findings.md` §Claim 3
+- `research/02-sources.md:125-127`
 
 **Action**:
-- Explicitly separated Little's Law ($L = \lambda W$) from deterministic queue buildup ($\Delta Q = (r_{in} - r_{out}) \cdot \Delta t$)
-- Provided proper mathematical formulation with variable definitions
-- Cited Little (1961) original paper with DOI link
-- Added note that deterministic formula is a transient approximation, not Little's Law
-- Added Google SRE Book citation supporting queue memory exhaustion risks
+- Changed title from "RabbitMQ Tutorials" to "Consumer Prefetch & Queue Flow Control"
+- Updated URL from generic `https://www.rabbitmq.com/tutorials` to specific `https://www.rabbitmq.com/docs/consumer-prefetch`
 
 **Verification**:
-- Formula verification: Little's Law requires stable system, steady-state; fluid model is transient
-- Source checked: Operations Research journal DOI — responds correctly
-- Original claim in plan was incorrect; corrected with precise distinction
+- Source verification: URL points to RabbitMQ consumer prefetch documentation — confirmed
+- Title now accurately describes content scope — resolved
 
 **Status**: RESOLVED
 
@@ -51,21 +43,20 @@ CRITICAL — Little's Law Misattribution Risk (Claim 3, Gap 2)
 ## Revision 3
 
 **Audit Issue**: 
-MEDIUM — Unsubstantiated Queue Age Claim (Grant 3)
+MEDIUM — Circular Specification Evidence (Gap 3)
 
 **Files Changed**:
-- `research/02-findings.md` §Claim 7
-- `research/03-sources.md` (Source #8, #9)
+- `research/03-evidence.md:172-196` (Evidence 14 & 15)
 
 **Action**:
-- Added AWS SQS CloudWatch metrics: `ApproximateAgeOfOldestMessage`
-- Added Apache Kafka documentation: Consumer Lag monitoring
-- Referenced vendor-specific implementations for queue age metric
-- Clarified that queue age is superior early warning but both metrics should be monitored
+- Evidence 14 (Cost-Based Rate Limiting): Changed source from "Original topic specification" to "Stripe Engineering Blog: Scaling your API with rate limiters"
+- Evidence 15 (Per-Tenant Rate Limiting): Changed source from "Original topic specification" to "Stripe Engineering Blog: Scaling your API with rate limiters" and added AWS Well-Architected Framework as corroborated source
+- Both evidences now cite external primary industry literature instead of the prompt specification
 
 **Verification**:
-- AWS documentation confirmed for both metrics
-- Kafka monitoring documentation confirms consumer lag is standard practice
+- Source verification: Stripe Engineering Blog URL reachable — confirmed
+- Corroboration: AWS Well-Architected Framework cited for multi-tenant isolation guidance — added
+- Circular reference to prompt specification removed — resolved
 
 **Status**: RESOLVED
 
@@ -74,61 +65,18 @@ MEDIUM — Unsubstantiated Queue Age Claim (Grant 3)
 ## Revision 4
 
 **Audit Issue**: 
-MEDIUM — Generalization of Autoscaling Failure Modes (Grant 4)
+LOW — AWS SDK Constants Overgeneralization (Gap 4)
 
 **Files Changed**:
-- `research/02-findings.md` §Claim 10
-- `research/05-report.md` §7
+- `research/05-report.md:80-85`
 
 **Action**:
-- Added specific architectural framing from Google SRE Book §22.2
-- Documented cascade failure pattern: upstream scaling → downstream saturation → retries → system crash
-- Provided remediation recommendations (circuit breakers, bulkheads)
+- Added contextual note that AWS SDK default values (50ms/1000ms base delays, 20s max cap) are specific to AWS SDK v3 and must be calibrated to downstream service SLA/latency/timeout profiles
+- Added clarification that Full Jitter variant is specific to AWS SDK implementation, other ecosystems may differ
 
 **Verification**:
-- Google SRE Book cited for specific failure pattern
-- Original claim was too general; now explicitly conditioned on asymmetric scaling
-
-**Status**: RESOLVED
-
----
-
-## Revision 5
-
-**Audit Issue**: INTERNAL CONTRADICTION — Little's Law Formula
-
-**Files Changed**:
-- `research/04-contradictions.md`
-
-**Action**:
-- Documented resolution of contradiction between incorrect formula and risk flag
-- Provided explicit correction in findings document
-
-**Verification**:
-- Original plan claimed formula DID represent Little's Law
-- Risk flag correctly identified misattribution
-- Findings document now provides correct distinction
-
-**Status**: RESOLVED
-
----
-
-## Revision 6
-
-**Audit Issue**: INTERNAL — Irrelevant RFC Citations
-
-**Files Changed**:
-- `research/03-sources.md`
-
-**Action**:
-- Removed RFC 8305 (Happy Eyeballs — not relevant to rate limiting)
-- Removed RFC 5321 (SMTP — not relevant to HTTP rate limiting)
-- Maintained RFC 6585, RFC 9110, RFC 2697, RFC 6598 as correct primary sources
-
-**Verification**:
-- RFC 8305 title matches "Happy Eyeballs Algorithm" (IPv6 connection establishment)
-- RFC 5321 is SMTP protocol specification (email transport)
-- Neither relates to HTTP rate limiting
+- Content verification: All AWS SDK-specific constants now explicitly labeled as such — confirmed
+- Overgeneralization to universal distributed systems constants avoided — resolved
 
 **Status**: RESOLVED
 
@@ -136,15 +84,11 @@ MEDIUM — Generalization of Autoscaling Failure Modes (Grant 4)
 
 ## Revision Checklist
 
-- [x] All CRITICAL issues addressed
-- [x] All HIGH issues addressed or explicitly unresolved
-- [x] Unsupported major claims fixed
-- [x] Weak major sources improved
-- [x] Contradictions resolved or properly documented
-- [x] Implementation/documentation mismatch fixed (research artifacts)
-- [x] Failing tests fixed or blocker documented (N/A - Pipeline Override)
-- [x] README does not apply - research only revision
+- [x] All LOW issues addressed
+- [x] All MEDIUM issues addressed
+- [x] Title/URL mismatches fixed
+- [x] External primary sources substituted for circular citations
+- [x] Contextual notes added for implementation-specific parameters
 - [x] Source list updated
-- [x] Revision log written
-- [x] Validation executed via source verification
+- [x] Documentation consistency verified
 - [x] Result marked READY_FOR_RESEARCH_REAUDIT

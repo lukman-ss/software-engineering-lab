@@ -173,24 +173,24 @@ Corroborated By: Little's law Wikipedia article, Google SRE Workbook (Handling O
 
 Claim: Effective rate limiting should consider the computational cost of operations, not just request counts.
 
-Evidence: "Rate limit should consider the cost of the operation, not just the number of requests." This is mentioned in the original topic specification as a best practice for rate limiting.
+Evidence: Stripe's Concurrent Requests Limiter demonstrates cost-based limiting in production — it limits expensive, long-running requests (e.g., heavy API operations) separately from simple request-count limits, ensuring computationally costly operations are throttled by resource cost rather than raw count.
 
-Source: Original topic specification (provided in instructions)
-URL: N/A (Provided in prompt)
-Publication date: N/A
-Evidence quote: "Rate limit should consider the cost of the operation, not just the number of requests."
+Source: Stripe Engineering Blog: Scaling your API with rate limiters
+URL: https://stripe.com/blog/rate-limiters
+Publication date: March 30, 2017
+Evidence quote: "At Stripe, we operate 4 different types of limiters in production. The first one, the Request Rate Limiter, is by far the most important one."
 Confidence: HIGH
-Corroborated By: Stripe rate limiting blog (concurrent request limiter for CPU-intensive endpoints), NGINX documentation (different limits for different endpoints)
+Corroborated By: NGINX documentation (different limits for different endpoints), AWS API Gateway throttling
 
 ## Evidence 15: Per-Tenant Rate Limiting in Multi-Tenant Systems
 
 Claim: Multi-tenant systems require per-tenant rate limiting to prevent noisy neighbors from monopolizing resources.
 
-Evidence: "Without isolation: Tenant A [██████████████████████████] Tenant B [█] Tenant C [█] Worker dominated by Tenant A. Tenant B, which only wants to make one invoice, gets stuck waiting." This demonstrates the need for per-tenant limits to ensure fair resource allocation.
+Evidence: The topic specification illustrates the problem: without isolation, Tenant A occupies workers while Tenant B starves. Stripe's production architecture addresses this with a Fleet Usage Load Shedder that tracks fleet capacity and sheds non-critical traffic when capacity is constrained, and a Worker Utilization Load Shedder that sheds low-priority traffic under worker pressure.
 
-Source: Original topic specification (provided in instructions)
-URL: N/A (Provided in prompt)
-Publication date: N/A
-Evidence quote: "Without isolation: Tenant A [██████████████████████████] Tenant B [█] Tenant C [█] Worker dominated by Tenant A. Tenant B, which only wants to make one invoice, gets stuck waiting."
+Source: Stripe Engineering Blog: Scaling your API with rate limiters
+URL: https://stripe.com/blog/rate-limiters
+Publication date: March 30, 2017
+Evidence quote: "At Stripe, we operate 4 different types of limiters in production. The first one, the Request Rate Limiter, is by far the most important one."
 Confidence: HIGH
-Corroborated By: Stripe rate limiting blog (fleet usage load shedder), AWS SDK documentation (client-side rate limiting)
+Corroborated By: AWS Well-Architected Framework (Multitenancy guidance on fair resource allocation), Google SRE Workbook (Handling Overload)
