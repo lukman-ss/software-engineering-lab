@@ -12,6 +12,7 @@ type Job struct {
 	Duration time.Duration
 }
 
+// ponytail: in-memory Go channel queue ceiling; upgrade to Redis/RabbitMQ/Kafka when distributed worker pools required.
 type Worker struct {
 	jobChan     chan Job
 	wg          sync.WaitGroup
@@ -39,6 +40,12 @@ func (w *Worker) Start(concurrency int) {
 				select {
 				case <-w.ctx.Done():
 					return
+				default:
+				}
+
+				select {
+				case <-w.ctx.Done():
+					return
 				case job, ok := <-w.jobChan:
 					if !ok {
 						return
@@ -59,11 +66,23 @@ func (w *Worker) Enqueue(job Job) {
 	w.jobChan <- job
 }
 
-func (w *Worker) Stop() {
+func (w *Worker) Stop(timeout time.Duration) {
 	log.Println("Worker receiving stop signal, no longer accepting new jobs...")
 	close(w.jobChan)
-	w.cancel()
-	w.wg.Wait()
+	
+	done := make(chan struct{})
+	go func() {
+		w.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		log.Println("Worker drain timeout reached, cancelling context...")
+		w.cancel()
+		<-done
+	}
 	log.Println("Worker gracefully stopped")
 }
 

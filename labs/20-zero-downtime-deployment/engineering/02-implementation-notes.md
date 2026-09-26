@@ -14,7 +14,7 @@
 - **Probes**: Separate `/healthz/live` (status of process) from `/healthz/ready` (traffic availability) based on research Findings.
 - **Connection Draining**: Using `net/http` standard library `Server.Shutdown(ctx)` which stops accepting new connections and waits for active ones.
 - **PreStop Hook**: Explicitly wait before invoking listener shutdown to mitigate the asynchronous routing table update race condition identified in Gap 1 of the audit.
-- **Worker Drain**: Wait for ongoing job to complete via Go channels and sync primitives instead of immediate hard kill.
+- **Worker Drain**: Wait for in-flight and buffered jobs to drain via Go channel closure and WaitGroup, with a configurable timeout ceiling before canceling context.
 
 ## Implementation-Specific Choices
 - In-memory data structures are used for DB and worker queues to keep the lab completely dependency-free and runnable with standard Go toolchain.

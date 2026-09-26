@@ -72,7 +72,7 @@ func main() {
 	}
 
 	// Stop background workers gracefully
-	w.Stop()
+	w.Stop(5 * time.Second)
 
 	log.Println("Demo finished cleanly. Zero downtime achieved.")
 }

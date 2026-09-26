@@ -17,6 +17,7 @@ type UserRecord struct {
 	LastName  string
 }
 
+// ponytail: in-memory mutex map ceiling; upgrade to PostgreSQL/MySQL with actual schema migrations when persistence or transactional DDL locks required.
 type UserStore struct {
 	mu      sync.RWMutex
 	records map[string]UserRecord

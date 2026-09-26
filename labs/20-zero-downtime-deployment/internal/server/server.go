@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// ponytail: time.Sleep preStop simulation ceiling; upgrade to K8s lifecycle container preStop exec hooks or Envoy graceful drain when running in orchestrator.
 type Server struct {
 	srv         *http.Server
 	ready       atomic.Bool
