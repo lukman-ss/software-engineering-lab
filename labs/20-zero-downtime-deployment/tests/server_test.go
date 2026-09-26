@@ -131,6 +131,57 @@ func TestServerPreStopContextCancellation(t *testing.T) {
 	}
 }
 
+func TestServerInvalidDurationFallback(t *testing.T) {
+	srv := server.NewServer("127.0.0.1:8086", 0)
+	srv.SetReady(true)
+
+	go func() {
+		_ = srv.Start()
+	}()
+	time.Sleep(50 * time.Millisecond)
+	defer func() {
+		_ = srv.Shutdown(context.Background())
+	}()
+
+	start := time.Now()
+	resp, err := http.Get("http://127.0.0.1:8086/work?d=INVALID")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	elapsed := time.Since(start)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if elapsed < 50*time.Millisecond {
+		t.Fatalf("expected fallback delay >=50ms, got %v", elapsed)
+	}
+}
+
+func TestServerReadyUnreadyTransition(t *testing.T) {
+	srv := server.NewServer("127.0.0.1:8087", 0)
+
+	go func() {
+		_ = srv.Start()
+	}()
+	time.Sleep(50 * time.Millisecond)
+	defer func() {
+		_ = srv.Shutdown(context.Background())
+	}()
+
+	srv.SetReady(true)
+	resp, err := http.Get("http://127.0.0.1:8087/healthz/ready")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 when ready, got %v err=%v", resp.StatusCode, err)
+	}
+
+	srv.SetReady(false)
+	resp, err = http.Get("http://127.0.0.1:8087/healthz/ready")
+	if err != nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 after unready, got %v err=%v", resp.StatusCode, err)
+	}
+}
+
 func TestServerWorkRequestCancellation(t *testing.T) {
 	srv := server.NewServer("127.0.0.1:8085", 0)
 	srv.SetReady(true)

@@ -2,18 +2,65 @@
 
 Target Lab: labs/20-zero-downtime-deployment
 
-## Test Suite Coverage Overview
+---
 
-- `TestExpandContractDatabase`: Tests happy path for reading legacy rows and expanded rows. Correctly validates logic of db.go fallback.
-- `TestServerProbes`: Tests live and ready probes change state correctly.
-- `TestServerGracefulShutdown`: Tests that in-flight requests are allowed to complete during server shutdown using `time.Sleep` to simulate long work.
-- `TestServerPreStopHook`: Tests that `Shutdown` correctly pauses for the preStop duration.
-- `TestWorkerGracefulShutdown`: Tests worker starts, executes two short jobs, and shuts down gracefully.
+## Test Inventory
 
-## Weaknesses
+| Test | File | Coverage Area |
+|---|---|---|
+| TestExpandContractDatabase | db_test.go | DB expand/contract happy path |
+| TestServerProbes | server_test.go | Liveness always 200; Readiness 503→200 transition |
+| TestServerGracefulShutdown | server_test.go | In-flight request completes during shutdown |
+| TestServerPreStopHook | server_test.go | PreStop delay enforced before listener close |
+| TestServerPreStopContextCancellation | server_test.go | PreStop aborts on context timeout |
+| TestServerWorkRequestCancellation | server_test.go | Client disconnect clears activeCount |
+| TestWorkerGracefulShutdown | worker_test.go | Both jobs drain before Stop returns |
+| TestWorkerShutdownTimeout | worker_test.go | In-flight job completes; queued job dropped on timeout |
 
-1. **Worker Shutdown Flaw Not Caught**: The worker test enqueues two 50ms jobs, waits 10ms, and calls `Stop()`. Since concurrency is 1, `job-1` is processing. `job-2` is in the buffer. If `Stop()` is called, `w.cancel()` happens. `job-1` finishes. Then `w.ctx.Done()` is selected over `w.jobChan`, dropping `job-2`. The test asserts `len(completed) < 1` and uses `len(completed) >= 1` as passing criteria (via `if len(completed) < 1 { t.Fatalf... }`). It does not assert that *both* jobs complete, thereby hiding the bug that `job-2` is dropped.
-2. **Race condition in worker test logic**: Testing for strictly 1 completed job means if the worker was faster, it might complete 2. But the test does not check if the system safely drains *all* accepted buffered work.
+Total: 8 tests across 3 files.
 
-## Verdict
-PASS but with WARNING for weak assertions masking a dropped-work bug in worker shutdown.
+---
+
+## Happy Path Coverage
+
+- Liveness probe always returns 200: COVERED (TestServerProbes)
+- Readiness probe: NOT READY → READY transition: COVERED (TestServerProbes)
+- In-flight request completes during graceful shutdown: COVERED (TestServerGracefulShutdown)
+- PreStop delay enforced: COVERED (TestServerPreStopHook)
+- Worker drains all jobs when time allows: COVERED (TestWorkerGracefulShutdown)
+- DB expand/contract read/write: COVERED (TestExpandContractDatabase)
+
+## Failure Path Coverage
+
+- PreStop context cancellation (hard deadline): COVERED (TestServerPreStopContextCancellation)
+- Worker timeout — in-flight completes, queued dropped: COVERED (TestWorkerShutdownTimeout)
+- Client disconnect clears active request counter: COVERED (TestServerWorkRequestCancellation)
+
+## Edge Cases
+
+- Single-name legacy user (no space in Name): NOT COVERED
+- Empty firstName or lastName in SaveExpand: NOT COVERED
+- DB record not found (ErrNotFound): NOT COVERED
+- Enqueue after Stop (panic guard): NOT COVERED
+- Zero-duration preStop: implicitly covered (TestServerGracefulShutdown uses preStop=0)
+- Ready→Unready→Ready transition: NOT COVERED (only tests NOT READY → READY)
+- Concurrent readiness toggle under load: NOT COVERED
+- Worker with concurrency > 1: NOT COVERED (all tests use concurrency=1)
+
+## Concurrency / Race
+
+- go test -race -count=1 ./...: PASS (verified by execution)
+- Worker completed slice protected by completedMu: correct
+- Server activeCount via atomic.Int32: correct
+- Server ready via atomic.Bool: correct
+
+## Negative Cases
+
+- /work with invalid duration falls back to 50ms default: NOT COVERED by test (implemented in code but untested)
+- Shutdown called with already-expired context: implicitly tested via TestServerPreStopContextCancellation
+
+---
+
+## Test Quality Assessment
+
+Tests are well-structured and test real behavior against a live HTTP server (not mocked). No fake sleeps substituting for assertions — tests verify actual outcomes (response body, status codes, completion counts). Timing margins are adequate. The suite proves the core claimed behaviors. Missing edge cases are minor and do not affect the primary correctness claims.

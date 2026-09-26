@@ -44,7 +44,7 @@ Zero-Downtime Deployment (ZDD) requires coordinating:
    - `/healthz/live` (Liveness)
    - `/healthz/ready` (Readiness)
    - `/work` (Simulates an in-flight business transaction)
-   - `Shutdown(ctx, preStopDelay)`: Implements graceful connection draining with a preStop sleep.
+    - `Shutdown(ctx context.Context) error`: Implements graceful connection draining with a preStop sleep (preStopDelay is a constructor parameter of `NewServer`).
 3. **Queue Worker (`internal/worker`)**:
    - `Worker`: Consumes tasks from an in-memory queue.
    - `Stop()`: Signals the worker to finish the current job and exit gracefully.

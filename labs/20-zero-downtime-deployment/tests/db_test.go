@@ -1,10 +1,53 @@
 package tests
 
 import (
+	"errors"
 	"testing"
 
 	"zero-downtime-deployment/internal/db"
 )
+
+func TestDBNotFound(t *testing.T) {
+	store := db.NewUserStore()
+	_, err := store.GetUser("nonexistent")
+	if !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDBSingleNameLegacy(t *testing.T) {
+	store := db.NewUserStore()
+	store.InsertLegacy("1", "Madonna")
+	user, err := store.GetUser("1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.FirstName != "Madonna" || user.LastName != "" {
+		t.Fatalf("expected FirstName=Madonna LastName='', got %s / %s", user.FirstName, user.LastName)
+	}
+}
+
+func TestDBSaveExpandEmptyFields(t *testing.T) {
+	store := db.NewUserStore()
+
+	store.SaveExpand("1", "", "Smith")
+	u1, err := store.GetUser("1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if u1.Name != "Smith" || u1.FirstName != "" || u1.LastName != "Smith" {
+		t.Fatalf("empty firstName: unexpected %+v", u1)
+	}
+
+	store.SaveExpand("2", "Jane", "")
+	u2, err := store.GetUser("2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if u2.Name != "Jane" || u2.FirstName != "Jane" || u2.LastName != "" {
+		t.Fatalf("empty lastName: unexpected %+v", u2)
+	}
+}
 
 func TestExpandContractDatabase(t *testing.T) {
 	store := db.NewUserStore()

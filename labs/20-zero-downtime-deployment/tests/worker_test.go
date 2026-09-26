@@ -1,11 +1,28 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"zero-downtime-deployment/internal/worker"
 )
+
+func TestWorkerConcurrency(t *testing.T) {
+	w := worker.NewWorker(10)
+	w.Start(3)
+
+	for i := 0; i < 6; i++ {
+		w.Enqueue(worker.Job{ID: fmt.Sprintf("job-%d", i), Duration: 20 * time.Millisecond})
+	}
+
+	w.Stop(500 * time.Millisecond)
+
+	completed := w.GetCompletedJobs()
+	if len(completed) != 6 {
+		t.Fatalf("expected all 6 jobs to complete with concurrency=3, got %d", len(completed))
+	}
+}
 
 func TestWorkerGracefulShutdown(t *testing.T) {
 	w := worker.NewWorker(10)

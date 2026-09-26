@@ -1,26 +1,71 @@
 ## Revision 1
 
-Audit Issue: PreStop Delay Ignores Context Cancellation
+Audit Issue: GAP-01 — No test for GetUser with non-existent ID
 Severity: LOW
-Files Changed: `internal/server/server.go`
-Action: Replaced `time.Sleep(s.preStop)` with a `select` statement listening to `<-time.After(s.preStop)` and `<-ctx.Done()`. This allows immediate abortion of the K8s Kubelet delay phase if a SIGKILL escalation cancels the parent context.
-Verification: Passed via new unit test.
+Files Changed: `tests/db_test.go`
+Action: Added `TestDBNotFound` asserting `errors.Is(err, db.ErrNotFound)` for unknown ID.
+Verification: PASS
 Status: RESOLVED
 
 ## Revision 2
 
-Audit Issue: Missing Negative Concurrency & Context Tests
+Audit Issue: GAP-02 — No test for InsertLegacy with single-name (no space)
 Severity: LOW
-Files Changed: `tests/server_test.go`
-Action: Added `TestServerPreStopContextCancellation` to verify graceful interruption of the `preStop` hook, and `TestServerWorkRequestCancellation` to assert cleanup when clients hang up mid-request.
-Verification: Evaluated via `go test -v ./...`.
+Files Changed: `tests/db_test.go`
+Action: Added `TestDBSingleNameLegacy` inserting "Madonna" and asserting FirstName="Madonna", LastName="".
+Verification: PASS
 Status: RESOLVED
 
 ## Revision 3
 
-Audit Issue: In-Flight Worker Jobs Cannot Be Force-Interrupted
+Audit Issue: GAP-03 — No test for SaveExpand with empty firstName or lastName
+Severity: LOW
+Files Changed: `tests/db_test.go`
+Action: Added `TestDBSaveExpandEmptyFields` covering SaveExpand("","Smith") and SaveExpand("Jane","") cases.
+Verification: PASS
+Status: RESOLVED
+
+## Revision 4
+
+Audit Issue: GAP-04 — Enqueue after Stop panics (send on closed channel)
 Severity: MEDIUM
 Files Changed: `internal/worker/worker.go`
-Action: Added explicit `ponytail:` documentation regarding the intentional cooperative worker drain ceiling (i.e. letting active jobs run to completion while abandoning queued jobs on drain timeout). As verified by the test suite design (`TestWorkerShutdownTimeout`), active job completion is the intended educational behavior. We documented this architectural ceiling explicitly to clarify why no force kill occurs.
-Verification: Verified documentation matches architectural constraints.
+Action: Added `stopped atomic.Bool` field; `Stop()` sets it before closing channel; `Enqueue()` checks flag and logs+returns instead of panicking.
+Verification: `go build ./...` PASS; `go test -race -count=1 ./...` PASS
+Status: RESOLVED
+
+## Revision 5
+
+Audit Issue: GAP-05 — Worker tests use concurrency=1 only
+Severity: LOW
+Files Changed: `tests/worker_test.go`
+Action: Added `TestWorkerConcurrency` starting 3 workers, enqueuing 6 jobs, asserting all 6 complete.
+Verification: PASS
+Status: RESOLVED
+
+## Revision 6
+
+Audit Issue: GAP-06 — /work invalid duration fallback untested
+Severity: LOW
+Files Changed: `tests/server_test.go`
+Action: Added `TestServerInvalidDurationFallback` sending `?d=INVALID`, asserting HTTP 200 and elapsed >= 50ms fallback.
+Verification: PASS
+Status: RESOLVED
+
+## Revision 7
+
+Audit Issue: GAP-07 — engineering/01-design.md describes Shutdown signature incorrectly
+Severity: LOW
+Files Changed: `engineering/01-design.md`
+Action: Updated line 47 from `Shutdown(ctx, preStopDelay)` to `Shutdown(ctx context.Context) error` with note that preStopDelay is a constructor parameter.
+Verification: Documentation matches implementation.
+Status: RESOLVED
+
+## Revision 8
+
+Audit Issue: GAP-08 — READY→UNREADY probe transition not tested explicitly
+Severity: LOW
+Files Changed: `tests/server_test.go`
+Action: Added `TestServerReadyUnreadyTransition` asserting SetReady(true) returns 200, then SetReady(false) returns 503.
+Verification: PASS
 Status: RESOLVED

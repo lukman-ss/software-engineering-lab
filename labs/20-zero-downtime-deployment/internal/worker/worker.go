@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type Worker struct {
 	cancel      context.CancelFunc
 	completed   []string
 	completedMu sync.Mutex
+	stopped     atomic.Bool
 }
 
 func NewWorker(bufferSize int) *Worker {
@@ -64,11 +66,16 @@ func (w *Worker) Start(concurrency int) {
 }
 
 func (w *Worker) Enqueue(job Job) {
+	if w.stopped.Load() {
+		log.Printf("Enqueue rejected: worker stopped, dropping job %s", job.ID)
+		return
+	}
 	w.jobChan <- job
 }
 
 func (w *Worker) Stop(timeout time.Duration) {
 	log.Println("Worker receiving stop signal, no longer accepting new jobs...")
+	w.stopped.Store(true)
 	close(w.jobChan)
 	
 	done := make(chan struct{})
