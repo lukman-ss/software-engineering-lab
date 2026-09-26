@@ -80,3 +80,29 @@ func TestBadProcessor_Success(t *testing.T) {
 		t.Errorf("expected 75, got %d", mock.ChargedMoney.Amount)
 	}
 }
+
+func TestBadProcessor_GatewayError(t *testing.T) {
+	mock := &MockGateway{ShouldFail: true}
+	container := &MockContainer{gateway: mock}
+	badProc := di.NewBadProcessor(container)
+
+	err := badProc.ProcessPayment(75)
+	if err == nil {
+		t.Fatalf("expected error from gateway, got nil")
+	}
+}
+
+func TestBadProcessor_InvalidAmount(t *testing.T) {
+	mock := &MockGateway{}
+	container := &MockContainer{gateway: mock}
+	badProc := di.NewBadProcessor(container)
+
+	err := badProc.ProcessPayment(-5)
+	if err == nil {
+		t.Fatalf("expected error for negative amount, got nil")
+	}
+
+	if mock.ChargedMoney.Amount != 0 {
+		t.Errorf("gateway should not have been called, but got amount %d", mock.ChargedMoney.Amount)
+	}
+}
