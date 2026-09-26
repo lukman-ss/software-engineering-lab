@@ -1,16 +1,21 @@
 # Content Brief
 
-Topic: Architecture Decision Records (ADRs) Structural Validation
-Target Reader: Software Engineers, Architects
-Problem: Engineering teams lose historical context of architectural decisions, leading to redundant debates and blind acceptance or reversal of past choices.
-Core Mental Model: ADRs are immutable, monotonic, version-controlled records co-located with code that document the context, decision, and consequences of architectural changes.
-Approved Research Status: APPROVED_WITH_WARNINGS
-Approved Engineering Status: APPROVED_WITH_WARNINGS
-Main Concepts: Immutability, Monotonic Numbering, Supersession Lineage (DAG), Architecturally Significant Requirements (ASRs), Co-location with Code.
-Verified Behaviors: Parsing Markdown ADRs for status and supersession metadata, validating monotonic sequence, concurrent bidirectional supersession link verification.
-Available Case Studies: Modular Monolith to Microservices for a 5-engineer SaaS ERP (used as an illustrative scenario).
-Warnings: 
-- Case study on Monolith vs Microservices is an applied scenario, not empirical findings from the core sources.
-- Multi-repository decision patterns are unaddressed in the research.
-- Linter lacks strict temporal DAG directionality (it doesn't enforce `SupersededBy > ID`).
-- The parser expects a strict markdown header format and is not a generalized markdown parser.
+Topic: Architecture Decision Record (ADR)
+Target Reader: Software architects, developers, technical leads
+Problem: How to document significant architectural decisions in a consistent, traceable manner
+Core Mental Model: Decisions should be recorded with context, alternatives, and consequences
+Approved Research Status: APPROVED
+Approved Engineering Status: APPROVED
+Main Concepts:
+- Decision context and drivers
+- Considered alternatives
+- Decision outcome and consequences
+- Status tracking (proposed, accepted, rejected, deprecated, superseded)
+Verified Behaviors:
+- Parsing extracts Title, ID, Status, and Supersedes/SupersededBy from markdown headers
+- Linter enforces monotonic numbering (1, 2, 3, ... without gaps)
+- Linter validates bidirectional supersession links (if A `Superseded by` B, then B must `Supersedes` A)
+- Concurrency-safe validation via goroutine fan-out with mutex-guarded error aggregation
+Available Case Studies:
+- SaaS ERP evolution: Modular Monolith (ADR 1) → Microservices (ADR 2) → Rejected Event Sourcing (ADR 3)
+- Validated end-to-end via cmd/demo/main.go demonstration

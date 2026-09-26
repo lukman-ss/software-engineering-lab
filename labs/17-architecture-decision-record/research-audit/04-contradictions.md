@@ -1,49 +1,40 @@
-# Contradictions Audit: Architecture Decision Record Research
+# Contradictions Audit
 
 ## Contradiction 1
 
-Statement A:
-"For an early-stage SaaS ERP with a small team (5 engineers) and a 3-month deadline, a Modular Monolith delivers necessary domain boundaries without the operational, networking, and distributed transaction complexity of microservices." (Supported by Cognitect Blog, AWS Prescriptive Guidance)
+Statement A: Status tracking uses `Proposed`, `Accepted`, `Deprecated`, `Superseded`.
+Location: Nygard (2011)
 
-Location:
-`05-report.md` (Finding 4)
+Statement B: Status tracking adds `Rejected` to preserve institutional memory of discarded options.
+Location: AWS Prescriptive Guidance / MADR
 
-Statement B:
-The primary sources (Nygard 2011, AWS Prescriptive Guidance, adr.github.io) are strictly process and governance definitions for Architectural Decision Records, not comparative architectural analyses of monoliths versus microservices.
-
-Location:
-`02-sources.md`
-
-Type:
-INTERNAL
-
-Impact:
-The research appropriately frames the ADR methodology within an applied case study (Monolith vs. Microservices). However, it attributes the architectural conclusions of that case study directly to the process guidelines. This makes it appear that AWS Prescriptive Guidance or Nygard provided the benchmark data for the 5-engineer ERP SaaS scenario.
-
-Assessment:
-This is a medium-impact internal contradiction regarding source attribution. The architectural trade-off logic is sound, but its source attribution is flawed.
-
----
+Type: SOURCE_CONFLICT
+Impact: Minor implementation variance.
+Assessment: Correctly identified by the research agent. Resolved cleanly by the agent adopting a superset of statuses (`Proposed`, `Accepted`, `Rejected`, `Deprecated`, `Superseded`) which preserves the intent of both schools of thought.
 
 ## Contradiction 2
 
-Statement A:
-Nygard limits status lifecycle to Proposed, Accepted, Deprecated, and Superseded.
+Statement A: Accepted ADRs are strictly immutable. Updates require new ADRs that supersede older ones.
+Location: Nygard / AWS / Microsoft Azure Well-Architected
 
-Location:
-`04-contradictions.md`
+Statement B: Practical teams often prefer "living documents" with date-stamped additions instead of immutability.
+Location: Joel Parker Henderson community repository (README Teamwork Advice)
 
-Statement B:
-AWS Prescriptive Guidance formally incorporates a "Rejected" state into the ADR lifecycle.
+Type: SOURCE_CONFLICT
+Impact: Operational tension between auditable history and maintenance convenience.
+Assessment: Correctly flagged as a practice-level tension. The research agent rightly favored the Tier 1 strict immutability rule, as it enforces the referential integrity logic the lab aims to validate (supersession lineage).
 
-Location:
-`04-contradictions.md`
+## Contradiction 3
 
-Type:
-SOURCE_CONFLICT
+Statement A: Start new projects with a monolith, even if confident it will scale.
+Location: Martin Fowler ("Monolith First" core thesis)
 
-Impact:
-Minimal.
+Statement B: Starting with microservices allows teams to get used to the rhythm... viable for system replacements with stable boundaries.
+Location: Martin Fowler ("Monolith First" counter-argument section)
 
-Assessment:
-The research correctly identifies and records this minor structural discrepancy between foundational (2011) and modern cloud enterprise (2023) ADR templates.
+Type: INTERNAL
+Impact: Nuanced architectural trade-off.
+Assessment: Correctly identified by the research agent. This is not a contradiction of fact, but an acknowledgment of differing engineering contexts. The research maps the monolith-first consensus appropriately to the specific constraints of the lab scenario (small team, volatile boundaries, greenfield).
+
+## Overall Assessment
+No material contradictions were hidden or ignored. All identified contradictions are well-analyzed and appropriately resolved within the context of the engineering lab.

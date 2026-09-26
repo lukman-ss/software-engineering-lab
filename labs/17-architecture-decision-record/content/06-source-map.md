@@ -3,8 +3,8 @@
 ## Problem & Why This Matters
 
 Research:
-research/runs/2026-09-25-architecture-decision-record/05-report.md (Finding 1)
-research/runs/2026-09-25-architecture-decision-record/03-evidence.md (Evidence 1, 3)
+research/runs/2026-09-26-architecture-decision-record/05-report.md (Finding 1)
+research/runs/2026-09-26-architecture-decision-record/03-evidence.md (Evidence 1, 3)
 
 Sources:
 Documenting Architecture Decisions (Nygard)
@@ -13,8 +13,8 @@ AWS Prescriptive Guidance
 ## Mental Model & Core Concept
 
 Research:
-research/runs/2026-09-25-architecture-decision-record/05-report.md (Finding 2, Finding 3)
-research/runs/2026-09-25-architecture-decision-record/03-evidence.md (Evidence 2, 4, 5)
+research/runs/2026-09-26-architecture-decision-record/05-report.md (Finding 2, Finding 3)
+research/runs/2026-09-26-architecture-decision-record/03-evidence.md (Evidence 2, 4, 5)
 
 Implementation:
 internal/adr/models.go (Status Lifecycle)
@@ -55,7 +55,7 @@ engineering/03-execution-result.md
 ## Case Study
 
 Research:
-research/runs/2026-09-25-architecture-decision-record/05-report.md (Finding 4)
+research/runs/2026-09-26-architecture-decision-record/05-report.md (Finding 5)
 
 Research Audit:
 research-audit/03-claim-audit.md (Claim 6 Warning)

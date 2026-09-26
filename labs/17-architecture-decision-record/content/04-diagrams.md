@@ -43,16 +43,14 @@ Diagram ini mengilustrasikan hubungan graf keputusan terarah antara ADR awal dan
 ┌──────────────────────────────────────┐
 │ ADR 0001                             │
 │ Title: Use Modular Monolith...       │
-│ Status: Superseded by 2 ─────────────┼────────┐
-└──────────────────────────────────────┘        │
-                   ▲                            │
-                   │ (Tautan Verifikasi Timbal-Balik)
-                   │                            │
-┌──────────────────┴───────────────────┐        │
-│ ADR 0002                             │        │
-│ Title: Extract Notification Service..│        │
-│ Status: Accepted                     │        │
-│ Supersedes: 1 ◄──────────────────────┼────────┘
+│ Status: Superseded by 2 ─────────┐   │
+└──────────────────────────────────────┘
+                                     │
+┌──────────────────────────────────────┘
+│ ADR 0002                             │
+│ Title: Extract Notification Service..│
+│ Status: Accepted                     │
+│ Supersedes: 1  ─── (back-reference)  │
 └──────────────────────────────────────┘
 ```
 

@@ -311,3 +311,19 @@ Sebelum menggabungkan (*merging*) ADR ke cabang utama:
 3. **Architectural Decision Records (ADRs)**
    - Publikasi: adr.github.io (2024-11-10)
    - URL: https://adr.github.io/
+4. **Markdown Architectural Decision Records (MADR)**
+   - Publikasi: adr/madr project (scientific publication 2018-04-03; MADR 4.0.0 on 2024-09-17)
+   - URL: https://adr.github.io/madr/
+5. **Maintain an architecture decision record (ADR)**
+   - Publikasi: Microsoft Learn — Azure Well-Architected Framework (2026-04-13)
+   - URL: https://learn.microsoft.com/en-us/azure/well-architected/architect-role/architecture-decision-record
+6. **Monolith First**
+   - Penulis: Martin Fowler
+   - Publikasi: martinfowler.com (2015-06-03)
+   - URL: https://martinfowler.com/bliki/MonolithFirst.html
+7. **Architecture decision record (ADR) — repository README and template collection**
+   - Penulis: Joel Parker Henderson
+   - Publikasi: GitHub — architecture-decision-record/architecture-decision-record (community-maintained)
+   - URL: https://github.com/joelparkerhenderson/architecture-decision-record
+
+Catatan: Sumber 1–6 adalah sumber primer Tier 1. Sumber 7 adalah referensi komunitas Tier 2 yang dipakai untuk koregatasi praktik "living document" vs imutan.
