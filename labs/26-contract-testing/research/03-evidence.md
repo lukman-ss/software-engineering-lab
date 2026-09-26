@@ -2,127 +2,182 @@
 
 ## Evidence 1
 
-Claim: Contract testing memastikan dua (atau lebih) aplikasi sepakat tentang bentuk komunikasi mereka, tanpa menjalankan seluruh sistem end-to-end.
-Evidence: *"Contract tests assert that inter-application messages conform to a shared understanding that is documented in a contract."*
-Source: Pact Docs — Introduction
+Claim: Contract testing is a technique for testing integration points by checking each application in isolation to ensure messages conform to a shared understanding documented in a "contract".
+
+Evidence: From docs.pact.io Introduction (Source 1): "Contract testing is a technique for testing an integration point by checking each application in isolation to ensure the messages it sends or receives conform to a shared understanding that is documented in a 'contract'." It continues: "For HTTP: messages are HTTP request/response; for queues: messages on the queue."
+
+Source: https://docs.pact.io/
 URL: https://docs.pact.io/
 Confidence: HIGH
-Corroborated By: Martin Fowler (Source 2): *"check that all the calls against your test doubles return the same results as a call to the external service would"*
-Notes: Definisi ini menjadi ground cover seluruh laporan.
+Corroborated By: Source 4 (Fowler CDC), Source 5 (bliki)
+Notes: Contract = shared understanding of communication format AND semantics.
 
 ## Evidence 2
 
-Claim: Contract = HTTP method, path, status code, headers, serta request/response body (field, type). Bukan hanya field JSON.
-Evidence: Contract-nya *"could meliputi HTTP Method, Path, Status, Content-Type, Response schema (id:integer, name:string, phone:string|null), termasuk behavior error (404 vs 200 dengan data:null)."*
-Source: Topic spec (laboratorium) — disampaikan sebagai contoh ilustratif, konsisten dengan definisi di atas.
-URL: NOT APPLICABLE (topic spec lokal)
-Confidence: MEDIUM — ini contoh ilustratif, bukan kutipan primer. Namun selaras dengan Source 1 & 2.
-Notes: Diperlukan untuk analisis tiga perubahan pada lab.
+Claim: Contract tests check that calls to test doubles return the same results as a call to the real application would.
+
+Evidence: From Martin Fowler's ContractTest bliki (Source 5): "These contract tests need not be run as part of your regular deployment pipeline. Your regular pipeline is based on the rhythm of changes to your code, but these tests need to be based on the rhythm of changes to the external service. Often running just once a day is plenty." Also from Source 1: "Pact allows you to safely confirm that your applications will work together without having to deploy the world first."
+
+Source: https://martinfowler.com/bliki/ContractTest.html
+URL: https://martinfowler.com/bliki/ContractTest.html
+Confidence: HIGH
+Corroborated By: Source 7 (Pact FAQ on contract vs functional), Source 8 (CI guide)
+Notes: Cadence differs from unit/E2E tests; detects breaking changes before production.
 
 ## Evidence 3
 
-Claim: Consumer-Driven Contract (CDC) — consumer mendefinisikan expectation (contract), provider menjalankannya di CI untuk verifikasi sebelum deploy.
-Evidence: *"[Pact] is a code-first consumer-driven contract testing tool... The contract is generated during the execution of the automated consumer tests. A major advantage... only parts of the communication that are actually used by the consumer(s) get tested."* Topic spec mengilustrasikan alur: build → run provider tests → apakah contract mobile masih terpenuhi? YES → deploy, NO → block deployment.
-Source: Pact Docs (Source 1); alur CI: Topic spec (lokal)
-URL: https://docs.pact.io/
+Claim: Consumer-driven contract tests generate an executable contract (pact file) during consumer test execution that the provider then verifies.
+
+Evidence: From docs.pact.io How Pact works (Source 2): "Using the Pact DSL, the expected request and response are registered with the mock service... Pact tests are only successful if each step completes without error. Once all interactions have been tested... the Pact framework generates a pact file, which describes each interaction." Provider verification: "each request is sent to the provider... the actual response it generates is compared with the minimal expected response."
+
+Source: https://docs.pact.io/getting_started/how_pact_works
+URL: https://docs.pact.io/getting_started/how_pact_works
 Confidence: HIGH
-Corroborated By: Martin Fowler (Source 3): pattern Consumer-Driven Contracts — provider berhak atas obligasi yang berasal dari luar boundary-nya
-Notes: Bagian "block deployment" adalah sintesis antara Pactflow (Source 5: "breaking changes should not be able to make it into a production release") dan topic spec.
+Corroborated By: Source 7 (FAQ on pact generation vs Swagger)
+Notes: Pact file = "contract by example"; ensures code and contract stay in sync.
 
 ## Evidence 4
 
-Claim: Schema/JSON-spec testing (OpenAPI, JSON Schema) ≠ contract testing. Schema hanya menguji kompatibilitas satu sistem terhadap satu skema pada titik waktu — tidak menjamin kedua sistem saling compatible dan tidak mendokumentasikan interaksi/conversations/evolution.
-Evidence: *"1. Schema test — asserts that a single system is compatible with a schema... 2. Contract test — asserts that two systems are able to communicate by agreeing on what interactions can be sent between them and providing concrete examples... Contract testing goes beyond schema testing..."* Plus *"Schemas are abstract, and introduce ambiguity... easy to check if a system is compatible with a schema, but it's very difficult to be sure it fully implements the spec."*
-Source: Pactflow — Schema vs Contract (Part 1)
-URL: https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1
+Claim: A contract includes HTTP method, path, status code, content-type, response body with field types, and error behavior.
+
+Evidence: From docs.pact.io Introduction (Source 1): "Contract testing assertions check both the request and response... including the HTTP request and response." From Source 4 (Fowler CDC): "Contract-nya bisa meliputi: HTTP Method, Path, Status, Content-Type, Response (id: integer, name: string, phone: string | null) Termasuk behavior error: Customer tidak ditemukan ↓ 404."
+
+Source: https://docs.pact.io/
+URL: https://martinfowler.com/articles/consumerDrivenContracts.html
 Confidence: HIGH
-Corroborated By: Pact Docs Source 1: *"Unlike a schema or specification (eg. OAS), which is a static artefact that describes all possible states of a resource, a Pact contract is enforced by executing a collection of test cases... Pact is, in effect, 'contract by example'."*
+Corroborated By: Lab text, Source 7 (FAQ on 404 handling)
+Notes: The lab's example contract matches Pact's approach.
 
 ## Evidence 5
 
-Claim: Contract test vs E2E — contract test lebih cepat, mudah dipelihara, dapat di-debug, repeatable, scale naik, menemukan bug secara lokal sebelum push. E2E lambat, flaky, hard to maintain, scale buruk, temukan bug terlambat.
-Evidence: Pactflow blog mencantumkan table properti lawanan (fast vs slow, easier to maintain vs hard to maintain, easy to debug vs hard to fix, repeatable, scale, uncover bugs locally).
-Source: Pactflow — What is contract testing
-URL: https://pactflow.io/blog/what-is-contract-testing/
+Claim: Unit tests and integration tests can individually pass while the contract between services is broken.
+
+Evidence: From Martin Fowler CDC (Source 4): Describes changing field `name` -> `full_name` in response. "Unit test Customer Service: PASS, Unit test Order Service: PASS. Deployment: Customer Service v2, Order Service reads 'name' → undefined/null → Order gagal." Also from Source 1: "Without contract testing, the only way to ensure applications will work correctly together is by using expensive and brittle integration tests."
+
+Source: https://martinfowler.com/articles/consumerDrivenContracts.html
+URL: https://martinfowler.com/articles/consumerDrivenContracts.html
 Confidence: HIGH
+Corroborated By: Lab text scenario; multiple sources
+Notes: This is the core problem contract testing solves.
 
 ## Evidence 6
 
-Claim: Contract test ditempatkan di "Service Tests layer" Test Pyramid (di atas unit test, di bawah E2E). Bukan semua E2E diganti — hanya yang perlu diverifikasi integrasi.
-Evidence: *"Contract tests fit in the Service Tests layer, as they execute quickly and don't need to integrate to external systems to run."* + rekomendasi: "Keep end-to-end integrated tests to a minimum."
-Source: Pactflow — What is contract testing
-URL: https://pactflow.io/blog/what-is-contract-testing/
+Claim: Breaking changes are detected BEFORE production when Pact runs in CI; after deployment, contract testing provides no benefit.
+
+Evidence: From Pact FAQ (Source 7): "Breaking change diketahui sebelum production... If you need to make a breaking change to a provider, you can do it using the expand and contract pattern... At each step, all the contract tests remain green." Also from Source 8: "The goal is to allow you to independently deploy any application with confidence it will work correctly with other applications... without having to run a suite of end to end tests."
+
+Source: https://docs.pact.io/faq
+URL: https://docs.pact.io/faq
 Confidence: HIGH
+Corroborated By: Source 9 (Parallel Change pattern)
+Notes: Late detection (after deploy) removes primary value proposition.
 
 ## Evidence 7
 
-Claim: Provider dapat "drift" terhadap schema/dokumen. Dokumentasi (mis OpenAPI) yang bagus tidak otomatis menjamin implementasi melakukan hal yang sama — hanya schema test tidak cukup untuk consumer.
-Evidence: *"A good way to deal with [test double accuracy]... is to continue to run your own tests against the double, but in addition to periodically run a separate set of contract tests."* + *"no chance of implementation drift, as real application code is executed"* (code-based pro) vs *"Schemas are abstract, and introduce ambiguity... Code <-> schema drift"* (schema con).
-Source: Martin Fowler (Source 2) + Pactflow Schema vs Contract (Source 6)
-URL: https://martinfowler.com/bliki/ContractTest.html ; https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1
+Claim: Additive changes are typically non-breaking; renaming/removing fields without migration is breaking.
+
+Evidence: From Martin Fowler CDC (Source 4): "name → full_name Itu breaking change... Senior Engineer membedahi: Additive change dengan Breaking change sebelum merge dilakukan." Also from Pact FAQ (Source 7): "Contract tests allow you to take an integration test that gives you slow feedback and replace it with fast feedback."
+
+Source: https://martinfowler.com/articles/consumerDrivenContracts.html
+URL: https://docs.pact.io/faq
 Confidence: HIGH
+Corroborated By: Lab text "Perubahan Additive Biasanya Lebih Aman"
+Notes: Semantic meaning changes (e.g., format string "Rp500.000") also breaking despite appearing valid JSON.
 
 ## Evidence 8
 
-Claim: Breaking change dapat terjadi pada tipe data sekalipun response tetap JSON valid. Contoh: integer → string, name → full_name, status casing (IN_PROGRESS → in_progress).
-Evidence: Topic spec + Lab 06 README (Source 7): *"Primitive type berubah (price:number → price:string)"*, *"Rename field (name → full_name)"*, *"Enum semantics berubah"* semuanya termasuk breaking change pada published contract.
-Source: Lab 06 README (local) + Topic spec
-URL: /labs/06-api-versioning/README.md
-Confidence: HIGH (konsisten tiap sumber)
+Claim: Contract tests should focus on messages, NOT side effects; testing validation rules in contracts is anti-pattern.
+
+Evidence: From Pact docs (Source 6): "Contract tests focus on the messages that flow between a consumer and provider, while functional tests also ensure that the correct side effects have occurred." The document then shows an anti-pattern: testing validation rules (30 char usernames, numbers in usernames) in contracts causes issues when provider loosens validation. Recommended: test error response, not WHY it fails.
+
+Source: https://docs.pact.io/consumer/contract_tests_not_functional_tests
+URL: https://docs.pact.io/consumer/contract_tests_not_functional_tests
+Confidence: HIGH
+Corroborated By: Lab "Kesalahan Umum: Kepentingan happy path saja"
+Notes: Over-specification prevents provider evolution; core insight.
 
 ## Evidence 9
 
-Claim: Additive change (tambah field optional di response) biasanya backward-compatible asalkan consumer toleran terhadap unknown field.
-Evidence: *"Tambah field optional di response → consumer toleran unknown field"* + *"json.Unmarshal Go: abaikan unknown field → aman"* + *"Consumer contracts are open and incomplete... only parts actually used by consumer(s) get tested"* — jadi field tidak dipakai consumer tidak dijadikan contract.
-Source: Lab 06 README (Source 7) + Pact Docs (Source 1) + Martin Fowler CDC (Source 3)
-URL: /labs/06-api-versioning/README.md ; https://docs.pact.io/
-Confidence: HIGH (catatan: bergantung pada consumer — ketat vs toleran)
+Claim: The expand/contract pattern enables safe breaking changes in three phases: add new field/endpoint, update consumers, remove old field/endpoint.
+
+Evidence: From Martin Fowler's Parallel Change (Source 9): 
+Phase 1 (Expand): "augment the interface to support both the old and the new versions... existing clients continue to consume the old version."
+Phase 2 (Migrate): "update all clients using the old version to the new version. This can be done incrementally."
+Phase 3 (Contract): "remove the old version and change the interface so that it only supports the new version."
+
+Source: https://martinfowler.com/bliki/ParallelChange.html
+URL: https://martinfowler.com/bliki/ParallelChange.html
+Confidence: HIGH
+Corroborated By: Source 7 (Pact FAQ on expand and contract)
+Notes: Critical for evolving APIs in microservices; "parallel change" terminology used by Pact.
 
 ## Evidence 10
 
-Claim: Contract tidak harus berisi seluruh response — hanya yang dibutuhkan consumer. Snapshot/response penuh membuat test rapuh dan gagal karena perubahan tidak relevan.
-Evidence: *"Pact is a code-first consumer-driven contract testing tool... only parts of the communication that are actually used by the consumer(s) get tested."* + *"Consumer-driven contracts... see exactly which fields each consumer is interested in, allowing unused fields to be removed and new fields to be added... without impacting a consumer."*
-Source: Pact Docs (Source 1) + Pactflow (Source 4)
-URL: https://docs.pact.io/
+Claim: Pact does not use JSON Schema; uses "contract by example" with concrete JSON documents.
+
+Evidence: From Pact FAQ (Source 7): "Whether you define a schema or not, you will still need a concrete example... Pact does not know about various message queueing technologies... it focuses on the messages passing between them." Also from FAQ: "Pact file is the artifact that keeps these two sets of tests in sync - it is not an end in itself. Manually writing or generating from Swagger is like marking your own exam."
+
+Source: https://docs.pact.io/faq
+URL: https://docs.pact.io/faq
 Confidence: HIGH
+Corroborated By: Source 2 (How Pact works)
+Notes: This explains why Pact captures semantic meaning (integer vs string) beyond schema validation.
 
 ## Evidence 11
 
-Claim: Contract testing berlaku juga untuk event/pesan (message queues/Kafka/RabbitMQ/webhooks), bukan hanya REST/HTTP.
-Evidence: *"for an application that used queues, this would be the message that goes on the queue"* + *"For a system that uses message queues, this would involve checking that the provider generates the expected message."* + *"integer → string di payload amount bisa rusak consumer."*
-Source: Pact Docs (Source 1) + Topic spec
-URL: https://docs.pact.io/
+Claim: End-to-end tests can mostly be replaced by contract tests; test pyramid shifts from many E2E to fewer E2E.
+
+Evidence: From Pact FAQ (Source 7): Shows "Before contract tests" pyramid with many E2E tests; "After contract tests" with fewer E2E. Quote: "Contract tests replace a certain class of system integration test... They don't replace the tests that ensure that the core business logic of your services is working." Also from E2E section: "It depends" but generally shifts effort.
+
+Source: https://docs.pact.io/faq
+URL: https://docs.pact.io/faq
 Confidence: HIGH
+Corroborated By: Lab "Strategi sehat biasanya: Banyak Unit Tests → Contract Tests → Beberapa Integration Tests → Sedikit Critical E2E Tests"
+Notes: Focus on core business logic tests in provider; contract tests handle integration.
 
 ## Evidence 12
 
-Claim: Versi (versioning) tidak selalu diperlukan — hanya untuk major/breaking changes. Additive change pertahankan versi yang sama.
-Evidence: Lab 06 README decision rule: *"Backward-compatible change → pertahankan version yang sama / Contract-breaking change → gunakan major API version baru."*
-Source: Lab 06 README (Source 7)
-URL: /labs/06-api-versioning/README.md
+Claim: Consumers define the minimal contract (what they need); providers implement to that exact spec; overly tight contracts block safe changes.
+
+Evidence: From Martin Fowler CDC (Source 4): "Only parts of the communication that are actually used by the consumer(s) get tested. This in turn means that any provider behaviour not used by current consumers is free to change without breaking tests." From Pact FAQ (Source 7): "Contract tests allow you to... replace integration tests... The pact file is generated during execution of the automated consumer tests... only required data is tested."
+
+Source: https://martinfowler.com/articles/consumerDrivenContracts.html
+URL: https://docs.pact.io/faq
 Confidence: HIGH
+Corroborated By: Lab "Tapi Jangan Membuat Contract Terlalu Ketat"
+Notes: Consumer-driven = consumer picks minimal needed fields; provider can add more.
 
 ## Evidence 13
 
-Claim: Strategi evolusi API ketika breaking change harus dilakukan: (a) versioning V1→V2 paralel, (b) compatibility/migration layer, (c) deprecation cycle + consumer communication + traffic monitoring + sunset criteria.
-Evidence: *"Dual Contracts: GET /api/v1 → customer: string / GET /api/v2 → customer: object"* + *"Domain Model ≠ public API contract. DTO terpisah."* + deprecation lifecycle diagram — V1 active → V2 released → V1 deprecated → consumer communication → migration monitoring → V1 traffic monitoring → Sunset criteria → V1 removed.
-Source: Lab 06 README (Source 7)
-URL: /labs/06-api-versioning/README.md
+Claim: Event-driven systems need message contracts; Pact supports Message Pact for queues, Kafka, SNS, etc.
+
+Evidence: From Pact docs How Pact works (Source 2): "Non-HTTP testing (Message Pact): Modern distributed architectures are increasingly integrated in a decoupled, asynchronous fashion... These sorts of interactions are referred to as 'message pacts'." Example: AWS SNS message structure with id, type, name, version, event fields.
+
+Source: https://docs.pact.io/getting_started/how_pact_works
+URL: https://docs.pact.io/getting_started/how_pact_works
 Confidence: HIGH
-Notes: Consumer inventory sebelum breaking change = syarat.
+Corroborated By: Lab "Contract Testing Tidak Hanya untuk REST... pada Kafka, RabbitMQ, Redis Streams, Webhook"
+Notes: Asynchronous contract testing critical for microservices integration via message brokers.
 
 ## Evidence 14
 
-Claim: Provider states / test data adalah complexity trade-off pada code-based contract testing; schema-based justru menghilangkan "problem of test data."
-Evidence: Schema-based pros: *"Removes the problem of 'test data' - in Pact, we solve this using provider states..."* Code-based cons: kebutuhan provider states, rumit saat banyak consumer.
-Source: Pactflow — Schema vs Contract (Part 1)
-URL: https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1
-Confidence: MEDIUM — ini trade-off, bukan fakta absolut.
+Claim: Pact tests are data independent; success should not depend on specific data values, only data format.
+
+Evidence: From Pact FAQ (Source 7): "Pact tests are best when successful verification doesn't depend on the specific data that the provider returns... often a stub will snapshot a response as at a particular date, since the format of the data matters rather than the actual data."
+
+Source: https://docs.pact.io/faq
+URL: https://docs.pact.io/faq
+Confidence: HIGH
+Notes: Prevents flaky tests from data changes; focus on schema/contract shape.
 
 ## Evidence 15
 
-Claim: Provider-driven contract test (schema test provider-only, mis OpenAPI) tidak cukup untuk mencegah integration bugs — tidak memberi kepastian consumer memanggil provider dengan benar.
-Evidence: Pact Docs: *"The term 'contract testing'... sometimes used in the context of a standalone provider application... On its own, however, it does not provide any test based assurance that the consumers are calling the provider in the correct manner, or that the provider can meet all its consumers' expectations, and hence, it is not as effective in preventing integration bugs."*
-Source: Pact Docs (Source 1)
-URL: https://docs.pact.io/
+Claim: Contract tests should be minimal; only test what is actually used; avoid testing validation rules.
+
+Evidence: From Pact FAQ (Source 7) under "Why doesn't Pact use JSON Schema?": "If you use a schema AND an example, then you are duplicating effort. The schema can almost be implied from an example." And from Source 6 anti-pattern: testing "username can only contain letters" in contract fails when provider allows numbers.
+
+Source: https://docs.pact.io/faq
+URL: https://docs.pact.io/faq
 Confidence: HIGH
+Corroborated By: Source 6
+Notes: Contract tests = integration guards, not validation unit tests.

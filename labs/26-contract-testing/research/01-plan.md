@@ -1,43 +1,50 @@
-# Research Plan — Contract Testing
+# Research Topic
 
-## Research Topic
-
-**Contract Testing — API Bisa Sama-Sama "Lulus Test", Tapi Integrasi Tetap Rusak**
-
-Topic: Contract testing, consumer-driven contracts (CDC), API integration, breaking changes, schema evolution, backward compatibility.
+Contract Testing — API Bisa Sama-Sama "Lulus Test", Tapi Integrasi Tetap Rusak (Contract Testing — APIs Can Both "Pass Tests" But Integration Still Broken)
 
 ## Objective
 
-Investigate contract testing as a technique for catching integration-breaking API changes in distributed systems. Determine how CDC (consumer-driven contracts) works, how it differs from schema/OpenAPI testing, how it should be wired into CI/CD, and how it compares to end-to-end testing. Apply findings to the lab scenario (three proposed provider changes: enum-casing, rename field, type change).
+Investigate and document the theory, practice, tools, and patterns of contract testing in distributed systems, with emphasis on:
+1. Consumer-Driven Contracts (CDC) as defined by Ian Robinson and Martin Fowler
+2. Pact as the primary implementation tool
+3. Breaking vs. non-breaking change detection
+4. Contract testing for REST APIs and event-driven systems (AsyncAPI, Kafka, etc.)
+5. CI/CD integration patterns (expand/contract pattern, can-i-deploy)
+6. Common mistakes and anti-patterns
 
 ## Research Questions
 
-1. Apa definisi teknis contract testing dan CDC (Consumer-Driven Contracts)?
-2. Bagaimana Pact menerapkan CDC secara code-first, dan peran Pact Broker/PactFlow?
-3. Contract testing vs. schema (OpenAPI/JSON Schema) testing — apa perbedaan kunci dan trade-off?
-4. Bagaimana contract test dipasangkan ke CI/CD supaya breaking change diketahui sebelum deploy provider?
-5. Contract testing untuk pesan/event (message queues) — apakah konsepnya sama?
-6. Additive change vs. breaking change — batasan yang dapat dipercaya?
-7. Lab scenario: ketiga perubahan backend (status, nama field, tipe) — masing-masing breaking? Bagaimana evolusi minimal?
+1. What is the theoretical foundation of Consumer-Driven Contract Testing?
+2. How does Pact implement contract testing for HTTP and message-based integrations?
+3. What constitutes a "contract" beyond just JSON schema (status codes, error behaviors, semantics)?
+4. What are the criteria for breaking vs. non-breaking (additive) changes?
+5. How does contract testing compare to E2E and integration testing?
+6. How does the expand/contract pattern enable safe breaking changes?
+7. What is the role of Pact Broker in CI/CD pipelines?
+8. How does contract testing apply to event-driven architectures (Kafka, RabbitMQ, webhooks)?
+9. What are the common anti-patterns and misconceptions?
+10. What are the limitations of contract testing?
 
 ## Search Strategy
 
-- Primary: Pact official docs (docs.pact.io)
-- Primary: Martin Fowler bliki "Contract Test" + article "Consumer-Driven Contracts"
-- Primary/Secondary: Pactflow blog posts on contract testing, CDC, schema vs contract
-- Cross-check definitions across Pact + Fowler + Pactflow
+- Primary sources: Pact official documentation (docs.pact.io), Martin Fowler's CDC article (2006), Martin Fowler's ContractTest bliki (2011), ParallelChange pattern (2014)
+- Secondary: AsyncAPI specification for event contracts, Spring Cloud Contract (archived but relevant)
+- Focus on: Official docs, pattern originators, tool maintainers
+- Cross-reference: Pact FAQ, CDC theory, expand/contract pattern
 
 ## Expected Primary Sources
 
-- docs.pact.io (Introduction, How Pact works, Conceptual overview, Testing scope)
-- martinfowler.com/bliki/ContractTest.html
-- martinfowler.com/articles/consumerDrivenContracts.html
-- pactflow.io/blog/what-is-contract-testing
-- pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1
+1. Pact.io Documentation (docs.pact.io) - Tier 1, official tool docs
+2. Martin Fowler, "Consumer-Driven Contracts: A Service Evolution Pattern" (2006) - Tier 1, pattern originator
+3. Martin Fowler, "Contract Test" bliki (2011) - Tier 1, pattern definition
+4. Martin Fowler, "Parallel Change" (2014) - Tier 1, breaking change pattern
+5. AsyncAPI Initiative - Tier 1, event-driven API specification
+6. Pact FAQ & Best Practices (contract_tests_not_functional_tests) - Tier 1, tool-specific guidance
 
 ## Risks / Unknowns
 
-- Beberapa sumber Pact terbaru (2025) mencantumkan update 2026 — verifikasi tanggal.
-- Batasan "additive = aman" bergantung pada consumer yang tolerant/strict.
-- Perbedaan definisi "contract testing" provider-only vs integration contract testing.
-- Lab menggunakan Go dan REST; sumber banyak berbahasa Kotlin/JS — harus generalisasi.
+- Spring Cloud Contract is archived (July 2026) - may not reflect current practices
+- AsyncAPI documentation is more of a spec reference than practical contract testing guide
+- Need to verify claims about event contract testing (Pact Message Pact) from Pact docs
+- Limited primary sources on "when NOT to use contract testing" beyond Pact's own FAQ
+- Lab exercise specific analysis: determining breaking changes for three specific field changes

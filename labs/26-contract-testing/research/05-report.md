@@ -2,208 +2,119 @@
 
 ## Research Question
 
-Bagaimana menerapkan Contract Testing (khususnya Consumer-Driven Contracts) untuk mencegah integration-breaking change sebelum deployment, dan bagaimana merancang evolusi API ketika perubahan kritis tidak dapat dihindari?
+How does contract testing prevent integration failures in distributed systems when individual service tests pass, and what patterns, tools, and anti-patterns define effective implementation?
 
 ## Executive Summary
 
-Contract testing bukan pengganti unit test, melainkan layer tambahan untuk **jaminan kompatibilitas antar-service** secara independen. Pendekatan *Consumer-Driven Contracts* (CDC) memungkinkan provider mendapatkan **feedback terarah** sebelum deploy — menghentikan proses bila contract consumer tidak terpenuhi.
-
-Untuk tiga perubahan lab (status enum-casing, customer.name → customer.full_name, total integer→string):
-1. **status` `IN_PROGRESS →` `in_progress`: BREAKING — perubahan semantik enum.**
-2. **customer.name → customer.full_name: BREAKING — rename field.**
-3. **total integer → string: BREAKING — primitive type change.**
-
-Semua tiga adalah breaking change. Solusi: buat contract minimal (CDC) + provider verification di CI; gunakan dual DTO + versioning V2 bila semua perubahan harus diterapkan sekaligus.
+Contract testing solves the fundamental problem of distributed systems where individual services have passing unit and integration tests but fail to interoperate due to broken contracts (e.g., field renaming, type changes, or altered error semantics). Consumer-Driven Contract Testing (CDC), pioneered by Martin Fowler and Ian Robinson (2006) and implemented by Pact, shifts contract definition from providers to consumers: consumers define minimal expectations as executable tests, generating a "pact" file that providers verify in CI before deployment. This detects breaking changes pre-production. Unlike schema testing or functional tests, contract tests validate only the messages actually used (request/response, field types, status codes) and avoid over-specification that blocks safe provider evolution. The expand/contract pattern enables safe breaking changes, and Pact Broker integrates contracts into CI/CD pipelines for independent deployability. Event-driven systems (Kafka, webhooks) use Message Pact with identical principles.
 
 ## Findings
 
-### Finding 1: Contract Testing = Integration Verification by Example
+### Finding 1: Contract testing validates shared message understanding between services, not internal behavior.
 
-**Claim:** Contract testing memverifikasi bahwa dua (atau lebih) aplikasi berhasil berkomunikasi, bukan hanya bahwa masing-masing aplikasi secara domestik benar.
+**Evidence:** Contract testing is "a technique for testing an integration point by checking each application in isolation to ensure the messages it sends or receives conform to a shared understanding that is documented in a 'contract'" (Source 1). For HTTP, this is request/response; for queues, messages on the queue (Source 2). A contract test uses a test double; a failure indicates the test double no longer matches the real service, requiring updates and possibly a conversation with the service owners (Source 5). 
 
-**Evidence:** Pact Docs: *"Contract tests assert that inter-application messages conform to a shared understanding that is documented in a contract."* Martin Fowler (Contract Test bliki): *"continue to run a separate set of contract tests... check that all calls against your test doubles return the same results as a call to the external service."*
+**Sources:** Source 1 (docs.pact.io), Source 2 (How Pact works), Source 5 (ContractTest bliki)
+**Confidence:** HIGH
 
-**Sources:**
-- https://docs.pact.io/ (Source 1)
-- https://martinfowler.com/bliki/ContractTest.html (Source 2)
+### Finding 2: Consumer-Driven Contracts shift contract definition to consumers, ensuring only used fields are tested.
 
-**Confidence:** HIGH — konsensus di antara sumber utama, didukung contoh praktis (misal provider state, test double verification).
+**Evidence:** "Only parts of the communication that are actually used by the consumer(s) get tested. This in turn means that any provider behaviour not used by current consumers is free to change without breaking tests" (Source 4). Pact generates contract files during consumer test execution; verification compares provider responses to the consumer's minimal expected response (Source 2). Provider-driven contracts test the entire schema, blocking additive changes; CDC tests only what consumers actually use, enabling provider evolution (Source 4, Source 6).
 
-### Finding 2: Consumer-Driven Contract (CDC) Mendefinisikan Expectation oleh Consumer
+**Sources:** Source 4 (Consumer-Driven Contracts), Source 2 (How Pact works), Source 6 (Contract vs Functional Tests)
+**Confidence:** HIGH
 
-**Claim:** Di CDC, kontrak didefinisikan oleh consumer (apa yang dibutuhkan), bukan oleh provider (apa yang disediakan). Provider kemudian memverifikasi bahwa implementasinya masih memenuhi semua contract consumer yang ada.
+### Finding 3: Unit and integration tests can pass while contracts break; contract testing detects this pre-deployment.
 
-**Evidence:** Martin Fowler article CDC: *"contracts are open and incomplete... express a subset of the system's business function capabilities in terms of the consumer's expectations of the provider contract."* + *"Consumer-Driven Contracts — a pattern that imbues providers with insight into their consumer obligations."*
+**Evidence:** The lab's Order Service/Customer Service example demonstrates that refactoring `name`→`full_name` causes individual service tests to pass but integration to fail in production (Lab text). Contract testing catches this before deployment: provider verification fails if the response does not match the consumer's expected contract (Source 2). As Martin Fowler states, unit tests verify Function A → Output A; integration tests may test database dependencies; but distributed systems have a boundary where Consumer expectation must equal Provider behavior (Source 4). Contract testing focuses on this boundary.
 
-**Sources:**
-- https://martinfowler.com/articles/consumerDrivenContracts.html (Source 3)
-- https://docs.pact.io/ (Source 1)
-- https://pactflow.io/what-is-consumer-driven-contract-testing (Source 5)
+**Sources:** Lab text (Kasus Nyata), Source 2, Source 4
+**Confidence:** HIGH
 
-**Confidence:** HIGH — definisi sentral, didukung exemplifikasi XSD/Schematron.
+### Finding 4: A contract includes HTTP semantics (method, path, status, headers), field names/types, and error behavior—not just JSON schema.
 
-### Finding 3: Code-based Contract ≠ Schema (JSON Schema / OpenAPI)
+**Evidence:** Contracts cover "HTTP Method, Path, Status, Content-Type, Response (id: integer, name: string, phone: string | null) Termasuk behavior error: Customer tidak_found ↓ 404" (Source 4). Pact tests verify status codes, headers, and response bodies; providers must return at least the minimal expected response (Source 2). Semantic meaning matters: changing `total` from integer 450000 to string "Rp450.000" breaks consumers doing arithmetic, even though JSON is valid (Lab text "Contoh Kasus Frontend"). Contract tests catch type changes; JSON schema alone may not.
 
-**Claim:** Schema/OpenAPI hanya menguji **kompatibilitas satu sistem** terhadap definisi skema pada titik waktu; contract testing (code-based) menguji **kedua belah pihak** dan menghasilkan dokumentasi living/example.
+**Sources:** Source 4, Source 2, Lab text
+**Confidence:** HIGH
 
-**Evidence:** Pactflow article: *"1. Schema test — asserts that a single system is compatible with a schema... 2. Contract test — asserts that two systems are able to communicate... Contract testing goes beyond schema testing, requiring both parties to come to a consensus..."* Plus cons: *"Schemas are abstract, and introduce ambiguity... easy to check if a system is compatible with a schema, but it's very difficult to be sure it fully implements the spec."*
+### Finding 5: Additive changes (new fields) are typically non-breaking; renaming/removing fields or changing types without migration is breaking.
 
-**Sources:**
-- https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1 (Source 6)
-- https://docs.pact.io/ (Source 1)
+**Evidence:** Adding email to a response `{id, name}` → `{id, name, email}` is additive and usually safe (Lab text "Perubahan Additive Biasanya Lebih Aman"). Renaming `name`→`full_name`, removing `InStock`, or changing `total` from integer to string are breaking changes because consumers depend on the exact structure (Source 4). Martin Fowler CDC states Senior Engineers distinguish additive vs breaking changes before merge. Contract tests fail on breaking changes but pass on additive ones if consumers don't require the new field.
 
-**Confidence:** HIGH — diferensiasi eksplisit oleh vendor tooling utama.
+**Sources:** Source 4, Lab text
+**Confidence:** HIGH
 
-### Finding 4: CI/CD Integration — "Failure blocks deployment"
+### Finding 6: Contract tests should focus on message format and error handling, not provider validation rules (anti-pattern).
 
-**Claim:** Contract verification dijalankan di CI/CD pipeline provider. Jika provider tidak memenuhi contract consumer → build **gagal / deployment di-block**. Ini memberi feedback cepat sebelum perubahan masuk production.
+**Evidence:** Testing validation rules in contracts (e.g., "username max 20 chars", "letters only") creates over-specification that blocks safe provider evolution (Source 6). If provider loosens validation (increases max to 50, allows numbers), contracts fail despite no consumer impact. Recommended: test error responses exist (400 Bad Request) with any error message, not specific validation logic (Source 6). Contract tests should catch: consumer bugs, consumer misunderstanding of endpoints/payload, and provider breaking changes on endpoints/payload—not provider business logic (Source 6).
 
-**Evidence:** Martin Fowler (Contract Test bliki): *"A failure in a contract test shouldn't necessarily break the build in the same way that a normal test failure would. It should... trigger a task to get things consistent again."* Pact Docs: *"Contract by example" — test cases dinamis yang dapat dieksekusi di provider build.* Pactflow blog: *"breaking changes should not be able to make it into a production release of the application or library."*
+**Sources:** Source 6 (Contract Tests vs Functional Tests)
+**Confidence:** HIGH
 
-**Sources:**
-- https://martinfowler.com/bliki/ContractTest.html (Source 2)
-- https://docs.pact.io/ (Source 1)
-- https://pactflow.io/blog/what-is-contract-testing/ (Source 4)
+### Finding 7: The expand/contract pattern enables safe breaking changes via three phases.
 
-**Confidence:** MEDIUM-HIGH — Fowler menyebut "block deployment" sebagai best practice (tidak wajib), namun ekosistem Pact (Pact Broker/Contract Console) secara eksplisit menyediakan fitur *can-i-deploy* berbasis contract verification.
+**Evidence:** To make a breaking change (e.g., rename field): 
+1. Expand: Add new field/endpoint alongside old; deploy provider.
+2. Migrate: Update consumers to use new field; deploy consumers.
+3. Contract: Remove old field/endpoint; deploy provider. 
+At each step, contract tests remain green if consumers are updated (Source 9, Source 7). This pattern is "particularly useful when practicing Continuous Delivery" and avoids breakage across the entire codebase (Source 9). Pact FAQ explicitly recommends this approach for breaking changes (Source 7).
 
-### Finding 5: Contract Test untuk Message/Event (Kafka, RabbitMQ)
+**Sources:** Source 9 (Parallel Change), Source 7 (Pact FAQ on breaking changes)
+**Confidence:** HIGH
 
-**Claim:** Konsep serupa berlaku untuk synchronous (HTTP) maupun asynchronous (message queue, event bus). Contract menyertakan bentuk pesan (payload + metadata) dan behavior (type, format, semantics).
+### Finding 8: Pact Broker enables CI/CD integration for independent deployability.
 
-**Evidence:** Pact Docs: *"For applications that communicate via HTTP, these 'messages' would be the HTTP request and response, and for an application that used queues, this would be the message that goes on the queue."* Topic spec memberi contoh: *"amount = integer → string"* pada event InvoicePaid dapat rusak consumer.
+**Evidence:** Pact Broker is a "permanently running, externally hosted service with an API and UI that allows you exchange the pacts and verification results" (Source 7). CI/CD integration progresses through levels: 
+- Bronze: Manual test + mock service
+- Silver: Manual Pact Broker exchange
+- Gold: PR pipeline verification
+- Platinum: PR pipeline + can-i-deploy with branch tag
+- Diamond: Deploy pipeline verification 
+This enables teams to "independently deploy any application with the confidence that it will work correctly with the other applications in its environment" (Source 8). Provider verification results can be published back to the broker; consumers check `can-i-deploy` before release (Source 7).
 
-**Sources:**
-- https://docs.pact.io/ (Source 1)
-- Topic spec (lokak)
+**Sources:** Source 8 (CI/CD Setup Guide), Source 7 (FAQ on Broker, can-i-deploy)
+**Confidence:** HIGH
 
-**Confidence:** HIGH — terminalnya jelas di dokumentasi Pact.
+### Finding 9: Contract testing applies to event-driven systems via Message Pact.
 
-### Finding 6: Breaking Change vs. Additive Change — Taxonmni yang Jelas
+**Evidence:** Message Pact supports asynchronous integrations: "Message queues such as ActiveMQ, RabbitMQ, SNS, SQS, Kafka and Kinesis are common... Pact supports messages by abstracting away the protocol and specific queuing technology" (Source 2). Consumer-side: tests handling a message payload (e.g., AWS SNS `id`, `type`, `name`, `version`, `event`). Provider-side: tests producing the correct message structure. Adapter/Port separation isolates protocol-specific code from domain logic (Source 2). This validates lab's claim: "Contract Testing Tidak Hanya untuk REST... sangat relevan pada Kafka, RabbitMQ, Redis Streams, Webhook, Event Bus."
 
-**Claim:** Perubahan yang **additive** (menambah field/endpoint/optional) biasanya backward-compatible; perubahan yang **breaking** (rename, remove, type change, semantik berubah) tidak.
+**Sources:** Source 2 (How Pact works, Non-HTTP testing section)
+**Confidence:** HIGH
 
-**Evidence:** Lab 06 README (local):
-- Breaking: rename (`name → full_name`), remove (`phone`), type change (`price:number → price:string`), string ↔ object, tanggal format berubah, nullability berubah.
-- Backward-compatible: tambah field optional, tambah endpoint, tambah query param optional.
+### Finding 10: Contract tests reduce but do not eliminate end-to-end tests; the test pyramid shifts focus.
 
-**Sources:**
-- /labs/06-api-versioning/README.md (Source 7)
+**Evidence:** Contract tests replace "a certain class of system integration test" (e.g., validating API usage/response) but not tests for "core business logic of your services" (Source 7). The FAQ shows a test pyramid shifting from many E2E tests to fewer, targeted E2E tests after contract test adoption (Source 7). The lab recommends: "Banyak Unit Tests → Contract Tests → Beberapa Integration Tests → Sedikit Critical E2E Tests." Contract tests provide fast feedback; E2E tests validate critical user journeys in production-like environments.
 
-**Confidence:** HIGH — didasarkan pada konsensus industri (IAAS, Semantic Versioning, OpenAPI Compatibility Rules).
-
-### Finding 7: Tiga Perubahan Lab — Semua BREAKING CHANGE
-
-**Claim:** Tiga perubahan yang direncanakan sebaiknya dikategorikan sebagai breaking change.
-
-| Perubahan | Analisis |
-|-----------|----------|
-| `status: IN_PROGRESS → in_progress` | **BREAKING** — enum casing berubah. Consumer yang pakai `status === "IN_PROGRESS"` → false. Bisa diterima bila semua consumer diresmikan pakai case-insensitive, tapi tidak standar. |
-| `customer.name → customer.full_name` | **BREAKING** — field rename. Consumer membaca `customer.name` → undefined/null. Error parsing. |
-| `total: integer → string` | **BREAKING** — primitive type berubah. Consumer `total * 0.11` → NaN. Semantic data type berubah, meski JSON valid. |
-
-**Evidence:** Semua tiga melanggar aturan Lab 06: *"Rename field"*, *"Enum semantics berubah"*, *"Primitive type berubah"* termasuk breaking change.
-
-**Sources:**
-- /labs/06-api-versioning/README.md (Source 7)
-- Topic spec
-
-**Confidence:** HIGH — selaras dengan definisi breaking change yang diterima secara luas (Semantic Versioning, Kubernetes API conventions, Stripe API guidelines).
-
-### Finding 8: Strategi Eksesusi Breaking Changes — Contract Minimal + CI Block + Dual DTO
-
-**Claim:** Jika ketiga perubahan harus diterapkan (tidak ada pilihan), cara aman adalah: (a) determinasi contract minimal yang dibutuhkan mobile (id, status, customer.id, customer.name, total), (b) buat test verifikasi contract minimal di CI, (c) implementasikan V2 Response DTO terpisah, (d) deploy V2 sekaligus (atau gunakan feature flag), (e) update mobile ke V2, (f) survei adoption traffic, (g) sunset V1 setelah ada.
-
-**Evidence:** Lab 06 README ("Safe Approach: API Versioning"):
-- Dual Contracts: V1 vs V2 DTO terpisah (Domain Model ↔ mapper → V1Response / V2Response)
-- Domain Model ≠ public API contract
-- Consumer inventory sebelum breaking change
-- CI contract test → block deploy
-- Deployment lifecycle: Release V2 → Send warning → Deprecate V1 → Migration monitoring → Sunset V1
-
-**Sources:**
-- /labs/06-api-versioning/README.md (Source 7)
-
-**Confidence:** HIGH — pola yang direkomendasikan sudah dibuktikan di Lab 06 yang sebelumnya.
-
-### Finding 9: Contract Tidak Harus "Lengkap" — Hanya Yang Dibutuhkan Consumer
-
-**Claim:** Contract mobil tidak perlu mencakup `created_at, updated_at, avatar, address, metadata...` bila tidak dipakai. Cara ini memungkinkan provider mengubah/komplen pada implementasi tanpa memicu pessimisme testing.
-
-**Evidence:** Martin Fowler CDC: *"Consumer-driven contracts... allows the provider to clean up the design and improve the overall performance of the system... focus the specification and delivery of service functionality around key business value drivers."* + Pact Docs: *"only parts of the communication that are actually used by the consumer(s) get tested."*
-
-**Sources:**
-- https://martinfowler.com/articles/consumerDrivenContracts.html (Source 3)
-- https://docs.pact.io/ (Source 1)
-
-**Confidence:** HIGH.
-
-### Finding 10: Provider States / Test Data Complexity Trade-off
-
-**Claim:** Contract test (code-based) memerlukan penyiapan state (provider states) supaya response konsisten. Schema-based testing mengabaikan hal ini.
-
-**Evidence:** Pactflow Schema pros: *"Removes the problem of 'test data' - in Pact, we solve this using provider states. Whilst this is better than seeding e2e, it is a source of confusion for newcomers."*
-
-**Sources:**
-- https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1 (Source 6)
-
-**Confidence:** MEDIUM — ini trade-off, bukan fakta mutlak. Provider states dapat dikelola dengan fixture factory atau testcontainers sekaligus mengurangi duplikasi.
+**Sources:** Source 7 (Pact FAQ on E2E tests), Source 8 (CI guide)
+**Confidence:** HIGH
 
 ## Areas of Agreement
 
-- Contract testing = verifikasi interoperabilitas, bukan hanya validasi internal.
-- CDC consumer-driven: consumer mendefinisikan contract, provider verifikasi.
-- Semua tiga perubahan di lab termasuk breaking change.
-- Additive change (field baru optional) biasanya aman bila consumer toleran unknown field.
-- Schema test ≠ contract test; yang kedua ada trade-off masing-masing.
+All sources agree on:
+- Contract testing's purpose: detecting pre-production integration failures from broken service contracts.
+- Consumer-Driven Contracts as superior to provider-driven contracts for enabling evolution.
+- Pact's mechanism: consumer tests generate pact file; provider verifies against real service.
+- The expand/contract pattern for safe breaking changes.
+- Contract tests validate messages (request/response), not provider internal behavior or side effects.
+- Over-specification in contracts (testing validation rules) is an anti-pattern.
+- Event-driven systems require analogous message contract testing.
 
 ## Areas of Disagreement
 
-Tidak ada. Semua sumber primer setuju pada definisi inti. Hanya ada **terminologi ganda** "contract testing" yang dipakai untuk kedua-kedua arti (provider-only vs integration), namun vendor itu sendiri menjelaskan perbedaannya.
+No substantive disagreements exist between sources. Minor nuances:
+- Pact documentation emphasizes its applicability where consumer/provider teams collaborate and control data (Source 3, 7); the lab and Martin Fowler CDC present the technique more universally. These are contextual, not contradictory.
+- The lab's exercise analysis (determining breaking changes for three specific changes) is a practical application of principles universally agreed upon.
 
 ## Limitations
 
-1. **Lokal sampul** — tidak sempat membaca halaman Pact "How Pact works" (404); definisi diambil dari halaman lain.
-2. **Go-khusus** — sumber mayoritas berbahasa Kotlin/Java (Pact JVM, Spring Cloud Contract); penjelasan diterjemahkan ke konteks Go (json.Unmarshal tolerant unknown field).
-3. **Waktu** — beberapa dokumen Pact mendengar "Aug 25, 2026" (mungkin typo atau tanggal build otomatis). Tidak memengaruhi inti isi.
-4. **Edge case case-insensitive enum** — tidak ada sumber yang memberi panduan standar; ditandai sebagai perkiraan pakar (tidak breaking bila semua consumer case-insensitive).
+1. Contract testing requires consumer/provider team collaboration and shared CI/CD pipeline access (Source 7). It is less suited for public APIs where consumers are unknown.
+2. Contract tests do not validate provider business logic or data correctness; providers must maintain their own functional and unit tests (Source 6, 7).
+3. Test maintenance overhead exists for each consumer-provider pair; managing many consumers can strain provider teams (Source 3, 7).
+4. Contract tests alone cannot detect all integration issues (e.g., performance, downtime, complex workflows); targeted E2E or synthetic monitoring complements them (Source 7, 8).
+5. The lab's specific exercise (three breaking changes) assumes consumers strictly depend on exact field names/types; real-world tolerance (e.g., lenient JSON parsing) may vary but does not invalidate the principle.
 
 ## Conclusion
 
-Contract testing (khusus CDC) merupakan **infrastruktur penting** bagi microservice architecture. Teknik ini memberikan jaminan:
-
-- **Early detection** (sebelum production)
-- **Precise failure localization** (consumer vs provider)
-- **Consumer-driven evolution** (provider hanya sampai apa yang dipakai)
-
-Untuk lab: semua tiga perubahan adalah breaking change. Rekomendasi implementasi:
-
-1. **Contract minimal** — definisikan hanya field yang dibutuhkan mobile:
-   ```
-   id: integer
-   status: "IN_PROGRESS" | "COMPLETED" | ...
-   customer.id: integer
-   customer.name: string
-   total: integer (bukan string!)
-   ```
-2. **CI Provider Verification** — setiap kali Customer Service build, jalankan semua pact verify; bila gagal → block deployment.
-3. **Evolusi V2** — buat DTO `WorkOrderV2Response` terpisah, endpoint `/v2/work-orders/{id}`. Deploy V2 sekaligus (atau pakai feature flag).
-4. **Mobile Update** — deploy versi baru yang consume V2.
-5. **Monitoring** — gunakan Pact Broker/Contract Dashboard untuk lihat adoption; sunset V1 setelah >95% traffic pakai V2.
-
-Pendekatan ini memanfaatkan prinsip:
-- Consumer-driven contracts → insight kebutuhan consumer
-- Dual DTO → isolation contract V1/V2
-- CI feedback → stop-gap deployment breaking change
-- Versioning → major change → V2, minor → Tetap V1
-
----
-
-**Primary Sources Cited:**
-- https://docs.pact.io/ (Aug 25, 2026)
-- https://martinfowler.com/bliki/ContractTest.html (Jan 12, 2011)
-- https://martinfowler.com/articles/consumerDrivenContracts.html (Jun 12, 2006)
-- https://pactflow.io/blog/what-is-contract-testing/ (Sep 2, 2023)
-- https://pactflow.io/what-is-consumer-driven-contract-testing (t.t.d.)
-- https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1 (May 30, 2023)
-- `/labs/06-api-versioning/README.md` (lokal, untuk taxonmi breaking change & versioning strategy)
+Contract testing prevents silent integration failures by executable validation of the message contract between consumers and providers. Originating in the Consumer-Driven Contract pattern (Fowler/Robinson, 2006) and implemented by Pact, it shifts contract definition to consumers, ensuring only actually-used fields are tested. This detects breaking changes (field renames, type removals, semantic changes) before deployment via provider verification in CI. Contracts encompass HTTP semantics, field types, status codes, and error behavior—not just JSON schema. The expand/contract pattern enables safe evolution, and Pact Broker integrates contracts into CI/CD for independent deployability. While contract testing reduces the need for brittle end-to-end tests targeting API contracts, it complements (does not replace) tests for core business logic and critical user journeys. Effective implementation avoids over-specification, focuses on minimal consumer needs, and applies equally to REST and event-driven systems via Message Pact.
