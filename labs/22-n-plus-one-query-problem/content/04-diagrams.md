@@ -3,7 +3,7 @@
 ## N+1 Query Flow
 ```text
 App -> DB: GetAllAuthors()
-DB -> App: 3 Authors
+DB -> App: 3 Authors (not empty)
 App -> DB: GetPostsByAuthorID(1)
 App -> DB: GetPostsByAuthorID(2)
 App -> DB: GetPostsByAuthorID(3)

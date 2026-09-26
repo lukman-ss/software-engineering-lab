@@ -1,48 +1,37 @@
 # Code Audit
 
-Target Lab: labs/22-n-plus-one-query-problem
-
 ## Finding 1
 
-Location: internal/blog/store.go:30-80
-Claimed Behavior: Thread-safe in-memory database simulation that accurately tracks query counts.
-Observed Implementation: Store uses `sync.Mutex` across all data retrieval and query counter methods (`GetQueryCount`, `ResetQueryCount`, `GetAllAuthors`, `GetPostsByAuthorID`, `GetPostsByAuthorIDs`). Each query call increments `queryCount` by 1 under the lock.
+Location: `internal/blog/store.go:30-80`
+Claimed Behavior: Thread-safe data store tracking query executions accurately.
+Observed Implementation: All accessor and mutator methods (`GetQueryCount`, `ResetQueryCount`, `GetAllAuthors`, `GetPostsByAuthorID`, `GetPostsByAuthorIDs`) acquire `s.mu.Lock()` with deferred unlock.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrency-safe for concurrent readers/accessors. Returns internal slices directly; acceptable for deterministic mock store.
+Notes: Mutex protection is properly structured across all methods.
 
 ## Finding 2
 
-Location: internal/blog/repository.go:13-25
-Claimed Behavior: Naive relationship retrieval executes 1 query for parents and N queries for child records.
-Observed Implementation: Calls `r.store.GetAllAuthors()`, iterates over the resulting slice, and calls `r.store.GetPostsByAuthorID(author.ID)` once per author.
+Location: `internal/blog/repository.go:13-28`
+Claimed Behavior: Naive relationship loading produces N+1 query pattern.
+Observed Implementation: `GetAllAuthors()` fetches authors (1 query), then iterates through authors and calls `GetPostsByAuthorID(author.ID)` in each iteration (N queries). Total = N + 1.
 Assessment: PASS
 Severity: LOW
-Notes: Perfectly models the iterative N+1 query antipattern.
+Notes: Correctly demonstrates N+1 query execution behavior.
 
 ## Finding 3
 
-Location: internal/blog/repository.go:29-55
-Claimed Behavior: Eager loading batching reduces query execution to 2 queries total.
-Observed Implementation: Calls `r.store.GetAllAuthors()`, extracts author IDs, calls `r.store.GetPostsByAuthorIDs(authorIDs)`, and groups records in memory using a map before populating the result structs.
+Location: `internal/blog/repository.go:32-58`
+Claimed Behavior: Eager loading batches child queries into 1 query, reducing total queries to 2.
+Observed Implementation: Collects all author IDs into `authorIDs` slice, invokes `GetPostsByAuthorIDs(authorIDs)` once (1 query), maps posts by `AuthorID`, and constructs result slice preserving author ordering. Total = 2 queries.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly reproduces the two-query eager loading pattern common in ORMs and DataLoaders.
+Notes: Correctly handles batching and in-memory aggregation. Handles empty author list by returning empty slice without calling post query.
 
 ## Finding 4
 
-Location: internal/blog/repository.go:31-33 vs internal/blog/repository.go:16
-Claimed Behavior: Symmetrical data retrieval return semantics between naive and eager methods.
-Observed Implementation: When authors slice is empty, `GetAuthorsWithPostsEager` early-exits returning `nil`, whereas `GetAuthorsWithPostsNPlusOne` initializes `var result []AuthorWithPosts` and returns an empty non-nil slice (`[]AuthorWithPosts{}`).
-Assessment: WARNING
-Severity: LOW
-Notes: Functional behavior is equivalent in Go slice handling, but creates minor return value inconsistency when empty.
-
-## Finding 5
-
-Location: internal/blog/repository.go
-Claimed Behavior: Production N+1 performance bottleneck simulation.
-Observed Implementation: The implementation is an in-memory simulation with zero I/O and zero latency overhead.
+Location: `internal/blog/store.go:63-79`
+Claimed Behavior: Mock batch query returns all matching posts for given author IDs.
+Observed Implementation: Uses hash map lookup `idMap[p.AuthorID]` over internal posts.
 Assessment: PASS
 Severity: LOW
-Notes: The engineering notes explicitly declare this trade-off: in-memory deterministic query counting was chosen over real database engine setup to maintain zero external dependencies.
+Notes: Clean implementation with linear complexity.

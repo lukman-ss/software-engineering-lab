@@ -11,18 +11,19 @@ Executable/Demo:
 - cmd/demo/main.go
 Approved Research Inputs:
 - research/runs/2026-09-25-n-plus-one-query-problem/05-report.md
-- research-audit/07-verdict.md
+- engineering/01-design.md
+- engineering/02-implementation-notes.md
+- engineering/03-execution-result.md
 Main Claims To Verify:
-- Naive relationship loading executes 1 query for parents and N queries for children (N+1 queries total).
-- Eager loading (batching via ID list) executes 1 query for parents and 1 query for children (2 queries total).
-- In-memory mock accurately counts queries and enforces thread safety.
-- Test coverage verifies query counts match claimed formulas.
-- Output from demo matches documented results.
+1. N+1 query problem execution runs 1 query for parents + N queries for children (Total = 4 when N = 3).
+2. Eager loading (batching) execution runs 1 query for parents + 1 batched query for children (Total = 2 queries).
+3. Both naive and eager loading methods return identical and consistent entity relationships.
+4. Concurrency safety of the mock datastore with query tracking mutex.
 Commands To Run:
-- go test -v ./...
-- go test -race ./...
-- go run ./cmd/demo
+- `go test -v ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-- In-memory mock lacks realistic round-trip database latency or connection pool saturation.
-- Test suite checks count but does not check empty/error edge cases or data integrity mismatches.
-- Overclaiming performance improvements without real I/O.
+- In-memory mock could mask race conditions if mutex locks are missing or inconsistently acquired.
+- Eager loading batching map aggregation might produce mismatched results or panic on empty/nil inputs.
+- README/demo output could diverge from actual code behavior.

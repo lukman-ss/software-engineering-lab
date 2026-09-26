@@ -13,8 +13,7 @@ Evidence: "...unlike the slow query log that can help you find slow-running quer
 Source: N+1 query problem with JPA and Hibernate
 URL: https://vladmihalcea.com/n-plus-1-query-problem/
 Confidence: HIGH
-Corroborated By: General APM documentation emphasizing total request query tracking over slow query logging.
-Notes: Explains the common disconnect between local testing (where dataset is small) and production degradation.
+Notes: Explains the common disconnect between local testing (where dataset is small) and production degradation. No additional corroborating source cited for this evidence.
 
 ## Evidence 3
 Claim: Eager loading solves the relational N+1 query problem by loading necessary related models concurrent with the parent query, vastly reducing the total query count.
@@ -26,13 +25,12 @@ Corroborated By: Source 1 (Vlad Mihalcea), advising the use of `JOIN FETCH` (eag
 Notes: Highlights the primary technique used to mitigate N+1 within ORMs.
 
 ## Evidence 4
-Claim: Unrestricted eager loading creates severe memory bloat by fetching excessive amounts of unneeded data.
+Claim: Unrestricted eager loading creates memory bloat by fetching excessive amounts of unneeded data.
 Evidence: "Using FetchType.EAGER either implicitly or explicitly for your JPA associations is a bad idea because you are going to fetch way more data that you need."
 Source: N+1 query problem with JPA and Hibernate
 URL: https://vladmihalcea.com/n-plus-1-query-problem/
 Confidence: HIGH
-Corroborated By: Source 4 (Vlad Mihalcea) explicitly defining eager fetching without bounds as an anti-pattern.
-Notes: Warns against treating eager loading as a silver bullet without considering data volume.
+Notes: Warns against treating eager loading as a silver bullet without considering data volume. (JPA/Hibernate-specific quote; the general principle of over-fetching applies beyond JPA but the explicit source is scoped to FetchType.EAGER.)
 
 ## Evidence 5
 Claim: The N+1 problem also occurs over network API boundaries, where executing multiple external HTTP requests introduces massive latency due to network overhead.
@@ -40,8 +38,7 @@ Evidence: "The n+1 problem means that the server executes multiple unnecessary r
 Source: Solving the N+1 Problem for GraphQL through Batching
 URL: https://shopify.engineering/solving-the-n-1-problem-for-graphql-through-batching
 Confidence: HIGH
-Corroborated By: REST architecture constraints requiring batch API endpoints.
-Notes: Demonstrates the N+1 problem is architectural, not strictly limited to SQL databases.
+Notes: Demonstrates the N+1 problem is architectural, not strictly limited to SQL databases. This source is GraphQL-specific; generalization to REST APIs and microservices is a well-established principle but not directly demonstrated here.
 
 ## Evidence 6
 Claim: Network-based N+1 issues can be resolved using batch loaders which group individual data promises and load them collectively.

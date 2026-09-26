@@ -26,10 +26,10 @@ Source Tier: Tier 1
 Relevance: Examines how the N+1 problem extends beyond databases into network API interactions (Network N+1) and explains how to solve it using dataloaders/batching.
 
 ## Source 4
-Title: Eager fetching is a code smell
+Title: JPA and Hibernate FetchType EAGER is a code smell
 Publisher: Vlad Mihalcea
 URL: https://vladmihalcea.com/eager-fetching-is-a-code-smell/
-Published: Unknown
+Published: December 15, 2014
 Accessed: September 25, 2026
 Source Tier: Tier 2
-Relevance: Investigates the downside of naive N+1 fixes, primarily focusing on how over-fetching through eager loading bloats memory and strains data transfer.
+Relevance: Investigates why EAGER fetching as a global mapping strategy is a code smell, focusing on how the fetching strategy becomes inconsistent across Hibernate query methods (Persistence Context vs JPQL vs Criteria API), forcing secondary SELECTs for EAGER associations that could not be overridden at query time.

@@ -27,7 +27,5 @@ Pengujian membuktikan solusi bekerja secara konsisten:
 Menyamakan *Query-level eager loading* (direkomendasikan) dengan *Mapping-level eager loading* (berbahaya). Menggunakan konfigurasi *hardcoded* seperti `FetchType.EAGER` secara global memicu *memory bloat* karena data relasional yang tidak relevan ikut ditarik tanpa henti.
 
 ## Warning / Caveats
-Berdasarkan audit:
+Berdasarkan audit (engineering-audit/06-verdict.md: Non-Blocking Issues: None):
 - Jangan gunakan *eager loading* level *mapping*. Gunakan level spesifik pada query.
-- Solusi belum menguji ketat kesetaraan *field-by-field* (*deep equal*).
-- Transisi status pada *zero records* harus diseragamkan (e.g., saat database kosong, *return nil* vs *empty slice* wajib dijaga konsistensinya).

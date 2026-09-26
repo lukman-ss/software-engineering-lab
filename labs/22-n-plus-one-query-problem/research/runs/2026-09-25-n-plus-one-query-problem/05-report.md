@@ -17,28 +17,28 @@ Sources:
 Confidence: HIGH
 
 ### Finding 2: Production Impact and Observability Blind Spots
-Claim: N+1 queries often bypass slow query logs because individual queries are fast, causing stealthy performance degradation through aggregate latency, repeated round-trips, and connection pool exhaustion.
+Claim: N+1 queries often bypass slow query logs because individual queries are fast, causing stealthy performance degradation through aggregate latency and repeated round-trips.
 Evidence: "...unlike the slow query log that can help you find slow-running queries, the N+1 issue won’t be spotted because each individual additional query runs sufficiently fast to not trigger the slow query log."
 Sources: 
 - N+1 query problem with JPA and Hibernate (https://vladmihalcea.com/n-plus-1-query-problem/)
 Confidence: HIGH
 
 ### Finding 3: Eager Loading Mitigates Database Query Counts
-Claim: Eager loading (fetching relationships alongside the parent model in a single or batched operation) reduces the total query count from N+1 down to 1 or 2.
+Claim: Eager loading (fetching relationships alongside the parent model in a single or batched operation) typically reduces the total query count; for a JOIN approach this can be one query, for a batched approach typically two.
 Evidence: "Eloquent can 'eager load' relationships at the time you query the parent model. Eager loading alleviates the 'N + 1' query problem."
 Sources: 
 - Eloquent: Relationships | Laravel 11.x (https://laravel.com/docs/11.x/eloquent-relationships#eager-loading)
 Confidence: HIGH
 
 ### Finding 4: Eager Loading Pitfalls (Memory Bloat)
-Claim: Unrestrained eager loading introduces severe memory bloat by fetching excessive, often unnecessary data into application memory.
+Claim: Unrestrained eager loading fetches more data than needed; in JPA/Hibernate this is done via FetchType.EAGER which can lead to excessive memory consumption.
 Evidence: "Using FetchType.EAGER either implicitly or explicitly for your JPA associations is a bad idea because you are going to fetch way more data that you need."
 Sources: 
 - N+1 query problem with JPA and Hibernate (https://vladmihalcea.com/n-plus-1-query-problem/)
 Confidence: HIGH
 
 ### Finding 5: Network N+1 and Batching Solutions
-Claim: N+1 problems are not isolated to SQL databases; they apply to network APIs (REST/GraphQL), where N HTTP round-trips cause massive latency overhead. This is solved by batching requests (e.g., using DataLoaders).
+Claim: In GraphQL, N+1 problems occur when field resolvers make multiple unnecessary round trips to datastores for nested data, causing significant latency overhead. This is solved by batching requests (e.g., using DataLoaders such as the graphql-batch Ruby gem).
 Evidence: "The n+1 problem means that the server executes multiple unnecessary round trips to datastores for nested data... GraphQL Batch allows applications to define batch loaders that specify how to group and load similar data"
 Sources: 
 - Solving the N+1 Problem for GraphQL through Batching (https://shopify.engineering/solving-the-n-1-problem-for-graphql-through-batching)
@@ -46,9 +46,9 @@ Confidence: HIGH
 
 ## Areas of Agreement
 - The N+1 problem is a fundamental architectural issue spanning ORMs, GraphQL, and microservices.
-- Eager loading and request batching are the universally accepted primary solutions.
-- Loading an excessive amount of related data unconditionally is harmful (leading to memory bloat/OOM errors).
-- Relying purely on slow query logs is insufficient for detecting N+1 issues; total request query counting or full APM tracing is strictly necessary.
+- Eager loading and request batching are widely recommended approaches to mitigate the N+1 problem, as demonstrated by multiple frameworks and libraries.
+- Loading an excessive amount of related data unconditionally is harmful, leading to unnecessary memory and resource consumption (the source supports fetching "way more data than needed").
+- Relying purely on slow query logs is insufficient for detecting N+1 issues; total request query counting is recommended, and APM tracing can provide additional visibility.
 
 ## Areas of Disagreement
 No material disagreements were discovered in the investigated authoritative sources. 
@@ -57,4 +57,4 @@ No material disagreements were discovered in the investigated authoritative sour
 The precise latency cost (e.g., the exact millisecond cost of an N+1 query) heavily depends on the specific infrastructure, network topology, and database capabilities, making universal fixed latency benchmarks impossible to establish.
 
 ## Conclusion
-The N+1 query problem is a deceptive performance bottleneck that scales linearly with dataset size. Resolving it requires a balanced engineering approach: eliminating unnecessary iterative queries via eager loading or API batching, while strictly limiting payload sizes and column counts to prevent memory bloat. Effective system monitoring necessitates tracking the total query count per HTTP request rather than solely relying on individual database query execution times.
+The N+1 query problem is a deceptive performance bottleneck that scales with dataset size. Resolving it requires a balanced engineering approach: eliminating unnecessary iterative queries via eager loading or API batching, while limiting payload sizes and column counts to prevent excessive data fetching. Effective system monitoring benefits from tracking the total query count per HTTP request in addition to individual database query execution times.

@@ -6,6 +6,9 @@ Purpose: Demonstrasi anti-pattern (iterasi query).
 ```go
 func (r *Repository) GetAuthorsWithPostsNPlusOne() []AuthorWithPosts {
 	authors := r.store.GetAllAuthors()
+	if len(authors) == 0 {
+		return []AuthorWithPosts{}
+	}
 	
 	var result []AuthorWithPosts
 	for _, author := range authors {
@@ -29,7 +32,7 @@ Purpose: Solusi batching dan penggabungan di memori.
 func (r *Repository) GetAuthorsWithPostsEager() []AuthorWithPosts {
 	authors := r.store.GetAllAuthors()
 	if len(authors) == 0 {
-		return nil
+		return []AuthorWithPosts{}
 	}
 	
 	authorIDs := make([]int, len(authors))
