@@ -18,17 +18,21 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- Research Plan & Findings: Token Bucket, Leaky Bucket, Bounded Queue Backpressure, RFC 6585 (429 + Retry-After), RFC 6598 (CGNAT collision avoidance), Marc Brooker / AWS Jitter Backoff.
+- Token Bucket & Leaky Bucket algorithms (burst capacity vs traffic smoothing)
+- Bounded Queue Backpressure & Load Shedding (rejection on saturation)
+- RFC 6585 HTTP 429 Too Many Requests with `Retry-After` header
+- AWS Full Jitter, Equal Jitter, No Jitter, Decorrelated Jitter (Marc Brooker)
+- RFC 6598 CGNAT tenant isolation via API key registry
 
 Main Claims To Verify:
-1. Token bucket accommodates initial bursts up to capacity and refills at constant rate.
-2. Leaky bucket prevents bursts exceeding capacity and drains at leak rate.
-3. Bounded queue immediately rejects excess jobs under load (`ErrQueueFull`) without unbounded memory growth.
-4. HTTP 429 middleware sets standard RFC 6585 `Retry-After` header and JSON response.
-5. Multi-tenant registry isolates tenant rate limits to prevent CGNAT IP starvation.
-6. Retry backoff adheres to AWS Full Jitter, Equal Jitter, No Jitter bounds.
-7. Concurrency safety verified with Go race detector without data races.
-8. Demo execution produces legitimate live metrics.
+1. Token bucket allows burst up to capacity $B$ and replenishes at rate $R$.
+2. Leaky bucket smooths flow to rate $R$ and drops requests exceeding capacity.
+3. Multi-tenant registry isolates rate limit buckets per tenant key.
+4. Bounded queue immediately rejects excess jobs under saturation (`ErrQueueFull`).
+5. Retry backoff calculates bounds according to AWS jitter strategies.
+6. HTTP middleware returns HTTP 429 with `Retry-After` header when limit exceeded.
+7. Concurrency safety under race detector (`go test -race ./...`).
+8. Demo runs successfully with real, uncorrupted output matching documented results.
 
 Commands To Run:
 - `go test -v ./...`
@@ -36,6 +40,7 @@ Commands To Run:
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions in rate limit token accumulation or queue status updates.
-- Flaky tests caused by real-time wall-clock `time.Sleep`.
-- Mismatch between README claims and actual exposed package APIs.
+- Race conditions during token refill or channel queue operations.
+- Flaky tests dependent on real-time wall clocks.
+- Inaccurate jitter formulas or mathematical boundary violations.
+- Discrepancies between execution result logs and actual command outputs.
