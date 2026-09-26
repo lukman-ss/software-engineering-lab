@@ -1,91 +1,27 @@
 # Changes Made
 
-## Revision Summary
+## Revision 2 (research-only pass, 2026-09-26)
 
-Audit Date: 2026-09-26
-Reviser: Research Revicer Agent
-
-All issues identified were pre-existing gaps that were already honestly declared with appropriate confidence levels (MEDIUM/LOW). No unsupported claims were promoted as verified fact.
-
-## Revision 1
-
-Audit Issue:
-MEDIUM — Gatling documentation inaccessible (403), capacity unverified
+Audit Issue: HIGH/MEDIUM — Overgeneralization: claim that third-party APIs must always be tested with real calls lacks guardrails for sandbox/staging vs high-volume stress tests
 
 Files Changed:
-- research/03-evidence.md (Evidence 15)
-- research/02-sources.md (added Source 25)
-- research/06-open-questions.md (updated Weak Evidence section)
-- research/05-report.md (updated Finding 5, Limitations section)
+- research/05-report.md (Finding 7)
+- research/03-evidence.md (Evidence 17)
+- research/04-contradictions.md (Contradiction 2)
+- research/02-sources.md (Source 24 — ISO, Source 23 — JMeter component ref)
+- research/06-open-questions.md (weak evidence note)
 
 Action:
-- Verified alternative Gatling vendor page (https://gatling.io/open-source/) 
-- Updated Evidence 15 to reflect MEDIUM confidence with explicit verification notes
-- Added Source 25 as alternative verification source
-- Documented that primary DSL/architecture details remain unverifiable due to 403
+- Narrowed claim: real calls appropriate in controlled sandbox/staging environments; mocks with artificial latency for high-volume stress tests (Finding 7 now qualified)
+- Added qualification to Evidence 17 matching revised Finding 7
+- Updated Contradiction 2 assessment to reflect resolved qualification
+- Marked Source 24 (ISO/IEC 25010) as DISCLAIMED in sources.md
+- Marked Source 23 (JMeter component reference) as DISCLAIMED in sources.md
+- Updated open-questions weak evidence to note ISO disclaimer
 
 Verification:
-- Source 25 checked 2026-09-26
-- Evidence 15 confidence properly annotated
-- No claims elevated beyond verified scope
+- All edits reviewed against audit/03-claim-audit Claim 6 (PARTIAL, INTERPRETATION)
+- Audit required revision 1 now addressed
+- Audit required revision 2 now addressed (Sources 23 and 24 disclaimed)
 
-Status:
-RESOLVED — Confidence level appropriately adjusted, gaps documented
-
-## Revision 2
-
-Audit Issue:
-MEDIUM — JMeter official docs timed out, relied on Azure inference
-
-Files Changed:
-- research/03-evidence.md (Evidence 14)
-- research/02-sources.md (added Verification Notes to Source 22)
-
-Action:
-- Azure documentation verified as authoritative source for JMeter protocol support
-- Updated evidence to clarify Azure confirmation serves as proxy verification
-- Confidence upgraded from MEDIUM to MEDIUM-HIGH
-
-Verification:
-- Source 16 (Azure Load Testing) checked and confirmed
-- Evidence 14 now cites Azure as verification source
-- Protocol claims (HTTP, JDBC, JMS, SOAP, FTP) verified through Azure integration statement
-
-Status:
-RESOLVED — Confidence level appropriately elevated, source properly cited
-
-## Revision 3
-
-Audit Issue:
-MEDIUM — Bottleneck triage decision tree synthesized from fragments
-
-Files Changed:
-- research/03-evidence.md (Evidence 29)
-
-Action:
-- Clarified that guidance is synthesized best-practice, not single-source authoritative
-- Added explicit note: "practitioners should verify against their specific monitoring tools and architecture"
-- Maintained MEDIUM confidence level with clearer scope limitation
-
-Verification:
-- Evidence 29 now explicitly labels synthesized guidance
-- No overstatement of verification scope
-
-Status:
-RESOLVED — Synthesis properly documented, not overstated
-
-## Revision 4
-
-Audit Issue:
-Source list consistency - missing verification notes for updated claims
-
-Files Changed:
-- research/02-sources.md (added Source 25, updated Source 22 notes)
-
-Action:
-- Added Source 25 for Gatling verification (vendor page)
-- Added verification notes to Source 22 (JMeter)
-- All evidence references now have clear verification status
-
-Status:
-RESOLVED — All sources have proper verification documentation
+Status: RESOLVED

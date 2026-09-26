@@ -204,18 +204,20 @@ Title: What's New in JMeter (component reference attempt)
 Publisher: Apache Software Foundation
 URL: https://jmeter.apache.org/usermanual/component_reference.html
 Published: NOT VERIFIED
-Accessed: 2026-09-26
+Accessed: NOT ACCESSED — request timed out
 Source Tier: Tier 1 (official project documentation)
-Relevance: NOT ACCESSED — request timed out. Referenced as intended but inaccessible.
+Relevance: NOT ACCESSED — request timed out. NOT USED as primary evidence for any claim. JMeter protocol support verified through Azure Load Testing (Source 16) instead.
+Verification Status: DISCLAIMED — not included in primary evidence list due to inaccessibility.
 
 ## Source 24
 Title: ISO/IEC 25010:2011 Software Engineering
 Publisher: ISO (International Organization for Standardization)
-URL: NOT VERIFIED — paywalled standard
-Published: 2011
-Accessed: Search attempted, no accessible full text
+URL: STUB — paywalled standard, not directly verified
+Published: 2011 (according to ISO registry, secondary confirmation)
+Accessed: NOT VERIFIED — full text not inspected
 Source Tier: Tier 1 (international standard)
-Relevance: Performance efficiency quality model: time behavior, resource utilization, capacity. Referenced but NOT VERIFIED directly.
+Relevance: Performance efficiency quality model: time behavior, resource utilization, capacity — widely cited in SE literature but NOT VERIFIED from paywalled text.
+Verification Status: DISCLAIMED — not included in primary evidence list due to lack of direct verification; sub-characteristics cited are based on secondary descriptions — see Open Questions.
 
 ## Source 25
 Title: Gatling Open Source vs. Gatling Enterprise

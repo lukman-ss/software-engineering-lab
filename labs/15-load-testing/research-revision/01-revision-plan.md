@@ -5,22 +5,26 @@ Target Lab: labs/15-load-testing
 Previous Audit Status: APPROVED_WITH_WARNINGS
 
 ## Blocking Issues
+
 None.
 
 ## Non-Blocking Issues
-1. Gatling documentation returned 403 HTTP error and is unverified from primary sources.
-2. JMeter documentation timed out; relied on Azure documentation for JMeter capability claims.
-3. Bottleneck triage decision tree is synthesized rather than derived from a single authoritative source.
+
+1. **Overgeneralization**: "External third-party dependencies must always be tested with real calls" omits guardrails for sandbox/staging vs stress tests
+2. **Unverified Source**: ISO/IEC 25010:2011 cited but paywalled/not inspected
+3. **Missing Source**: Apache JMeter component reference URL timed out
+4. **Weak Source**: Gatling technical documentation returned 403; relies on marketing summary
 
 ## Files To Modify
-- research/03-evidence.md (Evidence 15 - Gatling)
-- research/03-evidence.md (Evidence 14 - JMeter)
-- research/03-evidence.md (Evidence 29 - Bottleneck triage)
-- research/06-open-questions.md (Question 2 and 7 - related to gaps)
+
+- research/05-report.md (Finding 7 - external API call overgeneralization)
+- research/03-evidence.md (Evidence 17 - add qualification, Evidence 14 - verify via Azure docs)
+- research/02-sources.md (Source 23, Source 24 - add disclaimers, Source 25 for Gatling)
+- research/04-contradictions.md (Contradiction 2 - resolve via qualification)
+- research/06-open-questions.md (update weak evidence notes)
 
 ## Verification Plan
-- source verification: Verify accessible sources for Gatling and JMeter claims
-- tests: Not applicable (PIPELINE OVERRIDE: research only)
-- build: Not applicable
-- demo: Not applicable
-- documentation consistency: Ensure research notes confidence levels appropriately
+
+- source verification: Confirm Azure docs for JMeter, Gatling vendor page verified
+- documentation consistency: Ensure all claims properly qualified
+- confidence levels: Verify no claims elevated beyond verified scope

@@ -13,7 +13,7 @@
 - **Evidence 15 (Gatling):** MEDIUM (reviser 2026-09-26: vendor page https://gatling.io/open-source/ verified; primary docs still 403)
 - **Evidence 14 (JMeter multi-protocol):** MEDIUM-HIGH (reviser 2026-09-26: Azure docs provide authoritative confirmation; direct JMeter component ref still timed out)
 - **Evidence 29 (P95 300ms→2.5s investigation steps):** MEDIUM — synthesized best-practice, not single-source authoritative procedure
-- **Source 24 (ISO/IEC 25010):** NOT VERIFIED — paywalled, referenced but not opened
+- **Source 24 (ISO/IEC 25010):** DISCLAIMED — paywalled, not directly verified, excluded from primary evidence list; cited sub-characteristics require further investigation with full-text access or removal from formal sources
 
 ## Claims Needing Deeper Research
 - Quantitative percentile thresholds: Is P95 <500ms with Error <1% appropriate for Booking Bengkel? Industry SLA benchmarks by domain (HR, CMMS, booking) not found.

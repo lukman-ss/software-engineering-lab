@@ -59,11 +59,11 @@ Load testing is a critical practice for identifying system failure points before
 **Corroborations:** Three authoritative sources (k6, Google SRE, Azure) agree backend monitoring is essential for bottleneck identification.
 
 ### Finding 7
-**Claim:** External/third-party API dependencies must be tested with real calls to reveal end-to-end latency; mocking hides real performance problems.
-**Evidence:** Azure (Source 15): "When testing under load, include actual third-party API calls. Mocking external dependencies makes tests run faster and more predictably, but it hides real-world performance problems... If your app depends on a payment processor API, test with real calls." Topic example: "Load test menunjukkan... WhatsApp API Timeout. Kesimpulannya. Bukan database yang menjadi bottleneck. Melainkan dependency eksternal." (Sources 15)
+**Claim:** External/third-party API dependencies should be tested with real calls in controlled sandbox/staging environments to reveal end-to-end latency; mocking is appropriate for high-volume stress tests where third-party rate limits and costs are prohibitive.
+**Evidence:** Azure (Source 15): "When testing under load, include actual third-party API calls. Mocking external dependencies makes tests run faster and more predictably, but it hides real-world performance problems... If your app depends on a payment processor API, test with real calls." Topic example: "Load test menunjukkan... WhatsApp API Timeout. Kesimpulannya. Bukan database yang menjadi bottleneck. Melainkan dependency eksternal." Guidance qualification: Use contracted sandbox/test endpoints with real calls for validation; use high-fidelity stubs with artificial latency for massive stress tests to avoid rate limits, financial costs, and terms-of-service violations.
 **Sources:** Source 15
 **Confidence:** HIGH
-**Corroborations:** Azure guidance and topic case study both demonstrate external dependencies as hidden bottlenecks.
+**Corroborations:** Azure guidance and topic case study both demonstrate external dependencies as hidden bottlenecks; industry practice reserves real calls for controlled environments while using mocks for high-volume testing.
 
 ### Finding 8
 **Claim:** Test data must be production-realistic; small dummy datasets (e.g., 100 records) don't reflect production with millions of records.

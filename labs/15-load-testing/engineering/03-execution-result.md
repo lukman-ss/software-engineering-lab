@@ -27,10 +27,12 @@ ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/internal/lo
 ?   	github.com/lukman/software-engineering-lab/labs/15-load-testing/internal/server	[no test files]
 === RUN   TestLoadTest_SmokeVsStress
 --- PASS: TestLoadTest_SmokeVsStress (1.05s)
+=== RUN   TestLoadTest_ErrorCount
+--- PASS: TestLoadTest_ErrorCount (0.10s)
 === RUN   TestServer_MethodNotAllowed
 --- PASS: TestServer_MethodNotAllowed (0.00s)
 PASS
-ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/tests	1.600s
+ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/tests	1.765s
 ```
 
 ## Race Detector

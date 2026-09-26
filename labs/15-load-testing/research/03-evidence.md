@@ -134,12 +134,12 @@ Confidence: HIGH
 Corroborated By: Three independent sources emphasize backend resource monitoring during load tests.
 
 ## Evidence 17
-Claim: External API dependencies (third-party services) can be bottlenecks; testing with real calls reveals end-to-end latency.
-Evidence: Azure (Source 15): "When testing under load, include actual third-party API calls. Mocking external dependencies makes tests run faster and more predictably, but it hides real-world performance problems. If your app depends on a payment processor API, test with real calls to understand end-to-end latency."
+Claim: External API dependencies (third-party services) can be bottlenecks; testing with real calls in sandbox/staging reveals end-to-end latency; real calls to production third-party APIs during high-volume stress tests may violate rate limits and terms of service.
+Evidence: Azure (Source 15): "When testing under load, include actual third-party API calls. Mocking external dependencies makes tests run faster and more predictably, but it hides real-world performance problems. If your app depends on a payment processor API, test with real calls to understand end-to-end latency." Guidance clarification: For production-like validation in controlled environments, real calls are essential; for high-volume stress tests, use rate-limiting safeguards or high-fidelity stubs with simulated network delay to avoid financial cost and provider bans.
 Source: Source 15 (Azure Well-Architected Performance Test)
 URL: https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
 Confidence: HIGH
-Corroborated By: Topic specification CMMS example: "Load test menunjukkan... WhatsApp API Timeout. Kesimpulannya. Bukan database yang menjadi bottleneck. Melainkan dependency eksternal."
+Corroborated By: Topic specification CMMS example: "Load test menunjukkan... WhatsApp API Timeout. Kesimpulannya. Bukan database yang menjadi bottleneck. Melainkan dependency eksternal"; industry practice reserves real third-party calls for contracted sandbox environments.
 
 ## Evidence 18
 Claim: Test data must be realistic — small dummy datasets don't reflect production database performance.

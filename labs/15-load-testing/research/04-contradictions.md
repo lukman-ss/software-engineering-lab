@@ -16,7 +16,7 @@ Source A (general best practice implied in many guides): Many load testing guide
 
 Source B (Azure Well-Architected): "When testing under load, include actual third-party API calls. Mocking external dependencies makes tests run faster and more predictably, but it hides real-world performance problems. If your app depends on a payment processor API, test with real calls to understand end-to-end latency." (Source 15)
 
-ASSESSMENT: Not contradictory — complementary. The Azure guidance clarifies that while mocking may make tests faster, it hides real-world bottlenecks (e.g., third-party API timeouts, high latency). For production-like validation, real calls are essential. Teams may use mocked dependencies for early dev/test cycles, then switch to real dependencies for production-like load tests.
+ASSESSMENT: Resolved by contextual qualification. Real calls are essential for production-like validation in controlled sandbox environments; mocks/stubs with artificial latency are appropriate for high-volume stress tests to avoid rate limits, financial costs, and ToS violations. Research report now clarifies this distinction (Finding 7 revised 2026-09-26).
 
 ## Contradiction 3
 Claim: "Use laptop/test environment that mirrors production" vs "Only way to get accurate performance data is production testing."

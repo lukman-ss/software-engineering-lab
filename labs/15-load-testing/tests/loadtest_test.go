@@ -54,6 +54,33 @@ func TestLoadTest_SmokeVsStress(t *testing.T) {
 	}
 }
 
+func TestLoadTest_ErrorCount(t *testing.T) {
+	// Create a mock server that returns HTTP 500
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	cfg := loadtest.Config{
+		URL:      ts.URL,
+		Method:   http.MethodGet,
+		Body:     nil,
+		VUs:      2,
+		Duration: 100 * time.Millisecond,
+	}
+	res := loadtest.NewRunner(cfg).Run(context.Background())
+
+	if res.TotalRequests == 0 {
+		t.Fatal("expected requests to be made")
+	}
+	if res.ErrorCount != res.TotalRequests {
+		t.Fatalf("expected all requests to be errors, got %d errors out of %d total", res.ErrorCount, res.TotalRequests)
+	}
+	if res.SuccessCount != 0 {
+		t.Fatalf("expected 0 successes, got %d", res.SuccessCount)
+	}
+}
+
 func TestServer_MethodNotAllowed(t *testing.T) {
 	srv := server.New(server.Config{})
 	ts := httptest.NewServer(srv.Routes())
