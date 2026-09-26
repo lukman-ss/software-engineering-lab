@@ -7,18 +7,18 @@ Previous Verdict: APPROVED
 None.
 
 ## Non-Blocking Issues
-1. Outbox table cleanup / purge functionality: Noted as omitted in audit warning. Added `PurgeProcessedOutbox` on `DB` to complete outbox lifecycle capabilities cleanly.
+None.
 
 ## Files To Change
-- `internal/outbox/db.go`: Add `PurgeProcessedOutbox` helper to purge processed outbox events.
-- `tests/outbox_test.go`: Add test verifying cleanup of processed outbox entries.
+None required.
 
 ## Tests To Add/Modify
-- `TestTransactionalOutbox_PurgeProcessed`: Verify `PurgeProcessedOutbox` removes PROCESSED entries while keeping PENDING records.
+None required.
 
 ## Validation Commands
 ```bash
-go test -v ./...
-go test -count=1 -race ./...
+cd labs/21-outbox-pattern
+go test ./...
+go test -race ./...
 go run ./cmd/demo
 ```
