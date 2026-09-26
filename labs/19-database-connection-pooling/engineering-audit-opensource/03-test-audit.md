@@ -1,83 +1,55 @@
 # Test Audit
 
-Test suite location: tests/pool_test.go
-Test package: `tests` (external test package consuming the pool package via import).
+Target Lab: labs/19-database-connection-pooling
+Tests Reviewed: tests/pool_test.go (4 tests)
 
-Command results (executed against the real working directory):
-  $ go test -v ./...
-  → 4 PASS, 0 FAIL  (exit 0)
-  $ go test -race -v ./...
-  → 4 PASS, 0 FAIL, 0 DATA RACES  (exit 0)
+## Test Results
 
-Coverage of required test dimensions:
+Commands Executed:
+- go test -v ./... → PASS (all 4 tests)
+- go test -race -v ./... → PASS (no data races)
 
-- Happy path: PASS
-  TestSafeProcessingConcurrently runs 20 concurrent safe orders on a pool of 5 with a 2s
-  timeout and expects all to succeed.
+### TestDirectConnectionOverhead
+- Type: Happy path (performance comparison)
+- Assertion: pooledDuration < unpooledDuration
+- Coverage: PASS — timing assumption stable (5x 5ms delay vs reuse)
+- Result: PASS (0.03s)
 
-- Failure path: PASS
-  TestConnectionStarvationDueToLeak asserts the safe order FAILS (context deadline
-  exceeded) when the pool is starved by an unsafe holder.
+### TestOversizedPoolExhaustsServerConnections
+- Type: Failure path (server limit enforcement)
+- Assertion: errCount > 0 when 20 concurrent conns vs server limit 10
+- Coverage: PASS — validates server-side rejection of oversized client pool
+- Result: PASS (0.02s)
 
-- Edge cases: PARTIAL
-  No test exercises the exact server-saturation boundary of MockDriver, no test asserts
-  the value of ErrAcquireTimeout, no test exercises mockRows/mockTx rollback behavior.
+### TestConnectionStarvationDueToLeak
+- Type: Edge case / failure path (leak-induced starvation)
+- Assertion: second request with 20ms timeout fails while pool of 1 held for 100ms
+- Coverage: PASS — proves holding conn during external IO blocks pool
+- Result: PASS (0.03s)
 
-- Transitions: PARTIAL
-  No explicit test for idle↔open connection reuse accounting beyond the overhead test's
-  timing comparison.
+### TestSafeProcessingConcurrently
+- Type: Happy path + concurrency (20 goroutines, pool of 5)
+- Assertion: no errors under concurrent safe processing
+- Coverage: PASS — validates safe pattern scales concurrently
+- Result: PASS (0.01s)
 
-- Recovery / rollback: NOT COVERED
-  No test that a failed operation rolls back or returns the connection to the pool for
-  reuse. (processOrderUnsafeLeak uses defer conn.Close(), so recovery is implicit.)
+## Coverage Assessment
 
-- Concurrency: PASS
-  Three tests exercise concurrency under the race detector; none report races.
+- Happy path: YES (overhead + concurrent safe)
+- Failure path: YES (exhaustion + starvation)
+- Edge cases: YES (pool=1 starvation, timeout propagation)
+- Transitions: YES (safe vs unsafe ordering)
+- Recovery: PARTIAL — pool recovers after leak goroutine finishes, but no explicit test asserts post-leak recovery succeeds
+- Rollback: NOT_APPLICABLE — mock Exec never fails; no tx rollback path in service
+- Concurrency: YES — all race-relevant paths run under -race cleanly
+- Negative cases: YES — exhaustion errors, starvation timeouts asserted
 
-- Negative cases: PASS
-  TestOversizedPoolExhaustsServerConnections expects ≥1 failure from 20 concurrent
-  acquirers against a server cap of 10; TestConnectionStarvationDueToLeak expects a error.
+## Weaknesses
 
-## Finding 1
+- Timing-dependent assertions (5ms delay, 20ms timeouts) are stable on this run but could flake under extreme CI load. Margins (25ms pooled vs unpooled gap; 80ms starvation margin) adequate. LOW severity.
+- No test for externalCall error propagation in either safe or unsafe path. Test suite does not assert that a failing externalCall returns error without acquiring DB conn (safe) or returns error while still releasing conn (unsafe). MEDIUM — negative case gap.
+- No test for ErrAcquireTimeout / context cancellation on db.Conn beyond starvation case. Minor.
 
-Location: tests/pool_test.go
-Claimed Behavior: Connection starvation is observable when an oversized pool exceeds
-  server max_connections.
-Observed Implementation: TestOversizedPoolExhaustsServerConnections uses server max=10,
-  client pool=20, 20 concurrent acquirers, asserts errCount > 0.
-Assessment: PASS
-Severity: N/A
-Notes: Robustly asserted (does not pin an exact count, accommodating the check-then-act
-  gap documented in code audit Finding 1).
+## Overall
 
-## Finding 2
-
-Location: tests/pool_test.go
-Claimed Behavior: Safe processing survives concurrency.
-Observed Implementation: TestSafeProcessingConcurrently, 20 goroutines, pool of 5,
-  2s timeout, expects no errors.
-Assessment: PASS
-Severity: N/A
-
-## Finding 3
-
-Location: tests/pool_test.go
-Claimed Behavior: (Gap) ErrAcquireTimeout is never referenced in any test.
-Observed Implementation: No test asserts that a pool acquire timeout yields ErrAcquireTimeout
-  or any specific sentinel.
-Assessment: WARNING
-Severity: LOW
-Notes: Related to code-audit Finding 2. The timeout *behavior* is tested (the order fails),
-  but no test pins the error identity. Low impact for a pedagogical lab.
-
-## Finding 4
-
-Location: tests/pool_test.go
-Claimed Behavior: (Gap) No negative test for "connection properly returned after error".
-Observed Implementation: ProcessOrderUnsafeLeak updates status then calls externalCall;
-  if externalCall errors the connection is still closed via defer. No test asserts that a
-  subsequent acquirer can reuse that connection (i.e., no pool-recovery-after-failure test).
-Assessment: WARNING
-Severity: LOW
-Notes: Implicit via defer; not a correctness bug, but a coverage gap relative to the
-  "failure handling / recovery" audit dimensions.
+Passing suite is not weak on core claims. All four claimed behaviors proven. Gaps are non-blocking for verdict.

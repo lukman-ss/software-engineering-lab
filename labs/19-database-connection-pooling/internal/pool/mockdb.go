@@ -38,7 +38,7 @@ func (d *MockDriver) Open(name string) (driver.Conn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if d.maxConnections > 0 && d.activeConns >= d.maxConnections {
+	if d.maxConnections > 0 && atomic.LoadInt32(&d.activeConns) >= d.maxConnections {
 		return nil, ErrServerOverloaded
 	}
 

@@ -1,65 +1,60 @@
-# Documentation vs Code
+# Docs vs Code
 
-## README.md vs implementation
-README claims:
-  - internal/pool/mockdb.go implements a driver simulating max_connections + connect latency.
-  - internal/pool/service.go provides safe vs unsafe (leak) operations.
-  - tests/pool_test.go covers direct overhead, pool exhaustion, leaks, concurrency.
-  - cmd/demo/main.go is an interactive CLI demo.
-Code reality: all four components exist exactly as described. PASS.
+Target Lab: labs/19-database-connection-pooling
 
-README commands:
-  - `go test -v ./...`  → verified, 4 PASS.
-  - `go test -race -v ./...` → verified, 4 PASS, 0 races.
-  - `go run ./cmd/demo` → verified, exit 0, output shown below.
-All documented commands reproduce. PASS.
+## README vs Code
 
-## Engineering notes (engineering/03-execution-result.md) vs actual execution
+### README: "internal/pool/mockdb.go: Implements a Go database/sql/driver to simulate database server constraints (max_connections)
+Code: MockDriver struct enforces maxConnections limit in Open(). ✓ MATCH
 
-| Step            | Claimed         | Actual (re-executed)      | Match? |
-|-----------------|-----------------|---------------------------|--------|
-| go build ./...  | Success, no output | Success, no output      | PASS |
-| go test -v ./.. | 4 PASS          | 4 PASS                    | PASS |
-| go test -race ..| 4 PASS, 0 races | 4 PASS, 0 races           | PASS |
-| Demo output     | 3 sections      | 3 sections                | PASS |
+### README: "internal/pool/service.go: Provides services executing safe operations vs unsafe operations
+Code: ProcessOrderSafe (external I/O before DB op) and ProcessOrderUnsafeLeak (I/O during DB lock). ✓ MATCH
 
-Demo output — claimed (engineering notes):
-  Unpooled (5 requests): 54.593875ms
-  Pooled (5 requests): 6.333µs
-  Client attempted: 30, Succeeded: 15, Server Rejected: 15
-  Order 3 Failed: context deadline exceeded
+### README: "tests/pool_test.go: Automated test suite covering direct overhead, pool exhaustion, connection leaks, and concurrent operations
+Code: 4 tests covering exactly these scenarios. ✓ MATCH
 
-Demo output — actual (this audit run):
-  Unpooled (5 requests): 54.242792ms
-  Pooled (5 requests): 2.833µs
-  Client attempted: 30, Succeeded: 15, Server Rejected: 15
-  Order 3 Failed: context deadline exceeded
+### README: "cmd/demo/main.go: Interactive CLI demo demonstrating connection overhead, rejection, and pool starvation
+Code: 3 demo functions demonstrating each. ✓ MATCH
 
-The integer-valued behavioral assertions (15/15 split, context deadline exceeded, all demo
-sections present) reproduce exactly. The sub-millisecond timing values differ because they
-are wall-clock dependent (54.24ms vs 54.59ms; 2.8µs vs 6.3µs). This is expected variance
-on a live system, NOT fabrication: the engineering notes recorded one real run and the
-structure/counts are reproducible verbatim. No DOC_CODE_MISMATCH or RESEARCH_IMPLEMENTATION_MISMATCH.
+### README: "go test -v ./... / go test -race -v ./..."
+Verified: Both commands pass. ✓ MATCH
 
-## Findings
+## Engineering Design vs Code
 
-## Finding 1
+### Design: "Direct connection creation penalty (overhead)"
+Code: TestDirectConnectionOverhead + demo. ✓ MATCH
 
-Location: README.md vs code
-Claimed Behavior: Demo prints "Client attempted: 30, Succeeded: 15, Server Rejected: 15".
-Observed: matches exactly.
-Assessment: PASS
-Severity: N/A
-Notes: 15 successes / 15 rejections because server max_connections=15 and the demo fires 30
-  requests with 10ms holds. Matches README narrative.
+### Design: "Connection exhaustion when pools oversized beyond hardware limits"
+Code: TestOversizedPoolExhaustsServerConnections + demo. ✓ MATCH
 
-## Finding 2
+### Design: "Connection leaks when connections held during external I/O"
+Code: ProcessOrderUnsafeLeak + TestConnectionStarvationDueToLeak + demo. ✓ MATCH
 
-Location: engineering/03-execution-result.md final status line
-Claimed Behavior: Final Engineering Status = READY_FOR_ENGINEERING_AUDIT
-Observed Implementation: Status field is prose, not enforced by code/tests — but all
-  preceding commands (build/test/race/demo) were verified to pass independently in this
-  audit, so the readiness claim is substantiated.
-Assessment: PASS
-Severity: N/A
-Type: None (no mismatch; status is corroborated by re-execution).
+### Design Success Criteria: "Test validates pool sizes and limits"
+Code: TestOversizedPoolExhaustsServerConnections. ✓ MATCH
+
+### Design Success Criteria: "Test verifies connection leakage triggers errors"
+Code: TestConnectionStarvationDueToLeak. ✓ MATCH
+
+### Design Success Criteria: "Test validates throughput degradation or max connection enforcement"
+Code: TestDirectConnectionOverhead (throughput degradation). ✓ MATCH
+
+## Engineering Execution-Result vs Actual Execution
+
+| Item | Claimed | Actual | Match |
+|------|---------|--------|-------|
+| Build | Success, no output | Success, no output | ✓ |
+| Tests | 4 PASS | 4 PASS | ✓ |
+| Race Detector | 4 PASS | 4 PASS | ✓ |
+| Demo: Unpooled | 54.59ms | 55.25ms | ✓ |
+| Demo: Pooled | 6.33µs | 2.46µs | ✓ |
+| Demo: Oversized | 30, 15, 15 | 30, 15, 15 | ✓ |
+| Demo: Leak | Order 3 Failed: context deadline exceeded | Order 3 Failed: context deadline exceeded | ✓ |
+
+## Mismatches Found
+
+None. README, design notes, execution-result, code, tests, and demo all align.
+
+## Notes
+
+Demo timing values differ slightly from engineering/03-execution-result.md (expected — timing varies by run). Core outcomes identical.

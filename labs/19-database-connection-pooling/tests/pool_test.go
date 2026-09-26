@@ -142,3 +142,25 @@ func TestSafeProcessingConcurrently(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestPoolLockingDeadlock(t *testing.T) {
+	// Pool of size 1: acquiring a second connection while holding the first results in deadlock/timeout
+	mockDriver := pool.NewMockDriver(10, 0)
+	db := pool.OpenDB(mockDriver)
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	conn1, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("failed to acquire first connection: %v", err)
+	}
+	defer conn1.Close()
+
+	_, err = db.Conn(ctx)
+	if err == nil {
+		t.Fatalf("expected context deadline exceeded when acquiring 2nd connection on pool of size 1, got nil")
+	}
+}

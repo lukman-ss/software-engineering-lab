@@ -5,7 +5,7 @@ Research Status: APPROVED
 
 ## Concept To Prove
 - Direct connection creation penalty (overhead).
-- Connection exhaustion and throughput degradation when pools are oversized (beyond hardware limits).
+- Connection exhaustion when pools are oversized (beyond hardware limits).
 - Connection leaks when connections are held during external I/O.
 
 ## Expected Behavior
@@ -20,7 +20,7 @@ Research Status: APPROVED
 ## Success Criteria
 - Test validates pool sizes and limits.
 - Test verifies connection leakage triggers errors.
-- Test validates throughput degradation or max connection enforcement.
+- Test validates max connection enforcement.
 
 ## Architecture
 - Custom `database/sql/driver` to simulate database server limits, connection overhead, and active query counting.

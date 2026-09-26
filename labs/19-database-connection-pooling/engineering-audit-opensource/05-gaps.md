@@ -1,32 +1,20 @@
 # Gap Analysis
 
-Allowed gap types:
-  MISSING_TEST, BROKEN_IMPLEMENTATION, DOC_CODE_MISMATCH, RACE_CONDITION,
-  UNHANDLED_ERROR, MISSING_EDGE_CASE, IMPLEMENTATION_OVERCLAIM,
-  RESEARCH_MISMATCH, FAKE_DEMO, FAKE_BENCHMARK, UNVERIFIED_RESULT
+Target Lab: labs/19-database-connection-pooling
 
-Identified gaps:
+## Gaps
 
-1. MISSING_TEST — No test pins ErrAcquireTimeout; no test exercises
-   MockDriver exact-saturation boundary; no test verifies connection reuse
-   immediately after an error/rollback path (pool-recovery-after-failure).
+### GAP-1: MISSING_TEST (LOW)
+- Missing assertion for externalCall error propagation. Neither ProcessOrderSafe nor ProcessOrderUnsafeLeak failure path (externalCall returns error) is tested. Core leak/starvation claims unaffected.
 
-2. MISSING_EDGE_CASE — mockRows/mockTx rollback and error-return paths are
-   never exercised by tests (mockTx.Rollback returns nil and is never called).
+### GAP-2: MISSING_TEST (LOW)
+- No explicit post-leak recovery assertion. Starvation test proves blocking but does not assert pool becomes usable after leaking goroutine finishes. sql.DB natively recovers; untested, not broken.
 
-3. LOW concurrency weakness (not a data race) — MockDriver.Open evaluates the
-   max-connection cap under d.mu but increments after unlocking, so under
-   extreme concurrency the cap can be overshot by a small margin. The race
-   detector is clean (atomics used), so this is a logical/TOCTOU gap, not a
-   data race. Tests are written to tolerate this (assert "≥ some errors",
-   not an exact saturation count).
+## No Gaps Found For
 
-No BROKEN_IMPLEMENTATION, no RACE_CONDITION (data race), no UNHANDLED_ERROR,
-no DOC_CODE_MISMATCH, no RESEARCH_MISMATCH, no FAKE_DEMO, no FAKE_BENCHMARK,
-no UNVERIFIED_RESULT.
-
-Severity distribution: 3 LOW / 0 MEDIUM / 0 HIGH / 0 CRITICAL.
-
-Summary: the gaps are pedagogical completeness gaps (test coverage breadth)
-and one minor logical-cap gap in a *mock*. None affect the demonstrated,
-claimed behavior, which was reproduced verbatim in this audit.
+- BROKEN_IMPLEMENTATION: none. Safe/unsafe ordering correct, mock limit enforcement correct.
+- DOC_CODE_MISMATCH: none. README, design, code, tests, demo align.
+- RACE_CONDITION: none. go test -race clean.
+- UNHANDLED_ERROR: none. All Conn/Exec/externalCall errors propagated.
+- FAKE_DEMO / FAKE_BENCHMARK / UNVERIFIED_RESULT: none. Demo re-executed, output reproduced (timings vary, outcomes identical).
+- RESEARCH_MISMATCH: out of scope per pipeline override.
