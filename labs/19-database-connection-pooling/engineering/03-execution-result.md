@@ -19,6 +19,10 @@ Result:
 --- PASS: TestConnectionStarvationDueToLeak (0.03s)
 === RUN   TestSafeProcessingConcurrently
 --- PASS: TestSafeProcessingConcurrently (0.01s)
+=== RUN   TestPoolLockingDeadlock
+--- PASS: TestPoolLockingDeadlock (0.05s)
+=== RUN   TestMockConnDoubleClose
+--- PASS: TestMockConnDoubleClose (0.00s)
 PASS
 ```
 
@@ -34,6 +38,10 @@ Result:
 --- PASS: TestConnectionStarvationDueToLeak (0.03s)
 === RUN   TestSafeProcessingConcurrently
 --- PASS: TestSafeProcessingConcurrently (0.01s)
+=== RUN   TestPoolLockingDeadlock
+--- PASS: TestPoolLockingDeadlock (0.05s)
+=== RUN   TestMockConnDoubleClose
+--- PASS: TestMockConnDoubleClose (0.00s)
 PASS
 ```
 

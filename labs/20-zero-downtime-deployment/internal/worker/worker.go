@@ -13,6 +13,7 @@ type Job struct {
 }
 
 // ponytail: in-memory Go channel queue ceiling; upgrade to Redis/RabbitMQ/Kafka when distributed worker pools required.
+// ponytail: cooperative drain ceiling; in-flight active jobs run to completion while queued jobs are abandoned upon drain timeout. Upgrade to job-level context preemption or hard deadline escalation when arbitrary job runtimes require forced interruption.
 type Worker struct {
 	jobChan     chan Job
 	wg          sync.WaitGroup

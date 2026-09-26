@@ -105,3 +105,60 @@ func TestServerPreStopHook(t *testing.T) {
 		t.Fatalf("expected preStop delay of at least %v, but took %v", preStopDuration, elapsed)
 	}
 }
+
+func TestServerPreStopContextCancellation(t *testing.T) {
+	preStopDuration := 500 * time.Millisecond
+	srv := server.NewServer("127.0.0.1:8084", preStopDuration)
+	srv.SetReady(true)
+
+	go func() {
+		_ = srv.Start()
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := srv.Shutdown(ctx)
+	if err == nil {
+		t.Fatalf("expected error due to context cancellation during preStop, got nil")
+	}
+
+	elapsed := time.Since(start)
+	if elapsed >= preStopDuration {
+		t.Fatalf("shutdown blocked for full preStop (%v) instead of aborting promptly on context cancellation (%v)", preStopDuration, elapsed)
+	}
+}
+
+func TestServerWorkRequestCancellation(t *testing.T) {
+	srv := server.NewServer("127.0.0.1:8085", 0)
+	srv.SetReady(true)
+
+	go func() {
+		_ = srv.Start()
+	}()
+	time.Sleep(50 * time.Millisecond)
+	defer func() {
+		_ = srv.Shutdown(context.Background())
+	}()
+
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer reqCancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://127.0.0.1:8085/work?d=200ms", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	client := &http.Client{}
+	_, err = client.Do(req)
+	if err == nil {
+		t.Fatalf("expected request to fail due to client context cancellation")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if active := srv.ActiveRequests(); active != 0 {
+		t.Fatalf("expected active requests to be 0 after cancellation, got %d", active)
+	}
+}

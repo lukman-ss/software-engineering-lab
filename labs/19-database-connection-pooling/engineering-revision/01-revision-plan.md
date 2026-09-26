@@ -1,21 +1,20 @@
 # Engineering Revision Plan
 
 Target Lab: labs/19-database-connection-pooling
-Previous Verdict: NEEDS_REVISION
+Previous Verdict: APPROVED_WITH_WARNINGS
 
 ## Blocking Issues
-1. Data Race in `MockDriver.Open` (`internal/pool/mockdb.go:41`) where `d.activeConns` is read non-atomically.
+None.
 
 ## Non-Blocking Issues
-1. Missing Deadlock Test: Pool-locking deadlock scenario (Finding 11) is not tested.
-2. Implementation Overclaim: Engineering doc claims "throughput degradation or max connection enforcement" while implementation only enforces max connections.
+1. DOC_CODE_MISMATCH: `engineering/03-execution-result.md` does not list `TestPoolLockingDeadlock` in test outputs.
+2. MISSING_TEST: Unit test verifying safe double-close on `mockConn` is missing.
 
 ## Files To Change
-- `internal/pool/mockdb.go`
-- `engineering/01-design.md`
+- `engineering/03-execution-result.md`
 
 ## Tests To Add/Modify
-- `tests/pool_test.go`: Add `TestPoolLockingDeadlock` to test the pool-locking deadlock edge case.
+- `tests/pool_test.go`: Add `TestMockConnDoubleClose`
 
 ## Validation Commands
 - `go test ./...`

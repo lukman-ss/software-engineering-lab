@@ -164,3 +164,26 @@ func TestPoolLockingDeadlock(t *testing.T) {
 		t.Fatalf("expected context deadline exceeded when acquiring 2nd connection on pool of size 1, got nil")
 	}
 }
+
+func TestMockConnDoubleClose(t *testing.T) {
+	mockDriver := pool.NewMockDriver(10, 0)
+	conn, err := mockDriver.Open("")
+	if err != nil {
+		t.Fatalf("failed to open mock connection: %v", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("first close failed: %v", err)
+	}
+
+	// Should not panic, return error, or double-decrement active conns
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("second close failed: %v", err)
+	}
+
+	if mockDriver.ActiveConnections() != 0 {
+		t.Errorf("expected 0 active connections, got %d", mockDriver.ActiveConnections())
+	}
+}

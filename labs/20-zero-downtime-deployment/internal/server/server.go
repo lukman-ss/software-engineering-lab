@@ -90,7 +90,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	if s.preStop > 0 {
 		log.Printf("Executing preStop sleep for %v to allow routing table updates...", s.preStop)
-		time.Sleep(s.preStop)
+		select {
+		case <-time.After(s.preStop):
+		case <-ctx.Done():
+			log.Println("preStop sleep interrupted by context cancellation")
+			return ctx.Err()
+		}
 	}
 
 	log.Println("Initiating graceful shutdown of HTTP listeners...")
