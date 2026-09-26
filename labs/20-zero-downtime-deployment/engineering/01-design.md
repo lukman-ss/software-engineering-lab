@@ -1,7 +1,7 @@
 # Engineering Design
 
 Target Lab: labs/20-zero-downtime-deployment
-Research Status: APPROVED_WITH_WARNINGS
+Research Status: APPROVED
 
 ## Concept To Prove
 Zero-Downtime Deployment (ZDD) requires coordinating:

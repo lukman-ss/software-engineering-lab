@@ -1,118 +1,160 @@
-# 03 — Claim Audit
+# Claim Audit: Zero-Downtime Deployment
 
-Target Lab: `labs/20-zero-downtime-deployment`
-Research Run: `research/runs/2026-09-26-zero-downtime-deployment/`
-Audit Date: 2026-09-26
+**Target Lab:** `labs/20-zero-downtime-deployment`  
+**Research Run:** `2026-09-26-zero-downtime-deployment`
 
 ---
 
 ## Claim 1
 
-Claim: NGINX supports graceful configuration reload using `HUP` signal and graceful shutdown using `QUIT` signal.
-Location: `03-evidence.md` (Evidence 1 & 2), `05-report.md` (Finding 1 & 2)
-Evidence Provided: NGINX control doc describes `HUP` signal master behavior (opening new config, starting new workers, sending graceful shutdown to old workers) and `QUIT` signal behavior.
-Source: Source 10 (NGINX Control)
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fully accurate and supported by official NGINX docs.
+Claim: Rolling update gradually replaces old Pods with new ones, keeping the application available throughout the process, controlled by `maxUnavailable` (default 25%) and `maxSurge` (default 25%).  
+Location: `05-report.md: Finding 1` & `03-evidence.md: Evidence 1`  
+Evidence Provided: Direct quote and configuration details from Kubernetes documentation.  
+Source: Source 1 & Source 11 (Kubernetes Documentation)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Fully verified against official Kubernetes docs.  
 
 ---
 
 ## Claim 2
 
-Claim: Kubernetes pod termination sends SIGTERM, waits terminationGracePeriodSeconds (default 30s), then SIGKILL; Readiness probes determine pod inclusion in Service endpoints.
-Location: `03-evidence.md` (Evidence 3 & 4), `05-report.md` (Finding 1 & 2)
-Evidence Provided: Kubernetes Pod Lifecycle and Probes documentation.
-Source: Source 8 (Pod Lifecycle) & Source 9 (Probes)
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Correctly notes 30s as default configurable threshold.
+Claim: Liveness probes determine when to restart a container, while readiness probes determine when a container should receive traffic via EndpointSlices.  
+Location: `05-report.md: Finding 2` & `03-evidence.md: Evidence 2`  
+Evidence Provided: Exact quotes on liveness vs readiness distinction and EndpointSlice removal.  
+Source: Source 3 (Kubernetes Probes Documentation)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Standard Kubernetes architectural distinction.  
 
 ---
 
 ## Claim 3
 
-Claim: Laravel `queue:work` handles SIGTERM for graceful exit; `queue:restart` instructs workers to exit after current job; Horizon `horizon:terminate` requires Supervisor `stopwaitsecs` > longest job duration.
-Location: `03-evidence.md` (Evidence 5, 6, 13), `05-report.md` (Finding 2 & 5)
-Evidence Provided: Laravel Queues & Horizon documentation.
-Source: Source 2 (Queues) & Source 4 (Horizon)
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Crucial distinction between immediate SIGKILL and signal-based graceful shutdown correctly captured.
+Claim: Blue-green deployment requires two identical environments (blue and green) with instant router switching for rollback.  
+Location: `05-report.md: Finding 3` & `03-evidence.md: Evidence 3`  
+Evidence Provided: Quoted text from Martin Fowler's canonical article.  
+Source: Source 4 (Martin Fowler - Blue Green Deployment)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Classical definition verified.  
 
 ---
 
 ## Claim 4
 
-Claim: Blue-Green deployment and Expand-Migrate-Contract (Parallel Change) enable zero-downtime transitions and schema coexistence.
-Location: `03-evidence.md` (Evidence 7 & 8), `05-report.md` (Finding 3 & 4)
-Evidence Provided: Martin Fowler bliki articles on Blue-Green and Parallel Change.
-Source: Source 6 & Source 7
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Theoretical foundations for zero-downtime database and traffic orchestration are accurate.
+Claim: Renaming or dropping columns breaks backward compatibility unless handled via transition phases (e.g. Expand-Contract pattern or views).  
+Location: `05-report.md: Finding 4 & Finding 12` & `03-evidence.md: Evidence 4 & Evidence 12`  
+Evidence Provided: Quotes from Martin Fowler & ThoughtWorks Evolutionary Database Design.  
+Source: Source 4 & Source 9  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Valid pattern for concurrent multi-version application deployment.  
 
 ---
 
 ## Claim 5
 
-Claim: PostgreSQL `ADD COLUMN` without volatile default or `NOT NULL` is instant (metadata-only); `ADD CONSTRAINT ... NOT VALID` followed by `VALIDATE CONSTRAINT` prevents write-blocking during migration.
-Location: `03-evidence.md` (Evidence 9 & 10), `05-report.md` (Finding 3)
-Evidence Provided: PostgreSQL ALTER TABLE documentation.
-Source: Source 13 (ALTER TABLE)
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Lock mechanics and non-blocking DDl paths accurately reflected for modern PostgreSQL versions.
+Claim: A container that is merely "running" does not guarantee readiness; health checks must check DB and cache dependencies.  
+Location: `05-report.md: Finding 5` & `03-evidence.md: Evidence 5`  
+Evidence Provided: Kubernetes probe docs combined with Laravel health endpoint docs.  
+Source: Source 3 & Source 6  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Well supported across orchestrator and application layer docs.  
 
 ---
 
 ## Claim 6
 
-Claim: Laravel `/up` route returns 200 on boot; `DiagnosingHealth` event must be listened to for verifying DB/Redis readiness.
-Location: `03-evidence.md` (Evidence 11), `05-report.md` (Finding 7)
-Evidence Provided: Laravel Deployment documentation.
-Source: Source 1 (Deployment)
-Source Actually Supports Claim: YES
-Classification: INTERPRETATION
-Severity: LOW
-Notes: Sound recommendation distinguishing basic HTTP 200 boot check from functional readiness.
+Claim: Pod termination follows: SIGTERM sent → grace period (default 30s) → SIGKILL; endpoint set to ready=false upon deletion initiation.  
+Location: `05-report.md: Finding 6` & `03-evidence.md: Evidence 6`  
+Evidence Provided: Kubernetes Pod termination lifecycle quotes.  
+Source: Source 2 & Source 14  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Accurately reflects Kubernetes container termination semantics.  
 
 ---
 
 ## Claim 7
 
-Claim: NGINX `upstream` module `drain` mode and active `health_check` require commercial NGINX Plus (or experimental Lua/custom module in OSS).
-Location: `03-evidence.md` (Evidence 12), `04-contradictions.md`
-Evidence Provided: NGINX Upstream module documentation.
-Source: Source 11 (Upstream Module)
-Source Actually Supports Claim: YES
-Classification: IMPLEMENTATION-SPECIFIC
-Severity: MEDIUM
-Notes: Research agent correctly highlights limitation of open-source NGINX rather than falsely claiming OSS supports active probes natively out of the box.
+Claim: NGINX active health checks require NGINX Plus, while passive health checks (`max_fails`, `fail_timeout`) are available in NGINX Open Source.  
+Location: `05-report.md: Finding 7` & `03-evidence.md: Evidence 7`  
+Evidence Provided: NGINX documentation breakdown.  
+Source: Source 5 (NGINX Documentation)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Crucial operational distinction between OSS and commercial NGINX.  
 
 ---
 
 ## Claim 8
 
-Claim: Redis supports zero-downtime rolling upgrades across version changes.
-Location: `03-evidence.md` (Evidence 14), `06-open-questions.md`
-Evidence Provided: None (Attempted fetch returned 404).
-Source: Source 14 (Failed)
-Source Actually Supports Claim: NO
-Classification: HYPOTHESIS
-Severity: MEDIUM
-Notes: Explicitly marked as NOT VERIFIED by research agent. No unsubstantiated claim was asserted as fact.
+Claim: Laravel provides built-in health endpoint `/up` returning HTTP 200/500 and supports custom checks via `DiagnosingHealth` event.  
+Location: `05-report.md: Finding 8` & `03-evidence.md: Evidence 8`  
+Evidence Provided: Laravel 11.x deployment documentation.  
+Source: Source 6 (Laravel Documentation)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Standard feature in Laravel 11.  
 
 ---
 
-## Summary of Claim Audit
-- Major Claims Audited: 8
-- Fully Supported: 7
-- Explicitly Marked Unverified: 1
-- Unsupported Claims Presented as Fact: 0
-- Overgeneralized Claims: 0
+## Claim 9
+
+Claim: `php artisan horizon:terminate` gracefully waits for in-flight queue jobs to complete, with Supervisor `stopwaitsecs` set higher than longest running job.  
+Location: `05-report.md: Finding 9` & `03-evidence.md: Evidence 9`  
+Evidence Provided: Laravel Horizon official documentation.  
+Source: Source 8 (Laravel Horizon Documentation)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Supported by documentation.  
+
+---
+
+## Claim 10
+
+Claim: PostgreSQL `ALTER TABLE ... ADD COLUMN` with constant default value is a metadata-only operation and does not rewrite the table.  
+Location: `05-report.md: Finding 10` & `03-evidence.md: Evidence 10`  
+Evidence Provided: PostgreSQL 11+ documentation quote on constant defaults.  
+Source: Source 10 (PostgreSQL Documentation)  
+Source Actually Supports Claim: PARTIAL  
+Classification: IMPLEMENTATION-SPECIFIC  
+Severity: MEDIUM  
+Notes: True for constant default values, but FALSE for volatile expressions (e.g., `clock_timestamp()`, `gen_random_uuid()`). Report correctly notes this in evidence notes, but executive summary requires explicit warning regarding volatile defaults.  
+
+---
+
+## Claim 11
+
+Claim: Docker container stop sends SIGTERM and waits for grace period (10s Linux default) before sending SIGKILL.  
+Location: `05-report.md: Finding 11` & `03-evidence.md: Evidence 11`  
+Evidence Provided: Docker CLI reference quotes.  
+Source: Source 12 (Docker Documentation)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Verified against Docker docs.  
+
+---
+
+## Claim 12
+
+Claim: Database migrations during zero-downtime deployments should strictly follow Expand-Deploy-Migrate-Contract.  
+Location: `05-report.md: Finding 12` & `03-evidence.md: Evidence 12`  
+Evidence Provided: Fowler & Evolutionary Database Design patterns.  
+Source: Source 4 & Source 9  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: High industry consensus.  

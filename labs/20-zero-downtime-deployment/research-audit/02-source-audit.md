@@ -1,227 +1,214 @@
-# 02 — Source Audit
+# Source Audit: Zero-Downtime Deployment
 
-Target Lab: `labs/20-zero-downtime-deployment`
-Research Run: `research/runs/2026-09-26-zero-downtime-deployment/`
-Audit Date: 2026-09-26
+**Target Lab:** `labs/20-zero-downtime-deployment`  
+**Research Run:** `2026-09-26-zero-downtime-deployment`
 
 ---
 
 ## Source 1
 
-Claimed Title: Deployment — Laravel 11.x docs
-Claimed Publisher: Laravel
-URL: https://laravel.com/docs/11.x/deployment
+Claimed Title: Deployments | Kubernetes  
+Claimed Publisher: The Kubernetes Authors  
+URL: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None.  
+Assessment: PASS  
 
 ---
 
 ## Source 2
 
-Claimed Title: Queues — Laravel 11.x docs
-Claimed Publisher: Laravel
-URL: https://laravel.com/docs/11.x/queues
+Claimed Title: Pod Lifecycle | Kubernetes  
+Claimed Publisher: The Kubernetes Authors  
+URL: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None.  
+Assessment: PASS  
 
 ---
 
 ## Source 3
 
-Claimed Title: Laravel Octane — Laravel 11.x docs
-Claimed Publisher: Laravel
-URL: https://laravel.com/docs/11.x/octane
+Claimed Title: Liveness, Readiness, and Startup Probes | Kubernetes  
+Claimed Publisher: The Kubernetes Authors  
+URL: https://kubernetes.io/docs/concepts/workloads/pods/probes/  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Canonical Kubernetes probe reference.  
+Assessment: PASS  
 
 ---
 
 ## Source 4
 
-Claimed Title: Laravel Horizon — Laravel 11.x docs
-Claimed Publisher: Laravel
-URL: https://laravel.com/docs/11.x/horizon
+Claimed Title: Blue Green Deployment  
+Claimed Publisher: Martin Fowler  
+URL: https://martinfowler.com/bliki/BlueGreenDeployment.html  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: Minor date inconsistency in sources.md (published 2010, accessed 2026). Content is authentic.  
+Assessment: PASS  
 
 ---
 
 ## Source 5
 
-Claimed Title: Task Scheduling — Laravel 11.x docs
-Claimed Publisher: Laravel
-URL: https://laravel.com/docs/11.x/scheduling
+Claimed Title: HTTP Health Checks | NGINX Documentation  
+Claimed Publisher: F5 NGINX  
+URL: https://docs.nginx.com/nginx/admin-guide/load-balancer/http-health-check/  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Distinguishes OSS passive checks vs Plus active checks.  
+Assessment: PASS  
 
 ---
 
 ## Source 6
 
-Claimed Title: Blue Green Deployment — bliki
-Claimed Publisher: Martin Fowler (martinfowler.com)
-URL: https://martinfowler.com/bliki/BlueGreenDeployment.html
+Claimed Title: Deployment | Laravel 11.x  
+Claimed Publisher: Laravel  
+URL: https://laravel.com/docs/11.x/deployment  
 
-Reachable: YES
-Source Type: PRIMARY (Canonical pattern definition)
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Accurately covers `/up` route and optimization commands.  
+Assessment: PASS  
 
 ---
 
 ## Source 7
 
-Claimed Title: Parallel Change — bliki
-Claimed Publisher: Danilo Sato / martinfowler.com
-URL: https://martinfowler.com/bliki/ParallelChange.html
+Claimed Title: Queues | Laravel 11.x  
+Claimed Publisher: Laravel  
+URL: https://laravel.com/docs/11.x/queues  
 
-Reachable: YES
-Source Type: PRIMARY (Canonical pattern definition)
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Accurately documents worker timeouts and `retry_after`.  
+Assessment: PASS  
 
 ---
 
 ## Source 8
 
-Claimed Title: Pod Lifecycle — Kubernetes docs
-Claimed Publisher: Kubernetes
-URL: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+Claimed Title: Laravel Horizon  
+Claimed Publisher: Laravel  
+URL: https://laravel.com/docs/11.x/horizon  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Documents `horizon:terminate` and `stopwaitsecs`.  
+Assessment: PASS  
 
 ---
 
 ## Source 9
 
-Claimed Title: Liveness, Readiness, and Startup Probes — Kubernetes docs
-Claimed Publisher: Kubernetes
-URL: https://kubernetes.io/docs/concepts/workloads/pods/probes/
+Claimed Title: Evolutionary Database Design  
+Claimed Publisher: ThoughtWorks / Pramod Sadalage & Martin Fowler  
+URL: https://martinfowler.com/articles/evodb.html  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: Publisher listed as ThoughtWorks; article hosted on Martin Fowler's site co-authored with Sadalage. Minor attribution nuance, content completely valid.  
+Assessment: PASS  
 
 ---
 
 ## Source 10
 
-Claimed Title: Controlling nginx
-Claimed Publisher: NGINX
-URL: https://nginx.org/en/docs/control.html
+Claimed Title: 5.7. Modifying Tables | PostgreSQL Documentation  
+Claimed Publisher: PostgreSQL Global Development Group  
+URL: https://www.postgresql.org/docs/current/ddl-alter.html  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Documents fast ADD COLUMN with constant default since PG 11.  
+Assessment: PASS  
 
 ---
 
 ## Source 11
 
-Claimed Title: Module ngx_http_upstream_module
-Claimed Publisher: NGINX
-URL: https://nginx.org/en/docs/http/ngx_http_upstream_module.html
+Claimed Title: Update a Deployment Without Downtime | Kubernetes  
+Claimed Publisher: The Kubernetes Authors  
+URL: https://kubernetes.io/docs/tasks/run-application/update-deployment-rolling/  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: Correctly identifies `drain` and active health checks as commercial/NGINX Plus features.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None.  
+Assessment: PASS  
 
 ---
 
 ## Source 12
 
-Claimed Title: Chapter 5. Data Definition — PostgreSQL 18 docs
-Claimed Publisher: PostgreSQL Global Development Group
-URL: https://www.postgresql.org/docs/current/ddl.html
+Claimed Title: docker container stop | Docker Documentation  
+Claimed Publisher: Docker  
+URL: https://docs.docker.com/reference/cli/docker/container/stop/  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: None. Accurately documents SIGTERM -> grace period -> SIGKILL.  
+Assessment: PASS  
 
 ---
 
 ## Source 13
 
-Claimed Title: ALTER TABLE — PostgreSQL docs
-Claimed Publisher: PostgreSQL Global Development Group
-URL: https://www.postgresql.org/docs/current/sql-altertable.html
+Claimed Title: Server Configuration | PostgreSQL Documentation  
+Claimed Publisher: PostgreSQL Global Development Group  
+URL: https://www.postgresql.org/docs/current/runtime-config.html  
 
-Reachable: YES
-Source Type: PRIMARY
-Relevant: YES
-Supports Claimed Topic: YES
-Problems: None.
-Assessment: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: Broad source for lock timeouts and runtime config; appropriately used.  
+Assessment: PASS  
 
 ---
 
 ## Source 14
 
-Claimed Title: Redis upgrade doc (attempted)
-Claimed Publisher: redis.io
-URL: https://redis.io/docs/latest/operate/oss_and_stack/management/upgrading/
+Claimed Title: Pod Termination | Kubernetes  
+Claimed Publisher: The Kubernetes Authors  
+URL: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination  
 
-Reachable: NO (HTTP 404)
-Source Type: UNKNOWN
-Relevant: PARTIAL
-Supports Claimed Topic: NO
-Problems:
-- The research agent explicitly tagged this source as a failed fetch and marked the corresponding claim as NOT VERIFIED.
-- Properly segregated from supporting evidence.
-Assessment: WARNING (Recorded as failed fetch / unverified, not fabricated)
-
----
-
-## Source Audit Summary
-
-- Total Sources Listed: 14
-- PASS: 13
-- WARNING: 1 (Properly declared failed fetch)
-- FAIL: 0
-- Source Integrity: PASS
+Reachable: YES  
+Source Type: PRIMARY  
+Relevant: YES  
+Supports Claimed Topic: YES  
+Problems: Anchor link inside Source 2 (Pod Lifecycle). Canonical content.  
+Assessment: PASS  

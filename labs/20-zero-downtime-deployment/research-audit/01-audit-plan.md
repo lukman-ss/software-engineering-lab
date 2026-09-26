@@ -1,10 +1,15 @@
-# 01 — Audit Plan
+# Audit Plan: Research Audit for Zero-Downtime Deployment
 
-Target Lab: `labs/20-zero-downtime-deployment`
-Research Run Audited: `research/runs/2026-09-26-zero-downtime-deployment/`
-Audit Date: 2026-09-26
+**Target Lab:** `labs/20-zero-downtime-deployment`  
+**Audit Date:** 2026-09-26  
+**Auditor:** Technical Research Auditor Agent  
+**Scope:** Research Audit Only (Pipeline Override: Implementation/code excluded)
 
-## Files Reviewed
+---
+
+## 1. Files Reviewed
+
+Research Run 2026-09-26:
 - `research/runs/2026-09-26-zero-downtime-deployment/01-plan.md`
 - `research/runs/2026-09-26-zero-downtime-deployment/02-sources.md`
 - `research/runs/2026-09-26-zero-downtime-deployment/03-evidence.md`
@@ -12,31 +17,47 @@ Audit Date: 2026-09-26
 - `research/runs/2026-09-26-zero-downtime-deployment/05-report.md`
 - `research/runs/2026-09-26-zero-downtime-deployment/06-open-questions.md`
 
-## Scope & Pipeline Override
-- Pipeline override active: Research audit only.
-- Engineering implementation, tests, and code execution excluded from this phase.
-- Focus: Source validity, claim verification, numeric recommendations, contradictions, and research completeness.
+(Note: Prior run `2026-09-25-zero-downtime-deployment` was also inspected for context).
 
-## Claims To Verify
-1. NGINX graceful configuration reload via `HUP` and graceful shutdown via `QUIT` / `USR2`.
-2. Kubernetes Pod lifecycle termination flow (`SIGTERM` -> grace period -> `SIGKILL`) and Readiness probe gating.
-3. Laravel `queue:work` signal handling (`SIGTERM`), `queue:restart`, and Horizon `horizon:terminate` + Supervisor `stopwaitsecs`.
-4. Blue-Green deployment mechanics and Fowler's Parallel Change (Expand-Migrate-Contract) pattern.
-5. PostgreSQL `ALTER TABLE` lock levels, non-blocking nullable column additions vs table rewrites, and `ADD CONSTRAINT NOT VALID` + `VALIDATE CONSTRAINT`.
-6. Laravel `/up` health route and `DiagnosingHealth` event capabilities.
-7. NGINX open source vs Plus upstream features (passive vs active health checks, `drain` parameter availability).
+---
 
-## Primary Risks
-- Inaccurate URL or dead links in cited sources.
-- Overgeneralizing PostgreSQL DDL locking semantics across versions (e.g. constant defaults vs volatile defaults vs rewrites).
-- Claiming features exist in open source NGINX that are commercial-only (e.g. dynamic `drain`, active `health_check`).
-- Arbitrary numeric defaults presented as absolute rules (e.g., 30s grace, 3600s stopwaitsecs).
-- Unverified third-party component lifecycle (e.g. Redis rolling upgrade).
+## 2. Claims To Verify
 
-## Audit Strategy
-1. Source verification: Verify URL accessibility, publisher authenticity, relevance, and tiering for all 14 listed sources.
-2. Claim verification: Cross-reference every factual claim in `03-evidence.md` and `05-report.md` against authoritative documentation.
-3. Unsupported / Overgeneralized claims check: Flag claims lacking evidence or conflating platform features.
-4. Contradiction audit: Compare internal research statements for logical or technical clashes.
-5. Gap identification: Formalize missing evidence, edge cases, and scope limitations.
-6. Verdict generation: Produce final verdict according to auditor criteria.
+1. Rolling deployment gradually replaces Pods maintaining availability via `maxSurge` / `maxUnavailable`.
+2. Liveness probes control restarts; readiness probes control traffic routing via EndpointSlices.
+3. Blue-Green deployment requires separate database schema deployment prior to application deployment.
+4. Database column removal / rename breaks backward compatibility without transition views / expand-contract.
+5. Simple container running state is insufficient for traffic readiness; dependency checks (DB, Redis) required.
+6. Kubernetes Pod termination flow: SIGTERM -> grace period -> SIGKILL; Endpoint ready set to false.
+7. NGINX active health checks are NGINX Plus only; passive checks (max_fails, fail_timeout) are OSS.
+8. Laravel `/up` endpoint returns 200/500 and hooks into `DiagnosingHealth` event.
+9. Laravel Horizon `horizon:terminate` gracefully waits for jobs up to Supervisor `stopwaitsecs`.
+10. PostgreSQL `ALTER TABLE ... ADD COLUMN` with constant default is metadata-only without table rewrite.
+11. Docker container stop default timeout is 10s (Linux) / 30s (Windows) sending SIGTERM -> SIGKILL.
+12. Expand-deploy-migrate-contract is the standard multi-phase database refactoring pattern.
+
+---
+
+## 3. Execution Exclusions
+
+Per PIPELINE OVERRIDE instructions:
+- Implementation code, demo binaries, and tests are explicitly excluded from this audit stage.
+- Focus is 100% on research validity, source verification, claim verification, contradictions, and gaps.
+
+---
+
+## 4. Primary Risks Identified
+
+- **Outdated/Inaccurate Source Attributes**: Citations dated "2026" for legacy papers (e.g., Fowler 2010/2016).
+- **Overgeneralization**: Claiming PostgreSQL `ADD COLUMN` is always metadata-only (volatile defaults like `clock_timestamp()` rewrite tables).
+- **Nuance Gaps in Queue Draining**: Difference between `queue:work` blocking wait vs Horizon signal handling.
+- **Unverified External URLs**: Potential live check failures or hallucinated links.
+
+---
+
+## 5. Audit Strategy
+
+1. Audit 14 listed sources across accuracy, reachability, tiering, and relevance.
+2. Cross-examine 13 key claims/evidence items against report findings.
+3. Check internal consistency and resolution of contradictions.
+4. Categorize research gaps and record overall verdict.

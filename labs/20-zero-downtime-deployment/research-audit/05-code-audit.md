@@ -1,13 +1,19 @@
-# 05 — Code Audit
+# Code Audit: Zero-Downtime Deployment (Pipeline Override)
 
-Target Lab: `labs/20-zero-downtime-deployment`
-Research Run: `research/runs/2026-09-26-zero-downtime-deployment/`
-Audit Date: 2026-09-26
+**Target Lab:** `labs/20-zero-downtime-deployment`  
+**Audit Scope:** RESEARCH AUDIT ONLY
 
-## Scope & Status
+---
 
-PIPELINE OVERRIDE:
-- Research audit stage only.
-- Code implementation and test executions are deferred to the engineering audit stage.
+## Pipeline Override Notice
 
-Status: `NOT_APPLICABLE` (Skipped per pipeline instructions for Research Auditor).
+As specified in the execution instructions:
+- **Pipeline Override:** Audit research only.
+- **Do not audit implementation/code** in this stage.
+- **Do not execute code or run tests** in this research audit stage.
+
+---
+
+## Assessment
+
+Code correctness auditing is **NOT APPLICABLE** for this research audit phase. All code-related compliance and verification will be conducted in a separate code/engineering audit stage.
