@@ -1,37 +1,39 @@
 # Code Audit
 
-## Finding 1
+Target Lab: `labs/22-n-plus-one-query-problem`
 
-Location: `internal/blog/repository.go:13-28` (`GetAuthorsWithPostsNPlusOne`)
-Claimed Behavior: Demonstrates N+1 query problem by making 1 query for all authors and N queries for posts.
-Observed Implementation: Fetches all authors using `r.store.GetAllAuthors()` (1 query), then iterates over each author calling `r.store.GetPostsByAuthorID(author.ID)` (N queries).
+## Finding 1: Thread-Safe Query Tracking Store
+
+Location: `internal/blog/store.go:6-80`
+Claimed Behavior: In-memory store safely tracks query count across reads and resets.
+Observed Implementation: `Store` uses `sync.Mutex` protecting all operations (`queryCount`, `authors`, `posts`). All methods lock and defer unlock properly.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately models naive lazy loading query explosion.
+Notes: Clean thread-safe design.
 
-## Finding 2
+## Finding 2: Exact N+1 Query Execution Path
 
-Location: `internal/blog/repository.go:32-57` (`GetAuthorsWithPostsEager`)
-Claimed Behavior: Demonstrates eager loading mitigation by reducing query count to 2.
-Observed Implementation: Fetches all authors (1 query), extracts IDs into a slice, fetches posts with `r.store.GetPostsByAuthorIDs(authorIDs)` (1 query), maps posts in memory, and constructs `AuthorWithPosts`.
+Location: `internal/blog/repository.go:13-28`
+Claimed Behavior: `GetAuthorsWithPostsNPlusOne` executes 1 initial query for authors, then iterates over each author calling `GetPostsByAuthorID`, yielding N queries for posts (Total = 1 + N).
+Observed Implementation: Fetches all authors (1 query), checks length, iterates through N authors calling `GetPostsByAuthorID` (N queries). Total = 1 + N.
 Assessment: PASS
 Severity: LOW
-Notes: Idiomatic batching implementation cleanly matching design.
+Notes: Accurately replicates ORM lazy loading traversal.
 
-## Finding 3
+## Finding 3: Eager Loading / Batching Execution Path
 
-Location: `internal/blog/store.go:30-80` (`Store` mutex usage)
-Claimed Behavior: Thread-safe data store with query counting.
-Observed Implementation: All accessors (`GetQueryCount`, `ResetQueryCount`, `GetAllAuthors`, `GetPostsByAuthorID`, `GetPostsByAuthorIDs`) lock `s.mu.Lock()` and defer unlock before mutating or reading `queryCount` and underlying slice data.
+Location: `internal/blog/repository.go:32-57`
+Claimed Behavior: `GetAuthorsWithPostsEager` fetches authors (1 query) and all associated posts in a single batched query using IDs (1 query), resulting in 2 queries total, followed by in-memory stitching.
+Observed Implementation: Fetches all authors (1 query), builds `authorIDs` slice, fetches all matching posts via `GetPostsByAuthorIDs` (1 query), constructs map `postsByAuthor`, and returns stitched `AuthorWithPosts` slice preserving author ordering.
 Assessment: PASS
 Severity: LOW
-Notes: No race conditions detected.
+Notes: Accurately implements `IN (...)` batching pattern.
 
-## Finding 4
+## Finding 4: Empty Result Edge Case
 
-Location: `internal/blog/repository.go:45-48` (`GetAuthorsWithPostsEager`)
-Claimed Behavior: Correctly maps posts by author ID.
-Observed Implementation: Maps all returned posts into `postsByAuthor[post.AuthorID]` slice map. Authors without posts correctly map to a `nil` slice which yields an empty slice behavior in JSON/Go domain models without nil panics.
+Location: `internal/blog/repository.go:15-17, 34-36`
+Claimed Behavior: When no authors exist, returns empty slice immediately without issuing secondary queries.
+Observed Implementation: Returns `[]AuthorWithPosts{}` immediately on `len(authors) == 0`.
 Assessment: PASS
 Severity: LOW
-Notes: Fully handles empty and multi-item author post slices correctly.
+Notes: Correctly handles empty datasets with 1 total query.

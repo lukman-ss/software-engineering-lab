@@ -1,32 +1,28 @@
 # Test Audit
 
-## Test Suite Overview
+Target Lab: `labs/22-n-plus-one-query-problem`
 
-Test file: `internal/blog/repository_test.go`
-Runner command: `go test -v -count=1 ./...` and `go test -race -count=1 ./...`
+## Test Coverage Summary
 
-## Coverage Analysis
+1. `TestGetAuthorsWithPostsNPlusOne` (`internal/blog/repository_test.go:8-25`):
+   - Validates parent count equals 3.
+   - Verifies query count equals 4 (1 + 3).
+   - Confirms N+1 query explosion behavior.
 
-### 1. TestGetAuthorsWithPostsNPlusOne
-- Covered: Verifies that retrieval with 3 authors executes exactly 4 queries ($3+1$).
-- Assertions: `len(result) == 3`, `queryCount == 4`.
-- Result: PASS.
+2. `TestGetAuthorsWithPostsEager` (`internal/blog/repository_test.go:27-50`):
+   - Validates parent count equals 3.
+   - Verifies query count equals 2 (1 author query + 1 batch post query).
+   - Validates deep structural equality (`reflect.DeepEqual`) between eager result and N+1 result to prove data equivalence.
 
-### 2. TestGetAuthorsWithPostsEager
-- Covered: Verifies that eager loading executes exactly 2 queries regardless of author count.
-- Assertions: `len(result) == 3`, `queryCount == 2`, and `reflect.DeepEqual(result, nPlusOneResult)`.
-- Result: PASS. Proves dataset identity between naive and eager versions.
-
-### 3. TestEmptyStore
-- Covered: Verifies behavior when store contains no authors or posts.
-- Assertions: `len(n1) == 0`, `len(eager) == 0`, `reflect.DeepEqual(n1, eager)`.
-- Result: PASS. Proves edge case handling.
+3. `TestEmptyStore` (`internal/blog/repository_test.go:52-65`):
+   - Tests nil/empty datasets for both methods.
+   - Asserts non-nil empty slice equivalence.
 
 ## Execution Verification
 
-Actual command outputs:
-
+### Command: `go test -v ./...`
 ```text
+?   	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/cmd/demo	[no test files]
 === RUN   TestGetAuthorsWithPostsNPlusOne
 --- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)
 === RUN   TestGetAuthorsWithPostsEager
@@ -34,25 +30,25 @@ Actual command outputs:
 === RUN   TestEmptyStore
 --- PASS: TestEmptyStore (0.00s)
 PASS
-ok      github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog      0.078s
+ok  	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog	(cached)
 ```
 
-Race detector:
+### Command: `go test -race -v ./...`
 ```text
-ok      github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog      1.096s
+?   	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/cmd/demo	[no test files]
+=== RUN   TestGetAuthorsWithPostsNPlusOne
+--- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)
+=== RUN   TestGetAuthorsWithPostsEager
+--- PASS: TestGetAuthorsWithPostsEager (0.00s)
+=== RUN   TestEmptyStore
+--- PASS: TestEmptyStore (0.00s)
+PASS
+ok  	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog	1.321s
 ```
 
-Demo execution:
-```text
---- 1. Simulating N+1 Query Problem ---
-Loaded 3 authors with their posts.
-Total queries executed: 4 (1 query for authors + 3 queries for posts)
-
---- 2. Simulating Eager Loading (Batching) ---
-Loaded 3 authors with their posts.
-Total queries executed: 2 (1 query for authors + 1 batched query for posts)
-```
-
-## Assessment
-
-Tests are deterministic, cover happy path, comparison equivalence, and edge case (empty store). Tests pass cleanly under Go race detector.
+### Assessment
+- Happy path covered: PASS
+- Edge cases covered: PASS
+- Query count assertions: PASS
+- Concurrency & Race detector: PASS
+- Equivalence assertions: PASS
