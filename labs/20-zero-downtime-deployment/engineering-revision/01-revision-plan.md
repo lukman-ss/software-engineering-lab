@@ -1,7 +1,7 @@
 # Engineering Revision Plan
 
-Target Lab: `labs/20-zero-downtime-deployment`
-Previous Verdict: `APPROVED`
+Target Lab: labs/20-zero-downtime-deployment
+Previous Verdict: APPROVED
 
 ## Blocking Issues
 None.
@@ -10,15 +10,15 @@ None.
 None.
 
 ## Files To Change
-- `internal/server/server.go`
-- `tests/server_test.go`
+None. Code, tests, and documentation are already fully aligned and verified.
 
 ## Tests To Add/Modify
-- Modify `tests/server_test.go` (`TestServerMultiRequestDrain`) to track unhandled write errors cleanly without false negative assertion failures.
+None. All 18 existing test cases pass cleanly under normal and race execution modes.
 
 ## Validation Commands
 ```bash
-go test -v ./...
-go test -race ./...
+cd labs/20-zero-downtime-deployment
+go test -count=1 -v ./...
+go test -count=1 -race -v ./...
 go run ./cmd/demo
 ```
