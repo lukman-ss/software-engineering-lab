@@ -1,172 +1,119 @@
-# 03 Claim Audit
+# Claim Audit: SLO, SLI & Error Budget
 
-Target Lab: `labs/24-slo-sli-error-budget`  
-Audit Date: 2026-09-26
-
----
-
-## Claim 1
-Claim: SLI adalah ukuran kuantitatif kualitas layanan; Google SRE merekomendasikan format rasio `good events / total events` agar bernilai 0–100%.  
-Location: `05-report.md` §Finding 1; `03-evidence.md` §Evidence 1 & 8  
-Evidence Provided: SRE Book Ch.4 §Indicators in Practice; SRE Workbook Ch.2 "What to Measure"  
-Source: Sources 1 & 7 (Google SRE Book & Workbook)  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Accurately reflected and cited verbatim from the source.
+## Claim 1: Distinctions between SLI, SLO, SLA
+Claim: SLI is a quantitative measure of service quality; SLO is a target value for an SLI; SLA is a contract with explicit penalties/consequences for missing SLOs.
+Location: `research/03-evidence.md` (Evidence 1), `research/05-report.md` (Finding 1)
+Evidence Provided: Quotes from Google SRE Book Chapter 4.
+Source: https://sre.google/sre-book/service-level-objectives/
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Canonical definitions from the originators of SRE.
 
 ---
 
-## Claim 2
-Claim: SLO adalah target value/range untuk SLI (`SLI <= target` atau lower bound <= SLI <= upper bound); dapat memiliki multiple thresholds bertingkat (misal P90 dan P99).  
-Location: `05-report.md` §Finding 2; `03-evidence.md` §Evidence 3  
-Evidence Provided: SRE Book Ch.4 §Objectives; SRE Workbook Ch.2  
-Source: Sources 1 & 7  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Matches official Google definitions and guidelines.
+## Claim 2: Common SLI Types by System Archetype
+Claim: User-facing systems focus on availability, latency, throughput; storage systems on latency, availability, durability; big data systems on throughput, end-to-end latency; all systems on correctness.
+Location: `research/03-evidence.md` (Evidence 2 & 3), `research/05-report.md` (Finding 2)
+Evidence Provided: Direct quotes from Google SRE Book Chapter 4.
+Source: https://sre.google/sre-book/service-level-objectives/
+Source Actually Supports Claim: YES
+Classification: FACT / BEST_PRACTICE
+Severity: LOW
+Notes: Fully supported by primary text.
 
 ---
 
-## Claim 3
-Claim: SLA berbeda dari SLO; SLA memuat konsekuensi eksplisit (seperti penalti finansial/refund). Jika tanpa konsekuensi eksplisit, praktis adalah SLO.  
-Location: `05-report.md` §Finding 3; `03-evidence.md` §Evidence 4  
-Evidence Provided: SRE Book Ch.4 §Agreements  
-Source: Source 1  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Precise quotation and clear distinction between contract vs internal target.
+## Claim 3: Time-based vs Aggregate Availability Calculation
+Claim: Availability can be calculated as time-based `uptime / (uptime + downtime)` or aggregate `successful requests / total requests`. Distributed systems generally prefer aggregate (request success rate / yield).
+Location: `research/03-evidence.md` (Evidence 4), `research/05-report.md` (Finding 3)
+Evidence Provided: Direct quotes from Google SRE Book Chapter 3.
+Source: https://sre.google/sre-book/embracing-risk/
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurately distinguishes between aggregate yield and uptime time-slices.
 
 ---
 
-## Claim 4
-Claim: Empat sinyal emas (The Four Golden Signals) monitoring user-facing sistem adalah Latency, Traffic, Errors, Saturation.  
-Location: `05-report.md` §Finding 4; `03-evidence.md` §Evidence 10  
-Evidence Provided: SRE Book Ch.6 "The Four Golden Signals"  
-Source: Source 2  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Primary canonical definition by Google SRE. Widely adopted across the industry.
+## Claim 4: Availability Downtime Windows
+Claim: 99% availability equals 7.2 hours/month; 99.9% equals 43.2 minutes/month; 99.99% equals 4.32 minutes/month.
+Location: `research/03-evidence.md` (Evidence 5 & 21), `research/05-report.md` (Finding 4)
+Evidence Provided: Table from Google SRE Book Appendix A.
+Source: https://sre.google/sre-book/availability-table/
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: The research explicitly caught and documented the arithmetic discrepancy in the topic specification (which stated 7h 18m and 4m 23s respectively).
 
 ---
 
-## Claim 5
-Claim: Gunakan percentile (P50/P90/P99), bukan rata-rata (mean), untuk latency karena rata-rata menyembunyikan tail latency.  
-Location: `05-report.md` §Finding 5; `03-evidence.md` §Evidence 9  
-Evidence Provided: SRE Book Ch.4 §Aggregation & Ch.6 §Worrying About Your Tail  
-Source: Sources 1 & 2  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Fully supported mathematically and empirically in the cited chapters.
+## Claim 5: Error Budget Definition and Governance Mechanism
+Claim: Error budget equals 100% - SLO. It acts as an objective throttle for deployment risk: if budget is positive, release velocity can proceed; if exhausted, releases freeze or slow while stability engineering takes priority.
+Location: `research/03-evidence.md` (Evidence 6 & 18), `research/05-report.md` (Finding 5 & 8)
+Evidence Provided: Quotes from Google SRE Book Chapter 3.
+Source: https://sre.google/sre-book/embracing-risk/
+Source Actually Supports Claim: YES
+Classification: FACT / IMPLEMENTATION-SPECIFIC
+Severity: LOW
+Notes: Verified against primary SRE text.
 
 ---
 
-## Claim 6
-Claim: 100% availability adalah target yang salah karena tidak realistis, tidak bernilai tambah bagi user di edge, biaya melonjak eksponensial per nine, dan menghambat deployment/perubahan.  
-Location: `05-report.md` §Finding 6; `03-evidence.md` §Evidence 6  
-Evidence Provided: SRE Workbook Ch.2 "Reliability Targets"; SRE Book Ch.3 "Embracing Risk"  
-Source: Sources 4 & 7  
-Source Actually Supports Claim: YES  
-Classification: INTERPRETATION  
-Severity: LOW  
-Notes: Core philosophy of SRE. Fully backed by Chapter 3 & Workbook Chapter 2.
+## Claim 6: Latency Distributions and Percentiles vs Averages
+Claim: Averages obscure tail latencies and changes across workloads; high percentiles (P95, P99, P99.9) must be used.
+Location: `research/03-evidence.md` (Evidence 10), `research/05-report.md` (Finding 7)
+Evidence Provided: Quotes and Figure 4-1 reference from Google SRE Book Chapter 4.
+Source: https://sre.google/sre-book/service-level-objectives/
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Core statistical principle in SRE telemetry.
 
 ---
 
-## Claim 7
-Claim: Downtime availability nines: 99% ≈ 7.2 jam/bulan (30 hari), 99.9% = 43.2 menit/bulan, 99.99% = 4.32 menit/bulan, 99.999% = 5.26 menit/tahun.  
-Location: `05-report.md` §Finding 7; `03-evidence.md` §Evidence 5  
-Evidence Provided: SRE Book Appendix A Table 1-1  
-Source: Source 5  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Math verified against Google Appendix A (30-day month baseline). Minor variation with 30.44-day calendar average noted and explained in contradictions.
+## Claim 7: Non-linear Cost of Increasing Reliability (100x per nine)
+Claim: Improving reliability by an additional nine may cost ~100x more due to redundant hardware and developer opportunity costs.
+Location: `research/03-evidence.md` (Evidence 17), `research/05-report.md` (Finding 11)
+Evidence Provided: Direct quote from Google SRE Book Chapter 3.
+Source: https://sre.google/sre-book/embracing-risk/
+Source Actually Supports Claim: YES
+Classification: INTERPRETATION / HEURISTIC
+Severity: MEDIUM
+Notes: Quoted accurately from the SRE Book, but rightly flagged in `06-open-questions.md` as an empirical heuristic without published formal econometric models.
 
 ---
 
-## Claim 8
-Claim: Error Budget = 1 − SLO; mengukur sisa ketidakandalan yang diperbolehkan dalam suatu jendela waktu.  
-Location: `05-report.md` §Finding 8; `03-evidence.md` §Evidence 7  
-Evidence Provided: SRE Book Ch.3; SRE Workbook Appendix B  
-Source: Sources 4 & 8  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Exact mathematical identity used in SRE framework.
+## Claim 8: Burn Rate Alerting Thresholds
+Claim: Burn rate measures error budget consumption rate; Datadog uses 2-hour window where burn rate 1-6 is elevated and >6 is critical.
+Location: `research/03-evidence.md` (Evidence 12), `research/05-report.md` (Finding 8)
+Evidence Provided: Datadog documentation excerpt.
+Source: https://docs.datadoghq.com/service_level_objectives/
+Source Actually Supports Claim: YES
+Classification: IMPLEMENTATION-SPECIFIC
+Severity: MEDIUM
+Notes: Supported by Datadog docs, but not an SRE universal constant. The research accurately labels it as implementation-specific in `04-contradictions.md` and `06-open-questions.md`.
 
 ---
 
-## Claim 9
-Claim: Error budget berfungsi sebagai mekanisme pengambilan keputusan rilis/eksperimen vs stabilisasi/pembayaran utang teknis.  
-Location: `05-report.md` §Finding 9; `03-evidence.md` §Evidence 7 & 15  
-Evidence Provided: SRE Book Ch.3 §Forming Your Error Budget; SRE Workbook Appendix B  
-Source: Sources 4 & 8  
-Source Actually Supports Claim: YES  
-Classification: INTERPRETATION  
-Severity: LOW  
-Notes: Core organizational concept of Google SRE error budget policies.
+## Claim 9: Error Budget Remaining Calculation Formula
+Claim: Remaining error budget percentage is calculated as `100 * (current status - target) / (100 - target)`.
+Location: `research/03-evidence.md` (Evidence 13), `research/05-report.md` (Finding 12)
+Evidence Provided: Datadog documentation.
+Source: https://docs.datadoghq.com/service_level_objectives/
+Source Actually Supports Claim: YES
+Classification: IMPLEMENTATION-SPECIFIC / MATHEMATICAL FORMULATION
+Severity: LOW
+Notes: Derived mathematically from `(allowed_error - actual_error) / allowed_error * 100`.
 
 ---
 
-## Claim 10
-Claim: Alerting berbasis multi-window multi-burn-rate (page: 14.4x/1h+5m, 6x/6h+30m; ticket: 1x/3d+6h) memiliki precision dan recall tinggi dibandingkan alert durasi tunggal (`for: 1h`).  
-Location: `05-report.md` §Finding 10; `03-evidence.md` §Evidence 11 & 12  
-Evidence Provided: SRE Workbook Ch.5 Table 5-8 & PromQL examples  
-Source: Source 6  
-Source Actually Supports Claim: YES  
-Classification: IMPLEMENTATION-SPECIFIC  
-Severity: MEDIUM  
-Notes: Supported by SRE Workbook Ch.5. Specific parameters are recommendations tested inside Google; other teams/tools may tweak specific multipliers.
-
----
-
-## Claim 11
-Claim: SLO harus berbeda per endpoint berdasarkan criticality (misal `POST /payment/webhook` > `GET /report`).  
-Location: `05-report.md` §Finding 11  
-Evidence Provided: SRE Book Ch.4 §Objectives; SRE Workbook Ch.5 Table 5-10  
-Source: Sources 1 & 6  
-Source Actually Supports Claim: YES  
-Classification: EXAMPLE  
-Severity: LOW  
-Notes: Realistic enterprise architectural guidance supported by Workbook bucketing guidance.
-
----
-
-## Claim 12
-Claim: Metrik infrastruktur (CPU, RAM, connection pool) adalah sinyal diagnostik, bukan SLI/SLO user-facing.  
-Location: `05-report.md` §Finding 12  
-Evidence Provided: SRE Book Ch.4 §Indicators in Practice; Ch.3  
-Source: Sources 1 & 4  
-Source Actually Supports Claim: YES  
-Classification: INTERPRETATION  
-Severity: LOW  
-Notes: Strongly aligned with SRE user-centric principles, correctly classified as an interpretation.
-
----
-
-## Claim 13
-Claim: Window rolling 4-minggu (28 hari) adalah interval umum yang direkomendasikan.  
-Location: `03-evidence.md` §Evidence 16  
-Evidence Provided: SRE Workbook Ch.2  
-Source: Source 7  
-Source Actually Supports Claim: YES  
-Classification: IMPLEMENTATION-SPECIFIC  
-Severity: LOW  
-Notes: Supported by SRE Workbook Ch.2 as Google's operational experience.
-
----
-
-## Claim 14
-Claim: ~70% gangguan (outages) disebabkan oleh perubahan (changes/deployments).  
-Location: `03-evidence.md` §Evidence 17; `05-report.md` §Limitations  
-Evidence Provided: SRE Workbook Appendix B Background  
-Source: Source 8  
-Source Actually Supports Claim: PARTIAL  
-Classification: HYPOTHESIS  
-Severity: MEDIUM  
-Notes: Google mentions this as an internal rule of thumb in Appendix B without formal empirical publication. Research agent appropriately marked it LOW confidence and cautioned against treating it as an absolute universal statistic.
+## Claim 10: Symptom-Based Alerting
+Claim: Alerts should page on user-visible symptoms rather than infrastructure causes to reduce alert fatigue and accurately reflect SLO impact.
+Location: `research/03-evidence.md` (Evidence 14 & 20), `research/05-report.md` (Finding 9)
+Evidence Provided: Prometheus Alerting Best Practices, Google SRE Book Chapter 6.
+Source: https://prometheus.io/docs/practices/alerting/, https://sre.google/sre-book/monitoring-distributed-systems/
+Source Actually Supports Claim: YES
+Classification: FACT / BEST_PRACTICE
+Severity: LOW
+Notes: Supported by both Google SRE and Prometheus official guidelines.

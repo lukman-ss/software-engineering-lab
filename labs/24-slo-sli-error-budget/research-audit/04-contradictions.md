@@ -1,34 +1,48 @@
-# 04 Contradictions
+# Contradictions Audit: SLO, SLI & Error Budget
 
-Target Lab: `labs/24-slo-sli-error-budget`  
-Audit Date: 2026-09-26
+## Contradiction 1: Month Availability Calculations in Topic Spec vs Standard SRE Tables
+Statement A:
+Topic specification stated 99% availability equates to ~7 hours 18 minutes downtime per month, and 99.99% equates to ~4 minutes 23 seconds per month.
+Location:
+Topic input specification.
 
-## Contradiction 1: Monthly Downtime Calculation Baseline (30-day month vs 30.44-day average month)
-- **Statement A:** Lab topic / preliminary calculations mention ~7 hours 18 minutes allowed downtime per month for 99% availability (`04-contradictions.md` §1).
-- **Statement B:** Google SRE Book Appendix A Table 1-1 gives 7.2 hours/month = 7 hours 12 minutes/month for 99% availability (`03-evidence.md` §Evidence 5).
-- **Type:** SOURCE_CONFLICT (Arithmetic baseline variation).
-- **Impact:** Negligible (difference is 6 minutes over a month, ~1.4%). Statement A assumes an average Gregorian month length of 365.25 / 12 = 30.44 days (43,830 minutes), whereas Google's table explicitly adopts a nominal 30-day month (43,200 minutes).
-- **Assessment:** PASS (Accurately documented and resolved by the research team).
+Statement B:
+Canonical availability table defines 99% as 7.2 hours/month (7 hours 12 minutes) and 99.99% as 4.32 minutes/month (4 minutes 19.2 seconds).
+Location:
+Google SRE Book Appendix A: https://sre.google/sre-book/availability-table/
+
+Type:
+SOURCE_CONFLICT / SPECIFICATION_ERROR
+
+Impact:
+Minor numeric discrepancy in input materials.
+
+Assessment:
+The research artifacts correctly noted and resolved this discrepancy using the primary canonical source while documenting the exact arithmetic difference in `research/03-evidence.md` (Evidence 21) and `research/04-contradictions.md`.
 
 ---
 
-## Contradiction 2: 99.99% Downtime Duration (4m 23s vs 4m 19s)
-- **Statement A:** Lab preliminary estimate: ~4 minutes 23 seconds/month for 99.99% availability.
-- **Statement B:** Google Appendix A: 4.32 minutes = 4 minutes 19.2 seconds/month.
-- **Type:** SOURCE_CONFLICT (Arithmetic baseline variation).
-- **Impact:** Negligible (difference is 3.8 seconds over a month). Caused by the same 30.44 days vs 30.0 days baseline.
-- **Assessment:** PASS (Accurately documented and resolved by the research team).
+## Contradiction 2: SRE Conceptual Model vs Commercial Platform Mechanics
+Statement A:
+Google SRE Book describes error budget consumption and thresholding qualitatively and as policy-driven quarterly targets.
+Location:
+Google SRE Book Chapters 3 & 4.
 
----
+Statement B:
+Datadog documentation formalizes specific burn rate numeric tiers (1-6 elevated, >6 critical) over rolling 2-hour sliding windows.
+Location:
+Datadog SLO Documentation.
 
-## Contradiction 3: Evaluation Window (30 Calendar Days vs 28 Days / 4 Full Weeks)
-- **Statement A:** Common business SLOs often specify a 30-day calendar rolling window.
-- **Statement B:** Google SRE Workbook Ch.2 recommends a 4-week rolling window (28 days) to ensure identical weekend/weekday proportions.
-- **Type:** INTERNAL (Design recommendation trade-off).
-- **Impact:** Minor. 28-day rolling window prevents cyclical day-of-week distortion; 30-day rolling window aligns with calendar billing/monthly reviews.
-- **Assessment:** PASS (Both models are valid; the research explicitly highlights the trade-off).
+Type:
+INTERNAL / SCOPE_DIFFERENTIATION
+
+Impact:
+Potential risk of treating vendor-specific alerting thresholds as immutable SRE laws.
+
+Assessment:
+The research correctly identifies this as complementary implementation detail rather than an irreconcilable conflict, appropriately isolating Datadog's specifics into lower confidence / implementation-specific tags.
 
 ---
 
 ## Summary
-No material technical contradictions found. All key principles (SLI definitions, SLO thresholds, Error Budget equations, Golden Signals, and multi-burn-rate logic) are consistent across all consulted chapters and research deliverables.
+No material contradictions or unsupported conflicts remain unresolved across the research corpus.

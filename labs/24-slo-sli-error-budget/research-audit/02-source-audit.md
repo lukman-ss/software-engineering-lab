@@ -1,92 +1,149 @@
-# 02 Source Audit
-
-Target Lab: `labs/24-slo-sli-error-budget`  
-Audit Date: 2026-09-26
+# Source Audit: SLO, SLI & Error Budget
 
 ## Source 1
-Claimed Title: Chapter 4 - Service Level Objectives  
-Claimed Publisher: Google SRE Book (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/sre-book/service-level-objectives/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Canonical definitions of SLI, SLO, SLA, percentile aggregation, and safety margin.  
-Assessment: PASS
+Claimed Title: Service Level Objectives (Google SRE Book)
+Claimed Publisher: Google, Inc. / O'Reilly Media
+URL: https://sre.google/sre-book/service-level-objectives/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Authoritative origin of modern SRE SLI/SLO concepts.
+
+Assessment:
+PASS
+
+---
 
 ## Source 2
-Claimed Title: Chapter 6 - Monitoring Distributed Systems  
-Claimed Publisher: Google SRE Book (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/sre-book/monitoring-distributed-systems/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Authoritative source for the Four Golden Signals (Latency, Traffic, Errors, Saturation) and tail latency.  
-Assessment: PASS
+Claimed Title: Embracing Risk (Google SRE Book)
+Claimed Publisher: Google, Inc. / O'Reilly Media
+URL: https://sre.google/sre-book/embracing-risk/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Primary source for error budget mechanics, velocity tradeoff, and risk tolerance.
+
+Assessment:
+PASS
+
+---
 
 ## Source 3
-Claimed Title: Chapter 10 - Practical Alerting from Time-Series Data  
-Claimed Publisher: Google SRE Book (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/sre-book/practical-alerting/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Practical Borgmon time-series alerting, alert thresholds, and duration filtering.  
-Assessment: PASS
+Claimed Title: Monitoring Distributed Systems (Google SRE Book)
+Claimed Publisher: Google, Inc. / O'Reilly Media
+URL: https://sre.google/sre-book/monitoring-distributed-systems/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Establishes the Four Golden Signals (Latency, Traffic, Errors, Saturation) and symptom-based alerting.
+
+Assessment:
+PASS
+
+---
 
 ## Source 4
-Claimed Title: Chapter 3 - Embracing Risk  
-Claimed Publisher: Google SRE Book (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/sre-book/embracing-risk/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Explains motivation for error budgets, unreliability risk tolerance, and cost scaling per nine.  
-Assessment: PASS
+Claimed Title: Availability Table (Google SRE Book Appendix)
+Claimed Publisher: Google, Inc. / O'Reilly Media
+URL: https://sre.google/sre-book/availability-table/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Canonical reference table for downtime calculations per time period.
+
+Assessment:
+PASS
+
+---
 
 ## Source 5
-Claimed Title: Appendix A - Availability Table  
-Claimed Publisher: Google SRE Book (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/sre-book/availability-table/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Concrete table of allowed downtime across various time windows.  
-Assessment: PASS
+Claimed Title: Alerting (Prometheus Documentation)
+Claimed Publisher: Prometheus Authors / The Linux Foundation
+URL: https://prometheus.io/docs/practices/alerting/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Industry standard guidance on symptom-based alerting.
+
+Assessment:
+PASS
+
+---
 
 ## Source 6
-Claimed Title: Chapter 5 - Alerting on SLOs  
-Claimed Publisher: Google SRE Workbook (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/workbook/alerting-on-slos/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Definitive guide to burn rate calculation and multiwindow multi-burn-rate alerting with PromQL examples.  
-Assessment: PASS
+Claimed Title: Service Level Objectives (Datadog Documentation)
+Claimed Publisher: Datadog
+URL: https://docs.datadoghq.com/service_level_objectives/
 
-## Source 7
-Claimed Title: Chapter 2 - Implementing SLOs  
-Claimed Publisher: Google SRE Workbook (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/workbook/implementing-slos/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: None. Step-by-step implementation guide, SLI specification, 4-week rolling window recommendation, and decision matrix.  
-Assessment: PASS
+Reachable:
+YES
 
-## Source 8
-Claimed Title: Appendix B - Example Error Budget Policy  
-Claimed Publisher: Google SRE Workbook (Google Inc.) / O'Reilly Media  
-URL: https://sre.google/workbook/error-budget-policy/  
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY  
-Relevant: YES  
-Supports Claimed Topic: YES  
-Problems: Note that the "70% outages due to change" statement is an internal Google observation cited as background context rather than an industry-wide empirical standard.  
-Assessment: PASS
+Source Type:
+SECONDARY (Commercial platform documentation)
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- Burn rate thresholds (1-6 elevated, >6 critical) and remaining error budget formula are proprietary Datadog implementation details, correctly classified in research as such.
+
+Assessment:
+PASS

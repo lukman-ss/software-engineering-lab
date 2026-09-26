@@ -1,32 +1,62 @@
-# 06 Research Gap Analysis
+# Research Gaps Analysis: SLO, SLI & Error Budget
 
-Target Lab: `labs/24-slo-sli-error-budget`  
-Audit Date: 2026-09-26
+## Gap 1: Lack of Empirical Data for Cost of Nines
+Type:
+WEAK_SOURCE
 
-## Gap 1
-- **Type:** OVERGENERALIZATION
-- **Severity:** MEDIUM
-- **Location:** `03-evidence.md` §Evidence 17, `05-report.md` §Limitations
-- **Problem:** The figure "Changes represent roughly 70% of outages" originates from Google SRE Workbook Appendix B as internal background context without cited methodology or broader industry replication.
-- **Required Revision:** Ensure lab text explicitly clarifies that this figure is an internal historical observation from Google, not an undisputed universal industry statistic.
-- **Can Be Approved Without Fix:** YES (The research report already appropriately marked this with LOW confidence and recorded it in §Limitations).
+Severity:
+LOW
 
----
+Location:
+`research/05-report.md` (Finding 11), `research/06-open-questions.md`
 
-## Gap 2
-- **Type:** SCOPE_ERROR (Single-vendor source distribution)
-- **Severity:** MEDIUM
-- **Location:** `02-sources.md`, `05-report.md` §Limitations
-- **Problem:** 100% of the cited Tier 1 sources are published by Google (Google SRE Book & Google SRE Workbook). No third-party engineering blogs or cross-cloud literature (e.g. AWS Builders Library, CNCF, Microsoft Azure architecture center) are incorporated.
-- **Required Revision:** While Google SRE established the modern terminology and best practices for SLI/SLO/Error Budget, future revisions can incorporate cross-cloud references or case studies (e.g., Alex Hidalgo's SLO Book or AWS Builders' Library).
-- **Can Be Approved Without Fix:** YES (Google SRE Book/Workbook is the canonical, universally recognized origin of these principles).
+Problem:
+The claim that each additional "nine" costs ~100x more is accepted as a rule of thumb from the Google SRE Book, but lacks empirical financial case studies or formulaic proofs.
+
+Required Revision:
+None required for approval; research transparently flagged this in `06-open-questions.md`.
+
+Can Be Approved Without Fix:
+YES
 
 ---
 
-## Gap 3
-- **Type:** MISSING_CASE
-- **Severity:** LOW
-- **Location:** `06-open-questions.md` §Unanswered Questions (Item 3)
-- **Problem:** Research focus is heavily weighted toward request-driven synchronous HTTP/RPC workloads; guidance for asynchronous background jobs (e.g., Kafka streaming consumers, daily ETL batch pipelines) is only briefly acknowledged.
-- **Required Revision:** Provide brief conceptual examples of SLIs for event-driven systems (e.g., consumer lag, pipeline freshness/throughput) during lab implementation or documentation.
-- **Can Be Approved Without Fix:** YES (Request-driven APIs serve as the primary teaching vehicle for Lab 24).
+## Gap 2: Specificity of Burn Rate Alerting Thresholds
+Type:
+OVERGENERALIZATION / IMPLEMENTATION_GAP
+
+Severity:
+MEDIUM
+
+Location:
+`research/05-report.md` (Finding 8), `research/03-evidence.md` (Evidence 12)
+
+Problem:
+Numeric burn rate thresholds (1-6 elevated, >6 critical over 2 hours) rely exclusively on Datadog documentation rather than an open standard (e.g., OpenTelemetry or Google SRE Workbook multi-window multi-burn rate alerts).
+
+Required Revision:
+None required for approval; research clearly separated vendor implementation from canonical SRE theory.
+
+Can Be Approved Without Fix:
+YES
+
+---
+
+## Gap 3: User Perception of Variance vs Speed Citation
+Type:
+MISSING_SOURCE
+
+Severity:
+LOW
+
+Location:
+`research/03-evidence.md` (Evidence 10), `research/06-open-questions.md`
+
+Problem:
+Google SRE Book asserts user studies show preference for consistent latency over lower mean latency with high variance, but does not explicitly cite the underlying academic paper/study in that section.
+
+Required Revision:
+None required for basic research approval; noted in open questions.
+
+Can Be Approved Without Fix:
+YES

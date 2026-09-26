@@ -1,15 +1,8 @@
-# 05 Code Audit
+# Code Audit: SLO, SLI & Error Budget
 
-Target Lab: `labs/24-slo-sli-error-budget`  
-Audit Date: 2026-09-26
+## Scope Status
+NOT APPLICABLE (PIPELINE OVERRIDE: RESEARCH AUDIT ONLY)
 
-## Status
-**NOT_APPLICABLE**
-
-## Reason
-Per PIPELINE OVERRIDE instructions:
-> "Audit research only."  
-> "Do not audit implementation/code in this stage."  
-> "Do not modify research files."
-
-Code audit skipped in accordance with execution instructions for this stage.
+Per pipeline instructions:
+- This stage audits research artifacts only.
+- Code verification, execution tests, and implementation checks are deferred to the Engineering Audit phase.
