@@ -12,6 +12,9 @@ func NewRepository(store *Store) *Repository {
 // It executes 1 query for authors, and N queries for posts.
 func (r *Repository) GetAuthorsWithPostsNPlusOne() []AuthorWithPosts {
 	authors := r.store.GetAllAuthors()
+	if len(authors) == 0 {
+		return []AuthorWithPosts{}
+	}
 	
 	var result []AuthorWithPosts
 	for _, author := range authors {
@@ -29,7 +32,7 @@ func (r *Repository) GetAuthorsWithPostsNPlusOne() []AuthorWithPosts {
 func (r *Repository) GetAuthorsWithPostsEager() []AuthorWithPosts {
 	authors := r.store.GetAllAuthors()
 	if len(authors) == 0 {
-		return nil
+		return []AuthorWithPosts{}
 	}
 	
 	authorIDs := make([]int, len(authors))

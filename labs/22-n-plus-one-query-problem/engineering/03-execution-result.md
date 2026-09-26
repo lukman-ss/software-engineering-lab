@@ -22,8 +22,10 @@ Result:
 --- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)
 === RUN   TestGetAuthorsWithPostsEager
 --- PASS: TestGetAuthorsWithPostsEager (0.00s)
+=== RUN   TestEmptyStore
+--- PASS: TestEmptyStore (0.00s)
 PASS
-ok  	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog	0.576s
+ok  	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog	0.354s
 ```
 
 ## Race Detector
