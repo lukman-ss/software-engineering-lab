@@ -6,36 +6,44 @@ Audit Date: 2026-09-26
 
 ## Summary
 
-Major Claims Reviewed: 7  
-Sources Reviewed: 14  
-Unsupported Claims: 0  
-Contradictions: 0 unhandled (2 engine-specific variations properly categorized)  
-Code Issues: 0 (Code audit skipped per pipeline override)  
-Test Failures: 0 (Skipped per pipeline override)  
-Research Gaps: 4 (All LOW severity, transparently recorded in open questions)  
+Major Claims Reviewed: 9
+Sources Reviewed: 16
+Unsupported Claims: 0
+Contradictions: 0 (2 vendor-level implementation variations identified and resolved)
+Code Issues: NOT_APPLICABLE (pipeline override: research only)
+Test Failures: NOT_APPLICABLE
+Research Gaps: 4 (all non-blocking)
 
 ## Quality Gates
 
-Source Integrity: PASS  
-Claim Support: PASS  
-Internal Consistency: PASS  
-Code Correctness: NOT_APPLICABLE (Pipeline override: research audit only)  
-Tests: NOT_APPLICABLE (Pipeline override: research audit only)  
-Documentation Accuracy: PASS  
+Source Integrity:
+PASS
+
+Claim Support:
+PASS
+
+Internal Consistency:
+PASS
+
+Code Correctness:
+NOT_APPLICABLE
+
+Tests:
+NOT_APPLICABLE
+
+Documentation Accuracy:
+PASS
 
 ## Blocking Issues
-
 None.
 
 ## Non-Blocking Issues
-
-1. Direct access to dev.mysql.com domain was verified via official Oracle CDN mirror; content integrity confirmed.
-2. The atomic conditional decrement recipe (`SET stock = stock - N WHERE stock >= N`) is synthesized from ACID single-statement atomicity guarantees rather than a literal vendor doc quote; appropriately noted with MEDIUM confidence in research.
-3. Version overflow and Redis lock boundary conditions remain open questions for future deep-dives.
+1. Direct automated fetch to `dev.mysql.com` returned 403; verified via official Oracle documentation mirror.
+2. Boundary criteria for distributed locks (Redis) vs native DB locks rely on architectural reasoning; documented in Open Questions (OQ-2).
+3. Version counter integer overflow limits in optimistic locking require 64-bit/timestamp guidance for high-frequency systems (OQ-3).
 
 ## Required Revisions
-
-None required for research approval.
+None for research stage. Recommendations noted for downstream content drafting.
 
 ## Final Status
 

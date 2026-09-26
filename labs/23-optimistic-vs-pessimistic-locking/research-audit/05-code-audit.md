@@ -1,12 +1,11 @@
 # Code Audit: Optimistic vs Pessimistic Locking
 
-## Status
-NOT APPLICABLE (Audit research only per pipeline override).
+## Pipeline Override Status
+**NOT APPLICABLE FOR THIS STAGE.**
 
-## Details
-Per pipeline override instruction:
-- "Audit research only."
-- "Do not audit implementation/code in this stage."
-- "Do not modify research files."
+In accordance with explicit pipeline instructions:
+- Audit research only.
+- Do not audit implementation/code in this stage.
+- Do not modify research files.
 
-Implementation files (`internal/inventory/`, `tests/`, `cmd/demo/`) will be audited in subsequent engineering audit stages.
+Full code, test execution, concurrency race detection, and demo validation are deferred to the engineering audit stage (`engineering-audit/`).

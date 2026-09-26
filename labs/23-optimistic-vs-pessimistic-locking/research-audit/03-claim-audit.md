@@ -2,138 +2,194 @@
 
 ## Claim 1
 
-Claim: The "lost update" problem occurs when a second transaction overwrites a first transaction's update without seeing it, causing the first value to be lost.
+Claim:
+The "lost update" anomaly occurs under default database isolation (READ COMMITTED in PostgreSQL/Oracle) when concurrent transactions execute uncoordinated read-modify-write sequences.
 
-Location: `research/05-report.md:21-25`, `research/03-evidence.md:7-22`
+Location:
+`research/05-report.md`, Finding 1; `research/03-evidence.md`, Evidence 01, 02
 
-Evidence Provided: Academic definition from Bernstein et al. 1987 / Weikum & Vossen 2001 via Wikipedia, and concrete salary update example from Oracle 19c Concepts Table 10-2.
+Evidence Provided:
+Wikipedia lost update definition citing Bernstein et al. 1987; Oracle 19c Concepts Table 10-2 Banda salary scenario; PostgreSQL 13.2 Read Committed re-evaluation semantics.
 
-Source: Source 3 (Wikipedia Concurrency Control), Source 10 (Oracle 19c Concepts), Source 2 (PostgreSQL Transaction Isolation)
+Source:
+Sources 1, 2, 3, 10
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW (Fully Supported)
+Severity:
+LOW
 
-Notes: Verified against classical database literature and official RDBMS documentation.
+Notes:
+Solidly supported across multiple database engines and standard textbook definitions.
 
 ---
 
 ## Claim 2
 
-Claim: Pessimistic locking via `SELECT ... FOR UPDATE` causes retrieved rows to be locked exclusively until transaction end; other transactions attempting write or locking read on those rows are blocked.
+Claim:
+Pessimistic locking via `SELECT ... FOR UPDATE` acquires row-level exclusive locks held until commit/rollback, preventing concurrent UPDATE/DELETE/locking reads on the targeted rows while plain SELECT remains unblocked.
 
-Location: `research/05-report.md:35-46`, `research/03-evidence.md:43-58`
+Location:
+`research/05-report.md`, Finding 2; `research/03-evidence.md`, Evidence 03, 04
 
-Evidence Provided: PostgreSQL 18 Documentation 13.3.2, MySQL 8.0 InnoDB Locking Reads, Oracle 19c Concepts.
+Evidence Provided:
+PostgreSQL 13.3.2 row-level lock documentation; MySQL 8.0 locking reads documentation; Oracle TX row lock semantics.
 
-Source: Source 1 (PostgreSQL Explicit Locking), Source 7 (MySQL Locking Reads), Source 10 (Oracle Data Concurrency)
+Source:
+Sources 1, 7, 10, 16
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW (Fully Supported)
+Severity:
+LOW
 
-Notes: Verified via PostgreSQL docs Section 13.3.2 and Table 13.3.
+Notes:
+Fully verified against PostgreSQL, MySQL/InnoDB, and Oracle documentation.
 
 ---
 
 ## Claim 3
 
-Claim: Pessimistic locking reduces concurrency, increases wait times, and introduces deadlock risks. Applications should avoid holding locks during long operations like network calls or user input.
+Claim:
+Pessimistic locking increases lock wait time, reduces concurrency, and introduces deadlock risk; holding locks across external HTTP/gateway calls is an anti-pattern.
 
-Location: `research/05-report.md:48-58`, `research/03-evidence.md:80-112`
+Location:
+`research/05-report.md`, Finding 3, Finding 9; `research/03-evidence.md`, Evidence 05, 06, 13
 
-Evidence Provided: PostgreSQL Documentation 13.3.4 (Deadlocks) and Section 13.3 warning against holding transactions open for long periods.
+Evidence Provided:
+PostgreSQL 13.3.4 deadlocks section ("applications should not hold transactions open for long periods waiting for user input / external events"); Wikipedia 2PL deadlock discussion.
 
-Source: Source 1 (PostgreSQL 18 Docs 13.3)
+Source:
+Sources 1, 3, 5
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT / IMPLEMENTATION-SPECIFIC
+Classification:
+FACT / BEST_PRACTICE
 
-Severity: LOW (Fully Supported)
+Severity:
+LOW
 
-Notes: Matches official PostgreSQL and database engineering principles.
+Notes:
+Consistently warned against in all primary database documentation.
 
 ---
 
 ## Claim 4
 
-Claim: Optimistic locking validates at commit time that data has not changed since it was read (via version/timestamp check in WHERE clause). A result of 0 affected rows signals a conflict that must be handled by the application (reload/retry/409).
+Claim:
+Optimistic locking detects conflicts at commit/update time by including the read version/timestamp in the `WHERE` clause (`UPDATE ... WHERE id = ? AND version = ?`), where zero affected rows signals a conflict requiring application-level handling (retry or 409).
 
-Location: `research/05-report.md:60-73`, `research/03-evidence.md:116-130`, `research/03-evidence.md:278-290`
+Location:
+`research/05-report.md`, Finding 4; `research/03-evidence.md`, Evidence 07, 16
 
-Evidence Provided: Martin Fowler EAA (Optimistic Offline Lock), Oracle 19c Concepts WHERE-guard recommendation, Hibernate / Baeldung JPA docs.
+Evidence Provided:
+Martin Fowler (Optimistic Offline Lock); Oracle 19c WHERE-clause original value recommendation; Hibernate/JPA OptimisticLockException behavior.
 
-Source: Source 4 (Fowler Optimistic Offline Lock), Source 10 (Oracle Data Concurrency), Source 12 (Baeldung JPA), Source 14 (Hibernate Guide)
+Source:
+Sources 4, 10, 12, 14
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT / DESIGN_PATTERN
 
-Severity: LOW (Fully Supported)
+Severity:
+LOW
 
-Notes: Verified with Fowler EAA pattern and standard SQL WHERE-guard semantics.
+Notes:
+Standard implementation pattern supported by enterprise architecture literature and vendor guides.
 
 ---
 
 ## Claim 5
 
-Claim: Atomic single-statement updates (`UPDATE ... SET stock = stock - N WHERE stock >= N` + checking `affected_rows == 1`) eliminate the read-modify-write race window without explicit locking.
+Claim:
+Atomic single-statement updates (`UPDATE products SET stock = stock - N WHERE id = ? AND stock >= N` with `affected_rows == 1` check) eliminate read-modify-write race windows without requiring explicit multi-statement locks.
 
-Location: `research/05-report.md:89-100`, `research/03-evidence.md:170-184`
+Location:
+`research/05-report.md`, Finding 6; `research/03-evidence.md`, Evidence 10
 
-Evidence Provided: Oracle ACID statement atomicity, PostgreSQL single-statement MVCC lock release, MySQL row-locking behavior during update.
+Evidence Provided:
+PostgreSQL 13.4.2 statement-level consistency ("must actually update the row"); SQL statement-level ACID atomicity from Oracle/PostgreSQL/MySQL.
 
-Source: Source 11 (Oracle Transactions), Source 1 (PostgreSQL Explicit Locking), Source 9 (MySQL Isolation)
+Source:
+Sources 11, 15, 16
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: INTERPRETATION / IMPLEMENTATION-SPECIFIC
+Classification:
+FACT
 
-Severity: LOW (Supported with proper confidence caveat)
+Severity:
+LOW
 
-Notes: UPGRADED from MEDIUM to HIGH (2026-09-26). PostgreSQL 13.4.2 applevel-consistency (direct fetch) explicitly states "SELECT FOR UPDATE does not ensure that a concurrent transaction will not update or delete a selected row. To do that in PostgreSQL you must actually update the row, even if no values need to be changed." This directly confirms an actual UPDATE is the authoritative conflict-resolution action — a single conditional UPDATE (`SET stock = stock - N WHERE stock >= N`) satisfies this requirement while being atomic at statement level.
+Notes:
+Statement atomicity and predicate evaluation in SQL engines guarantee atomic execution of single DML statements.
 
 ---
 
 ## Claim 6
 
-Claim: Wrapping code in a database transaction alone does not automatically prevent lost updates; prevention depends on query structure and isolation level.
+Claim:
+Default transaction isolation levels vary across database engines (PostgreSQL and Oracle default to READ COMMITTED; MySQL/InnoDB defaults to REPEATABLE READ) and do not uniformly eliminate lost updates.
 
-Location: `research/05-report.md:102-114`, `research/03-evidence.md:206-220`
+Location:
+`research/05-report.md`, Finding 8; `research/03-evidence.md`, Evidence 11, 12
 
-Evidence Provided: PostgreSQL Read Committed re-evaluation allows overwrite; Oracle documented example occurs within transactions; MySQL semi-consistent reads.
+Evidence Provided:
+PostgreSQL 13.2 isolation levels; MySQL 15.7.2.1 isolation levels; Oracle 19c Concepts 9.
 
-Source: Source 1, Source 2, Source 9, Source 10
+Source:
+Sources 2, 9, 10
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW (Fully Supported)
+Severity:
+LOW
 
-Notes: Essential distinction for software engineers.
+Notes:
+Accurately reflects differences in vendor defaults and MVCC/2PL implementations.
 
 ---
 
 ## Claim 7
 
-Claim: Default transaction isolation levels differ across database vendors: PostgreSQL defaults to READ COMMITTED (READ UNCOMMITTED is a no-op identical to READ COMMITTED), Oracle defaults to READ COMMITTED, and MySQL InnoDB defaults to REPEATABLE READ.
+Claim:
+Using distributed locks (e.g. Redis) when the resource lives entirely in a single relational database is an anti-pattern.
 
-Location: `research/05-report.md:116-128`, `research/03-evidence.md:188-202`
+Location:
+`research/05-report.md`, Finding 9; `research/06-open-questions.md`, OQ-2
 
-Evidence Provided: PostgreSQL Docs 13.2, MySQL Docs 15.7.2.1, Oracle Docs Chapter 9.
+Evidence Provided:
+Inference from PostgreSQL advisory locks and database-native capabilities.
 
-Source: Source 1, Source 2, Source 9, Source 10
+Source:
+Source 1, Source 13
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+PARTIAL
 
-Classification: FACT / IMPLEMENTATION-SPECIFIC
+Classification:
+INTERPRETATION / BEST_PRACTICE
 
-Severity: LOW (Fully Supported)
+Severity:
+MEDIUM
 
-Notes: Cross-engine isolation level semantics are correctly distinguished.
+Notes:
+While single-DB native locks are universally recommended before introducing Redis/Redlock overhead, the boundary conditions (e.g. high-throughput rate-limiting vs transactional state) require careful architectural nuance. Properly flagged in Open Questions (OQ-2).

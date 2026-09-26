@@ -1,47 +1,44 @@
-# Audit Plan: Research on Optimistic vs Pessimistic Locking
+# Audit Plan: Optimistic vs Pessimistic Locking Research
 
 ## Target Lab
 `labs/23-optimistic-vs-pessimistic-locking`
 
 ## Scope
-Research files audit only (per pipeline override):
-- `research/01-plan.md`
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/04-contradictions.md`
-- `research/05-report.md`
-- `research/06-open-questions.md`
+Pipeline Override: Research Only. Implementation/code audit is out of scope for this stage and handled under code audit placeholder rules.
 
 ## Files Reviewed
-- `research/01-plan.md` (117 lines)
-- `research/02-sources.md` (173 lines)
-- `research/03-evidence.md` (291 lines)
-- `research/04-contradictions.md` (90 lines)
-- `research/05-report.md` (170 lines)
-- `research/06-open-questions.md` (89 lines)
+- `labs/23-optimistic-vs-pessimistic-locking/research/01-plan.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/02-sources.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/03-evidence.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/04-contradictions.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/05-report.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Definition and reproduction of the "lost update" anomaly under default isolation (READ COMMITTED).
-2. Mechanism of pessimistic locking via `SELECT ... FOR UPDATE` (row-level exclusive locks, blocking behavior, release at transaction boundary).
-3. Mechanism of optimistic locking (version/timestamp guard in `WHERE` clause, conflict detection via `affected_rows == 0` or exception, requirement for explicit application retry/409 handling).
-4. Trade-offs: Pessimistic locking reduces concurrency and risks deadlocks; optimistic locking wastes work upon conflict.
-5. Selection criteria: Pessimistic for high contention/correctness-critical; optimistic for low contention/read-heavy/offline workflows.
-6. Atomic single-statement update (`UPDATE ... SET stock = stock - N WHERE stock >= N`) as an alternative.
-7. Database-specific default isolation levels (PostgreSQL vs MySQL vs Oracle) and isolation differences.
-8. Common anti-patterns (assuming transaction alone prevents lost update, holding locks across network calls, ignoring 0 affected rows).
+1. Lost update occurs under default isolation levels (READ COMMITTED in PostgreSQL/Oracle) during concurrent read-modify-write cycles.
+2. `SELECT ... FOR UPDATE` acquires row-level exclusive locks blocking concurrent writers until commit/rollback.
+3. Pessimistic locking induces deadlocks and concurrency bottlenecks when transactions are long-running.
+4. Optimistic locking validates version/timestamp guards at commit, detecting conflicts via zero affected rows without holding database locks.
+5. Selection heuristic: Pessimistic prevents conflicts (high contention/critical data); Optimistic detects conflicts (low contention/read-heavy/long-lived transactions).
+6. Single-statement atomic conditional updates (`UPDATE ... SET stock = stock - N WHERE stock >= N`) remove read-modify-write race windows.
+7. Plain database transactions alone without explicit locking or conditional guards do not prevent lost updates.
+8. Default isolation levels differ significantly across vendors (PostgreSQL/Oracle: READ COMMITTED; MySQL: REPEATABLE READ).
+9. Common anti-patterns: premature distributed locks (Redis), holding pessimistic locks across network calls, ignoring 0-rows-affected.
 
 ## Code To Execute
-Skipped per pipeline override ("Audit research only. Do not audit implementation/code in this stage.").
+None. Per pipeline override instructions:
+`PIPELINE OVERRIDE: Audit research only. Do not audit implementation/code in this stage.`
 
 ## Primary Risks
-1. Verification of external links (e.g. MySQL 8.0 manual URLs returning 403 or requiring mirrors).
-2. Distinction between verified primary source statements and synthesized best practices (e.g., atomic decrement WHERE pattern).
-3. Completeness of contradiction and gap analysis.
+1. Verification gaps for vendor-specific documentation (e.g. dev.mysql.com returning HTTP 403, requiring verification via Oracle CDN mirror).
+2. Unverified performance quantification claims (e.g. concrete latency/throughput numbers vs qualitative assertions).
+3. Over-generalization of distributed lock trade-offs (asserting Redis is an anti-pattern without explicit boundary conditions).
+4. Version counter integer overflow risks in optimistic locking implementations.
 
 ## Audit Strategy
-1. Perform web fetch verification on critical primary sources (PostgreSQL official docs, Fowler EAA patterns, Wikipedia concurrency control).
-2. Inspect source metadata (titles, publishers, URLs, relevance, tier classification).
-3. Cross-reference all claims in `05-report.md` and `03-evidence.md` against sources.
-4. Verify contradiction analysis in `04-contradictions.md`.
-5. Verify open questions and gap documentation in `06-open-questions.md`.
-6. Issue final verdict in `07-verdict.md`.
+1. Cross-reference all 16 listed sources in `research/02-sources.md` against claims in `research/03-evidence.md` and `research/05-report.md`.
+2. Verify reachability, relevance, and fidelity of cited citations against primary documentation.
+3. Validate claim classification (FACT vs INTERPRETATION vs IMPLEMENTATION-SPECIFIC) and ensure unsupported claims are flagged.
+4. Examine internal and cross-database contradictions identified in `research/04-contradictions.md`.
+5. Map documented research gaps and unresolved open questions in `research/06-open-questions.md`.
+6. Issue formal verdict in `research-audit/07-verdict.md`.
