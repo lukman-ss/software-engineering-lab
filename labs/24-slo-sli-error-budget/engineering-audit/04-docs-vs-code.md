@@ -1,25 +1,18 @@
-# Documentation vs Code Verification
+# Docs vs Code Audit
 
-## Document Comparisons
+## Documentation Review (`README.md`)
 
-### 1. README.md vs Code & Execution
-- **Structure section**: Accurately describes packages `internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, and `tests/`.
-- **Commands**: `go test ./...`, `go test -race ./...`, and `go run ./cmd/demo` work exactly as documented.
-- **Assessment**: PASS
+- Structure documented matches directory contents (`internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, `tests/`).
+- Instructions to run tests (`go test ./...`, `go test -race ./...`) execute cleanly without errors.
+- Instructions to run demo (`go run ./cmd/demo`) produce exact expected phase outputs.
 
-### 2. Engineering Design (`01-design.md`) vs Code
-- **Design specification**: Recommends sliding-window metric tracker, ratio-based SLI, multi-window burn rate alert engine, and demo script.
-- **Implementation**: Fully matches architecture and design specification.
-- **Assessment**: PASS
+## Research vs Code Audit
 
-### 3. Execution Notes (`03-execution-result.md`) vs Actual Output
-- **Execution log comparison**:
-  - `engineering/03-execution-result.md` recorded Phase 1-3 demo outputs.
-  - Phase 4 was subsequently added to `cmd/demo/main.go` demonstrating endpoint criticality comparisons.
-  - The core outputs for Phases 1-3 in `03-execution-result.md` are accurate, though Phase 4 output additions exist in the current demo binary.
-- **Assessment**: PASS (Minor doc update potential, no code defect).
+- Research claim: Google SRE multi-window multi-burn-rate alerting requires both short-window and long-window thresholds to be met before alerting to avoid false alarms on transient spikes.
+- Code implementation: `internal/alerting/engine.go:73` enforces `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
+- Research claim: Error budget exhaustion should signal deployment freeze.
+- Code implementation: `internal/slo/evaluator.go:55` sets `CanDeploy = false` when `budgetRemaining <= 0`.
 
-### 4. Mismatch Summary
-- DOC_CODE_MISMATCH: None.
-- TEST_CLAIM_MISMATCH: None.
-- RESEARCH_IMPLEMENTATION_MISMATCH: None.
+## Discrepancies Found
+
+None. Documentation, research claims, implementation code, test assertions, and demo output are fully consistent.

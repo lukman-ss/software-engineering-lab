@@ -5,31 +5,28 @@ Implementation Files:
 - internal/metrics/tracker.go
 - internal/slo/evaluator.go
 - internal/alerting/engine.go
-- cmd/demo/main.go
-
 Tests:
 - tests/slo_test.go
-
 Executable/Demo:
 - cmd/demo/main.go
-
 Approved Research Inputs:
-- research/05-report.md (SLI ratio definition, Error Budget calculation, Multi-window multi-burn-rate alerting, Release Freeze policy, Service criticality tiering)
-
+- research/01-plan.md
+- research/02-sources.md
+- research/03-evidence.md
+- research/04-contradictions.md
+- research/05-report.md
+- research/06-open-questions.md
 Main Claims To Verify:
-1. SLI calculation accurately computes ratio of good events over total events across sliding windows.
-2. Error Budget accurately calculates total budget `(1-SLO)*Total` and remaining budget `TotalBudget - BadEvents`.
-3. Release freeze policy (`CanDeploy`) evaluates to `false` when remaining budget <= 0.
-4. Multi-window multi-burn-rate alerting triggers when both short and long window burn rates exceed thresholds, avoiding false positives on transient spikes.
-5. In-memory metric tracker correctly handles out-of-order events, eviction, and concurrent access without race conditions.
-6. Execution outputs in `engineering/03-execution-result.md` and `README.md` reflect actual execution.
-
+1. Sliding window metric bucket tracking and event eviction (`WindowTracker`).
+2. Correct mathematical evaluation of SLI ratios, error budget consumption, and release freeze policy (`Evaluator`).
+3. Multi-window multi-burn-rate alerting logic matching Google SRE thresholds (`AlertEngine`).
+4. Thread safety under concurrent event ingestion.
+5. Functional demo matching output claims.
 Commands To Run:
-- `cd labs/24-slo-sli-error-budget && go test ./...`
-- `cd labs/24-slo-sli-error-budget && go test -race ./...`
-- `cd labs/24-slo-sli-error-budget && go run ./cmd/demo`
-
+- `go test ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-- Floating point / rounding inaccuracies in error budget and burn rate calculations.
-- Incorrect sliding window eviction when inserting out-of-order timestamps.
-- Discrepancies between documentation (README / engineering logs) and actual command outputs.
+- Race conditions or out-of-order event ingestion handling in time-bucketed tracker.
+- Precision/rounding errors in float comparisons for burn rate calculations or error budget exhaustion.
+- Documentation vs implementation mismatches in thresholds or mathematical definitions.

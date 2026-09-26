@@ -1,63 +1,45 @@
 # Test Audit
 
-## Test Suite Execution Results
+## Test Suite Overview
 
-Command: `go test -v ./...`
-```text
-?   	labs/24-slo-sli-error-budget/cmd/demo	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/alerting	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/metrics	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/slo	[no test files]
-=== RUN   TestMetricsWindowTracker
---- PASS: TestMetricsWindowTracker (0.00s)
-=== RUN   TestSLOEvaluator
---- PASS: TestSLOEvaluator (0.00s)
-=== RUN   TestAlertEngineBurnRate
---- PASS: TestAlertEngineBurnRate (0.00s)
-=== RUN   TestOutOfOrderTimestamps
---- PASS: TestOutOfOrderTimestamps (0.00s)
-=== RUN   TestEvaluatorZeroTraffic
---- PASS: TestEvaluatorZeroTraffic (0.00s)
-=== RUN   TestConcurrencyMetrics
---- PASS: TestConcurrencyMetrics (0.00s)
-PASS
-ok  	labs/24-slo-sli-error-budget/tests	0.210s
-```
-
-Command: `go test -race ./...`
-```text
-?   	labs/24-slo-sli-error-budget/cmd/demo	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/alerting	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/metrics	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/slo	[no test files]
-ok  	labs/24-slo-sli-error-budget/tests	1.120s
-```
+Test file: `tests/slo_test.go`
+Execution results:
+- `go test -v -count=1 ./...`: PASS (0.332s)
+- `go test -race -v -count=1 ./...`: PASS (1.350s)
 
 ## Test Coverage Breakdown
 
 1. `TestMetricsWindowTracker`:
-   - Validates bucket aggregation of good and bad events based on status code and duration predicates.
-   - Validates sliding window eviction of old buckets.
-   - Assessment: PASS
+   - Happy path: Records good and bad events across time slices.
+   - Assertions: Verifies exact total (12), good (10), bad (2) event counts.
+   - Expiration / Eviction: Verifies total/good/bad reset to 0 after window expiration.
+   - Status: PASS
 
 2. `TestSLOEvaluator`:
-   - Validates SLI calculation and `CanDeploy` state transitions when error budget drops below 0.
-   - Assessment: PASS
+   - SLI Calculation: Verifies exactly 99% SLI for 99 good and 1 bad event.
+   - Deployment Gates: Asserts `CanDeploy == true` when remaining budget >= 0.
+   - Budget Exhaustion: Asserts `CanDeploy == false` when an additional error breaches error budget.
+   - Status: PASS
 
 3. `TestAlertEngineBurnRate`:
-   - Positive path: Verifies alert triggers when both short and long window burn rates exceed threshold.
-   - Negative path: Verifies alert is suppressed during transient spike when short window is high but long window is below threshold.
-   - Assessment: PASS
+   - Positive Trigger: Verifies high burn rate across both short and long windows triggers `PAGE` severity alert with burn rate factor >= 14.4x.
+   - Negative Trigger: Verifies transient error spike in short window does not trigger alert when long window remains below threshold.
+   - Status: PASS
 
 4. `TestOutOfOrderTimestamps`:
-   - Verifies bucket insertion ordering and correct partial eviction when timestamps arrive out of sequence.
-   - Assessment: PASS
+   - Edge case: Verifies events arriving out of chronological order are correctly placed into proper buckets.
+   - Eviction of sorted buckets: Verifies sliding window eviction functions correctly with out-of-order inserted buckets.
+   - Status: PASS
 
 5. `TestEvaluatorZeroTraffic`:
-   - Verifies zero-traffic edge case (`SLI = 1.0`, `CanDeploy = true`, no division by zero).
-   - Assessment: PASS
+   - Edge case: Zero traffic yields 1.0 SLI and allows deployment without division by zero.
+   - Status: PASS
 
 6. `TestConcurrencyMetrics`:
-   - 20 goroutines x 100 requests concurrent execution against shared `WindowTracker`.
-   - Verified race-free under `-race`.
-   - Assessment: PASS
+   - Concurrency: 20 goroutines x 100 requests concurrent execution against shared `WindowTracker`.
+   - Thread safety: Zero race detector warnings, aggregate totals match expected counts exactly.
+   - Status: PASS
+
+## Assessment
+
+The test suite thoroughly exercises core behavior, edge cases (zero traffic, out-of-order events), concurrency safety, and negative alert conditions.
