@@ -1,35 +1,20 @@
-# Docs vs Code Analysis
+# Docs vs Code Audit
 
-## Comparisons
+Target Lab: labs/15-load-testing
 
-### 1. Structure and File Names
-- **Documented in README.md:**
-  - `cmd/demo`
-  - `internal/server`
-  - `internal/loadtest`
-  - `tests`
-  - `engineering/`
-- **Actual Files:** Exactly matching. No phantom directories or missing paths.
-- **Status:** PASS
+## Claim vs Implementation
 
-### 2. Execution Commands
-- **Documented in README.md:**
-  - `go run ./cmd/demo`
-  - `go test -v ./...`
-  - `go test -race ./...`
-- **Actual Verification:** All commands run as documented without requiring configuration or external dependencies.
-- **Status:** PASS
+### Claim 1: "Average response time conceals tail latency spikes; percentiles (P95, P99) are necessary to uncover degradation."
+- Source: `engineering/01-design.md`, `research/05-report.md`
+- Implementation: In `cmd/demo/main.go`, Smoke Test produces Average: ~21ms, P95: ~21ms. Stress Test produces Average: ~200ms, P95: ~211ms.
+- Assessment: `DOC_CODE_MISMATCH` / `IMPLEMENTATION_OVERCLAIM`. Average does not conceal the degradation, it tracks P95 almost 1:1 because of constant simulated query time under a closed workload model.
 
-### 3. Engineering Claims vs Implementation
-- **Claim:** Tail latency spikes under constrained resource (connection pool) saturation.
-- **Code:** Implemented via bounded buffered channel (`chan struct{}`) and measured via exact-sorted percentiles.
-- **Status:** PASS
+### Claim 2: "Semaphore pattern (buffered channel) used in the server handler to simulate database connection pool bottlenecks, accurately mimicking tail latency growth when saturated."
+- Source: `engineering/02-implementation-notes.md`
+- Implementation: Present in `internal/server/server.go`. Matches the documentation.
+- Assessment: PASS.
 
-### 4. Demo Claims vs Code Execution
-- **Documented in `engineering/03-execution-result.md`:**
-  - Smoke: ~90 RPS, ~21.8ms Average, ~22.6ms P95.
-  - Stress: ~234 RPS, ~200.4ms Average, ~212.3ms P95.
-- **Observed in Audit Demo Run:**
-  - Smoke: 92.96 RPS, 21.45ms Average, 21.59ms P95.
-  - Stress: 236.35 RPS, 200.50ms Average, 210.76ms P95.
-- **Status:** PASS (Results are authentic, reproducible, and reflect actual workload dynamics).
+### Claim 3: "Demonstration clearly contrasts Smoke test metrics against Stress test metrics."
+- Source: `engineering/01-design.md`
+- Implementation: The demo shows a clear 10x degradation in response time from smoke to stress, demonstrating resource saturation clearly, but fails to show tail skewness.
+- Assessment: PASS (for resource saturation), WARNING (for tail skewness).

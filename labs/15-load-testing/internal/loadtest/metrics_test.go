@@ -49,3 +49,31 @@ func TestCalculateMetrics_Empty(t *testing.T) {
 		t.Fatalf("expected 0 P95, got %s", res.P95Latency)
 	}
 }
+
+func TestCalculateMetrics_Invariants(t *testing.T) {
+	// Unordered list of latencies with long-tail spikes
+	latencies := []time.Duration{
+		45 * time.Millisecond, 12 * time.Millisecond, 100 * time.Millisecond,
+		5 * time.Millisecond, 20 * time.Millisecond, 500 * time.Millisecond,
+		15 * time.Millisecond, 22 * time.Millisecond, 18 * time.Millisecond,
+		80 * time.Millisecond, 250 * time.Millisecond, 30 * time.Millisecond,
+	}
+
+	res := CalculateMetrics(latencies, 0, time.Second)
+
+	if res.MinLatency > res.P50Latency {
+		t.Errorf("invariant violated: Min (%s) > P50 (%s)", res.MinLatency, res.P50Latency)
+	}
+	if res.P50Latency > res.P90Latency {
+		t.Errorf("invariant violated: P50 (%s) > P90 (%s)", res.P50Latency, res.P90Latency)
+	}
+	if res.P90Latency > res.P95Latency {
+		t.Errorf("invariant violated: P90 (%s) > P95 (%s)", res.P90Latency, res.P95Latency)
+	}
+	if res.P95Latency > res.P99Latency {
+		t.Errorf("invariant violated: P95 (%s) > P99 (%s)", res.P95Latency, res.P99Latency)
+	}
+	if res.P99Latency > res.MaxLatency {
+		t.Errorf("invariant violated: P99 (%s) > Max (%s)", res.P99Latency, res.MaxLatency)
+	}
+}

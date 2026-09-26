@@ -52,6 +52,9 @@ func TestLoadTest_SmokeVsStress(t *testing.T) {
 	if stressRes.P95Latency <= smokeRes.P95Latency {
 		t.Fatalf("expected stress P95 (%s) to exceed smoke P95 (%s)", stressRes.P95Latency, smokeRes.P95Latency)
 	}
+	if stressRes.P95Latency <= stressRes.AvgLatency {
+		t.Fatalf("expected stress P95 (%s) to exceed stress Avg (%s) due to tail queuing", stressRes.P95Latency, stressRes.AvgLatency)
+	}
 }
 
 func TestLoadTest_ErrorCount(t *testing.T) {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -64,7 +65,13 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { <-s.semaphore }()
 
-	t := time.NewTimer(s.cfg.DBQueryDuration)
+	dur := s.cfg.DBQueryDuration
+	if atomic.LoadInt64(&s.activeReq) > int64(s.cfg.MaxDBConnections) {
+		if rand.Float32() < 0.10 {
+			dur = s.cfg.DBQueryDuration * 25
+		}
+	}
+	t := time.NewTimer(dur)
 	defer t.Stop()
 
 	select {

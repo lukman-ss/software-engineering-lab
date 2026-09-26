@@ -1,16 +1,21 @@
-# Gap Analysis
+# Engineering Gaps
 
-## MISSING_TEST
-**Description:** Network dial errors (e.g., closed ports, unroutable URLs) increment error counts in `runner.go`, but there is no specific unit or integration test simulating an unreachable network dial. `TestLoadTest_ErrorCount` only tests HTTP 500 status code errors.
-**Severity:** LOW
-**Impact:** Minimal. The runner's logic handles it correctly, but explicit test coverage for the network-failure edge case is missing.
+Target Lab: labs/15-load-testing
 
-## UNHANDLED_ERROR (Warning)
-**Description:** In `server.go`, the handler unconditionally waits to acquire the connection pool semaphore (`s.semaphore <- struct{}{}`). It does not listen to `r.Context().Done()` while queuing. If a client disconnects, the server still eventually consumes a DB query slot for 20ms.
-**Severity:** LOW
-**Impact:** Minor in this lab environment since client timeouts (5s) are much higher than max queue wait times (~210ms). However, this represents an unhandled request cancellation propagation in the server mock.
+## Gap 1
 
-## IMPLEMENTATION_OVERCLAIM (Warning)
-**Description:** `runner.go` closes the response body via `_ = resp.Body.Close()` without draining it via `io.Copy(io.Discard, resp.Body)`. In high-throughput load testers, failing to drain the body can sever TCP connections instead of returning them to `http.Transport`'s idle pool.
-**Severity:** LOW
-**Impact:** The mock server writes tiny payloads that are immediately buffered by the OS networking stack, so the close operation succeeds without noticeable connection churn. For a production load testing tool, this would be a defect.
+- Gap Type: `RESEARCH_MISMATCH`
+- Severity: HIGH
+- Description: The core research hypothesis claimed that average latency conceals tail latency spikes. However, the mock server uses a deterministic query duration (`20ms`) under a closed-loop virtual user harness. Consequently, queuing delay distributes uniformly across all requests, resulting in an Average latency (~200ms) that degrades virtually identically to P95 (~211ms). The masking effect of averages is not demonstrated by the actual runtime numbers.
+
+## Gap 2
+
+- Gap Type: `DOC_CODE_MISMATCH`
+- Severity: MEDIUM
+- Description: `engineering/01-design.md` states: *"P95 and P99 latency spikes significantly, while average latency degrades less severely, proving the masking effect of averages."* The actual execution result shows average latency degrading from 21ms to 200ms, which is a 9.5x degradation, virtually matching the P95 degradation (22ms to 212ms, 9.6x).
+
+## Gap 3
+
+- Gap Type: `MISSING_TEST`
+- Severity: LOW
+- Description: No unit or integration test checks whether the percentile calculation maintains ordering invariants (Min <= P50 <= P90 <= P95 <= P99 <= Max) under non-monotonic or random distributions.

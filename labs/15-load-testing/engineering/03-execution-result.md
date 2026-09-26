@@ -22,17 +22,23 @@ Result:
 --- PASS: TestCalculateMetrics (0.00s)
 === RUN   TestCalculateMetrics_Empty
 --- PASS: TestCalculateMetrics_Empty (0.00s)
+=== RUN   TestCalculateMetrics_Invariants
+--- PASS: TestCalculateMetrics_Invariants (0.00s)
 PASS
-ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/internal/loadtest	0.546s
+ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/internal/loadtest	0.347s
 ?   	github.com/lukman/software-engineering-lab/labs/15-load-testing/internal/server	[no test files]
 === RUN   TestLoadTest_SmokeVsStress
---- PASS: TestLoadTest_SmokeVsStress (1.05s)
+--- PASS: TestLoadTest_SmokeVsStress (1.36s)
 === RUN   TestLoadTest_ErrorCount
 --- PASS: TestLoadTest_ErrorCount (0.10s)
 === RUN   TestServer_MethodNotAllowed
 --- PASS: TestServer_MethodNotAllowed (0.00s)
+=== RUN   TestLoadTest_DialError
+--- PASS: TestLoadTest_DialError (0.10s)
+=== RUN   TestServer_ContextCanceled
+--- PASS: TestServer_ContextCanceled (0.00s)
 PASS
-ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/tests	1.765s
+ok  	github.com/lukman/software-engineering-lab/labs/15-load-testing/tests	1.657s
 ```
 
 ## Race Detector
@@ -60,24 +66,24 @@ Server simulated DB connections: 5
 Simulated DB query duration: 20ms
 
 --- Running Smoke Test (2 VUs) ---
-Total Requests:  182
-Success:         182
+Total Requests:  188
+Success:         188
 Errors:          0
-RPS:             90.96
-Average:         21.873222ms
-P50:             21.727792ms
-P95:             22.674291ms
-P99:             29.268042ms
+RPS:             93.96
+Average:         21.250847ms
+P50:             21.2175ms
+P95:             21.372291ms
+P99:             22.289875ms
 
 --- Running Stress Test (50 VUs) ---
-Total Requests:  470
-Success:         470
+Total Requests:  120
+Success:         120
 Errors:          0
-RPS:             234.92
-Average:         200.484306ms
-P50:             209.993833ms
-P95:             212.389875ms
-P99:             214.703708ms
+RPS:             59.92
+Average:         739.091366ms
+P50:             669.568542ms
+P95:             1.35666975s
+P99:             1.587917041s
 ```
 
 ## Final Engineering Status
