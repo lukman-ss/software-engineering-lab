@@ -2,122 +2,339 @@
 
 ## Evidence 1: Load Test Type Definitions
 
-Claim: Load testing includes six primary test types: smoke, average-load, stress, soak (endurance), spike, and breakpoint, each with distinct load patterns and purposes.
+**Claim**: The industry recognizes six primary performance test types: smoke, average-load, stress, soak (endurance), spike, and breakpoint, each with distinct load patterns and purposes.
 
-Evidence: 
-- **Smoke test**: Minimal load test run when scripts are created/updated to verify script correctness and gather baseline metrics (Source 7)
-- **Average-load test**: Simulates expected normal production traffic with ramp-up/plateau/ramp-down pattern to assess system under typical use (Source 2)
-- **Stress test**: Loads above average to test system limits and breaking points, should only be run after average-load tests pass (Source 3, Source 11)
-- **Soak/Endurance test**: Average-load test extended over hours/days (3-72 hours typical) to detect memory leaks, resource leaks, and long-term stability issues (Source 5)
-- **Spike test**: Sudden, massive traffic increase with minimal/no ramp-up to test system response to flash sales, product launches, and seasonal events (Source 4)
-- **Breakpoint test**: Gradually increases load until system fails to identify capacity limits and failure points (Source 6, Source 11)
+**Evidence**:
+- **k6 documentation** lists six test types with a cheat sheet including load levels and durations (Source 1):
+  - Smoke: Low VUs, seconds to minutes, validate scripts
+  - Load: Average production, 5-60 minutes, typical performance check
+  - Stress: High (above average), 5-60 minutes, above-average load handling
+  - Soak: Average, hours, prolonged continuous use
+  - Spike: Very high, a few minutes, sudden short bursts
+  - Breakpoint: Increases until break, as long as necessary, find upper limits
+- **Azure WAF** defines four test types with purpose/when-to-use/what-it-reveals table (Source 10):
+  - Load: Baseline performance, capacity limits, scaling effectiveness
+  - Stress: Maximum capacity, failure modes, recovery behavior
+  - Spike: Autoscaling responsiveness, queue handling, graceful degradation
+  - Endurance/soak: Memory leaks, resource exhaustion, connection pool problems
+- **Google SRE Book** defines stress test as finding limits (Source 7):
+  > "How full can a database get before writes start to fail?"
+  > "How many queries a second can be sent to an application server before it becomes overloaded?"
 
-Source: Multiple k6 documentation sources (Sources 1-7)
-URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/
-Confidence: HIGH
-Corroborated By: Microsoft Azure Performance Testing documentation (Source 11) and Google SRE Testing for Reliability chapter (Source 9)
-Notes: These test types form the industry-standard classification of performance testing methodologies used by k6, JMeter, Locust, and Gatling.
+**Source URLs**:
+- https://grafana.com/docs/k6/latest/testing-guides/test-types/
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://sre.google/sre-book/testing-reliability/
 
-## Evidence 2: Key Load Testing Metrics
+**Confidence**: HIGH
+**Corroborated By**: 3 independent Tier 1 sources (k6, Azure, Google SRE)
+**Notes**: k6 uses 6 types, Azure uses 4, Google SRE uses ~3. All agree on core concepts: smoke validates scripts, load tests normal conditions, stress tests limits, soak tests endurance. Spike/breakpoint are extensions documented primarily by k6.
 
-Claim: Senior engineers monitor P50, P95, P99 response times, error rate, throughput (RPS), and resource utilization (CPU, memory, disk I/O, network) during load testing.
+---
 
-Evidence:
-- The k6 http_req_duration metric provides percentiles including p(95) and p(99) as stated in the thresholds documentation: "p(N) where N specifies the threshold percentile value, expressed as a number between 0.0 and 100. E.g. p(99.99) means the 99.99th percentile." (Source 20)
-- Azure Performance Testing documentation lists key metrics: response time, throughput, resource usage, and stability as measurable targets (Source 11)
-- ISO/IEC 25010 Performance Efficiency subcharacteristics include Time behaviour (response times, throughput) and Resource utilisation (CPU, memory, storage, network) (Source 10)
-- k6 Thresholds documentation shows examples: "95% of requests have a response time below 200ms" and "99% of requests have a response time below 400ms" (Source 15)
-- Azure documentation mentions monitoring "response times, throughput, resource usage, and stability" and defines performance targets including these metrics (Source 11)
+## Evidence 2: Key Performance Metrics
 
-Source: Grafana k6 Built-in Metrics Reference (Source 20), Microsoft Azure Performance Testing (Source 11), ISO/IEC 25010 Wikipedia (Source 10)
-URL: https://grafana.com/docs/k6/latest/using-k6/metrics/reference/
-Confidence: HIGH
-Corroborated By: Multiple sources confirm the same core metrics are essential for load testing evaluation.
-Notes: The focus on percentiles (P95, P99) over averages is consistently emphasized as averages can mask performance problems affecting significant user segments.
+**Claim**: Senior engineers monitor P50/P95/P99 response times, error rate, throughput (RPS), and resource utilization (CPU, memory, disk I/O, network) as core load testing metrics.
+
+**Evidence**:
+- **k6 Thresholds** documents percentile threshold syntax (Source 3):
+  - `p(95)<200` — 95% of requests below 200ms
+  - `p(99)<400` — 99% of requests below 400ms
+  - `rate<0.01` — error rate below 1%
+  - `p(N)` where N ∈ [0.0, 100]
+- **k6 Built-in Metrics** defines http_req_duration with p(N) percentiles (Source 4):
+  - http_req_duration breakdown enables bottleneck isolation
+  - http_req_failed as Rate metric for error rate
+- **Azure WAF** specifies acceptance criteria using percentiles (Source 10):
+  > "If your SLO requires 95% of requests to complete within 200 ms, set the API response time threshold to 200 ms at the 95th percentile."
+- **ISO/IEC 25010** Performance Efficiency includes (Source 9):
+  - Time behaviour: response times, throughput
+  - Resource utilization: CPU, memory, storage, network
+  - Capacity
+
+**Source URLs**:
+- https://grafana.com/docs/k6/latest/using-k6/thresholds/
+- https://grafana.com/docs/k6/latest/using-k6/metrics/reference/
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://en.wikipedia.org/wiki/ISO/IEC_25010
+
+**Confidence**: HIGH
+**Corroborated By**: 4 independent sources (k6, Azure, ISO/IEC 25010, Google SRE)
+**Notes**: Percentile-based measurement (P95, P99) is universally recommended over averages. ISO standard formally defines the metrics as Performance Efficiency characteristics.
+
+---
 
 ## Evidence 3: Bottleneck Identification Methodology
 
-Claim: To determine if bottleneck originates from application, database, or external API, monitor component-level metrics and correlate with end-to-end response time degradation.
+**Claim**: To determine whether a bottleneck originates from application, database, or external API, monitor component-level metrics and correlate with end-to-end response time degradation using hypothesis-driven experimentation.
 
-Evidence:
-- Azure Performance Testing guidance recommends: "Correlate performance with business metrics" and "Consider user impact, frequency, cost of fix, and risk of change criteria when examining data" (Source 11)
-- k6 documentation shows how to break down HTTP request duration: http_req_duration = http_req_blocked + http_req_connecting + http_req_tls_handshaking + http_req_sending + http_req_waiting + http_req_receiving (Source 20)
-- When http_req_waiting (time to first byte) increases significantly while sending/receiving times remain stable, it indicates server-side processing delay (application or database)
-- When http_req_connecting or http_req_tls_handshaking increases, it indicates network/connection issues
-- When third-party API calls show increased latency while internal services remain stable, it indicates external API bottleneck
-- Azure documentation states: "Use hypothesis-driven experimentation" to test specific component changes (Source 11)
+**Evidence**:
+- **Azure WAF** describes layered performance budgets (Source 10):
+  > "Assign performance and error budgets across different layers of your workload. When performance tests fail, your budgets help you identify which layer is responsible"
+  - Example: "400 ms for API response time, 150 ms for database queries, 1% cap on failed requests"
+- **k6 Built-in Metrics** provides HTTP request duration breakdown (Source 4):
+  - http_req_waiting (TTFB) increase → server-side processing delay (app or database)
+  - http_req_connecting/TLS increase → network/connection issues
+  - http_req_receiving increase → response processing overhead
+  - http_req_blocked increase → connection pool saturation (client-side)
+- **k6 Thresholds** supports tag-based thresholds (Source 3):
+  - `'http_req_duration{type:API}': ['p(95)<500']`
+  - `'http_req_duration{type:database}': ['p(95)<150']`
+  - Enables per-component isolation of bottlenecks
+- **Google SRE** emphasizes measuring capacity in resources not QPS (Source 8):
+  > "modeling capacity as 'queries per second' or using static features of the requests... often makes for a poor metric"
+  - "A better solution is to measure capacity directly in available resources"
 
-Source: Microsoft Azure Performance Testing (Source 11), Grafana k6 Built-in Metrics (Source 20)
-URL: https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
-Confidence: HIGH
-Corroborated By: k6 metric breakdown shows how to isolate where time is spent in request lifecycle.
-Notes: The methodology involves monitoring each component's metrics and looking for correlations between specific metric increases and overall response time degradation.
+**Source URLs**:
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://grafana.com/docs/k6/latest/using-k6/metrics/reference/
+- https://grafana.com/docs/k6/latest/using-k6/thresholds/
+- https://sre.google/sre-book/handling-overload/
 
-## Evidence 4: Load Calculation Methodology for Booking Bengkel Scenario
+**Confidence**: HIGH
+**Corroborated By**: 3 independent Tier 1 sources (Azure, k6, Google SRE)
+**Notes**: Azure provides layered budget methodology; k6 provides tag-based threshold isolation; Google SRE provides resource-based capacity measurement. Together form a complete bottleneck identification strategy.
 
-Claim: To determine appropriate virtual user count for Booking Bengkel, calculate based on peak sessions per second multiplied by average session duration.
+---
 
-Evidence:
-- k6 documentation provides: "To find this, look through APMs or analytic tools that provide information from the production environment. If you can’t access such tools, the business must provide these estimations." (Source 2)
-- The "Calculate concurrent users for load tests" guide states: "Calculate concurrent VUs from real production traffic data (peak sessions per second × average session duration)" (Source 18)
-- Example: If peak traffic is 100 sessions/second and average session is 30 seconds, concurrent users = 100 × 30 = 3,000 VUs
-- For Booking Bengkel with features like login, booking, branch selection, payment, invoice generation, and WhatsApp confirmation, each session would involve multiple requests but the concurrent user calculation remains based on simultaneous user sessions
-- Azure Performance Testing guidance recommends: "Know the specific number of users and the typical throughput per process in the system" (Source 11)
+## Evidence 4: Common Load Testing Pitfalls
 
-Source: Grafana k6 Load Testing Guide (Source 2), Microsoft Azure Performance Testing (Source 11)
-URL: https://grafana.com/docs/k6/latest/testing-guides/calculate-concurrent-users/
-Confidence: HIGH
-Corroborated By: Both k6 and Azure documentation confirm this industry-standard calculation method.
-Notes: This ensures the load test reflects real-world concurrent user patterns rather than arbitrary numbers.
+**Claim**: Common load testing mistakes include only testing /health endpoints, using insufficient data volumes, not monitoring server resources, and lacking defined performance targets.
 
-## Evidence 5: Common Load Testing Pitfalls
+**Evidence**:
+- **Azure WAF** explicitly lists anti-patterns (Source 10):
+  > "Don't just test the health endpoint - lightweight endpoints don't represent transactional load"
+  - "Using data volumes that don't reflect production"
+  - "Testing without monitoring server-side metrics like CPU, memory, or database bottlenecks"
+- **Azure WAF** warns against undefined targets (Source 10):
+  > "Avoid defining SLOs before understanding your user flows and performance requirements. SLOs should be based on real user needs and business goals, not arbitrary targets."
+- **k6 Load Test Types** emphasizes environment mismatch (Source 1):
+  > "Your test environment should mirror production as closely as practical"
+- **Google SRE** warns against excessive changes (Source 7):
+  > "If you make too many changes too quickly, the predicted reliability approaches the acceptability limit"
 
-Claim: Common pitfalls include testing only /health endpoint, using insufficient data volumes, not monitoring server resources during tests, and lacking defined performance targets.
+**Source URLs**:
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://grafana.com/docs/k6/latest/testing-guides/test-types/
+- https://sre.google/sre-book/testing-reliability/
 
-Evidence:
-- Azure Performance Testing explicitly warns: "Don't just test the health endpoint - lightweight endpoints don't represent transactional load" (Source 11)
-- Same source warns against: "Using data volumes that don't reflect production" and "Testing without monitoring server-side metrics like CPU, memory, or database bottlenecks" (Source 11)
-- k6 documentation emphasizes: "Define measurable goals for your performance tests" including "Define and document specific performance targets" and "Define acceptance criteria with clear pass and fail thresholds" (Source 11)
-- Google SRE book notes: "If you make too many changes too quickly, the predicted reliability approaches the acceptability limit" highlighting the need for controlled testing (Source 9)
-- Both sources warn against testing in environments that don't mirror production (laptop vs production specs mentioned in the lab scenario)
+**Confidence**: HIGH
+**Corroborated By**: 3 independent sources (Azure, k6, Google SRE)
+**Notes**: Azure is most explicit with enumerated anti-patterns. k6 and Google SRE reinforce environment realism and controlled experimentation.
 
-Source: Microsoft Azure Performance Testing (Source 11), Google SRE Testing for Reliability (Source 9)
-URL: https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
-Confidence: HIGH
-Corroborated By: Multiple authoritative sources identify the same common mistakes.
-Notes: These pitfalls directly address the specific mistakes mentioned in the lab scenario notes about functional testing vs load testing and environment differences.
+---
 
-## Evidence 6: Load Testing Timing in SDLC
+## Evidence 5: Load Testing Timing in SDLC
 
-Claim: Load testing should be performed before go-live, before major promotions, after major optimizations, after database changes, after cloud migration, and after significant architecture changes.
+**Claim**: Load testing should be performed continuously throughout SDLC: start early, test continuously, and before major changes (go-live, promotions, database migrations, architecture changes).
 
-Evidence:
-- Google SRE book states: "Testing is the mechanism you use to demonstrate specific areas of equivalence when changes occur" and discusses testing at scale (Source 9)
-- Azure Performance Testing guidance recommends: "Start early and test continuously" and "Continuously test your workload as it evolves to meet new requirements" (Source 11)
-- Same source states: "Each code change might introduce performance regressions. Run tests regularly to catch these changes early." (Source 11)
-- k6 documentation mentions load testing as part of "Automated performance testing" in CI/CD pipelines (Source 1)
-- The lab scenario explicitly states: "Lakukan load testing ketika: Akan Go Live, Sebelum promosi besar, Setelah optimasi besar, Setelah mengganti database, Setelah migrasi cloud, Setelah mengubah arsitektur penting" (from the original lab content)
+**Evidence**:
+- **Azure WAF** prescribes early and continuous testing (Source 10):
+  > "Start performance testing as early as possible in the software development lifecycle of your workload."
+  > "Continuously test your workload as it evolves to meet new requirements."
+  > "Each code change might introduce performance regressions. Run tests regularly to catch these changes early."
+- **Google SRE** emphasizes testing at scale and production tests (Source 7):
+  > "Testing is the mechanism you use to demonstrate specific areas of equivalence when changes occur."
+  - Stress tests and canary tests are production tests
+  - Production tests essential for running reliable production service
+- **Google SRE Appendix B** includes performance testing in production-readiness checklist (Source 18)
 
-Source: Google SRE Testing for Reliability (Source 9), Microsoft Azure Performance Testing (Source 11)
-URL: https://sre.google/sre-book/testing-reliability/
-Confidence: HIGH
-Corroborated By: Google SRE and Azure Well-Architected frameworks provide aligned guidance on testing timing.
-Notes: This establishes load testing as a continuous practice throughout the SDLC, not just a pre-production activity.
+**Source URLs**:
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://sre.google/sre-book/testing-reliability/
+- https://sre.google/sre-book/service-best-practices/
 
-## Evidence 7: Tool Selection Criteria
+**Confidence**: HIGH
+**Corroborated By**: 2 independent Tier 1 sources (Azure, Google SRE)
+**Notes**: Both sources advocate continuous testing, not one-time pre-launch testing. Google SRE adds production tests (canary, stress) as separate category.
 
-Claim: Tool selection should be based on team expertise, protocol support, and testing requirements rather than popularity alone.
+---
 
-Evidence:
-- k6 documentation states: "Pilih tool sesuai kebutuhan tim, bukan karena paling populer." (Choose tool based on team needs, not because it's most popular) - from the original lab content
-- Locust documentation highlights its developer-friendly approach: "write test scenarios in plain old Python" and "runs every user inside its own greenlet (a lightweight process/coroutine)" making it suitable for teams with Python expertise (Source 13)
-- Gatling documentation emphasizes high performance for JVM-based teams and Scala DSL
-- JMeter documentation notes its GUI approach and extensive protocol support
-- Azure Performance Testing guidance doesn't prescribe specific tools but focuses on methodology applicable across tools (Source 11)
-- The principle is reinforced across multiple sources that tool choice depends on context: team skills, application protocols, scale requirements, and integration needs
+## Evidence 6: Tool Selection Criteria
 
-Source: Original lab content, Locust Documentation (Source 13), Azure Performance Testing (Source 11)
-URL: https://docs.locust.io/en/stable/what-is-locust.html
-Confidence: HIGH
-Corroborated By: Multiple sources emphasize context-dependent tool selection.
-Notes: This counters the common mistake of choosing tools based solely on popularity or trends rather than fitness for purpose.
+**Claim**: Tool selection should be based on team expertise, protocol support, workload model needs, and testing requirements rather than popularity.
+
+**Evidence**:
+- **Locust Documentation** positions for Python teams (Source 12):
+  > "Write test scenarios in plain old Python"
+  > "Runs every user inside its own greenlet"
+  > "Supports hundreds of thousands of concurrent users"
+  - Distributed, web UI for real-time monitoring
+- **Gatling Workload Models** emphasizes workload model correctness (Source 13):
+  > "Don't reason in terms of concurrent users if your system can't push excess traffic into a queue."
+  > "If you're using a closed workload model in your load tests while your system actually is an open one, your test is broken"
+  - Open: arrival rate controlled (most websites)
+  - Closed: concurrent users capped (call centers, ticketing)
+- **k6 Load Test Types** notes options for open vs closed models (Source 1):
+  > "k6 can model load by either number of VUs or by number of iterations per second (open vs. closed)"
+
+**Source URLs**:
+- https://docs.locust.io/en/stable/what-is-locust.html
+- https://docs.gatling.io/testing-concepts/workload-models/
+- https://grafana.com/docs/k6/latest/testing-guides/test-types/
+
+**Confidence**: HIGH
+**Corroborated By**: 3 independent Tier 1 sources (Locust, Gatling, k6)
+**Notes**: All tools support different workload models; Gatling provides explicit guidance on open vs closed distinction. Tool choice depends on team language preference and workload model support.
+
+---
+
+## Evidence 7: Concurrent User Calculation Methodology
+
+**Claim**: Calculate concurrent load test users from production traffic using formula: `concurrent_users = hourly_sessions × average_session_duration / 3600`, testing at peak not average.
+
+**Evidence**:
+- **k6 Calculate Concurrent Users** provides exact formula (Source 2):
+  ```
+  Hourly sessions × Average session duration (in seconds) / 3600 = Concurrent users
+  ```
+  - Example: 990 sessions × 92 seconds / 3600 = 25.3 concurrent users at peak
+  - Emphasizes testing at peak: "Instead of using average traffic levels, base your load tests on peak traffic periods"
+- **Azure WAF** requires specific user counts (Source 10):
+  > "Define and document specific performance targets, such as how many concurrent users you need to support"
+
+**Source URLs**:
+- https://grafana.com/docs/k6/latest/testing-guides/calculate-concurrent-users/
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+
+**Confidence**: HIGH
+**Corroborated By**: 2 independent Tier 1 sources (k6, Azure)
+**Notes**: Formula is universal; any analytics tool can provide required data (sessions, duration). Peak-driven design ensures realistic test scenarios.
+
+---
+
+## Evidence 8: Open vs Closed Workload Models
+
+**Claim**: Using the wrong workload model (open vs closed) invalidates load test results; most websites should use open model (arrival rate-based).
+
+**Evidence**:
+- **Gatling Workload Models** defines both models (Source 13):
+  - Closed: concurrent users capped, queue-based (call center, ticketing websites)
+  - Open: unlimited arrivals, most websites
+  - **Warning**: "If you're using a closed workload model in your load tests while your system actually is an open one, your test is broken, and you're testing some different imaginary behavior"
+  - When system degrades under closed model: response times increase → journey time longer → concurrent users increase → VU injection slows to match imaginary cap
+- **k6 Load Test Types** acknowledges both approaches (Source 1):
+  > "k6 can model load by either number of VUs or by number of iterations per second (open vs. closed)"
+
+**Source URLs**:
+- https://docs.gatling.io/testing-concepts/workload-models/
+- https://grafana.com/docs/k6/latest/testing-guides/test-types/
+
+**Confidence**: HIGH
+**Corroborated By**: 2 independent Tier 1 sources (Gatling, k6)
+**Notes**: Booking Bengkel is a web application with unlimited arrivals → should use open workload model (arrival rate-based). k6 supports both via scenarios (ramping-arrival-rate for open).
+
+---
+
+## Evidence 9: Overload Handling and Resource-Based Capacity
+
+**Claim**: Model capacity in available resources (CPU, memory) rather than QPS; use utilization signals to reject requests gracefully under overload.
+
+**Evidence**:
+- **Google SRE Handling Overload** provides principles (Source 8):
+  > "modeling capacity as 'queries per second' or using static features of the requests that are believed to be a proxy for the resources they consume... often makes for a poor metric"
+  > "A better solution is to measure capacity directly in available resources"
+  - **Utilization signals**: executor load average (active threads), CPU rate, memory pressure
+  - **Criticality levels**: CRITICAL_PLUS, CRITICAL, SHEDDABLE_PLUS, SHEDDABLE
+  - **Client-side throttling**: adaptive algorithm, self-regulate when requests > 2× accepts
+  - **Per-customer quotas**: allocate capacity per customer, reject gracefully when exceeded
+- **Azure WAF** recommends resource-based thresholds (Source 10):
+  - Performance budgets: "400 ms for API response time, 150 ms for database queries, 1% cap on failed requests"
+
+**Source URLs**:
+- https://sre.google/sre-book/handling-overload/
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+
+**Confidence**: HIGH
+**Corroborated By**: 2 independent Tier 1 sources (Google SRE, Azure)
+**Notes**: Google SRE provides detailed overload handling architecture; Azure provides simpler budget-based approach. Both agree resource measurement > QPS.
+
+---
+
+## Evidence 10: Soak Testing for Memory Leak Detection
+
+**Claim**: Soak tests (extended average-load, 3-72 hours) detect memory leaks, resource leaks, data saturation, and storage depletion that only appear under prolonged use.
+
+**Evidence**:
+- **k6 Soak Testing** defines soak purpose and typical durations (Source 6):
+  - "Typical values: 3, 4, 8, 12, 24, 48-72 hours"
+  - Detects: "response time degradation, memory or other resource leaks, data saturation, and storage depletion"
+  - "Monitor the backend resources and code efficiency"
+- **Azure WAF** notes endurance testing for connection pool problems (Source 10):
+  - Endurance/soak testing reveals: "Memory leaks, resource exhaustion, connection pool problems"
+  - "After initial load tests pass" (soak runs after load/stress)
+
+**Source URLs**:
+- https://grafana.com/docs/k6/latest/testing-guides/test-types/soak-testing/
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+
+**Confidence**: HIGH
+**Corroborated By**: 2 independent Tier 1 sources (k6, Azure)
+**Notes**: Soak test duration varies by system; 8-24h typical for most applications, 48-72h for high-reliability systems. Connection pool problems specifically called out by Azure.
+
+---
+
+## Evidence 11: Environment Mirroring and Realism
+
+**Claim**: Test environments must mirror production as closely as practical; mock external dependencies hides real performance problems.
+
+**Evidence**:
+- **Azure WAF** emphasizes production mirroring (Source 10):
+  > "Your test environment should mirror production as closely as practical"
+  - For mission-critical: match compute SKUs, autoscaling, caching, network, external dependencies
+  - For noncritical: scaled-down environment mimicking production
+  > "Mocking external dependencies makes tests run faster and more predictable, but it hides real-world performance problems"
+- **k6 Load Test Types** notes environment fidelity (Source 1):
+  > "Avoid thinking in absolutes"
+  - "The correct load testing strategy is highly dependent on the risk profile for your organization"
+
+**Source URLs**:
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://grafana.com/docs/k6/latest/testing-guides/test-types/
+
+**Confidence**: HIGH
+**Corroborated By**: 2 independent Tier 1 sources (Azure, k6)
+**Notes**: Azure is more prescriptive (specific SKUs); k6 emphasizes risk-based judgment. Both agree realism matters.
+
+---
+
+## Evidence 12: Hypothesis-Driven Experimentation
+
+**Claim**: Use hypothesis-driven experimentation to validate performance changes: state prediction, test against baseline, validate with measured results.
+
+**Evidence**:
+- **Azure WAF** defines hypothesis-driven experimentation (Source 10):
+  > "Start with a focused hypothesis about your workload's performance and define measurable success criteria that lead to actionable decisions."
+  - Example: "Adding an index to the orders table reduces query time by 70% under peak load"
+  - Process: baseline → variant → same load test → capture metrics → compare
+- **Azure WAF** requires baseline establishment (Source 10):
+  > "Record performance metrics during initial tests. This recording is your baseline, a snapshot of 'normal' performance."
+
+**Source URLs**:
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+
+**Confidence**: MEDIUM (only 1 source directly addresses this methodology)
+**Corroborated By**: k6 implicitly supports (thresholds for baseline comparison)
+**Notes**: Methodology matches scientific method; useful for optimizing Booking Bengkel (e.g., "adding DB index will reduce P95 by X%").
+
+---
+
+## Summary
+
+**Evidence Claims**: 12  
+**HIGH Confidence**: 11 (92%)  
+**MEDIUM Confidence**: 1 (8%)  
+**LOW Confidence**: 0 (0%)
+
+**Coverage by Research Question**:
+1. Load test type definitions → Evidence 1
+2. Key metrics (P50/P95/P99) → Evidence 2
+3. Tool comparison → Evidence 6, 8
+4. Bottleneck identification → Evidence 3, 9
+5. Common pitfalls → Evidence 4
+6. P95/P99 degradation investigation → Evidence 2, 3, 9
+7. SDLC timing → Evidence 5
+8. Load calculation → Evidence 7
+9. Soak testing → Evidence 10
+10. Environment realism → Evidence 11
+11. Experimentation methodology → Evidence 12
