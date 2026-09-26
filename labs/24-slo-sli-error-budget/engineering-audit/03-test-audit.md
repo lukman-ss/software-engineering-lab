@@ -1,23 +1,17 @@
-# Test Audit
+# Test Audit Report
 
-Target Lab: `labs/24-slo-sli-error-budget`
+## Test Coverage Overview
 
-## Test Coverage Matrix
-
-| Test Function | Target Area | Happy Path | Failure Path | Edge Cases | Concurrency | Assessment |
-|---|---|---|---|---|---|---|
-| `TestMetricsWindowTracker` | `internal/metrics` | YES | YES (bad events) | YES (eviction on time advance) | NO | PASS |
-| `TestSLOEvaluator` | `internal/slo` | YES | YES (budget depletion) | YES (budget threshold check) | NO | PASS |
-| `TestAlertEngineBurnRate` | `internal/alerting` | YES (alert trigger) | YES | YES (negative test: transient spike in short window only) | NO | PASS |
-| `TestOutOfOrderTimestamps` | `internal/metrics` | YES | YES | YES (out-of-order insert & partial eviction) | NO | PASS |
-| `TestEvaluatorZeroTraffic` | `internal/slo` | YES | YES | YES (0 traffic divide-by-zero check) | NO | PASS |
-| `TestConcurrencyMetrics` | `internal/metrics` | YES | YES | YES (parallel goroutines recording simultaneously) | YES | PASS |
+- `TestMetricsWindowTracker`: Tests basic event recording, custom good predicate (status code and duration), summary counts, and window eviction.
+- `TestSLOEvaluator`: Tests SLI calculation, deploy status transition when error budget is exhausted, and threshold boundaries.
+- `TestAlertEngineBurnRate`: Tests multi-window burn rate alert triggering on severe burn rates and negative test verifying no alert triggers on transient spikes (short window elevated, long window normal).
+- `TestOutOfOrderTimestamps`: Tests insertion and summary aggregation when events arrive out-of-order, verifying temporal sorting and slice-based eviction.
+- `TestEvaluatorZeroTraffic`: Tests edge case where zero events are recorded in window (defaults to SLI 1.0, CanDeploy true).
+- `TestConcurrencyMetrics`: Tests concurrent multi-goroutine recording against single `WindowTracker` across 2,000 parallel operations.
 
 ## Test Execution Results
 
-Command: `go test -v -count=1 ./tests`
-Output:
-```text
+```
 === RUN   TestMetricsWindowTracker
 --- PASS: TestMetricsWindowTracker (0.00s)
 === RUN   TestSLOEvaluator
@@ -31,19 +25,10 @@ Output:
 === RUN   TestConcurrencyMetrics
 --- PASS: TestConcurrencyMetrics (0.00s)
 PASS
-ok  	labs/24-slo-sli-error-budget/tests	0.077s
 ```
 
-Command: `go test -race ./...`
-Output:
-```text
-?   	labs/24-slo-sli-error-budget/cmd/demo	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/alerting	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/metrics	[no test files]
-?   	labs/24-slo-sli-error-budget/internal/slo	[no test files]
-ok  	labs/24-slo-sli-error-budget/tests	1.082s
-```
+### Race Detector (`go test -race ./...`)
+Result: PASS (0 data races detected).
 
-## Assessment Summary
-- All 6 tests pass without race conditions or memory leaks.
-- Test suite verifies happy paths, negative paths (transient spikes without alert), edge cases (zero traffic, out-of-order records, stale bucket evictions), and concurrent writes.
+### Demo Run (`go run ./cmd/demo`)
+Result: PASS (Executes all 4 phases with authentic outputs matching expected math).

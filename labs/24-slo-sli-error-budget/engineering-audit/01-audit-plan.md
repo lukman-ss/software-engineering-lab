@@ -1,39 +1,44 @@
 # Engineering Audit Plan
 
-Target Lab: `labs/24-slo-sli-error-budget`
+Target Lab: labs/24-slo-sli-error-budget
 Implementation Files:
-- `internal/metrics/tracker.go`
-- `internal/slo/evaluator.go`
-- `internal/alerting/engine.go`
-- `cmd/demo/main.go`
+- internal/metrics/tracker.go
+- internal/slo/evaluator.go
+- internal/alerting/engine.go
 
 Tests:
-- `tests/slo_test.go`
+- tests/slo_test.go
 
 Executable/Demo:
-- `cmd/demo/main.go`
+- cmd/demo/main.go
 
 Approved Research Inputs:
-- `research/05-report.md`
-- `research-revision/03-revision-result.md`
-- `research-audit/07-verdict.md`
+- research/01-plan.md
+- research/02-sources.md
+- research/03-evidence.md
+- research/04-contradictions.md
+- research/05-report.md
+- research/06-open-questions.md
 
 Main Claims To Verify:
-1. SLI calculation implements good/total event ratio tracking over sliding time windows (`internal/metrics` + `internal/slo`).
-2. Error budget dynamically calculated as `(1 - SLO) * total_events - bad_events` and enforces freeze policy when exhausted.
-3. Multi-window multi-burn-rate alerting triggers only when both short and long window burn rates exceed rule thresholds.
-4. Concurrency safety: metrics aggregation and sliding window tracker are thread-safe under concurrent recording.
-5. Out-of-order event insertion and timestamp eviction function correctly.
-6. Zero-traffic edge cases do not trigger divide-by-zero panics and default to valid state.
-7. Endpoint criticality comparison (e.g. 99.9% vs 95.0%) behaves according to configured thresholds.
+1. Sliding window time-bucketed metric tracking accurate for good/total request count.
+2. SLI calculation matches good/total events ratio.
+3. Error budget total, consumed, and remaining calculations conform to SRE principles.
+4. Release freeze policy (`CanDeploy`) correctly toggles when budget is <= 0.
+5. Multi-window multi-burn-rate alerting correctly triggers when both short and long window burn rates exceed rule factor.
+6. Code handles out-of-order event timestamps gracefully without corruption.
+7. Concurrency operations on WindowTracker are data-race free under high parallel load.
 
 Commands To Run:
-- `go test -v -count=1 ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+```bash
+cd labs/24-slo-sli-error-budget
+go test ./...
+go test -race ./...
+go run ./cmd/demo
+```
 
 Primary Risks:
-- Race conditions during concurrent slice mutations in `WindowTracker`.
-- Divide-by-zero panics in SLI or Burn Rate calculations on empty windows.
-- Out-of-order event eviction bugs causing stale bucket retention or slice index corruption.
-- Mismatch between demo output recorded in docs and live demo execution.
+- Thread-safety / race conditions on metric slice mutations.
+- Stale bucket eviction errors when timestamps arrive out-of-order.
+- Floating-point precision / rounding issues in SLI or Error Budget evaluation.
+- False positive alerts if multi-window conditions are not properly evaluated.

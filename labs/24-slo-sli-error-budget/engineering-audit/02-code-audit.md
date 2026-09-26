@@ -1,65 +1,46 @@
-# Code Audit
-
-Target Lab: `labs/24-slo-sli-error-budget`
+# Code Audit Report
 
 ## Finding 1
 
 Location: `internal/metrics/tracker.go:46-104`
-Claimed Behavior: Thread-safe recording of events into time-bucketed sliding windows, with support for in-order and out-of-order timestamps.
-Observed Implementation:
-- Mutex locked at entry (`w.mu.Lock()`).
-- Calls `evictStaleLocked(e.Timestamp)` on write to keep buckets within window bounds.
-- Checks if bucket matches existing latest bucket; if earlier, searches and inserts at sorted index or increments matching bucket.
-- Correctly updates `TotalCount`, `GoodCount`, and `BadCount`.
+Claimed Behavior: Thread-safe recording of metric events into bucketed time windows, handling both ordered and out-of-order timestamps.
+Observed Implementation: Protected by `sync.RWMutex` (`w.mu.Lock()`). Buckets are kept in temporal order; earlier timestamps are inserted at the correct index or aggregated into existing buckets.
 Assessment: PASS
 Severity: LOW
-Notes: Linear search/insert on out-of-order events is efficient for moderate window bucket sizes (e.g. seconds to hours).
+Notes: `evictStaleLocked` is called at the beginning of `Record` and inside `Summary`. Slice slicing does not reallocate unnecessarily.
 
 ## Finding 2
 
 Location: `internal/metrics/tracker.go:106-115`
-Claimed Behavior: Proper sliding window eviction of stale buckets.
-Observed Implementation:
-- Computes `cutoff := now.Add(-w.windowSize)`.
-- Scans sorted buckets from head and slices out buckets where `StartTime.Before(cutoff)`.
-- Eviction called safely under lock in both `Record` and `Summary`.
+Claimed Behavior: Linear eviction of stale buckets older than `windowSize`.
+Observed Implementation: Compares bucket start times against `cutoff = now.Add(-w.windowSize)`. Slices from the first non-stale index.
 Assessment: PASS
 Severity: LOW
-Notes: Buckets are maintained in chronological order, allowing slice-reslicing eviction.
+Notes: Correctly assumes sorted slice order maintained by `Record`.
 
 ## Finding 3
 
-Location: `internal/slo/evaluator.go:41-71`
-Claimed Behavior: Evaluates SLI ratio, total error budget, consumed budget, remaining budget, and release freeze policy (`CanDeploy`).
-Observed Implementation:
-- If `total == 0`, defaults `sli` to `1.0` (100%), preventing divide-by-zero panics.
-- Computes `totalErrorBudget = (1.0 - TargetUptime) * total`.
-- Computes `budgetRemaining = totalErrorBudget - budgetConsumed`.
-- If `total > 0` and `budgetRemaining <= 0`, sets `CanDeploy = false`.
+Location: `internal/slo/evaluator.go:41-70`
+Claimed Behavior: Evaluates SLI ratio, computes remaining budget from allowed error rate, and restricts deployments (`CanDeploy = false`) when budget is exhausted.
+Observed Implementation: Total error budget is `(1.0 - TargetUptime) * total`. Budget remaining is `totalErrorBudget - bad`. If total == 0, defaults to SLI=1.0 and CanDeploy=true.
 Assessment: PASS
 Severity: LOW
-Notes: Mathematical implementation matches Google SRE formula.
+Notes: Mathematical definitions match Google SRE Handbook.
 
 ## Finding 4
 
 Location: `internal/alerting/engine.go:51-61`
-Claimed Behavior: Burn rate calculation per window with zero-traffic safeguard.
-Observed Implementation:
-- Handles `total == 0` by returning `0.0`.
-- Safeguards against `allowedErrorRate <= 0` returning `0.0`.
-- Correctly calculates `(bad / total) / (1 - targetSLO)`.
+Claimed Behavior: Burn rate calculated as `actualErrorRate / allowedErrorRate`.
+Observed Implementation: Handles zero-division when `total == 0` or `allowedErrorRate <= 0` by returning `0.0`.
 Assessment: PASS
 Severity: LOW
-Notes: Zero division completely guarded.
+Notes: Correctly implements Google SRE burn rate formula.
 
 ## Finding 5
 
-Location: `internal/alerting/engine.go:63-89`
-Claimed Behavior: Multi-window multi-burn-rate alert triggering logic requiring both short and long window conditions.
-Observed Implementation:
-- Evaluates `shortBurn` and `longBurn`.
-- Triggers alert if and only if `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
-- Accurately captures severity and rate metrics into `AlertResult`.
+Location: `internal/alerting/engine.go:63-88`
+Claimed Behavior: Multi-window multi-burn-rate alerting requires both short and long window burn rates to exceed the configured threshold before triggering.
+Observed Implementation: Condition `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor` strictly enforced.
 Assessment: PASS
 Severity: LOW
-Notes: Implements the Google SRE multi-window burn rate requirement preventing false alerts on single transient spikes.
+Notes: Prevents alert fatigue and transient spike flapping.
