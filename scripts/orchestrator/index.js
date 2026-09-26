@@ -2,6 +2,7 @@ const Redis = require('ioredis');
 const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 
 const redis = new Redis();
 
@@ -22,6 +23,62 @@ const MODEL_CRITICAL = "9router/ag-combo";
 const MODEL_FALLBACK = "9router/ag-combo";
 const MODEL_AUDITOR_OS = "9router/auditor-opensource-combo";
 
+// CPU Throttling Logic
+function getCPUInfo() {
+    const cpus = os.cpus();
+    let idle = 0;
+    let total = 0;
+    for (const cpu of cpus) {
+        for (const type in cpu.times) {
+            total += cpu.times[type];
+        }
+        idle += cpu.times.idle;
+    }
+    return { idle, total };
+}
+
+let lastCPUInfo = getCPUInfo();
+let lastCPUTime = Date.now();
+let cachedCPUUsage = 0;
+
+function updateCPUUsage() {
+    const now = Date.now();
+    if (now - lastCPUTime < 500) return cachedCPUUsage;
+
+    const currentCPUInfo = getCPUInfo();
+    const idleDiff = currentCPUInfo.idle - lastCPUInfo.idle;
+    const totalDiff = currentCPUInfo.total - lastCPUInfo.total;
+    lastCPUInfo = currentCPUInfo;
+    lastCPUTime = now;
+    
+    if (totalDiff === 0) cachedCPUUsage = 0;
+    else cachedCPUUsage = 100 - Math.round(100 * idleDiff / totalDiff);
+    return cachedCPUUsage;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let isSpawning = false;
+
+async function acquireCPU() {
+    while (true) {
+        if (isSpawning) {
+            await sleep(200);
+            continue;
+        }
+
+        const usage = updateCPUUsage();
+        if (usage < 80) {
+            isSpawning = true;
+            // Hold the spawn lock for 1 second to let OS register the new CPU load
+            setTimeout(() => { isSpawning = false; }, 1000);
+            return;
+        }
+        
+        console.log(`[CPU WAIT] Usage at ${usage}%. Throttling new agents...`);
+        await sleep(1000); // Wait for CPU to cool down
+    }
+}
+
 async function runOpencode(lab, stage, promptFile, instruction, model = MODEL_DEFAULT) {
     const logDir = path.join(LOG_ROOT, path.basename(lab));
     await fs.mkdir(logDir, { recursive: true });
@@ -31,6 +88,8 @@ async function runOpencode(lab, stage, promptFile, instruction, model = MODEL_DE
     const input = `${promptContent}\n---\n${instruction}`;
 
     async function execute(mod) {
+        await acquireCPU(); // DYNAMIC CPU THROTTLING
+        
         return new Promise((resolve, reject) => {
             const args = ['run'];
             if (mod) args.push('-m', mod);
@@ -287,10 +346,21 @@ async function main() {
 
     console.log(`Found ${pendingTasks.length} tasks.`);
     
-    // Process all tasks concurrently!
-    await Promise.all(pendingTasks.map(task => processTask(task)));
+    // Safety cap: max workers = CPU cores - 1 (min 1)
+    const maxWorkers = Math.max(1, os.cpus().length - 1);
+    console.log(`Starting dynamic pool with up to ${maxWorkers} workers (Target CPU < 80%)`);
     
-    console.log("All concurrent task loops finished.");
+    const queue = [...pendingTasks];
+    
+    const workers = Array.from({ length: maxWorkers }).map(async (_, id) => {
+        while (queue.length > 0) {
+            const task = queue.shift();
+            await processTask(task);
+        }
+    });
+
+    await Promise.all(workers);
+    console.log("All tasks processed.");
     process.exit(0);
 }
 
