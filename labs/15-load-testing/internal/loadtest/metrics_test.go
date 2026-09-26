@@ -50,6 +50,36 @@ func TestCalculateMetrics_Empty(t *testing.T) {
 	}
 }
 
+func TestCalculateMetrics_SingleSample(t *testing.T) {
+	latencies := []time.Duration{42 * time.Millisecond}
+	res := CalculateMetrics(latencies, 0, 1*time.Second)
+
+	if res.TotalRequests != 1 {
+		t.Fatalf("expected 1 request, got %d", res.TotalRequests)
+	}
+	if res.MinLatency != 42*time.Millisecond || res.MaxLatency != 42*time.Millisecond {
+		t.Fatalf("expected min/max 42ms, got min=%s max=%s", res.MinLatency, res.MaxLatency)
+	}
+	if res.P50Latency != 42*time.Millisecond || res.P95Latency != 42*time.Millisecond || res.P99Latency != 42*time.Millisecond {
+		t.Fatalf("expected all percentiles 42ms, got P50=%s P95=%s P99=%s", res.P50Latency, res.P95Latency, res.P99Latency)
+	}
+}
+
+func TestCalculateMetrics_RPS(t *testing.T) {
+	latencies := make([]time.Duration, 200)
+	for i := 0; i < 200; i++ {
+		latencies[i] = 10 * time.Millisecond
+	}
+	res := CalculateMetrics(latencies, 0, 2*time.Second)
+
+	if res.TotalRequests != 200 {
+		t.Fatalf("expected 200 requests, got %d", res.TotalRequests)
+	}
+	if res.RPS != 100.0 {
+		t.Fatalf("expected RPS 100.0, got %f", res.RPS)
+	}
+}
+
 func TestCalculateMetrics_Invariants(t *testing.T) {
 	// Unordered list of latencies with long-tail spikes
 	latencies := []time.Duration{

@@ -29,8 +29,8 @@ Research Status: APPROVED
 
 ## Components
 1. `BookingServer`: HTTP handler with a configurable concurrency limit (semaphore) simulating a database connection pool.
-2. `LoadTester`: Concurrency orchestrator generating HTTP traffic with specified virtual users (VUs) and iterations.
-3. `MetricsAggregator`: Thread-safe latency collector sorting durations to derive accurate percentiles.
+2. `LoadTester`: Concurrency orchestrator generating HTTP traffic with specified virtual users (VUs) for a bounded duration.
+3. `MetricsAggregator`: Per-VU latency buffers aggregated into `CalculateMetrics` to compute accurate percentiles without locks.
 
 ## Test Strategy
 - Unit tests: Verify statistical calculations (P50, P95, P99, Avg).

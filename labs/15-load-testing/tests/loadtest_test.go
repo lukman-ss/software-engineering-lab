@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -133,5 +135,87 @@ func TestServer_ContextCanceled(t *testing.T) {
 
 	if w.Code == http.StatusCreated {
 		t.Fatal("expected request to abort on canceled context, got 201 Created")
+	}
+}
+
+func TestServer_MaxDBConnectionsBound(t *testing.T) {
+	const maxConns = 3
+	srv := server.New(server.Config{
+		MaxDBConnections: maxConns,
+		DBQueryDuration:  50 * time.Millisecond,
+	})
+	ts := httptest.NewServer(srv.Routes())
+	defer ts.Close()
+
+	var maxObservedConns int32
+	var wg sync.WaitGroup
+
+	// Poll active connections while concurrent requests run
+	stopPoll := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopPoll:
+				return
+			case <-ticker.C:
+				current := int32(srv.ActiveConnections())
+				for {
+					max := atomic.LoadInt32(&maxObservedConns)
+					if current <= max || atomic.CompareAndSwapInt32(&maxObservedConns, max, current) {
+						break
+					}
+				}
+			}
+		}
+	}()
+
+	// Launch 15 concurrent requests to saturate the semaphore
+	for i := 0; i < 15; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, err := http.Post(ts.URL+"/booking", "application/json", nil)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(stopPoll)
+
+	peak := atomic.LoadInt32(&maxObservedConns)
+	if peak > int32(maxConns) {
+		t.Fatalf("peak active connections %d exceeded max %d", peak, maxConns)
+	}
+	if peak == 0 {
+		t.Fatal("expected non-zero active connections during concurrent load")
+	}
+}
+
+func TestLoadTest_SuccessAndErrorInvariant(t *testing.T) {
+	srv := server.New(server.Config{
+		MaxDBConnections: 2,
+		DBQueryDuration:  5 * time.Millisecond,
+	})
+	ts := httptest.NewServer(srv.Routes())
+	defer ts.Close()
+
+	cfg := loadtest.Config{
+		URL:      ts.URL + "/booking",
+		Method:   http.MethodPost,
+		VUs:      4,
+		Duration: 200 * time.Millisecond,
+	}
+	res := loadtest.NewRunner(cfg).Run(context.Background())
+
+	if res.TotalRequests == 0 {
+		t.Fatal("expected non-zero requests")
+	}
+	if res.SuccessCount+res.ErrorCount != res.TotalRequests {
+		t.Fatalf("invariant violated: SuccessCount (%d) + ErrorCount (%d) != TotalRequests (%d)",
+			res.SuccessCount, res.ErrorCount, res.TotalRequests)
 	}
 }

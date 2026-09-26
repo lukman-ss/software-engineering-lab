@@ -13,7 +13,7 @@
 - Per-goroutine slices in load generator to avoid mutex contention, aggregating once on completion.
 
 ## Implementation-Specific Choices
-- Wait durations in server mock are fixed (`20ms`), making the tail latency strictly a function of queuing time when VUs exceed max DB connections.
+- The demo uses a fixed query duration of `20ms`; the server accepts a configurable `DBQueryDuration`. Tail latency is strictly a function of queuing time when VUs exceed max DB connections.
 - Load generator executes loops with `time.Since` for durations rather than pre-generating requests to reduce memory bloat.
 
 ## Known Limitations

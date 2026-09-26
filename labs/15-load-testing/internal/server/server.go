@@ -19,6 +19,11 @@ type Server struct {
 	activeReq int64
 }
 
+// ActiveConnections returns the number of currently acquired database slots.
+func (s *Server) ActiveConnections() int {
+	return len(s.semaphore)
+}
+
 type BookingRequest struct {
 	VehicleID string `json:"vehicle_id"`
 	Service   string `json:"service"`
