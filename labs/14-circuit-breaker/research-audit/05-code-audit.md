@@ -1,5 +1,7 @@
 # Code Audit
 
-Status: NOT_APPLICABLE
+Scope: NOT APPLICABLE
 
-Reason: Skipped per pipeline override (Research Audit Stage only). Code implementation and tests are not audited in this stage.
+Pipeline override active:
+- Audit research only.
+- Do not audit implementation/code in this stage.

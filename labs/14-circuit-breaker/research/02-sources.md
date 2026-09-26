@@ -1,118 +1,119 @@
 # Sources
 
 ## Source 1
-Title: Circuit Breaker Pattern — Martin Fowler
-Publisher: Martin Fowler
+Title: Circuit Breaker
+Publisher: Martin Fowler (martinfowler.com)
 URL: https://martinfowler.com/bliki/CircuitBreaker.html
-Published: 2014-12-23
+Published: 2014-03-06
 Accessed: 2026-09-25
-Source Tier: Tier 2 (expert technical article)
-Relevance: Primary definition of the pattern, states, and transitions
+Source Tier: Tier 2 (expert technical article, cites Nygard Release It!)
+Relevance: Canonical pattern definition; three states (closed/open/half-open), failure counting, self-resetting probe
 
 ## Source 2
-Title: Hystrix Circuit Breaker — Netflix
-Publisher: Netflix
+Title: How it Works — Hystrix Wiki
+Publisher: Netflix / Hystrix
 URL: https://github.com/Netflix/Hystrix/wiki/How-it-Works
-Published: 2012-2018 (archived)
+Published: 2017-07-03 (last wiki edit by Matt Jacobs, 32 revisions)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (original implementation documentation)
-Relevance: Original production implementation details, configuration parameters
+Source Tier: Tier 1 (original production implementation)
+Relevance: Circuit-breaker tripping logic (request volume threshold + error percentage), sleep window, half-open single-probe, bulkhead via thread pools/semaphores, fallback
 
 ## Source 3
-Title: Circuit Breaker Pattern — Microsoft Azure Architecture Center
-Publisher: Microsoft
+Title: Circuit Breaker pattern — Azure Architecture Center
+Publisher: Microsoft Learn
 URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
-Published: 2023-08-29
+Published: 2025-02-05 (ms.date; updated 2026-09-26)
 Accessed: 2026-09-25
 Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Authoritative pattern description, states, configuration, considerations
+Relevance: Three-state machine, fail-fast in Open, Half-Open limited probes, failure counter time-based reset, monitoring, manual override, accelerated breaking on 429/503
 
 ## Source 4
-Title: AWS Well-Architected Framework — Reliability Pillar
-Publisher: Amazon Web Services
-URL: https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/
-Published: 2024
+Title: CircuitBreaker — gobreaker
+Publisher: Sony (github.com/sony/gobreaker)
+URL: https://github.com/sony/gobreaker
+Published: 2016–present
 Accessed: 2026-09-25
-Source Tier: Tier 1 (official cloud provider framework)
-Relevance: Production best practices for resilience, circuit breaker usage
+Source Tier: Tier 1 (Go library source)
+Relevance: Go reference impl; Settings {Name, MaxRequests, Interval, Timeout, ReadyToTrip, OnStateChange}; mutex-protected state ; Half-Open MaxRequests probes; Interval rolling window
 
 ## Source 5
-Title: Google SRE Book — Handling Overload
-Publisher: Google
+Title: Handling Overload (SRE Book Ch. 21)
+Publisher: Google SRE
 URL: https://sre.google/sre-book/handling-overload/
-Published: 2016
+Published: 2016 (SRE Book first edition)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (original SRE practices)
-Relevance: Circuit breaker in context of overload protection, cascade failure
+Source Tier: Tier 1 (SRE practices)
+Relevance: Client-side throttling, per-customer limits, criticality, cascading failure from retry amplification, shedding vs caller-side protection
 
 ## Source 6
-Title: Retry with Exponential Backoff — AWS Architecture Blog
-Publisher: Amazon Web Services
+Title: Exponential Backoff And Jitter — AWS Architecture Blog
+Publisher: Amazon Web Services (Marc Brooker)
 URL: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
-Published: 2015-03-10
+Published: 2015-03-04 (update note 2023-05)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (official cloud provider engineering blog)
-Relevance: Retry strategies, jitter, interaction with circuit breaker
+Source Tier: Tier 1 (cloud provider engineering blog)
+Relevance: Full/equal/decorrelated jitter, retry storm mitigation, proof jitter reduces contention vs plain exponential backoff
 
 ## Source 7
-Title: gobreaker — Sony
-Publisher: Sony
-URL: https://github.com/sony/gobreaker
-Published: 2016-present
-Accessed: 2026-09-25
-Source Tier: Tier 1 (Go library source code)
-Relevance: Go implementation reference, state machine, thread safety
-
-## Source 8
-Title: Circuit — Go Resilience (cep21)
+Title: Circuit — cep21/circuit
 Publisher: cep21
 URL: https://github.com/cep21/circuit
-Published: 2019-present
+Published: 2017–present
 Accessed: 2026-09-25
-Source Tier: Tier 1 (Go library source code)
-Relevance: Modern Go implementation, configuration options, metrics
+Source Tier: Tier 1 (Go library source)
+Relevance: Hystrix-like Go impl; zero-goroutine, context-aware, configurable open/close logic, metrics/SLO tracking, expvar
+
+## Source 8
+Title: Bulkhead pattern — Azure Architecture Center
+Publisher: Microsoft Learn
+URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
+Published: 2026-03-19 (ms.date)
+Accessed: 2026-09-25
+Source Tier: Tier 1
+Relevance: Bulkhead as isolation (connection pools, partitions, cells) distinct from circuit breaker; combine with retry/CB/throttling
 
 ## Source 9
-Title: Bulkhead Pattern — Microsoft Azure Architecture Center
-Publisher: Microsoft
-URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
-Published: 2023-08-29
+Title: Managing Load (SRE Workbook Ch. 11)
+Publisher: Google SRE
+URL: https://sre.google/workbook/managing-load/
+Published: 2018 (SRE Workbook)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Distinction from circuit breaker, isolation patterns
+Source Tier: Tier 1
+Relevance: Load shedding vs breaker vs balancing; Dressy case study (shedding + balancing feedback loop), Pokémon GO thundering-herd retry sync, kill switches
 
 ## Source 10
-Title: Managing Load — Google SRE Workbook
-Publisher: Google
-URL: https://sre.google/workbook/managing-load/
-Published: 2018
+Title: Retry pattern — Azure Architecture Center
+Publisher: Microsoft Learn
+URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/retry
+Published: 2024-07-18 (ms.date)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (original SRE practices)
-Relevance: Load shedding vs circuit breaker, priority-based shedding, load balancing interaction, Dressy case study
+Source Tier: Tier 1
+Relevance: Transient fault retry; cancel / immediate retry / retry-after-delay; exponential increment; idempotency; combine Retry + Circuit Breaker with sensitivity to CB exceptions
 
 ## Source 11
-Title: Timeout and Retry Patterns — Microsoft Azure
-Publisher: Microsoft
-URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/retry
-Published: 2023-08-29
+Title: Queue-Based Load Leveling pattern — Azure Architecture Center
+Publisher: Microsoft Learn
+URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling
+Published: 2026-06-09 (ms.date)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Timeout vs retry vs circuit breaker interaction
+Source Tier: Tier 1
+Relevance: Async decoupling via queue for non-critical flows; idempotency, dead-letter, ordering limits; enables degraded async processing when sync dependency down
 
 ## Source 12
 Title: Timeouts, retries, and backoff with jitter — AWS Builder's Library
 Publisher: Amazon Web Services
-URL: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
-Published: 2020
+URL: https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter/
+Note: Original URL (aws.amazon.com/builders-library/...) redirects 301 to this AWS Builder Center URL.
+Published: 2020 (Builder's Library)
 Accessed: 2026-09-25
-Source Tier: Tier 1 (official cloud provider engineering guidance)
-Relevance: Retry amplification and retry storms under dependency degradation, backoff and jitter to prevent synchronized retry spikes
+Source Tier: Tier 1
+Relevance: Retry amplification under degraded dependency; jitter to prevent synchronized spikes; referenced by Source 6 — NOT VERIFIED via direct fetch (AWS Builder Center returned placeholder); claim supported by Source 6 + Source 10 instead
 
 ## Source 13
-Title: Queue-Based Load Leveling — Microsoft Azure Architecture Center
-Publisher: Microsoft
-URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling
-Published: 2023-08-29
+Title: Addressing Cascading Failures (SRE Book Ch. 22)
+Publisher: Google SRE
+URL: https://sre.google/sre-book/addressing-cascading-failures/
+Published: 2016
 Accessed: 2026-09-25
-Source Tier: Tier 1 (official cloud provider documentation)
-Relevance: Decoupling non-critical flows via queues, buffering to enable fallback/degraded behavior and support idempotent processing
+Source Tier: Tier 1
+Relevance: Cascading failure mechanics; overload propagation; referenced via Source 5 chapter navigation — direct fetch not performed; listed as related primary

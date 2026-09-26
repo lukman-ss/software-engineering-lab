@@ -31,10 +31,8 @@ Code To Execute:
 None. Pipeline override dictates skipping implementation/code audit.
 
 Primary Risks:
-- Unsupported universal claims ("must", "always").
-- Dead URLs in source inventory.
+- Unsupported universal claims.
 - Mismatched evidence vs source content.
-- State implementation specifics generalized across all libraries.
 
 Audit Strategy:
 1. Verify source URLs.

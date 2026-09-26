@@ -1,81 +1,81 @@
 # Claim Audit
 
 ## Claim 1
-Claim: Timeouts block concurrent requests, exhausting critical resources (memory, threads, DB connections) resulting in cascading failures.
-Location: research/03-evidence.md:4, research/05-report.md:11
-Evidence Provided: Excerpt from Azure Architecture Center citing resource exhaustion mechanisms.
-Source: Microsoft Azure Architecture Center (Source 3), Martin Fowler (Source 1)
+Claim: Timeouts block concurrent requests, exhausting critical system resources (threads, memory, connections) and causing cascading failures.
+Location: research/03-evidence.md (Evidence 1)
+Evidence Provided: "If a service is busy, failure in one part of the system might lead to cascading failures... blocked requests might hold critical system resources, such as memory, threads, and database connections."
+Source: Microsoft Azure Architecture Center, Circuit Breaker Pattern
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Well-documented distributed systems behavior.
+Notes: Fully supported and corroborated by Martin Fowler and Netflix Hystrix.
 
 ## Claim 2
 Claim: Circuit Breakers implement a three-state machine: CLOSED, OPEN, HALF_OPEN.
-Location: research/03-evidence.md:12, research/03-core-concepts.md:16, research/05-report.md:17
-Evidence Provided: Explicit state machine model definitions from Azure and Martin Fowler.
-Source: Martin Fowler (Source 1), Netflix Hystrix (Source 2), Microsoft Azure (Source 3)
+Location: research/03-evidence.md (Evidence 2)
+Evidence Provided: "You can implement the proxy as a state machine that includes the following states... Closed... Open... Half-Open"
+Source: Microsoft Azure Architecture Center, Circuit Breaker Pattern
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Standard pattern definition.
+Notes: Standard state model universally described across sources.
 
 ## Claim 3
-Claim: Circuit Breakers differentiate from Retry Patterns by actively preventing operations from occurring instead of blindly repeating.
-Location: research/03-evidence.md:20, research/06-timeout-retry-backoff.md:14
-Evidence Provided: Azure Architecture Center documentation contrasting Retry and Circuit Breaker patterns.
-Source: Microsoft Azure Architecture Center (Source 3), Martin Fowler (Source 1)
+Claim: Circuit Breakers differentiate from Retry Patterns by actively preventing an operation from occurring instead of blindly repeating it.
+Location: research/03-evidence.md (Evidence 3)
+Evidence Provided: "The Retry pattern enables an application to retry an operation with the expectation that it eventually succeeds. The Circuit Breaker pattern prevents an application from performing an operation that's likely to fail."
+Source: Microsoft Azure Architecture Center, Circuit Breaker Pattern
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Accurate contrast supported by sources.
+Notes: Supported by Martin Fowler and Azure documentation.
 
 ## Claim 4
-Claim: Half-Open state limits traffic to probe downstream service recovery.
-Location: research/03-evidence.md:28, research/03-core-concepts.md:29
-Evidence Provided: Canary probe mechanics described in Azure Architecture Center.
-Source: Microsoft Azure Architecture Center (Source 3), Martin Fowler (Source 1)
+Claim: Half-Open limits traffic to probe whether the downstream service has recovered.
+Location: research/03-evidence.md (Evidence 4)
+Evidence Provided: "Half-Open: A limited number of requests from the application are allowed to pass through and invoke the operation."
+Source: Microsoft Azure Architecture Center, Circuit Breaker Pattern
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Standard canary mechanism across references.
+Notes: Corroborated by Hystrix Wiki and Martin Fowler.
 
 ## Claim 5
 Claim: Retries without bounding/jitter cause amplified failures (Retry Storms) against struggling downstream systems.
-Location: research/03-evidence.md:36, research/05-report.md:23, research/06-timeout-retry-backoff.md:8
-Evidence Provided: AWS Builder's Library and AWS Architecture blog documentation on retry amplification.
-Source: AWS Builder's Library (Source 12), AWS Architecture Blog (Source 6)
+Location: research/03-evidence.md (Evidence 5)
+Evidence Provided: "An aggressive retry policy with minimal delay between attempts, and a large number of retries, could further degrade a busy service that's running close to or at capacity."
+Source: Microsoft Azure Architecture Center, Retry pattern; AWS Architecture Blog
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Well-established retry storm phenomenon.
+Notes: Documented and supported by Google SRE and AWS Blog.
 
 ## Claim 6
-Claim: In-memory circuit breakers track state on a per-instance basis without shared coordination across a scaled-out fleet.
-Location: research/05-report.md:36
-Evidence Provided: State isolation in local memory process architectures.
-Source: cep21/circuit (Source 8), Microsoft Azure Architecture Center (Source 3)
+Claim: Bulkhead isolates resources per dependency; Circuit Breaker fails fast based on error thresholds; they solve different problems.
+Location: research/03-evidence.md (Evidence 6)
+Evidence Provided: "Bulkhead isolates consumers and services from cascading failures... isolated within its own bulkhead to prevent the entire solution from failing."
+Source: Microsoft Azure Architecture Center, Bulkhead pattern; Netflix Hystrix Wiki
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Correctly scoped limitation.
+Notes: Distinct architectural purposes accurately delineated.
 
 ## Claim 7
-Claim: Asynchronous non-critical flows can be decoupled using queues to enable degraded/fallback behavior.
-Location: research/10-final-research.md:6, research/07-fallback-bulkhead.md:4
-Evidence Provided: Azure Queue-Based Load Leveling architecture pattern.
-Source: Microsoft Azure Architecture Center (Source 13)
+Claim: Observability metrics for circuit breakers include state, failure count, rejected calls, latency, and open count.
+Location: research/03-evidence.md (Evidence 7)
+Evidence Provided: "reports successes, failures, rejections, and timeouts to the circuit breaker, which maintains a rolling set of counters that calculate statistics."
+Source: Netflix Hystrix Wiki; Microsoft Azure
 Source Actually Supports Claim: YES
-Classification: INTERPRETATION
+Classification: FACT
 Severity: LOW
-Notes: Accurately framed as an optional design strategy.
+Notes: Supported by real library implementations (gobreaker, cep21/circuit).
 
 ## Claim 8
-Claim: Configuration parameter ranges (e.g. FailureThreshold 5-20, OpenTimeout 10-60s).
-Location: research/03-core-concepts.md:39
-Evidence Provided: Parameter ranges from production libraries (Hystrix, gobreaker, cep21).
-Source: Netflix Hystrix (Source 2), gobreaker (Source 7), cep21/circuit (Source 8)
+Claim: Asynchronous non-critical flows can be decoupled using queues (Queue-Based Load Leveling) to enable degraded/fallback behavior when dependencies are unavailable.
+Location: research/10-final-research.md (Synthesis Point 3)
+Evidence Provided: Azure Queue-Based Load Leveling Pattern enables accepting work into durable queue even when downstream is not available.
+Source: Microsoft Azure Architecture Center
 Source Actually Supports Claim: YES
-Classification: EXAMPLE
+Classification: FACT
 Severity: LOW
-Notes: Explicitly marked as illustrative examples, not prescriptive universal thresholds.
+Notes: Valid pattern relationship.

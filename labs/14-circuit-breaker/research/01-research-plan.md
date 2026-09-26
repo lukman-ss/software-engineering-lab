@@ -1,68 +1,35 @@
-# Research Plan
+# Research Plan: Circuit Breaker Pattern & Cascading Failure Mitigation
 
 ## Research Topic
-Circuit Breaker Pattern — Preventing Cascading Failures in Distributed Systems
+Circuit Breaker Pattern — Preventing a single degraded dependency from taking down the entire system.
 
 ## Objective
-Research the Circuit Breaker pattern comprehensively to build a runnable Go demonstration lab that shows:
-1. How cascading failures occur without a circuit breaker
-2. How a circuit breaker prevents cascade failures
-3. State transitions (CLOSED → OPEN → HALF_OPEN → CLOSED)
-4. Recovery and failed recovery scenarios
-5. Related patterns: timeout, retry, fallback, bulkhead, load shedding
-6. Observability metrics
-7. Case studies: CMMS WhatsApp and PPOB
+Investigate operational mechanics, failure dynamics, and interplay between Circuit Breaker, Timeout, Retry with Exponential Backoff + Jitter, Fallback, Bulkhead, and Load Shedding in distributed microservices. Output must be evidence-backed (Tier 1 primary sources opened, not snippets) and suitable to inform Go implementation with real state machine.
 
 ## Research Questions
-
-### Core Circuit Breaker
-1. What are the exact state definitions and transitions for CLOSED, OPEN, HALF_OPEN?
-2. What are standard failure threshold configurations?
-3. How does the HALF_OPEN probe mechanism work?
-4. What are the thread-safety considerations?
-
-### Cascade Failure
-1. How does a slow/down dependency cause resource exhaustion in callers?
-2. What are the typical failure modes (timeout, connection pool exhaustion, thread starvation)?
-3. How does fail-fast prevent cascade?
-
-### Timeout vs Retry vs Circuit Breaker
-1. What is the relationship between HTTP timeout and circuit breaker?
-2. When to use retry with exponential backoff vs circuit breaker?
-3. How do they interact (retry amplification)?
-
-### Fallback Patterns
-1. What are safe fallback strategies (cached response, degraded response, queued)?
-2. What are unsafe fallbacks to avoid?
-
-### Bulkhead vs Circuit Breaker
-1. How does bulkhead isolation differ from circuit breaker?
-2. When to use each?
-
-### Observability
-1. What metrics are essential for circuit breaker monitoring?
-2. Standard metric names and meanings?
-
-### Case Studies
-1. CMMS: Invoice → PDF → WhatsApp — how to isolate WhatsApp failures
-2. PPOB: User → Order → Provider → Payment Gateway → WhatsApp — critical vs async dependencies
+1. How do unconstrained timeouts lead to resource exhaustion (thread/connection starvation) and cascading failure?
+2. What are the formal states and transition triggers of a Circuit Breaker (CLOSED, OPEN, HALF_OPEN)?
+3. How does Circuit Breaker differ fundamentally from Timeout, Retry, Bulkhead, and Load Shedding?
+4. What failure modes exist (thundering herd on probe, premature opening, 4xx false positives, stuck open)?
+5. What observable metrics and alerting signals define production circuit breaker health?
+6. What async decoupling patterns (queue-based load leveling) enable safe fallback for non-critical flows?
 
 ## Search Strategy
-1. Primary sources: Go standard library patterns, Netflix Hystrix docs, AWS/Azure/GCP resilience docs
-2. Standards: RFCs, ISO standards for distributed systems
-3. Reputable engineering blogs: Martin Fowler, Netflix Tech Blog, Google SRE books
-4. Go-specific: gobreaker, sony/gobreaker, go-resilience libraries
+1. Primary docs: Microsoft Azure Architecture Center (Cloud Design Patterns), Martin Fowler canonical Bliki, Google SRE Book/Workbook.
+2. Production impls: Netflix Hystrix Wiki (How it Works), Sony gobreaker, cep21/circuit.
+3. Retry/backoff: AWS Architecture Blog (Exponential Backoff and Jitter), AWS Builder's Library (attempted fetch; fallback to AWS Blog + Azure Retry).
+4. Cross-check every major claim against ≥2 independent sources; record verbatim evidence with URL + published date.
 
 ## Expected Primary Sources
-- Netflix Hystrix documentation (original circuit breaker implementation)
-- Martin Fowler's Circuit Breaker pattern article
-- Microsoft Azure Circuit Breaker pattern docs
-- AWS Well-Architected Framework reliability pillar
-- Google SRE Handbook (circuit breaker, timeout, retry)
-- Go resilience libraries source code (sony/gobreaker, cep21/circuit)
+- Martin Fowler, Circuit Breaker — https://martinfowler.com/bliki/CircuitBreaker.html (2014-03-06)
+- Microsoft Azure, Circuit Breaker pattern — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker (2025-02-05)
+- Netflix Hystrix, How it Works — https://github.com/Netflix/Hystrix/wiki/How-it-Works (2017-07-03)
+- Sony gobreaker — https://github.com/sony/gobreaker; cep21/circuit — https://github.com/cep21/circuit
+- Google SRE, Handling Overload — https://sre.google/sre-book/handling-overload/; Managing Load — https://sre.google/workbook/managing-load/
+- AWS, Exponential Backoff And Jitter — https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/ (2015-03-04)
 
 ## Risks / Unknowns
-- Exact HALF_OPEN probe semantics vary across implementations
-- Thread-safety mechanisms: mutex vs atomic vs channels
-- Production threshold recommendations (not invented)
-- Interaction between timeout, retry, and circuit breaker in practice
+- State transition trigger variance: consecutive failure count vs rolling-window error % vs time-bounded count.
+- HALF_OPEN probe concurrency bounds across distributed fleet vs single-process breaker (no shared coordination).
+- Adaptive vs static thresholds (Azure mentions AI/ML adaptive; not verified as production standard).
+- Builder's Library direct fetch returned placeholder; cross-checked via AWS Blog + Azure Retry instead (marked NOT VERIFIED standalone).

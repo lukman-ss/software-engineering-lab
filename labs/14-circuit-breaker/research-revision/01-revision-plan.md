@@ -2,25 +2,33 @@
 
 Target Lab: labs/14-circuit-breaker
 
-Previous Audit Status: NEEDS_REVISION
+Previous Audit Status: APPROVED_WITH_WARNINGS
 
 ## Blocking Issues
-1. Three primary source URLs cited in `02-sources.md` are returning HTTP 404 Not Found (cep21/circuitbreaker, Google SRE load shedding, Azure fallback pattern).
-2. Major limitations and final synthesis claims (e.g., in-memory state tracking limitations, asynchronous non-critical flows must be decoupled) lack any supporting citations or evidence.
+
+None identified.
 
 ## Non-Blocking Issues
-1. The AWS Builder's Library source cited in evidence and report files is absent from the master source inventory in `02-sources.md`.
-2. Minor framing differences regarding whether consecutive failures vs rolling windows are "disagreements" or "implementation variances".
+
+1. **AWS URL Redirection**: The link `https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/` permanently redirects (301) to AWS Builder Center (`https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter`).
+
+2. **Error Filter Simplification**: While `research/09-failure-modes.md` identifies counting 4xx errors as a failure mode, the implementation in `circuitbreaker.go` increments failure counters on any non-nil error without providing an error predicate.
+
+3. **Unimplemented Metrics**: Observability metrics described in `research/08-observability.md` and `README.md` are not exposed via any metrics export in the Go code.
+
+4. **HALF_OPEN Concurrency Test**: Test suite verifies concurrency in general, but lacks a targeted test verifying probe throttling when multiple concurrent callers hit `HALF_OPEN`.
 
 ## Files To Modify
-- research/02-sources.md (fix broken URLs, add missing sources)
-- research/03-evidence.md (add proper source citation for Evidence 5)
-- research/05-report.md (add citations for limitation claim, update Finding 3 source citations)
-- research/10-final-research.md (soften overgeneralized claim about async flows)
+
+- `research/02-sources.md` - Update AWS URL
+- `README.md` - Add clarification about error filtering and metrics being architectural guidance
+- `research/09-failure-modes.md` - May need clarification note
+- `research/08-observability.md` - May need clarification note
 
 ## Verification Plan
-- Source verification: Confirm all cited URLs are accessible and support the claims they are meant to support
-- Tests: Not applicable (research-only revision per pipeline override)
-- Build: Not applicable
-- Demo: Not applicable
-- Documentation consistency: Verify research changes align with audit findings and source material
+
+- source verification: Check that updated URL resolves correctly
+- documentation consistency: Ensure README matches research files
+- build: Run `go build ./...` to ensure no syntax errors
+- tests: Run `go test ./...` to ensure tests still pass
+- demo: Run `go run ./cmd/demo` to verify demo still works
