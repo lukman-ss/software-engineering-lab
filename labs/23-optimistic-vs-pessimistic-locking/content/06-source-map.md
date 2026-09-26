@@ -61,7 +61,7 @@ internal/inventory/store.go — `AtomicDeduct()` method (lines 155-173)
 internal/inventory/service.go — `DeductAtomic()` (lines 47-49)
 
 Tests:
-tests/locking_test.go — `TestAtomicConditionalUpdate()` (lines 147-170)
+tests/locking_test.go — `TestAtomicConditionalUpdate()` (lines 147-171)
 
 Demo:
 cmd/demo/main.go — Scenario [5] Atomic Operation (lines 99-116)

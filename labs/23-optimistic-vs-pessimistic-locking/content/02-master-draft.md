@@ -103,7 +103,7 @@ UPDATE products SET stock = stock - 3 WHERE id=1 AND stock >= 3;
 - `rowLocks map[int]*sync.Mutex` — tiap row punya mutex terpisah, meniru `SELECT ... FOR UPDATE`
 - `products map[int]*Product` — data terseksi dengan field `Stock` dan `Version`
 - `NaiveDeduct` — read, sleep, write; tidak aman
-- `PessimisticDeduct` — acuisisi row lock, validasi, update; aman
+- `PessimisticDeduct` — akuisisi row lock, validasi, update; aman
 - `OptimisticDeduct` — baca + version check di dalam lock; return `ErrOptimisticLock` bila konflik
 - `AtomicDeduct` — satu operasi lock-unlock dengan update terpisah; aman
 
@@ -238,7 +238,9 @@ Demo CLI menampilkan Lima skenario berdampingan (stok awal = 100):
 
 [4] Optimistic Locking With Exponential Backoff Retry (20 requests):
     Successful Deductions: 20
+    Total Attempted Conflicts Retried: 61
     Actual Final Stock:   80 (All retries converged)
+    Elapsed Time:         ~50ms
 
 [5] Atomic Single-Statement Operation:
     Actual Final Stock:   50 (Lockless Single Statement)

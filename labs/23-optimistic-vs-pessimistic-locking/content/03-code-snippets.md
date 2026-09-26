@@ -191,7 +191,7 @@ func (svc *Service) DeductOptimisticWithRetry(id int, qty int, maxRetries int) e
 ```
 
 Explanation:
-Retry loop dengan exponential backoff: attempt 0 = ~0ms, 1 = ~2ms, 2 = ~4ms, ... Jitter `rand.Intn(5)` mencegah thundering-herd. Jika kehabisan retry → kembalikan `ErrOptimisticLock` (analog HTTP 409).
+Retry loop dengan exponential backoff: attempt 0 = ~1-6ms, 1 = ~2-7ms, 2 = ~4-9ms, ... Jitter `rand.Intn(5)` mencegah thundering-herd. Jika kehabisan retry → kembalikan `ErrOptimisticLock` (analog HTTP 409).
 
 ## Snippet 7 — Atomic Single-Statement Update
 
