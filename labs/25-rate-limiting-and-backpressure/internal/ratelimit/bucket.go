@@ -55,10 +55,18 @@ func (tb *TokenBucket) Tokens() float64 {
 func (tb *TokenBucket) RetryAfterSeconds(n float64) int {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
-	if tb.tokens >= n {
+
+	now := time.Now()
+	elapsed := now.Sub(tb.lastRefill).Seconds()
+	tokens := tb.tokens + elapsed*tb.refillRate
+	if tokens > tb.capacity {
+		tokens = tb.capacity
+	}
+
+	if tokens >= n {
 		return 0
 	}
-	needed := n - tb.tokens
+	needed := n - tokens
 	secs := needed / tb.refillRate
 	if secs <= 0 {
 		return 1

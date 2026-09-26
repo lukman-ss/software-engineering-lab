@@ -66,6 +66,20 @@ func TestRegistry_TenantIsolation(t *testing.T) {
 	}
 }
 
+func TestTokenBucket_RetryAfterSeconds(t *testing.T) {
+	tb := NewTokenBucket(2, 2) // cap 2, refill 2/sec
+	if !tb.Allow() || !tb.Allow() {
+		t.Fatal("expected initial burst allowed")
+	}
+	if tb.RetryAfterSeconds(1.0) == 0 {
+		t.Fatal("expected retry after > 0 when bucket empty")
+	}
+	time.Sleep(600 * time.Millisecond)
+	if tb.RetryAfterSeconds(1.0) != 0 {
+		t.Fatal("expected retry after == 0 after refilling enough tokens")
+	}
+}
+
 func TestTokenBucket_ConcurrencyRace(t *testing.T) {
 	tb := NewTokenBucket(100, 100)
 	var wg sync.WaitGroup
