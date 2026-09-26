@@ -85,7 +85,8 @@ async function runOpencode(lab, stage, promptFile, instruction, model = MODEL_DE
     const logFile = path.join(logDir, `${stage}.log`);
 
     const promptContent = await fs.readFile(promptFile, 'utf8');
-    const input = `${promptContent}\n---\n${instruction}`;
+    const commitInstruction = `\n\n- MUST COMMIT CHANGES: Use the \`.opencode/skills/git-commit-auto/SKILL.md\` skill to commit your changes before finishing. CRITICAL: Use \`git add ${lab}\` instead of \`git add .\` to avoid committing other workers' files.`;
+    const input = `${promptContent}\n---\n${instruction}${commitInstruction}`;
 
     async function execute(mod) {
         await acquireCPU(); // DYNAMIC CPU THROTTLING
