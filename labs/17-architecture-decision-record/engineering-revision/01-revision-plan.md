@@ -1,23 +1,23 @@
 # Engineering Revision Plan
 
 Target Lab: labs/17-architecture-decision-record
-Previous Verdict: APPROVED_WITH_WARNINGS
+Previous Verdict: APPROVED
 
 ## Blocking Issues
 None.
 
 ## Non-Blocking Issues
-1. `tests/linter_test.go` lacks test coverage for duplicate ADR ID rejection (`internal/adr/linter.go:21-23`).
-2. `tests/linter_test.go` lacks concurrency stress coverage for larger record batches under race detector.
+1. Linter could explicitly reject an ADR that references itself as superseded/supersedes (LOW).
 
 ## Files To Change
-- `tests/linter_test.go`
+- `internal/adr/linter.go`
 
 ## Tests To Add/Modify
-- Add test case `duplicate ADR ID` in `TestLinter_BrokenReferences`.
-- Add test `TestLinter_ConcurrencyStress` to test validation on larger batches of records with mutual references.
+- `tests/linter_test.go` (Add a test case for self-supersession)
 
 ## Validation Commands
-- `go test -v ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+```bash
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo
+```

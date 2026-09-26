@@ -98,6 +98,18 @@ func TestLinter_BrokenReferences(t *testing.T) {
 			wantErr: "non-monotonic numbering, expected 2 but got 3",
 		},
 		{
+			name: "self supersession",
+			records: []*adr.Record{
+				{
+					ID:           1,
+					Title:        "Self",
+					Status:       adr.StatusSuperseded,
+					SupersededBy: 1,
+				},
+			},
+			wantErr: "ADR 1 cannot supersede itself",
+		},
+		{
 			name: "duplicate ADR ID",
 			records: []*adr.Record{
 				{

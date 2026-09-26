@@ -1,18 +1,18 @@
 # Engineering Revision Result
 
 Target Lab: labs/17-architecture-decision-record
-Previous Verdict: APPROVED_WITH_WARNINGS
+Previous Verdict: APPROVED
 
 ## Issue Summary
 
 Critical: 0
 High: 0
-Medium: 1
+Medium: 0
 Low: 1
 
 ## Resolution
 
-Resolved: 2
+Resolved: 1
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None.
+- None
 
 ## Re-Audit Status
 

@@ -47,7 +47,9 @@ func (l *Linter) Validate(records []*Record) []error {
 			var localErrs []error
 
 			if rec.Status == StatusSuperseded {
-				if rec.SupersededBy == 0 {
+				if rec.SupersededBy == rec.ID {
+					localErrs = append(localErrs, fmt.Errorf("ADR %d cannot supersede itself", rec.ID))
+				} else if rec.SupersededBy == 0 {
 					localErrs = append(localErrs, fmt.Errorf("ADR %d is superseded but missing superseded_by reference", rec.ID))
 				} else {
 					replacement, exists := recordMap[rec.SupersededBy]
@@ -60,11 +62,15 @@ func (l *Linter) Validate(records []*Record) []error {
 			}
 
 			if rec.Supersedes != 0 {
-				old, exists := recordMap[rec.Supersedes]
-				if !exists {
-					localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes non-existent ADR %d", rec.ID, rec.Supersedes))
-				} else if old.Status != StatusSuperseded || old.SupersededBy != rec.ID {
-					localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes ADR %d, but ADR %d is not properly marked as superseded by ADR %d", rec.ID, rec.Supersedes, rec.Supersedes, rec.ID))
+				if rec.Supersedes == rec.ID {
+					localErrs = append(localErrs, fmt.Errorf("ADR %d cannot supersede itself", rec.ID))
+				} else {
+					old, exists := recordMap[rec.Supersedes]
+					if !exists {
+						localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes non-existent ADR %d", rec.ID, rec.Supersedes))
+					} else if old.Status != StatusSuperseded || old.SupersededBy != rec.ID {
+						localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes ADR %d, but ADR %d is not properly marked as superseded by ADR %d", rec.ID, rec.Supersedes, rec.Supersedes, rec.ID))
+					}
 				}
 			}
 
