@@ -1,39 +1,37 @@
-# Code Audit Findings
+# Code Audit
 
 ## Finding 1
 
 Location: `internal/server/server.go:85-110`
-Claimed Behavior: HTTP server executes preStop delay, switches readiness probe to unready, drains in-flight requests, and shuts down listeners cleanly.
-Observed Implementation:
-- `s.SetReady(false)` marks readiness atomic flag false.
-- `preStop` timer executes with context cancellation awareness (`select { case <-time.After(s.preStop): case <-ctx.Done(): ... }`).
-- `s.srv.Shutdown(ctx)` closes listeners and stops accepting new connections.
-- `s.wg.Wait()` blocks until all active requests complete.
+Claimed Behavior: Graceful HTTP server shutdown with preStop routing delay and in-flight request draining.
+Observed Implementation: `Shutdown(ctx)` sets readiness to false atomically via `s.SetReady(false)`, executes `preStop` delay (interruptible via context cancellation), calls `srv.Shutdown(ctx)`, and waits for in-flight handlers registered via `sync.WaitGroup` to complete.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrency safety ensured via `sync.WaitGroup` and `atomic.Int32`/`atomic.Bool`.
+Notes: Correct synchronization primitives (`atomic.Bool`, `sync.WaitGroup`, `time.After` inside `select` with `ctx.Done()`).
 
 ## Finding 2
 
-Location: `internal/worker/worker.go:38-74`, `internal/worker/worker.go:86-107`
-Claimed Behavior: Worker consumes queued jobs, stops accepting jobs upon shutdown, drains active in-flight jobs within timeout, and cancels context if timeout is exceeded.
-Observed Implementation:
-- `w.stopped` atomic flag and `w.enqueueMu` prevent race conditions on channel closure and late enqueue attempts.
-- Worker goroutines monitor both `jobChan` and `w.ctx.Done()`.
-- `Stop(timeout)` closes the channel, waits on `w.wg`, and enforces the drain timeout via select/cancel fallback.
-- `GetCompletedJobs()` uses `w.completedMu` to safely return slice snapshots.
+Location: `internal/worker/worker.go:76-107`
+Claimed Behavior: Background queue worker graceful shutdown preventing post-stop enqueues and draining queued/active jobs up to a timeout.
+Observed Implementation: `w.stopped` atomic boolean coupled with `w.enqueueMu` prevents closed channel panics when `Enqueue` is called concurrently with `Stop`. Channel `w.jobChan` is closed, worker goroutines finish processing jobs, and `w.wg.Wait()` is bounded by `select` with `time.After(timeout)`. If timeout expires, `w.cancel()` signals goroutines to abort current job.
 Assessment: PASS
 Severity: LOW
-Notes: No race conditions detected under `go test -race`.
+Notes: Race-free concurrent enqueue/stop handling verified via test suite and race detector.
 
 ## Finding 3
 
-Location: `internal/db/db.go:41-71`
-Claimed Behavior: Implements expand-and-contract pattern with dual write (`SaveExpand`) and backward compatible read fallback (`GetUser`).
-Observed Implementation:
-- `SaveExpand` writes both legacy `Name` and split `FirstName`/`LastName` fields.
-- `GetUser` falls back to splitting `Name` if `FirstName`/`LastName` are absent, and constructs `Name` if only split fields exist.
-- Synchronized with `sync.RWMutex`.
+Location: `internal/db/db.go:32-71`
+Claimed Behavior: Expand-Contract database pattern supporting dual-write/read logic for legacy `Name` and modern `FirstName`/`LastName` fields.
+Observed Implementation: `InsertLegacy` writes `Name`, `SaveExpand` populates all fields (`Name`, `FirstName`, `LastName`), and `GetUser` provides fallback parsing when fields are missing or empty. Protected by `sync.RWMutex`.
 Assessment: PASS
 Severity: LOW
-Notes: All access synchronized; safe for concurrent reads and writes.
+Notes: Simplification note (`ponytail:`) properly documents in-memory ceiling and PostgreSQL/MySQL migration path.
+
+## Finding 4
+
+Location: `cmd/demo/main.go:16-78`
+Claimed Behavior: End-to-end demo execution illustrating zero-downtime deployment flow.
+Observed Implementation: Initializes background worker and HTTP server, enqueues jobs, makes a mock HTTP request taking 2s, sends simulated `SIGTERM`, triggers graceful server shutdown (with 1s preStop delay) and worker drain (5s timeout), verifying request completion.
+Assessment: PASS
+Severity: LOW
+Notes: All demo operations complete cleanly and log expected output matching claimed behavior.

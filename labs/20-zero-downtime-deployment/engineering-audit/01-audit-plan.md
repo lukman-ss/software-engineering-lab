@@ -1,36 +1,33 @@
 # Engineering Audit Plan
 
-Target Lab: `labs/20-zero-downtime-deployment`
+Target Lab: labs/20-zero-downtime-deployment
 Implementation Files:
-- `internal/db/db.go`
-- `internal/server/server.go`
-- `internal/worker/worker.go`
-
+- internal/server/server.go
+- internal/worker/worker.go
+- internal/db/db.go
+- cmd/demo/main.go
 Tests:
-- `tests/db_test.go`
-- `tests/server_test.go`
-- `tests/worker_test.go`
-
+- tests/server_test.go
+- tests/worker_test.go
+- tests/db_test.go
 Executable/Demo:
-- `cmd/demo/main.go`
-
+- cmd/demo/main.go
 Approved Research Inputs:
-- `research/runs/2026-09-25-zero-downtime-deployment/05-report.md`
-- `research/runs/2026-09-26-zero-downtime-deployment/05-report.md`
-
+- research/runs/2026-09-25-zero-downtime-deployment/05-report.md
+- research/runs/2026-09-26-zero-downtime-deployment/05-report.md
 Main Claims To Verify:
-1. Server executes preStop delay and HTTP connection draining upon SIGTERM/Shutdown request without dropping active requests.
-2. Server readiness probe toggles readiness status and detaches from load balancer immediately upon shutdown initialization.
-3. Background queue worker stops accepting new jobs upon shutdown signal while draining active jobs to completion.
-4. Database Expand-and-Contract schema pattern provides dual-write and backward-compatible read fallback for single/multi-word names.
-5. All tests pass with race detector enabled (`go test -race ./...`).
-
+1. Server readiness state changes immediately to 503 on shutdown signal.
+2. Configurable preStop delay executes properly to allow routing updates.
+3. In-flight HTTP requests complete before server process exits (Graceful Shutdown).
+4. Background worker stops taking new jobs on SIGTERM and drains existing active/queued jobs until completion or timeout.
+5. In-memory storage correctly implements Expand-Contract pattern for dual schema versions.
+6. Race detector passes cleanly with zero data races.
+7. README instructions and architectural descriptions match actual Go implementation.
 Commands To Run:
-- `go test ./...`
+- `go test -v ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
-
 Primary Risks:
-- Race conditions during concurrent HTTP server shutdown or worker stop operations.
-- Improper HTTP request lifecycle tracking causing premature termination before request draining completes.
-- Incomplete test coverage for edge cases (e.g., context timeouts during preStop, empty field handling in DB migration logic).
+- Race conditions during concurrent HTTP request draining or worker job enqueue/stop operations.
+- Improper HTTP context handling causing dropped requests or leaking goroutines.
+- Unhandled preStop context cancellation during rapid pod termination.

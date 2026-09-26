@@ -1,25 +1,25 @@
 # Engineering Audit Verdict
 
-Target Lab: `labs/20-zero-downtime-deployment`
+Target Lab: labs/20-zero-downtime-deployment
 Audit Date: 2026-09-26
 
 ## Summary
 
 Code Files Reviewed:
-- `internal/db/db.go`
 - `internal/server/server.go`
 - `internal/worker/worker.go`
+- `internal/db/db.go`
 - `cmd/demo/main.go`
 
 Tests Reviewed:
-- `tests/db_test.go`
 - `tests/server_test.go`
 - `tests/worker_test.go`
+- `tests/db_test.go`
 
 Commands Executed:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+- `go test -v ./...` (PASS)
+- `go test -race ./...` (PASS)
+- `go run ./cmd/demo` (PASS)
 
 Failures: 0
 Warnings: 0
