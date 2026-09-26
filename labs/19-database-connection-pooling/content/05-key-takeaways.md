@@ -1,0 +1,5 @@
+1. **Lebih Sedikit Itu Lebih Cepat**: Ukuran *pool* ideal mendekati jumlah *core* perangkat keras dikali dua untuk mencegah perebutan *resource* CPU dan RAM.
+2. **Overhead Koneksi Nyata**: Setiap koneksi baru memiliki penalti milidetik berharga. *Pooling* wajib digunakan.
+3. **Perkalian Skala Horisontal**: Saat melakukan autoscaling instance aplikasi, sadari bahwa total ukuran klien adalah `instance_count * pool_size`. Batas ini harus dikendalikan agar tidak membunuh `max_connections` server database.
+4. **Bahaya I/O Eksternal**: Panggilan API eksternal yang lambat dilarang keras dilakukan saat menahan *lock* transaksi koneksi database aktif.
+5. **Monitor, Jangan Main Tebak**: Monitor `pg_stat_activity` dan durasi 'idle in transaction' untuk mendiagnosis masalah bukan dengan asal membesarkan ukuran *pool*.
