@@ -8,7 +8,7 @@ Research:
 - research/09-failure-modes.md (Premature Opening, Thundering Herd, Infinite Open, 4xx False Positives)
 
 Implementation:
-- internal/circuitbreaker/circuit_breaker.go (State type, Config, CircuitBreaker struct, Execute method, checkStateTransitionLocked)
+- internal/circuitbreaker/circuit_breaker.go (State type, Config, Breaker struct, Execute method, advanceLocked)
 
 Tests:
 - internal/circuitbreaker/circuit_breaker_test.go (Tests 1-16 covering all states and transitions)
@@ -21,7 +21,6 @@ Master Draft Sections:
 ## Fail-Fast Behavior
 
 Research:
-- research/03-evidence.md (Evidence 3 — Circuit Breaker prevents operations likely to fail)
 - research/03-core-concepts.md (Fail Fast purpose)
 
 Implementation:
@@ -44,12 +43,11 @@ Master Draft Section:
 
 Research:
 - research/03-core-concepts.md (HALF_OPEN state description)
-- research/03-evidence.md (Evidence 4 — Half-Open limits traffic)
 - research/05-circuit-states.md (State transitions)
 
 Implementation:
-- internal/circuitbreaker/circuit_breaker.go:64-71 (checkStateTransitionLocked — OPEN to HALF_OPEN)
-- internal/circuitbreaker/circuit_breaker.go:82-121 (HALF_OPEN handling with HalfOpenMaxCalls)
+- internal/circuitbreaker/circuit_breaker.go:83-88 (advanceLocked — OPEN to HALF_OPEN)
+- internal/circuitbreaker/circuit_breaker.go:91-125 (HALF_OPEN handling with HalfOpenMaxCalls)
 
 Tests:
 - internal/circuitbreaker/circuit_breaker_test.go Test 7 (cooldown moves toward HALF_OPEN)
@@ -73,8 +71,8 @@ Research:
 - research/03-core-concepts.md (Thread Safety — Mutex, Atomic, Channel patterns)
 
 Implementation:
-- internal/circuitbreaker/circuit_breaker.go:28 (sync.Mutex on CircuitBreaker struct)
-- internal/circuitbreaker/circuit_breaker.go (all mutations guarded by cb.mu.Lock())
+- internal/circuitbreaker/circuit_breaker.go:53 (sync.Mutex on Breaker struct)
+- internal/circuitbreaker/circuit_breaker.go (all mutations guarded by b.mu.Lock())
 
 Tests:
 - internal/circuitbreaker/circuit_breaker_test.go Test 11 (50 concurrent goroutines)
@@ -92,7 +90,7 @@ Master Draft Sections:
 
 Research:
 - research/06-timeout-retry-backoff.md (Timeout bounds execution, Retry risks, Synergy)
-- research/03-evidence.md (Evidence 5 — Retry storms from unbounded retries)
+- research/03-core-concepts.md (Fail Fast purpose)
 
 Master Draft Sections:
 - Common Mistakes, Production Considerations
@@ -102,7 +100,6 @@ Master Draft Sections:
 ## Cascade Failure
 
 Research:
-- research/03-evidence.md (Evidence 1 — blocked requests hold critical resources)
 - research/10-final-research.md (Circuit Breakers isolate network blast radius)
 
 README:
@@ -197,12 +194,10 @@ Master Draft:
 ### Research Files:
 - research/01-research-plan.md
 - research/02-sources.md (13 sources)
-- research/03-evidence.md
 - research/03-core-concepts.md
-- research/04-contradictions.md
+- research-audit/04-contradictions.md
 - research/05-circuit-states.md
 - research/06-timeout-retry-backoff.md
-- research/06-open-questions.md
 - research/09-failure-modes.md
 - research/10-final-research.md
 

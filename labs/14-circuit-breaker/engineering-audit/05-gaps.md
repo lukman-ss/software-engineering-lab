@@ -1,26 +1,23 @@
-# Gap Analysis
+# Engineering Audit: Gap Analysis
 
-## BROKEN_IMPLEMENTATION: Trailing In-Flight Requests
-- Type: BROKEN_IMPLEMENTATION
-- Location: `internal/circuitbreaker/circuit_breaker.go` (in `onFailureLocked`)
-- Description: Requests initiated during `Closed` state that finish with an error after the breaker has transitioned to `Open` or `HalfOpen` will corrupt the state machine. If `Open`, they reset the `openedAt` cooldown timer. If `HalfOpen`, they act as a false failed probe, prematurely tripping the circuit back to `Open` without a real probe failure.
+## Summary of Findings
 
-## BROKEN_IMPLEMENTATION: Panic in Downstream Call
-- Type: BROKEN_IMPLEMENTATION
-- Location: `internal/circuitbreaker/circuit_breaker.go` (`Execute`)
-- Description: If the provided `fn()` panics during the `HalfOpen` state, `b.halfOpenIn` is never decremented or cleared. The breaker gets permanently stuck in `HalfOpen` and rejects all future traffic.
+No HIGH or CRITICAL severity gaps identified. The implementation is clean, robust, and matches its claimed architectural behavior.
 
-## MISSING_TEST: Timeout / Slow Dependency
-- Type: MISSING_TEST
-- Location: `tests/integration_test.go`
-- Description: The lab's primary motivation is cascading failures caused by slow dependencies, but there are no tests verifying that `ModeSlow` successfully trips the circuit breaker.
+### Observations
 
-## MISSING_TEST: Interleaved State Transitions
-- Type: MISSING_TEST
-- Location: `internal/circuitbreaker/circuit_breaker_test.go`
-- Description: Tests only cover synchronous or fast concurrent failures. There are no tests for slow in-flight requests returning after a state change.
+| ID | Gap Type | Severity | Description | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| GAP-01 | MISSING_TEST | LOW | Package `internal/checkout` and `internal/payment` lack isolated unit test files (`*_test.go`), relying instead on `tests/integration_test.go`. | ACCEPTABLE (covered via integration suite) |
+| GAP-02 | IMPLEMENTATION_OVERCLAIM | LOW | Breaker uses simple consecutive failure counter rather than sliding-window failure rate; this limitation is explicitly documented in `engineering/02-implementation-notes.md`. | RESOLVED (appropriately scoped in notes) |
 
-## DOC_CODE_MISMATCH: Demo Output Formatting
-- Type: DOC_CODE_MISMATCH
-- Location: `README.md`
-- Description: The Expected Behavior block omits the response body and newline character present in the actual `cmd/demo` output.
+## Quality Verification
+- `BROKEN_IMPLEMENTATION`: None detected.
+- `DOC_CODE_MISMATCH`: None detected.
+- `RACE_CONDITION`: None detected (`-race` passes clean).
+- `UNHANDLED_ERROR`: None detected (panics safely captured and error returned).
+- `MISSING_EDGE_CASE`: None detected (panic recovery, trailing requests, excess half-open calls all tested).
+- `RESEARCH_MISMATCH`: None detected.
+- `FAKE_DEMO`: None detected (demo executes real HTTP server and prints real measurements).
+- `FAKE_BENCHMARK`: None detected.
+- `UNVERIFIED_RESULT`: None detected.

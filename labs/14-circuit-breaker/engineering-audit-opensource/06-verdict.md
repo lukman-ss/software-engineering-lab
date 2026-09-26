@@ -1,56 +1,53 @@
 # Engineering Audit Verdict
 
-Target Lab: `labs/14-circuit-breaker`
+Target Lab: labs/14-circuit-breaker
 Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed: 7
-- `internal/circuitbreaker/circuit_breaker.go`
-- `internal/circuitbreaker/circuit_breaker_test.go`
-- `internal/payment/client.go`
-- `internal/payment/fake_server.go`
-- `internal/checkout/service.go`
-- `cmd/demo/main.go`
-- `tests/integration_test.go`
-
-Tests Reviewed: 15 test cases (13 unit/concurrency + 2 integration subtests).
-
+Code Files Reviewed:
+- internal/circuitbreaker/circuit_breaker.go
+- internal/payment/client.go
+- internal/payment/fake_server.go
+- internal/checkout/service.go
+- cmd/demo/main.go
+Tests Reviewed:
+- internal/circuitbreaker/circuit_breaker_test.go (16 tests)
+- tests/integration_test.go (2 tests, 3 subtests)
 Commands Executed:
-- `go test -count=1 -race ./...` → EXIT 0, all packages PASS (`circuitbreaker/internal/circuitbreaker`, `circuitbreaker/tests`).
-- `go test -count=1 -race -v ./...` → 15/15 PASS, zero race warnings.
-- `go run ./cmd/demo` → EXIT 0, all 4 scenarios print; transitions match README structure.
-- `go vet ./...` → EXIT 0.
-- `gofmt -l .` → flags `internal/circuitbreaker/circuit_breaker.go`, `cmd/demo/main.go` (cosmetic import ordering/alignment only).
-
+- go build ./...
+- go test -count=1 -v ./...
+- go test -race -count=1 ./...
+- go run ./cmd/demo
 Failures: 0
-Warnings: 1 MEDIUM (README error-format mismatch), 5 LOW (untested config paths, timing precision, gofmt).
+Warnings: 0 (tests / build / race / demo all green)
 
 ## Quality Gates
 
 Compilation: PASS
-Tests: PASS
-Race Detector: PASS
-Demo: PASS
-Research Alignment: NOT_APPLICABLE (engineering-only audit per pipeline override)
-Documentation Accuracy: WARNING (error message `body` segment omitted from README expected output)
+Tests: PASS (18/18)
+Race Detector: PASS (clean, no warnings)
+Demo: PASS (matches README Expected Behavior)
+Research Alignment: PASS (implementation aligns with approved design; research content not re-audited per PIPELINE OVERRIDE)
+Documentation Accuracy: WARNING (stale function name + stale test list + stale execution-result scenario-1 formatting in engineering notes)
 
 ## Blocking Issues
-
-None.
+1. — None. No HIGH/CRITICAL findings.
 
 ## Non-Blocking Issues
-
-1. MEDIUM: README "Expected Behavior" snippet omits ` body <body>` segment emitted by `client.go:42`. Actual demo shows `payment failed: status 500 body internal payment server failure` vs README's `payment failed: status 500`. Update README to match.
-2. LOW: `HalfOpenMaxCalls > 1` multi-probe path untested (all tests use `1`).
-3. LOW: `New()` default fallbacks (zero-valued Config) untested.
-4. LOW: README embeds exact microsecond timings that vary run-to-run (tolerated by its own "illustrative" disclaimer).
-5. LOW: `gofmt -l` flags two files (cosmetic).
+1. DOC_CODE_MISMATCH: engineering/02-implementation-notes.md references `checkStateTransitionLocked`; actual function is `advanceLocked` (LOW).
+2. DOC_CODE_MISMATCH: engineering/03-execution-result.md lists 11 unit + 1 integration test; current code has 16 + 2 (LOW, stale doc).
+3. DOC_CODE_MISMATCH: engineering/03-execution-result.md scenario 1 shows `state=CLOSED` for without-breaker calls; code omits state (LOW, stale doc).
+4. MISSING_TEST: HALF_OPEN flood with N>1 concurrent probes not asserted; payment/client and checkout packages lack dedicated unit tests (LOW).
+5. MISSING_EDGE_CASE: explicit zero-value Config path not asserted (LOW).
 
 ## Required Revisions
-
-1. Sync README "Expected Behavior" error strings with actual `client.go:42` format (add ` body internal payment server failure`).
+1. Correct stale function name (`checkStateTransitionLocked` -> `advanceLocked`) in engineering/02-implementation-notes.md.
+2. Update engineering/03-execution-result.md test inventory and scenario-1 formatting to match actual demo output.
+3. (Non-blocking) Optional: add direct unit tests for N>1 HALF_OPEN concurrent probes and zero-value Config.
 
 ## Final Status
 
 APPROVED_WITH_WARNINGS
+
+Rationale: Code compiles, all required tests pass including race detector, demo reproduces README behavior, and core circuit-breaker transitions (CLOSED->OPEN->HALF_OPEN->CLOSED/OPEN), fail-fast, downstream-call suppression, and concurrency/generation safety are all proven. Only documentation staleness (LOW) prevents full APPROVED. No blocking issues.

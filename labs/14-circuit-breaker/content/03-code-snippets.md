@@ -5,12 +5,19 @@ Source File: `internal/circuitbreaker/circuit_breaker.go`
 Purpose: Defines the three operational states of the circuit breaker state machine.
 
 ```go
-type State string
+type State int
 
 const (
-	StateClosed   State = "CLOSED"
-	StateOpen     State = "OPEN"
-	StateHalfOpen State = "HALF_OPEN"
+	Closed State = iota
+	Open
+	HalfOpen
+)
+
+// Exported aliases for external compatibility
+const (
+	StateClosed   = Closed
+	StateOpen     = Open
+	StateHalfOpen = HalfOpen
 )
 ```
 
@@ -18,7 +25,7 @@ const (
 
 Source File: `internal/circuitbreaker/circuit_breaker.go`
 
-Purpose: Configuration struct and default values for the circuit breaker.
+Purpose: Configuration struct, default values, and constructor for the circuit breaker.
 
 ```go
 type Config struct {
@@ -27,23 +34,26 @@ type Config struct {
 	HalfOpenMaxCalls int
 }
 
-func New(cfg Config) *CircuitBreaker {
+func DefaultConfig() Config {
+	return Config{
+		FailureThreshold: 3,
+		OpenTimeout:      300 * time.Millisecond,
+		HalfOpenMaxCalls: 1,
+	}
+}
+
+func New(cfg Config) *Breaker {
 	if cfg.FailureThreshold <= 0 {
 		cfg.FailureThreshold = 3
 	}
 	if cfg.OpenTimeout <= 0 {
-		cfg.OpenTimeout = 5 * time.Second
+		cfg.OpenTimeout = 300 * time.Millisecond
 	}
 	if cfg.HalfOpenMaxCalls <= 0 {
 		cfg.HalfOpenMaxCalls = 1
 	}
 
-	return &CircuitBreaker{
-		state:           StateClosed,
-		config:          cfg,
-		lastStateChange: time.Now(),
-		now:             time.Now,
-	}
+	return &Breaker{cfg: cfg, state: Closed}
 }
 ```
 
@@ -54,12 +64,11 @@ Source File: `internal/circuitbreaker/circuit_breaker.go`
 Purpose: Checks if OPEN circuit should transition to HALF_OPEN based on elapsed time.
 
 ```go
-func (cb *CircuitBreaker) checkStateTransitionLocked() {
-	if cb.state == StateOpen && cb.now().Sub(cb.lastStateChange) >= cb.config.OpenTimeout {
-		cb.state = StateHalfOpen
-		cb.halfOpenCalls = 0
-		cb.consecutiveSuccesses = 0
-		cb.lastStateChange = cb.now()
+func (b *Breaker) advanceLocked(now time.Time) {
+	if b.state == Open && now.Sub(b.openedAt) >= b.cfg.OpenTimeout {
+		b.state = HalfOpen
+		b.halfOpenIn = 0
+		b.generation++
 	}
 }
 ```
@@ -71,88 +80,40 @@ Source File: `internal/circuitbreaker/circuit_breaker.go`
 Purpose: Core execution method implementing the three-state machine with fail-fast, probe limiting, and panic handling.
 
 ```go
-func (cb *CircuitBreaker) Execute(fn func() error) error {
-	cb.mu.Lock()
-	cb.checkStateTransitionLocked()
-
-	switch cb.state {
-	case StateOpen:
-		cb.mu.Unlock()
+func (b *Breaker) Execute(fn func() error) (err error) {
+	b.mu.Lock()
+	b.advanceLocked(time.Now())
+	gen := b.generation
+	switch b.state {
+	case Open:
+		b.mu.Unlock()
 		return ErrCircuitOpen
-
-	case StateHalfOpen:
-		if cb.halfOpenCalls >= cb.config.HalfOpenMaxCalls {
-			cb.mu.Unlock()
+	case HalfOpen:
+		if b.halfOpenIn >= b.cfg.HalfOpenMaxCalls {
+			b.mu.Unlock()
 			return ErrCircuitOpen
 		}
-		cb.halfOpenCalls++
-		cb.mu.Unlock()
-
-		defer func() {
-			if r := recover(); r != nil {
-				cb.mu.Lock()
-				defer cb.mu.Unlock()
-				cb.state = StateOpen
-				cb.lastStateChange = cb.now()
-				cb.failureCount = 0
-				cb.halfOpenCalls = 0
-				panic(r)
-			}
-		}()
-
-		err := fn()
-
-		cb.mu.Lock()
-		defer cb.mu.Unlock()
-		if err != nil {
-			cb.state = StateOpen
-			cb.lastStateChange = cb.now()
-			cb.failureCount = 0
-			cb.halfOpenCalls = 0
-			return err
-		}
-
-		cb.consecutiveSuccesses++
-		if cb.consecutiveSuccesses >= cb.config.HalfOpenMaxCalls {
-			cb.state = StateClosed
-			cb.lastStateChange = cb.now()
-			cb.failureCount = 0
-			cb.halfOpenCalls = 0
-		}
-		return nil
-
-	default: // StateClosed
-		cb.mu.Unlock()
-
-		defer func() {
-			if r := recover(); r != nil {
-				cb.mu.Lock()
-				defer cb.mu.Unlock()
-				cb.failureCount++
-				if cb.failureCount >= cb.config.FailureThreshold {
-					cb.state = StateOpen
-					cb.lastStateChange = cb.now()
-				}
-				panic(r)
-			}
-		}()
-
-		err := fn()
-
-		cb.mu.Lock()
-		defer cb.mu.Unlock()
-		if err != nil {
-			cb.failureCount++
-			if cb.failureCount >= cb.config.FailureThreshold {
-				cb.state = StateOpen
-				cb.lastStateChange = cb.now()
-			}
-			return err
-		}
-
-		cb.failureCount = 0
-		return nil
+		b.halfOpenIn++
+	case Closed:
 	}
+	b.mu.Unlock()
+
+	panicked := true
+	defer func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if panicked {
+			b.onFailureLocked(gen, time.Now())
+		} else if err == nil {
+			b.onSuccessLocked(gen)
+		} else {
+			b.onFailureLocked(gen, time.Now())
+		}
+	}()
+
+	err = fn()
+	panicked = false
+	return err
 }
 ```
 
@@ -164,22 +125,9 @@ Purpose: Application-level consumer that routes payment calls through the circui
 
 ```go
 func (s *Service) Checkout(ctx context.Context) error {
-	if s.cb != nil {
-		err := s.cb.Execute(func() error {
-			return s.paymentClient.ProcessPayment(ctx)
-		})
-		if err != nil {
-			return fmt.Errorf("checkout payment failed (with CB): %w", err)
-		}
-		return nil
-	}
-
-	// Without Circuit Breaker
-	err := s.paymentClient.ProcessPayment(ctx)
-	if err != nil {
-		return fmt.Errorf("checkout payment failed (no CB): %w", err)
-	}
-	return nil
+	return s.breaker.Execute(func() error {
+		return s.payment.ProcessPayment(ctx)
+	})
 }
 ```
 
@@ -221,7 +169,8 @@ func NewFakeServer(slowDelay time.Duration) *FakeServer {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status":"ok_slow"}`))
 		case ModeDown:
-			http.Error(w, "internal payment server failure", http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("internal payment server failure"))
 		default: // ModeHealthy
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status":"ok"}`))

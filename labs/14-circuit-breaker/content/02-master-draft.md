@@ -20,49 +20,61 @@ The Circuit Breaker pattern implements three states:
 The implementation uses a synchronized struct with mutex protection:
 
 ```go
-type CircuitBreaker struct {
-	mu                   sync.Mutex
-	state                State
-	failureCount         int
-	consecutiveSuccesses int
-	halfOpenCalls        int
-	lastStateChange      time.Time
-	config               Config
-	now                  func() time.Time
+type Breaker struct {
+	mu         sync.Mutex
+	cfg        Config
+	state      State
+	failures   int
+	openedAt   time.Time
+	halfOpenIn int
+	generation uint64
 }
+```
+
+State is declared as an integer enum:
+
+```go
+type State int
+
+const (
+	Closed State = iota
+	Open
+	HalfOpen
+)
 ```
 
 ### State Transitions
 Transitions occur based on failure counts and timeouts:
-- CLOSED → OPEN: When `failureCount >= FailureThreshold`
-- OPEN → HALF_OPEN: When `now().Sub(lastStateChange) >= OpenTimeout`
-- HALF_OPEN → CLOSED: After `HalfOpenMaxCalls` consecutive successes
+- CLOSED → OPEN: When `failures >= FailureThreshold`
+- OPEN → HALF_OPEN: When `time.Since(openedAt) >= OpenTimeout` (via `advanceLocked(now)`)
+- HALF_OPEN → CLOSED: On the first successful probe when `state == HalfOpen`
 - HALF_OPEN → OPEN: On any failure during HALF_OPEN
 
 ### Execution Flow
 ```go
-func (cb *CircuitBreaker) Execute(fn func() error) error {
-	cb.mu.Lock()
-	cb.checkStateTransitionLocked()
+func (b *Breaker) Execute(fn func() error) error {
+	b.mu.Lock()
+	b.advanceLocked(time.Now())
+	gen := b.generation
 
-	switch cb.state {
-	case StateOpen:
-		cb.mu.Unlock()
+	switch b.state {
+	case Open:
+		b.mu.Unlock()
 		return ErrCircuitOpen
 
-	case StateHalfOpen:
+	case HalfOpen:
 		// Allow limited probe calls
-		if cb.halfOpenCalls >= cb.config.HalfOpenMaxCalls {
-			cb.mu.Unlock()
+		if b.halfOpenIn >= b.cfg.HalfOpenMaxCalls {
+			b.mu.Unlock()
 			return ErrCircuitOpen
 		}
-		cb.halfOpenCalls++
-		cb.mu.Unlock()
+		b.halfOpenIn++
+		b.mu.Unlock()
 		// Execute function and handle result
 		// ...
 
-	default: // StateClosed
-		cb.mu.Unlock()
+	default: // Closed
+		b.mu.Unlock()
 		// Execute function and handle failures
 		// ...
 	}
@@ -81,7 +93,7 @@ cb := circuitbreaker.New(circuitbreaker.Config{
 
 ### Using in Checkout Service
 ```go
-svc := checkout.NewService(paymentClient, cb)
+svc := checkout.New(paymentClient, cb)
 err := svc.Checkout(ctx)
 // Returns ErrCircuitOpen when OPEN, otherwise payment errors or success
 ```
@@ -128,6 +140,10 @@ Automatic recovery occurs after OpenTimeout elapses:
 - Implementation uses consecutive failure counting; production may require sliding window or error rate
 - Consider externalizing circuit state for microservice fleets (Redis/Consul) vs per-instance
 - Classify errors carefully — typically only 5xx and timeouts should trip breaker, not 4xx client errors
+- Pedagogical minimalism: lab `Breaker.Execute` counts any `err != nil` with no `IsFailure(error) bool` predicate, and does not export metrics — intentional simplification to keep state machine readable
+
+## Observability
+Architectural recommendation only (not instrumented in minimal lab code): `circuit_state` gauge (0=CLOSED,1=OPEN,2=HALF_OPEN), `circuit_open_count`, `rejected_call_count`, `failure_count`, `dependency_latency` P50/P95/P99 per research/08-observability.md. Lab exposes only `State() State`; production requires Prometheus/OpenTelemetry wiring.
 
 ## Common Mistakes
 - Setting FailureThreshold too low causing premature opening on transient blips
@@ -162,7 +178,6 @@ Automatic recovery occurs after OpenTimeout elapses:
   - Timeout/retry/backoff: research/06-timeout-retry-backoff.md
   - Failure modes: research/09-failure-modes.md
   - Final synthesis: research/10-final-research.md
-  - Evidence: research/03-evidence.md
   - Sources: research/02-sources.md
 - Implementation: labs/14-circuit-breaker/internal/
   - Circuit breaker: internal/circuitbreaker/circuit_breaker.go

@@ -1,37 +1,73 @@
-# Code Audit
+# Engineering Code Audit: Circuit Breaker
 
 ## Finding 1
 
-Location: `internal/circuitbreaker/circuit_breaker.go:88` (`onFailureLocked`)
-Claimed Behavior: Breaker transitions cleanly between states and honors the cooldown timer.
-Observed Implementation: `onFailureLocked` does not check if the request that failed was initiated in the current state. If a long-running request starts during `Closed`, takes 500ms, and fails, but the breaker tripped to `Open` at 100ms, the trailing request calls `onFailureLocked(now)` while the state is `Open` or `HalfOpen`. If `Open`, it overwrites `b.openedAt = now`, completely resetting the cooldown timer. If `HalfOpen`, it forces the state to `Open`, treating the old trailing request as a failed probe.
-Assessment: FAIL
-Severity: HIGH
-Notes: Requests must carry a "generation" or the state machine must ignore failures from requests that started before the last state transition.
+Location: `internal/circuitbreaker/circuit_breaker.go:141-158`
+Claimed Behavior: Circuit transitions from CLOSED to OPEN when consecutive failures reach `FailureThreshold`.
+Observed Implementation: `onFailureLocked` checks generation match, increments `b.failures`, and when `b.failures >= b.cfg.FailureThreshold`, sets `b.state = Open`, updates `b.openedAt = now`, and increments `b.generation++`.
+Assessment: PASS
+Severity: LOW
+Notes: Correctly tracks failures and resets or increments generation on transition.
 
 ## Finding 2
 
-Location: `internal/circuitbreaker/circuit_breaker.go:49` (`Execute`)
-Claimed Behavior: Circuit breaker handles state robustly and recovers via probe mechanism.
-Observed Implementation: When state is `HalfOpen`, `b.halfOpenIn` is incremented. `onSuccessLocked` or `onFailureLocked` are called after `fn()` returns to reset `b.halfOpenIn`. However, if `fn()` panics, neither function is called. The mutex is unlocked properly, but `b.halfOpenIn` remains permanently incremented. Any future request in `HalfOpen` sees `b.halfOpenIn >= b.cfg.HalfOpenMaxCalls` and returns `ErrCircuitOpen`. The breaker is permanently stuck in `HalfOpen`.
-Assessment: FAIL
-Severity: HIGH
-Notes: A `defer` should be used to catch panics and properly fail the request or clear the probe counter.
+Location: `internal/circuitbreaker/circuit_breaker.go:95-98`
+Claimed Behavior: When OPEN, calls fail fast immediately returning `ErrCircuitOpen` with zero downstream calls.
+Observed Implementation: Mutex acquired, `advanceLocked` checks if cooldown elapsed. If still OPEN, returns `ErrCircuitOpen` immediately after mutex unlock without invoking `fn()`.
+Assessment: PASS
+Severity: LOW
+Notes: Sub-microsecond fail-fast observed in execution and tests. Downstream function is not called.
 
 ## Finding 3
 
-Location: `internal/checkout/service.go:28`
-Claimed Behavior: Scenario 1 (Without Breaker) accurately represents an unprotected call.
-Observed Implementation: `CheckoutWithoutBreaker` returns a `Result` struct where the `State` field is zero-valued. When printed in `Result.String()`, state 0 resolves to `"CLOSED"`, making the demo output print `state=CLOSED` even though no circuit breaker is present.
-Assessment: WARNING
+Location: `internal/circuitbreaker/circuit_breaker.go:83-89`
+Claimed Behavior: After cooldown duration (`OpenTimeout`), circuit transitions to HALF-OPEN.
+Observed Implementation: State advancement is evaluated lazily in `advanceLocked` invoked by both `State()` and `Execute()`. If `now.Sub(b.openedAt) >= b.cfg.OpenTimeout`, transitions to `HalfOpen`, resets `halfOpenIn = 0`, and bumps `generation++`.
+Assessment: PASS
 Severity: LOW
-Notes: Minor display issue that could slightly confuse readers.
+Notes: Lazy evaluation avoids unnecessary timer goroutines. Thread-safe under `b.mu`.
 
 ## Finding 4
 
-Location: `internal/payment/fake_server.go:34`
-Claimed Behavior: Fake server simulates failures effectively.
-Observed Implementation: `http.Error` writes the error string followed by a newline `\n`. This newline propagates into the error returned by the client, causing multi-line formatting in logs.
-Assessment: WARNING
+Location: `internal/circuitbreaker/circuit_breaker.go:99-106`
+Claimed Behavior: In HALF-OPEN state, limit concurrent probes up to `HalfOpenMaxCalls`; excess calls fail fast.
+Observed Implementation: While in `HalfOpen`, if `halfOpenIn >= cfg.HalfOpenMaxCalls`, rejects additional concurrent requests with `ErrCircuitOpen`. Otherwise increments `halfOpenIn` and executes probe.
+Assessment: PASS
 Severity: LOW
-Notes: Causes documentation mismatch in README demo output.
+Notes: Successfully prevents probe storms against recovering downstream services.
+
+## Finding 5
+
+Location: `internal/circuitbreaker/circuit_breaker.go:94,127-130,141-144`
+Claimed Behavior: In-flight calls from earlier states/generations must not corrupt newly transitioned states.
+Observed Implementation: `gen := b.generation` captured under lock before execution. In deferred completion handlers (`onSuccessLocked` / `onFailureLocked`), if `b.generation != gen`, the result is discarded.
+Assessment: PASS
+Severity: LOW
+Notes: Effectively neutralizes race condition where slow requests from CLOSED or OPEN state resolve after breaker has transitioned to HALF-OPEN or CLOSED.
+
+## Finding 6
+
+Location: `internal/circuitbreaker/circuit_breaker.go:109-125`
+Claimed Behavior: Panics during user execution must not leave breaker corrupted or lock held.
+Observed Implementation: Mutex is unlocked during `fn()` execution. Deferred function runs with boolean flag `panicked := true` flipped to `false` only on clean return. If `fn()` panics, defer re-locks mutex and treats panic as failure (`onFailureLocked`), allowing panic to re-propagate cleanly without stranding state counters.
+Assessment: PASS
+Severity: LOW
+Notes: Verified by `TestPanicInHalfOpenCleansUpState`.
+
+## Finding 7
+
+Location: `internal/circuitbreaker/circuit_breaker.go:63-74`
+Claimed Behavior: Invalid or zero configuration values must fallback to safe defaults.
+Observed Implementation: `New()` validates `FailureThreshold <= 0`, `OpenTimeout <= 0`, `HalfOpenMaxCalls <= 0` and sets defaults (3, 300ms, 1 respectively).
+Assessment: PASS
+Severity: LOW
+Notes: Robust guard against uninitialized struct config.
+
+## Finding 8
+
+Location: `internal/payment/fake_server.go:34-45` & `internal/payment/client.go:27-37`
+Claimed Behavior: Simulated HTTP client and server handle timeout, 500 error, and healthy 200 response states.
+Observed Implementation: `FakeServer` uses `httptest.Server` with atomic mode flag (`ModeHealthy`, `ModeSlow`, `ModeDown`). `Client` uses standard `http.Client` with explicit timeouts.
+Assessment: PASS
+Severity: LOW
+Notes: Clean test doubles; no external dependencies or mock frameworks required.

@@ -1,41 +1,64 @@
 # Content Brief
 
-**Topic:** Circuit Breaker Pattern — Implementation and Demonstration in Go
+**Topic:** Circuit Breaker Pattern — Implementasi dan Demonstrasi di Go
 
-**Target Reader:** Backend engineers, SREs, and software architects implementing resilience patterns in distributed systems.
+**Target Reader:** Backend Engineer, SRE, dan Software Architect yang mengimplementasikan resilience patterns di sistem terdistribusi.
 
-**Problem:** Remote calls across networks fail or hang. Without protection, callers block waiting for timeouts, holding threads, sockets, and memory until system resources deplete and cascading failures propagate through the system.
+**Problem:** Panggilan remote across jaringan gagal atau timeout. Tanpa proteksi, caller memblokir menunggu timeout, memegang thread, socket, dan memory hingga sumber daya sistem terdepleksi dan kegagalan menyebar ke seluruh sistem (cascade failure).
 
-**Core Mental Model:** Circuit Breaker monitors downstream failures, trips open to block calls when a threshold is exceeded, fails fast in microseconds, then safely probes downstream before restoring traffic.
+**Core Mental Model:** Circuit Breaker memantau kegagalan downstream, mendorong (trip) OPEN untuk memblokir semua pemanggilan ketika threshold tercapai (fail-fast dalam microsecond), lalu mengirim probe terbatas (probe) sebelum mengembalikan trafik ke normal.
 
-**Approved Research Status:** APPROVED
+**Approved Research Status:** APPROVED (research-audit/07-verdict.md)
 
-**Approved Engineering Status:** APPROVED
+**Approved Engineering Status:** APPROVED (engineering-audit/06-verdict.md)
 
 **Main Concepts:**
-- Three-state machine: CLOSED, OPEN, HALF_OPEN
-- Fail-fast behavior when OPEN
-- Cooldown period with configurable timeout
-- Probe calls during HALF_OPEN to test recovery
-- Thread-safe state transitions using mutex
-- Consecutive failure counting
+- Tiga state machine: CLOSED, OPEN, HALF_OPEN
+- Fail-fast behavior ketika OPEN (tidak ada jaringan call)
+- Cooldown period dengan configurable timeout
+- Probe calls terbatas saat HALF_OPEN untuk menguji recovery
+- Thread-safe state transitions menggunakan sync.Mutex
+- Consecutive failure counting (bukan sliding window)
+- Generation-based invalidation untuk trailing in-flight requests
+- Panic safety pada saat execute
 
 **Verified Behaviors:**
-- CLOSED: All requests route to downstream; failures increment counter; successes reset counter; transitions to OPEN when failures reach threshold
-- OPEN: All requests immediately fail fast with `ErrCircuitOpen` without network calls; starts cooldown timer
-- HALF_OPEN: Allows limited probe calls; success transitions to CLOSED; failure transitions back to OPEN
-- Zero downstream requests executed when circuit is OPEN
-- Concurrency-safe under race detector with no data races
-- Panics handled without corrupting internal state
-- Default configuration values applied when not specified
+- CLOSED: semua request routing ke downstream; failure increment counter; success mereset counter; transit ke OPEN saat failures >= FailureThreshold
+- OPEN: semua request langsung gagal dengan `ErrCircuitOpen` tanpa network call; memulai cooldown timer
+- HALF_OPEN: mengizinkan probe terbatas (HalfOpenMaxCalls); success → CLOSED; failure → OPEN
+- Zero downstream requests dieksekusi ketika circuit OPEN
+- Concurrency-safe di bawah race detector (16 unit + 2 integration test, 0 data race)
+- Panic tidak corrupt state; counters diupdate before re-panic
+- Trailing in-flight request (generasi lama) tidak corrupt state baru
+- Default config: FailureThreshold=3, OpenTimeout=300ms, HalfOpenMaxCalls=1
+- Demo output verified: fail-fast ~40-125ns, downstream_calls terhenti setelah OPEN
 
 **Available Case Studies:**
-- Scenario 1: Without Circuit Breaker — slow dependency causes blocking timeouts
-- Scenario 2: With Circuit Breaker — fail-fast behavior after threshold exceeded
-- Scenario 3: Recovery — HALF_OPEN to CLOSED transition on successful probe
-- Scenario 4: Failed Recovery — HALF_OPEN to OPEN transition on failed probe
+- Skenario 1: Tanpa Circuit Breaker — slow dependency menyebabkan blocking timeout (~100ms/request)
+- Skenario 2: Dengan Circuit Breaker — fail-fast setelah 3 failures, request berikutnya < 1µs
+- Skenario 3: Recovery — HALF_OPEN → CLOSED saat probe sukses
+- Skenario 4: Failed Recovery — HALF_OPEN → OPEN saat probe gagal
+- Skenario tambahan: slow dependency timeout (integration test)
 
 **Warnings:**
-- Demo timing values (100ms HTTP timeout, 300ms cooldown) are illustrative for fast testing; production must tune to actual SLA and recovery profiles
-- Implementation uses consecutive failure counting only, not sliding window or error rate calculation
-- Circuit breaker does not heal a broken dependency
+- Nilai timeout demo (100ms HTTP, 300ms cooldown) bersifat illustratif untuk testing cepat; produksi harus tune ke SLA dan recovery profile
+- Implementasi pakai consecutive failure counting saja, bukan sliding window atau error rate
+- Circuit breaker tidak membedakan error 4xx vs 5xx — error predicate tidak ada; semua non-nil error increment counter (dokumentasi educational limitation)
+- Observability metrics (circuit_state, circuit_open_count, dll.) adalah rekomendasi arsitektur, tidak di-export di kode
+- DefaultConfig OpenTimeout = 300ms (bukan 5s) — sesuai kode sumber
+
+**Approved Research Sources (Tier 1):**
+- Martin Fowler, *Circuit Breaker* (2014)
+- Microsoft Azure Architecture Center, *Circuit Breaker Pattern* (2025-02)
+- Microsoft Azure, *Retry Pattern* (2024-07)
+- Microsoft Azure, *Bulkhead Pattern* (2026-03)
+- Resilience4j, *CircuitBreaker*
+- Google SRE Book, *Handling Overload* (2017)
+- Go Standard Library, *net/http.Client*
+- AWS Builders Library, *Timeouts, retries, and backoff with jitter* — canonical https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter (301 from https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/)
+
+**Approved Engineering Artifacts:**
+- engineering/01-design.md — design dan success criteria
+- engineering/02-implementation-notes.md — keputusan implementasi
+- engineering/03-execution-result.md — hasil eksekusi demo dan test
+- engineering-revision/02-changes-made.md — revisi: generation tracking, panic safety, slow dependency test, concurrency test, demo formatting

@@ -10,14 +10,14 @@
 
 5. **Probe mechanism prevents thundering herd** — `HalfOpenMaxCalls` limits concurrent probes during recovery; excess requests fail fast.
 
-6. **Consecutive successes required** — HALF_OPEN requires `HalfOpenMaxCalls` successful probes before transitioning to CLOSED.
+6. **HALF_OPEN transitions to CLOSED on first successful probe** — no consecutive success counting needed; single probe success closes the circuit.
 
-6. **Thread-safe by design** — all state mutations protected by `sync.Mutex`; zero data races verified under `go test -race ./...`.
+7. **Thread-safe by design** — all state mutations protected by `sync.Mutex`; zero data races verified under `go test -race ./...`.
 
-7. **Panic safety** — panics during execution don't corrupt internal state; failure counters updated before re-panicking.
+8. **Panic safety** — panics during execution don't corrupt internal state; failure counters updated before re-panicking.
 
-8. **Default configuration is sensible** — FailureThreshold=3, OpenTimeout=5s, HalfOpenMaxCalls=1 work out of the box.
+9. **Default configuration is sensible** — FailureThreshold=3, OpenTimeout=300ms, HalfOpenMaxCalls=1 work out of the box.
 
-9. **Lab timeouts are illustrative** — 100ms HTTP timeout and 300ms cooldown are for fast testing; production must tune to actual SLA and recovery profiles.
+10. **Lab timeouts are illustrative** — 100ms HTTP timeout and 300ms cooldown are for fast testing; production must tune to actual SLA and recovery profiles.
 
-10. **Implementation uses consecutive failure counting only** — not sliding window or error rate; production may need more sophisticated metrics.
+11. **Implementation uses consecutive failure counting only** — not sliding window or error rate; production may need more sophisticated metrics.
