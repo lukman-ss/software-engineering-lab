@@ -1,41 +1,76 @@
 # Test Audit
 
-File reviewed: `internal/blog/repository_test.go` (3 tests).
+Test File: internal/blog/repository_test.go
 
 ## Coverage Matrix
 
-| Scenario                     | Covered? | Test |
-|------------------------------|----------|------|
-| Happy path (N+1 query count) | YES      | `TestGetAuthorsWithPostsNPlusOne` — asserts 3 authors, 4 queries |
-| Happy path (eager query count)| YES     | `TestGetAuthorsWithPostsEager` — asserts 3 authors, 2 queries |
-| Data equivalence (eager == N+1)| YES    | `TestGetAuthorsWithPostsEager` — `reflect.DeepEqual` |
-| Empty input                  | YES      | `TestEmptyStore` — nil authors/posts |
-| Concurrency / race           | NO       | `go test -race` runs but no tests spawn concurrent goroutines against the Store — race-safety is verified by the detector's build instrumentation only, not by a dedicated concurrency test |
-| Failure path                 | NO (N/A) | Store never returns errors; in-memory mock has no failure surfaces to inject |
-| Negative cases               | PARTIAL  | Empty store covered; missing/duplicate author IDs not covered (acceptable for in-memory mock) |
+| Scenario | Covered | Test Name | Evidence |
+|---|---|---|---|
+| Happy path (N+1 query count) | Yes | TestGetAuthorsWithPostsNPlusOne | Asserts queryCount == 4 |
+| Happy path (eager query count) | Yes | TestGetAuthorsWithPostsEager | Asserts queryCount == 2 |
+| Result equivalence (eager == N+1) | Yes | TestGetAuthorsWithPostsEager | reflect.DeepEqual comparison |
+| Empty store (no authors/posts) | Yes | TestEmptyStore | Asserts len == 0 for both |
+| Author with zero posts | No | — | Mock data ensures every author has posts; not tested |
+| Single author (N=1) | No | — | Only 3-author case tested |
+| Failure path (store returns error) | No | — | Store cannot fail in mock |
+| Concurrency (parallel calls) | No | — | No concurrent access tests; -race passes because no concurrency used |
+| Negative cases (post belongs to nonexistent author) | No | — | Mock data consistent |
 
-## Findings
+## Test Quality Assessment
 
-### Finding 1 — Query-count assertions match implementation
-`TestGetAuthorsWithPostsNPlusOne` expects 4 queries (1 + 3 authors). `TestGetAuthorsWithPostsEager` expects 2 (1 + 1). Both pass and match `repository.go`. **PASS**.
+### TestGetAuthorsWithPostsNPlusOne (PASS)
+- Creates store, repo, resets count, invokes N+1.
+- Asserts len(result) == 3 (correct: 3 authors).
+- Asserts queryCount == 4 (correct: 1 + N = 1 + 3 = 4).
+- Comment is correct: "3 authors + 1 initial query = 4".
 
-### Finding 2 — Data-equivalence assertion
-`TestGetAuthorsWithPostsEager` deep-compares eager output with the N+1 output. Ordering is preserved because both scan the store in insertion order. Passes. **PASS — strong test**.
+### TestGetAuthorsWithPostsEager (PASS)
+- Creates store, repo, resets count, invokes eager loading.
+- Asserts len(result) == 3 (correct).
+- Asserts queryCount == 2 (correct: 1 + 1 = 2).
+- Deep-compares result with N+1 output via reflect.DeepEqual.
+  - This is good: it proves functional equivalence, not just count.
 
-### Finding 3 — Empty-store edge case
-`TestEmptyStore` constructs a zero-value `Store{authors:nil, posts:nil}` and confirms both methods return empty, equal results without spurious queries. **PASS — good edge case**.
+### TestEmptyStore (PASS)
+- Creates an empty store & repo.
+- Asserts both methods return empty results.
+- Confirms N+1 and eager are equal for empty input.
 
-### Finding 4 — Missing concurrency test
-Thread-safety of the query counter is *implemented* (mutex on every access) and the race detector reports no data races, but no test actually exercises concurrent calls to `GetAllAuthors`/`GetPostsByAuthorID`/`GetPostsByAuthorIDs`. The mutex therefore remains *unproven under load*, only proven by inspection.
-Assessment: WARNING
-Severity: LOW
-Notes: Add a test that calls the query methods from multiple goroutines (e.g., via `errgroup`/ `sync.WaitGroup`) and asserts the counter equals the number of invocations. Not blocking for this lab.
+## Strengths
+1. Query counts are asserted precisely (not just "improved").
+2. Functional equivalence between naive and optimized approaches is asserted.
+3. Empty input edge case is covered.
+4. All tests pass consistently.
 
-### Finding 5 — No assertion on post contents per author
-Tests assert *counts and shape* (len, DeepEqual vs. N+1) but never assert *specific post titles/IDs per author* (e.g., that Alice has 2 posts). Because eager is cross-checked against N+1 via DeepEqual, a data bug would have to exist identically in both implementations to be missed. For a demo this is acceptable.
-Assessment: LOW
-Severity: LOW
-Notes: A content-specific assertion would strengthen the suite but is not required.
+## Weaknesses / Missing Coverage
+1. **Author with zero posts**: Not tested. N+1 would issue a query even for authors with no posts; eager would batch (still 1 query). Test should confirm this.
+2. **Single author (N=1)**: N+1 count should be 2; eager should be 2. Only N=3 case tested.
+3. **Concurrency safety**: Although store is mutex-guarded, tests do not call methods concurrently to validate this assumption. Race detector passes vacuously because no goroutines are spawned.
+4. **No negative case**: Posts with an AuthorID not belonging to any author are not tested (though mock data prevents this).
 
-## Overall
-Test suite is correct and passes (incl. `-race`). The two main claims (N+1 => 4 queries; eager => 2 queries; equivalent data) are proven. The one soft gap is lack of a dedicated concurrency test; this is non-blocking for the lab.
+## Test Execution Results (Actual)
+
+```
+=== RUN   TestGetAuthorsWithPostsNPlusOne
+--- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)
+=== RUN   TestGetAuthorsWithPostsEager
+--- PASS: TestGetAuthorsWithPostsEager (0.00s)
+=== RUN   TestEmptyStore
+--- PASS: TestEmptyStore (0.00s)
+PASS
+ok  internal/blog  (cached)
+```
+
+## Race Detector Result
+
+```
+ok  internal/blog (cached)
+```
+
+No data races detected (tests do not use goroutines; race detector does not trigger).
+
+## Overall Assessment: MEDIUM
+
+Tests pass and cover core claims. Query-count assertions are accurate. However, edge-case coverage is limited (author with no posts, single-author, concurrency stress). Race detector runs clean but is not meaningfully exercised.
+
+These gaps are acceptable for a demonstration lab but do not constitute "proven" concurrency safety under parallel load.

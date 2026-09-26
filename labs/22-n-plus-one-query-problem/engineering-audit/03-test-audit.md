@@ -1,28 +1,32 @@
 # Test Audit
 
+## Test Suite Overview
+
+Test file: `internal/blog/repository_test.go`
+Runner command: `go test -v -count=1 ./...` and `go test -race -count=1 ./...`
+
 ## Coverage Analysis
 
-1. `TestGetAuthorsWithPostsNPlusOne`:
-   - Verifies author count is 3.
-   - Asserts query count is exactly 4 (1 + 3).
-   - Verifies N+1 query problem behavior.
+### 1. TestGetAuthorsWithPostsNPlusOne
+- Covered: Verifies that retrieval with 3 authors executes exactly 4 queries ($3+1$).
+- Assertions: `len(result) == 3`, `queryCount == 4`.
+- Result: PASS.
 
-2. `TestGetAuthorsWithPostsEager`:
-   - Verifies author count is 3.
-   - Asserts query count is exactly 2 (1 + 1).
-   - Validates eager loading mitigation behavior.
-   - Uses `reflect.DeepEqual` to verify that eager loading outputs identical data structure to N+1 loading.
+### 2. TestGetAuthorsWithPostsEager
+- Covered: Verifies that eager loading executes exactly 2 queries regardless of author count.
+- Assertions: `len(result) == 3`, `queryCount == 2`, and `reflect.DeepEqual(result, nPlusOneResult)`.
+- Result: PASS. Proves dataset identity between naive and eager versions.
 
-3. `TestEmptyStore`:
-   - Edge case with empty authors and posts.
-   - Confirms no panics and empty result slices returned from both functions.
-   - Deep equality check between both results on empty inputs.
+### 3. TestEmptyStore
+- Covered: Verifies behavior when store contains no authors or posts.
+- Assertions: `len(n1) == 0`, `len(eager) == 0`, `reflect.DeepEqual(n1, eager)`.
+- Result: PASS. Proves edge case handling.
 
-## Execution Output
+## Execution Verification
 
-### `go test -v ./...`
+Actual command outputs:
+
 ```text
-?   	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/cmd/demo	[no test files]
 === RUN   TestGetAuthorsWithPostsNPlusOne
 --- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)
 === RUN   TestGetAuthorsWithPostsEager
@@ -30,16 +34,15 @@
 === RUN   TestEmptyStore
 --- PASS: TestEmptyStore (0.00s)
 PASS
-ok  	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog	0.108s
+ok      github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog      0.078s
 ```
 
-### `go test -race ./...`
+Race detector:
 ```text
-?   	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/cmd/demo	[no test files]
-ok  	github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog	1.131s
+ok      github.com/lukman/software-engineering-lab/labs/22-n-plus-one-query-problem/internal/blog      1.096s
 ```
 
-### `go run ./cmd/demo`
+Demo execution:
 ```text
 --- 1. Simulating N+1 Query Problem ---
 Loaded 3 authors with their posts.
@@ -50,5 +53,6 @@ Loaded 3 authors with their posts.
 Total queries executed: 2 (1 query for authors + 1 batched query for posts)
 ```
 
-Assessment: PASS
-All claimed properties are covered and verified by automated tests and runtime demo.
+## Assessment
+
+Tests are deterministic, cover happy path, comparison equivalence, and edge case (empty store). Tests pass cleanly under Go race detector.
