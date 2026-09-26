@@ -1,21 +1,40 @@
-# Docs vs Code Audit
+## Docs vs Code
 
-Target Lab: `labs/24-slo-sli-error-budget`
+### README.md vs Code
+README structure: `internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, `tests/`.
+Code reality: matches exactly. PASS.
+README commands: `go test ./...`, `go test -race ./...`, `go run ./cmd/demo`.
+Executed: all three work. PASS.
+README claim: "Sliding-window time-bucketed event tracker for recording requests and measuring good vs. total events."
+Code (internal/metrics/tracker.go): WindowTracker buckets events by time, counts TotalCount/GoodCount/BadCount. PASS.
+README claim: "Evaluator calculating SLI ratios, remaining Error Budget, and release freeze policy enforcement."
+Code (internal/slo/evaluator.go): Evaluate computes SLI = good/total, budget = (1-SLO)*total, CanDeploy from remaining<=0. PASS.
+README claim: "Multi-window burn-rate alert calculator evaluating fast and slow budget burn rates."
+Code (internal/alerting/engine.go): Check evaluates short+long burn rates vs per-rule BurnRateFactor. PASS.
+README claim: "unit and concurrency tests ensuring thread-safety."
+Code (tests/slo_test.go): TestConcurrencyMetrics + -race passes. PASS.
 
-## Comparison Matrix
+### Design notes vs Code
+engineering/01-design.md "100% test coverage on core math and sliding window calculations" → measured coverage 95.3%. DOC mismatch. See Finding 4 (MEDIUM).
+engineering/01-design.md "histogram latency buckets" → no histogram aggregation in code. Doc over-description. See Finding 5 (LOW).
+engineering/01-design.md components: Event, WindowTracker, SLOEvaluator, BurnRateAlertEngine. Code has Event, WindowTracker, Evaluator (named differently), AlertEngine (BurnRateAlertEngine not the actual type). Naming mismatch but functionally present. LOW.
 
-| Component / Feature | README Claim | Implementation | Test Verification | Demo Execution | Match Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Window Tracker** | Time-bucketed sliding-window tracker | `internal/metrics/tracker.go` | `TestMetricsWindowTracker`, `TestOutOfOrderTimestamps`, `TestConcurrencyMetrics` | Phase 1, 2, 4 | MATCH |
-| **SLO / SLI Evaluator** | Calculates SLI ratios, error budget, release freeze policy | `internal/slo/evaluator.go` | `TestSLOEvaluator`, `TestEvaluatorZeroTraffic` | Phase 1, 2, 4 | MATCH |
-| **Burn Rate Alerting** | Multi-window burn-rate alert calculator evaluating fast/slow budget burn | `internal/alerting/engine.go` | `TestAlertEngineBurnRate` | Phase 3 | MATCH |
-| **Release Freeze Policy** | Freezes deployments when budget <= 0 | `evaluator.go:55-57` (`CanDeploy`) | `TestSLOEvaluator` | Phase 2, 4 | MATCH |
-| **Criticality Tiering** | Strict (99.9%) vs Non-Critical (95.0%) tiers | Configured via `slo.Config` | Evaluated in `slo_test.go` | Phase 4 | MATCH |
+### Execution result vs actual run
+engineering/03-execution-result.md recorded demo output ends after PHASE 3 and DEMO COMPLETE.
+Actual `go run ./cmd/demo` output includes PHASE 4 (Endpoint Criticality Comparison: Reports SLO 95% vs Payment 99.9%).
+Documented demo output is stale/incomplete. See Finding 6 (MEDIUM).
 
-## Findings
+### Math verification (actual demo output)
+PHASE 1: 1000 good/0 bad → SLI=1.0, budget=(1-0.999)*1000=1.0, remaining=1.0. CanDeploy=true.
+PHASE 2: 1100 total, 1090 good, 10 bad → SLI=1090/1100=0.9909, budget=(0.001)*1100=1.1, consumed=10, remaining=-8.9. CanDeploy=false.
+PHASE 3: short+long both = 10/1100 / 0.001 = 9.09x. Slow rule (6.0x) fires; Page rule (14.4x) does not (9.09<14.4). Alert output matches.
+PHASE 4: reports 90/100 → SLI=0.9, budget=(0.05)*100=5, consumed=10, remaining=-5. Both CanDeploy false.
+All computed values match code output. Math correct.
 
-1. `DOC_CODE_MISMATCH`: None.
-2. `TEST_CLAIM_MISMATCH`: None.
-3. `RESEARCH_IMPLEMENTATION_MISMATCH`: None.
+### Mismatch summary
+- DOC_CODE_MISMATCH: engineering/01-design.md claims "100% test coverage" — not achieved (95.3%).
+- DOC_CODE_MISMATCH: engineering/03-execution-result.md omits PHASE 4 from recorded demo output.
+- TEST_CLAIM_MISMATCH: design Test Strategy lists "recovery/rollback" coverage; no explicit recovery test present.
+- RESEARCH_IMPLEMENTATION_MISMATCH: none. Research audit (07-verdict.md) APPROVED with scope boundaries; code implements the approved research claims (SLI/error-budget/burn-rate). No contradiction.
 
-All claims in `README.md`, `engineering/01-design.md`, and `engineering/02-implementation-notes.md` accurately correspond to executable Go code.
+No fabricated results, no fake benchmark, no fake demo — the demo runs and reproduces real, verifiable output.

@@ -2,40 +2,42 @@
 
 Target Lab: `labs/24-slo-sli-error-budget`
 Implementation Files:
-- `internal/metrics/tracker.go`
-- `internal/slo/evaluator.go`
-- `internal/alerting/engine.go`
+- `go.mod`
+- `internal/metrics/tracker.go` — sliding-window time-bucketed event tracker
+- `internal/slo/evaluator.go` — SLI ratio, error budget, release-freeze (CanDeploy) evaluator
+- `internal/alerting/engine.go` — multi-window multi-burn-rate alert engine
+- `cmd/demo/main.go` — executable simulation (4 phases)
 
 Tests:
-- `tests/slo_test.go`
+- `tests/slo_test.go` (6 tests: TestMetricsWindowTracker, TestSLOEvaluator, TestAlertEngineBurnRate, TestOutOfOrderTimestamps, TestEvaluatorZeroTraffic, TestConcurrencyMetrics)
 
 Executable/Demo:
-- `cmd/demo/main.go`
+- `go run ./cmd/demo` — 4-phase simulation (baseline traffic, incident, burn-rate alerting, endpoint criticality comparison)
 
 Approved Research Inputs:
-- `research/05-report.md`
-- `research/03-evidence.md`
-- `research-audit/07-verdict.md` (APPROVED)
-- `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
+- `research-audit/07-verdict.md` = APPROVED (research-only; code/tests NOT_APPLICABLE)
 
 Main Claims To Verify:
-1. SLI calculation implements Google SRE ratio `good_events / total_events`.
-2. Error budget dynamically calculated as `(1 - SLO) * total_events` and consumed by failures/latency breaches.
-3. Release freeze policy (`CanDeploy = false`) enforced when remaining error budget <= 0.
-4. Multi-window multi-burn-rate alerting triggers only when both short and long rolling windows breach burn rate factor threshold.
-5. In-memory sliding window bucket tracker handles out-of-order events, time eviction, and concurrent access safely without data races.
-6. Endpoint criticality tiers allow distinct SLO/error budget tolerances (Payment 99.9% vs Reports 95.0%).
-7. Go test suite compiles and runs cleanly with zero failures and passes `-race`.
-8. Interactive demo runs and produces genuine output without simulated mocks or hardcoded fake results.
+1. SLI = good_events / total_events (rolling window).
+2. Error Budget = (1 - SLO) * total; consumed by bad events; CanDeploy = false when remaining <= 0.
+3. Burn rate = (bad/total) / (1 - SLO); alert fires when both short and long window burn rates exceed the rule factor.
+4. Multi-window multi-burn-rate policy (14.4x fast / 6.0x slow, Google SRE-style).
+5. Endpoint criticality: stricter SLO (99.9%) vs non-critical (95%).
+6. Concurrency safety of WindowTracker (race-free).
+7. README commands (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo`) all work and match output.
+8. Success criterion: "100% test coverage on core math and sliding window calculations" (design/01-design.md).
 
 Commands To Run:
+- `go build ./...`
+- `go vet ./...`
 - `go test -v -count=1 ./...`
-- `go test -race -v -count=1 ./...`
+- `go test -race -count=1 ./...`
 - `go run ./cmd/demo`
+- `go test -count=1 -coverpkg=./internal/... -coverprofile=/tmp/cov.out ./tests/ && go tool cover -func=/tmp/cov.out`
 
 Primary Risks:
-- Race conditions during concurrent event ingestion and bucket summary eviction.
-- Out-of-order timestamp handling in `metrics.WindowTracker`.
-- Zero-traffic edge case (division by zero in SLI or burn rate calculations).
-- Discrepancy between Google SRE multi-window alerting formulation and implementation logic.
+- Coverage overclaim ("100%") vs measured reality.
+- Stale recorded demo output in engineering/03-execution-result.md (may omit Phase 4).
+- Uncovered edge-case branches (CalculateBurnRate zero-total / SLO>=1; NewWindowTracker invalid args).
+- Summary() using write Lock instead of RLock (read op serialized unnecessarily).
+- Eviction keyed on event timestamp rather than wall clock (out-of-order old events may fail to evict stale buckets).
