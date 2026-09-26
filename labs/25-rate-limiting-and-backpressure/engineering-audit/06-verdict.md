@@ -1,23 +1,22 @@
 # Engineering Audit Verdict
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+Target Lab: labs/25-rate-limiting-and-backpressure
 Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed:
-- `internal/ratelimit/bucket.go`
-- `internal/ratelimit/registry.go`
-- `internal/backpressure/queue.go`
-- `internal/retry/backoff.go`
-- `internal/httputil/middleware.go`
-- `cmd/demo/main.go`
+Code Files Reviewed: 5
+- internal/ratelimit/bucket.go
+- internal/ratelimit/registry.go
+- internal/backpressure/queue.go
+- internal/retry/backoff.go
+- internal/httputil/middleware.go
 
-Tests Reviewed:
-- `internal/ratelimit/bucket_test.go`
-- `internal/backpressure/queue_test.go`
-- `internal/retry/backoff_test.go`
-- `internal/httputil/middleware_test.go`
+Tests Reviewed: 4
+- internal/ratelimit/bucket_test.go
+- internal/backpressure/queue_test.go
+- internal/retry/backoff_test.go
+- internal/httputil/middleware_test.go
 
 Commands Executed:
 - `go test -v -count=1 ./...`
