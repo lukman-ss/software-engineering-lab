@@ -67,7 +67,7 @@ async function acquireCPU() {
         }
 
         const usage = updateCPUUsage();
-        if (usage < 70) {
+        if (usage < 60) {
             isSpawning = true;
             // Hold the spawn lock for 1 second to let OS register the new CPU load
             setTimeout(() => { isSpawning = false; }, 1000);
@@ -85,8 +85,7 @@ async function runOpencode(lab, stage, promptFile, instruction, model = MODEL_DE
     const logFile = path.join(logDir, `${stage}.log`);
 
     const promptContent = await fs.readFile(promptFile, 'utf8');
-    const commitInstruction = `\n\n- MUST COMMIT CHANGES: Use the \`.opencode/skills/git-commit-auto/SKILL.md\` skill to commit your changes before finishing. CRITICAL: Use \`git add ${lab}\` instead of \`git add .\` to avoid committing other workers' files.`;
-    const input = `${promptContent}\n---\n${instruction}${commitInstruction}`;
+    const input = `${promptContent}\n---\n${instruction}`;
 
     async function execute(mod) {
         await acquireCPU(); // DYNAMIC CPU THROTTLING
@@ -113,6 +112,36 @@ async function runOpencode(lab, stage, promptFile, instruction, model = MODEL_DE
     if (code !== 0 && model !== MODEL_FALLBACK) {
         console.warn(`WARNING: Model ${model} failed (exit ${code}). Fallback to ${MODEL_FALLBACK}...`);
         code = await execute(MODEL_FALLBACK);
+    }
+    
+    // NATIVE AUTO COMMIT (Guaranteed execution after agent finishes)
+    if (code === 0) {
+        const { exec } = require('child_process');
+        const util = require('util');
+        const execAsync = util.promisify(exec);
+        const labName = path.basename(lab);
+        
+        // Mutex queue using a retry loop for git index.lock
+        let retries = 5;
+        while (retries > 0) {
+            try {
+                const { stdout: statusOut } = await execAsync(`git status --porcelain ${lab}`, { cwd: REPO_ROOT });
+                if (statusOut.trim().length > 0) {
+                    await execAsync(`git add ${lab}`, { cwd: REPO_ROOT });
+                    await execAsync(`git commit -m "feat(${labName}): auto-commit after ${stage}"`, { cwd: REPO_ROOT });
+                    console.log(`[GIT] Auto-committed changes for ${labName} after ${stage}.`);
+                }
+                break; // success
+            } catch (err) {
+                if (err.message.includes('index.lock')) {
+                    retries--;
+                    await sleep(2000);
+                } else {
+                    console.error(`[GIT ERROR] for ${labName}:`, err.message);
+                    break;
+                }
+            }
+        }
     }
 
     if (code !== 0) {
@@ -178,10 +207,10 @@ async function engineeringPipeline(lab) {
     while (true) {
         if (revisionCount === 0) {
             await runOpencode(lab, "04-engineering", path.join(PROMPTS, "engineer.md"),
-`Implement the approved technical lab:\n\n${lab}\n\nPIPELINE BOUNDARY:\n- Write and edit source code.\n- Write tests.\n- Do not generate publication content.\n- MUST COMMIT CHANGES: Use the \`.opencode/skills/git-commit-auto/SKILL.md\` skill to commit your code changes before finishing. CRITICAL: Use \`git add ${lab}\` instead of \`git add .\` to avoid committing other workers' files.`, MODEL_CRITICAL);
+`Implement the approved technical lab:\n\n${lab}\n\nPIPELINE BOUNDARY:\n- Write and edit source code.\n- Write tests.\n- Do not generate publication content.`, MODEL_CRITICAL);
         } else {
             await runOpencode(lab, `05-engineering-revision-r${revisionCount}`, path.join(PROMPTS, "engineering-reviser.md"),
-`Address the audit findings for target lab:\n\n${lab}\n\nPIPELINE OVERRIDE:\n- Revise implementation and tests only.\n- Do not generate publication content.\n- Write revision records to:\n  ${lab}/engineering-revision/\n- MUST COMMIT CHANGES: Use the \`.opencode/skills/git-commit-auto/SKILL.md\` skill to commit your revisions before finishing. CRITICAL: Use \`git add ${lab}\` instead of \`git add .\` to avoid committing other workers' files.\n- Finish with READY_FOR_ENGINEERING_REAUDIT.`, MODEL_CRITICAL);
+`Address the audit findings for target lab:\n\n${lab}\n\nPIPELINE OVERRIDE:\n- Revise implementation and tests only.\n- Do not generate publication content.\n- Write revision records to:\n  ${lab}/engineering-revision/\n- Finish with READY_FOR_ENGINEERING_REAUDIT.`, MODEL_CRITICAL);
         }
 
         const auditRound = revisionCount + 1;
@@ -349,7 +378,7 @@ async function main() {
     
     // Adaptive scaling: start with 1 worker, add more every minute if CPU < 80%
     const maxWorkers = Math.max(1, os.cpus().length - 1);
-    console.log(`Starting adaptive pool (Max workers: ${maxWorkers}). Starting with 1 worker... (Target CPU < 70%)`);
+    console.log(`Starting adaptive pool (Max workers: ${maxWorkers}). Starting with 1 worker... (Target CPU < 60%)`);
     
     const queue = [...pendingTasks];
     let activeWorkers = 0;
@@ -385,7 +414,7 @@ async function main() {
         // If tasks remain and we have capacity for more workers
         if (queue.length > 0 && activeWorkers < maxWorkers) {
             const usage = updateCPUUsage();
-            if (usage < 70) {
+            if (usage < 60) {
                 console.log(`\n[SCALING] 1 minute passed. CPU usage is ${usage}%. Adding worker ${nextWorkerId}...`);
                 activeWorkers++;
                 workerLoop(nextWorkerId);
