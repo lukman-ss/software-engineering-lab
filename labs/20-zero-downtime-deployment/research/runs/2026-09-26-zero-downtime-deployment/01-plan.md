@@ -1,34 +1,59 @@
-# Research Topic
+# Research Plan: Zero-Downtime Deployment
+
+## Research Topic
+
 Zero-Downtime Deployment — Deploy Versi Baru Tanpa Membuat User Tahu Ada Deployment
 
-# Objective
-Investigate zero-downtime deployment patterns specifically for the Nginx + Laravel + PostgreSQL + Redis Queue stack, collecting authoritative evidence on deployment orchestration, backward-compatible database migrations, health probes, graceful shutdown/connection draining, queue worker deployment strategies, and rollback mechanics.
+## Objective
 
-# Research Questions
-1. What are the core zero-downtime deployment patterns (Rolling, Blue-Green, Canary) and their tradeoffs for this stack?
-2. How must database schema changes be designed (Expand/Contract, backward-compatible migrations) to allow v1 and v2 coexistence?
-3. What constitutes a proper Readiness vs Liveness probe for Laravel (PHP-FPM) and queue workers?
-4. How to implement graceful shutdown/connection draining for Nginx upstream, PHP-FPM, and Laravel queue workers?
-5. What is the correct deployment sequence for queue workers during rolling/blue-green deployments to avoid job loss?
-6. How to achieve fast, safe rollback that restores v1 without data corruption?
-7. What monitoring/observability signals confirm zero-downtime success?
+To investigate and document the strategies, patterns, and best practices for implementing zero-downtime deployments in Laravel applications with PostgreSQL and Redis Queue backends. The focus is on ensuring continuous service availability during application upgrades while maintaining database compatibility.
 
-# Search Strategy
-1. Official docs: Laravel (deployment, queues, Octane), PostgreSQL (DDL concurrency, locking), Redis (rolling upgrade), Nginx (upstream health checks, graceful reload), Docker Compose (healthchecks), Kubernetes (probes, lifecycle).
-2. Authoritative patterns: Martin Fowler (Blue-Green, Parallel Change), Kelsey Hightower / Kubernetes best practices.
-3. Laravel-specific: Laravel Envoyer/Forge zero-downtime, spatie/laravel-health, spatie/laravel-horizon, queue worker signals.
+## Research Questions
 
-# Expected Primary Sources (Tier 1)
-- laravel.com/docs (deployment, queues, octane)
-- postgresql.org/docs (DDL, concurrent index, locking)
-- redis.io/docs (clustering, rolling upgrade)
-- nginx.org/en/docs (upstream, health_check)
-- kubernetes.io/docs (pod lifecycle, probes, termination)
-- martinfowler.com (blue-green-deployment, parallel-change)
+1. What are the primary zero-downtime deployment patterns (rolling, blue-green)?
+2. How do liveness and readiness probes differ and when should each be used?
+3. What are the patterns for graceful shutdown and connection draining?
+4. How should database migrations be designed for backward compatibility during deployment?
+5. What are the strategies for deploying queue workers without job loss?
+6. How should rollback mechanisms be designed and tested?
+7. What are Laravel/PostgreSQL/Redis-specific considerations for zero-downtime deployments?
 
-# Risks / Unknowns
-- Laravel Octane (Swoole/RoadRunner) changes shutdown semantics vs PHP-FPM
-- Exact SIGTERM handling in php-fpm vs octane workers
-- Redis queue job persistence across worker restart (horizon vs raw queue:work)
-- Coordinated deployment of web + scheduler + multiple queue workers
-- Nginx upstream "drain" support without commercial Plus
+## Search Strategy
+
+### Primary Sources (Tier 1)
+- Kubernetes official documentation on deployments, probes, and pod lifecycle
+- Kubernetes documentation on rolling updates and blue-green deployments
+- Docker documentation on container stop signals and graceful shutdown
+- Laravel documentation on deployments and queue workers
+- PostgreSQL documentation on schema modifications
+- ThoughtWorks articles on evolutionary database design
+
+### Secondary Sources (Tier 2)
+- Martin Fowler's articles on deployment patterns
+- NGINX documentation on health checks
+- AWS documentation on deployment strategies
+
+### Tertiary Sources (Tier 3)
+- Community articles and blogs (used for discovery only, not primary evidence)
+
+## Expected Primary Sources
+
+1. Kubernetes Deployment documentation: rolling update strategy, maxSurge/maxUnavailable
+2. Kubernetes Probe documentation: liveness vs readiness distinction
+3. Docker container stop behavior: SIGTERM → grace period → SIGKILL
+4. Laravel deployment guide: health endpoints, optimization commands
+5. Laravel Horizon deployment: graceful termination of queue workers
+6. PostgreSQL ALTER TABLE behavior: additive vs destructive changes
+7. Evolutionary Database Design: expand-deploy-migrate-contract pattern
+
+## Risks / Unknowns
+
+1. **Database Migration Backward Compatibility**: Not all database changes can be made backward-compatible. Need to identify which patterns work and which require downtime.
+
+2. **Queue Worker State**: Long-running jobs may be interrupted during deployment. Need to understand how Laravel handles job timeouts and graceful shutdown.
+
+3. **Connection Pooling**: How Nginx and Laravel handle existing connections during deployment.
+
+4. **Health Check Timing**: The gap between container start and application readiness.
+
+5. **Redis Queue Data Persistence**: What happens to queued jobs during deployment of queue workers.

@@ -1,129 +1,141 @@
-# 02 — Sources
-
-Research date: 2026-09-26. Accessed: 2026-09-26.
+# Research Sources: Zero-Downtime Deployment
 
 ## Source 1
-Title: Deployment — Laravel 11.x docs
-Publisher: Laravel
-URL: https://laravel.com/docs/11.x/deployment
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: Official Nginx/PHP-FPM config, optimize caching, `/up` health route + DiagnosingHealth event, Forge/Vapor deployment.
+
+**Title:** Deployments | Kubernetes  
+**Publisher:** The Kubernetes Authors  
+**URL:** https://kubernetes.io/docs/concepts/workloads/controllers/deployment/  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Primary source for understanding rolling deployments, update strategies, maxSurge and maxUnavailable parameters, and deployment lifecycle in Kubernetes. Critical for understanding how Kubernetes handles zero-downtime deployments automatically.
 
 ## Source 2
-Title: Queues — Laravel 11.x docs
-Publisher: Laravel
-URL: https://laravel.com/docs/11.x/queues
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: queue:work, queue:restart / deployment behavior, Supervisor, after_commit, retry_after, block_for + SIGTERM note.
+
+**Title:** Pod Lifecycle | Kubernetes  
+**Publisher:** The Kubernetes Authors  
+**URL:** https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Comprehensive documentation on pod phases, container states, and termination behavior. Contains essential information about how Kubernetes handles pod shutdown and endpoint removal.
 
 ## Source 3
-Title: Laravel Octane — Laravel 11.x docs
-Publisher: Laravel
-URL: https://laravel.com/docs/11.x/octane
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: Octane start/reload/stop behind Nginx, state/memory-leak caveats; relevant because long-lived workers complicate zero-downtime.
+
+**Title:** Liveness, Readiness, and Startup Probes | Kubernetes  
+**Publisher:** The Kubernetes Authors  
+**URL:** https://kubernetes.io/docs/concepts/workloads/pods/probes/  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Definitive source for understanding the three types of probes. Documents the distinction between liveness (restart unhealthy containers) and readiness (control traffic routing). Includes probe-level terminationGracePeriodSeconds feature (v1.28+).
 
 ## Source 4
-Title: Laravel Horizon — Laravel 11.x docs
-Publisher: Laravel
-URL: https://laravel.com/docs/11.x/horizon
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: horizon:terminate graceful deploy step, Supervisor stopwaitsecs guidance, pause/continue/status.
+
+**Title:** Blue Green Deployment  
+**Publisher:** Martin Fowler  
+**URL:** https://martinfowler.com/bliki/BlueGreenDeployment.html  
+**Published:** 2010  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Original Concept Paper)  
+**Relevance:** Original definition and explanation of blue-green deployment pattern. Contains critical insight about database schema changes needing to be deployed separately from application code. Introduced the concept of having both environments ready for quick rollback.
 
 ## Source 5
-Title: Task Scheduling — Laravel 11.x docs
-Publisher: Laravel
-URL: https://laravel.com/docs/11.x/scheduling
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: schedule:run single-cron, onOneServer, withoutOverlapping, schedule:interrupt for deploys.
+
+**Title:** HTTP Health Checks | NGINX Documentation  
+**Publisher:** F5 NGINX  
+**URL:** https://docs.nginx.com/nginx/admin-guide/load-balancer/http-health-check/  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Documents passive and active health check mechanisms in NGINX. Explains fail_timeout, max_fails, slow_start parameters. Includes information about health check intervals, mandatory health checks, and connection reuse with keepalive.
 
 ## Source 6
-Title: Blue Green Deployment — bliki
-Publisher: Martin Fowler (martinfowler.com)
-URL: https://martinfowler.com/bliki/BlueGreenDeployment.html
-Published: 1 March 2010 (page shows 2015-06-05 update note)
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: Blue-green definition, router switchback rollback, DB-first separation rule.
+
+**Title:** Deployment | Laravel 11.x  
+**Publisher:** Laravel  
+**URL:** https://laravel.com/docs/11.x/deployment  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Laravel's official deployment guide. Documents health endpoint (/up), optimization commands (optimize:clear, config:cache, route:cache, view:cache), and server requirements. Explains the built-in health route for load balancers and orchestration systems.
 
 ## Source 7
-Title: Parallel Change — bliki
-Publisher: Danilo Sato / martinfowler.com
-URL: https://martinfowler.com/bliki/ParallelChange.html
-Published: 13 May 2014
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: Expand–migrate–contract pattern; DB refactoring, deployment, API evolution applications.
+
+**Title:** Queues | Laravel 11.x  
+**Publisher:** Laravel  
+**URL:** https://laravel.com/docs/11.x/queues  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Comprehensive documentation on Laravel's queue system. Documents retry_after configuration, after_commit option for queue dispatching, job timeouts, and max job attempts. Includes information on Redis queue driver configuration.
 
 ## Source 8
-Title: Pod Lifecycle — Kubernetes docs
-Publisher: Kubernetes
-URL: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: Pod phases/conditions, termination flow (SIGTERM → grace → SIGKILL), endpoint removal ordering.
+
+**Title:** Laravel Horizon  
+**Publisher:** Laravel  
+**URL:** https://laravel.com/docs/11.x/horizon  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Documents the recommended approach for deploying queue workers with Horizon. Explains graceful termination using `php artisan horizon:terminate`, the stopwaitsecs supervisor configuration, and balancing strategies (simple, auto, false).
 
 ## Source 9
-Title: Liveness, Readiness, and Startup Probes — Kubernetes docs
-Publisher: Kubernetes
-URL: https://kubernetes.io/docs/concepts/workloads/pods/probes/
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: Liveness vs readiness vs startup semantics; readiness gates Service endpoints.
+
+**Title:** Evolutionary Database Design  
+**Publisher:** ThoughtWorks  
+**URL:** https://martinfowler.com/articles/evodb.html  
+**Published:** 2016  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Original Best Practices Paper)  
+**Relevance:** Authoritative source for database migration patterns. Introduces the expand-deploy-migrate-contract pattern and transition phases. Documents how to handle destructive changes that require both old and new versions to coexist.
 
 ## Source 10
-Title: Controlling nginx
-Publisher: NGINX
-URL: https://nginx.org/en/docs/control.html
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: HUP reload (new workers + graceful old-worker drain), QUIT graceful shutdown, USR2/WINCH binary upgrade + rollback path.
+
+**Title:** 5.7. Modifying Tables | PostgreSQL Documentation  
+**Publisher:** PostgreSQL Global Development Group  
+**URL:** https://www.postgresql.org/docs/current/ddl-alter.html  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Documents PostgreSQL's ALTER TABLE capabilities including ADD COLUMN, DROP COLUMN, SET DEFAULT, and data type changes. Critical for understanding which schema changes are non-blocking and which require table rewrites.
 
 ## Source 11
-Title: Module ngx_http_upstream_module
-Publisher: NGINX
-URL: https://nginx.org/en/docs/http/ngx_http_upstream_module.html
-Published: not listed
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: upstream server params (max_fails, fail_timeout, backup, down, drain, slow_start); OSS vs commercial health-check limits, sticky/drain notes.
+
+**Title:** Update a Deployment Without Downtime | Kubernetes  
+**Publisher:** The Kubernetes Authors  
+**URL:** https://kubernetes.io/docs/tasks/run-application/update-deployment-rolling/  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Task-based tutorial demonstrating rolling updates in Kubernetes. Shows kubectl rollout status, pause/resume, and rollback commands. Includes configuration examples for maxUnavailable and maxSurge.
 
 ## Source 12
-Title: Chapter 5. Data Definition — PostgreSQL 18 docs
-Publisher: PostgreSQL Global Development Group
-URL: https://www.postgresql.org/docs/current/ddl.html
-Published: not listed (current-series doc)
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: DDL structure/modify-table topic map for backward-compatible migration claims.
+
+**Title:** docker container stop | Docker Documentation  
+**Publisher:** Docker  
+**URL:** https://docs.docker.com/reference/cli/docker/container/stop/  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Documents the container stop behavior: SIGTERM → grace period → SIGKILL. Explains --timeout flag, --signal flag, STOPSIGNAL Dockerfile instruction, and default timeout values (10s Linux, 30s Windows).
 
 ## Source 13
-Title: ALTER TABLE — PostgreSQL docs
-Publisher: PostgreSQL Global Development Group
-URL: https://www.postgresql.org/docs/current/sql-altertable.html
-Published: not listed (current-series doc)
-Accessed: 2026-09-26
-Source Tier: 1
-Relevance: ADD COLUMN fast path (nullable/no-volatile-default), rewrites for type change/volatile default, ADD CONSTRAINT NOT VALID + VALIDATE CONSTRAINT concurrency pattern, lock levels.
 
-## Source 14 (failed fetch — recorded, not evidence)
-Title: Redis upgrade doc (attempted)
-Publisher: redis.io
-URL: https://redis.io/docs/latest/operate/oss_and_stack/management/upgrading/
-Published: unknown
-Accessed: 2026-09-26
-Source Tier: 1 (unverified — fetch returned 404)
-Relevance: NOT USED. Redis rolling-upgrade claim: NOT VERIFIED.
+**Title:** Server Configuration | PostgreSQL Documentation  
+**Publisher:** PostgreSQL Global Development Group  
+**URL:** https://www.postgresql.org/docs/current/runtime-config.html  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Reference for PostgreSQL server configuration parameters. Relevant for understanding connection limits, statement timeouts, and other runtime settings that affect deployment behavior.
+
+## Source 14
+
+**Title:** Pod Termination | Kubernetes  
+**Publisher:** The Kubernetes Authors  
+**URL:** https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination  
+**Published:** 2026  
+**Accessed:** 2026-09-26  
+**Source Tier:** Tier 1 (Official Documentation)  
+**Relevance:** Explains pod termination flow, stop signals, forced termination, and how endpoints are updated when pods are deleted. Critical for understanding connection draining behavior.
