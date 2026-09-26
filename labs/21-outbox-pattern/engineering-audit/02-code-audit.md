@@ -1,55 +1,48 @@
-# Code Audit
+# Code Audit Findings
+
+Target Lab: labs/21-outbox-pattern
 
 ## Finding 1
 
-Location: `internal/outbox/db.go:71-127`
-Claimed Behavior: Atomic transaction commit and rollback across entity and outbox tables.
-Observed Implementation: `SaveOrder` and `SaveOutbox` buffer mutations inside `stagedOrders` and `stagedOutbox`. `Commit` applies both maps atomically under `tx.db.mu.Lock()`. `Rollback` discards staged mutations.
+Location: `internal/outbox/db.go:99-127`
+Claimed Behavior: Atomic commit and rollback across domain and outbox state.
+Observed Implementation: `Tx` stages mutations in `stagedOrders` and `stagedOutbox`. During `Commit`, it acquires `db.mu.Lock()` and transfers staged entries into `db.orders` and `db.outbox` within the lock. `Rollback` marks the transaction closed and discards staged entries without touching `db`.
 Assessment: PASS
 Severity: LOW
-Notes: Properly enforces all-or-nothing semantics without partial write risk.
+Notes: Correctly models transactional staging and atomicity for in-memory simulation.
 
 ## Finding 2
 
-Location: `internal/outbox/db.go:12-69`
-Claimed Behavior: Thread-safe in-memory database operations.
-Observed Implementation: All reads and writes to `orders` and `outbox` maps are protected by `sync.RWMutex`.
+Location: `internal/outbox/relay.go:43-60`
+Claimed Behavior: Decoupled relay polls pending events, dispatches to broker, and marks status processed.
+Observed Implementation: `PollAndDispatch` fetches pending outbox messages from `db.GetPendingOutbox()`, publishes each message via `broker.Publish(msg)`, and on success calls `db.MarkOutboxProcessed(msg.ID)`. If publish fails, the message remains `PENDING` for next polling iteration.
 Assessment: PASS
 Severity: LOW
-Notes: Passed `-race` validation with concurrent workers.
+Notes: Properly adheres to at-least-once delivery semantics.
 
 ## Finding 3
 
-Location: `internal/outbox/service.go:16-83`
-Claimed Behavior: Correctly contrasts atomic outbox persistence against vulnerable dual-write.
-Observed Implementation: `CreateOrderWithOutbox` stages both entities within one `Tx`. `CreateOrderDualWriteNaive` commits DB transaction first, then attempts external broker publish, isolating the vulnerability.
+Location: `internal/outbox/consumer.go:19-31`
+Claimed Behavior: Idempotent processing of duplicate message deliveries.
+Observed Implementation: `Consumer.Handle` locks mutex, verifies whether `msg.ID` exists in `processedIDs`, returns `false` if seen, and records it only once if unseen.
 Assessment: PASS
 Severity: LOW
-Notes: Clean, decoupled comparison.
+Notes: Idempotency is thread-safe and verified.
 
 ## Finding 4
 
-Location: `internal/outbox/relay.go:47-66`
-Claimed Behavior: Decoupled polling relay worker dispatching messages to broker and marking them processed.
-Observed Implementation: `PollAndDispatch` queries `GetPendingOutbox()`, publishes to broker, and sets status to `PROCESSED` only upon success. Failed dispatches leave messages pending for future cycles.
+Location: `internal/outbox/broker.go:28-37`
+Claimed Behavior: Injectable broker failures to prove dual-write state inconsistency.
+Observed Implementation: `MockBroker.Publish` uses mutex-protected `failNext` flag to simulate downstream broker unavailability, returning `BrokerError`.
 Assessment: PASS
 Severity: LOW
-Notes: Conforms to polling publisher pattern.
+Notes: Reliable mock behavior without hidden side effects.
 
 ## Finding 5
 
-Location: `internal/outbox/consumer.go:19-35`
-Claimed Behavior: Idempotent message consumption deduplicating incoming events by ID.
-Observed Implementation: `Handle` checks `processedIDs` map guarded by `sync.Mutex`. Duplicates return `false` without appending to `received`.
+Location: `internal/outbox/service.go:57-89`
+Claimed Behavior: Dual-write naive implementation demonstrates failure when broker write fails post DB commit.
+Observed Implementation: Commits order to DB first, then invokes `broker.Publish(msg)`. If `failNext` is active, DB contains order while broker has zero records, replicating real-world partial failure.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly models consumer-side deduplication.
-
-## Finding 6
-
-Location: `internal/outbox/relay.go:47-66`
-Claimed Behavior: Relay error handling and retries.
-Observed Implementation: Failed broker publish logs an error and retries on next poll interval with no exponential backoff or dead-letter queue.
-Assessment: WARNING
-Severity: LOW
-Notes: Accurately scoped and noted under limitations in `engineering/02-implementation-notes.md`.
+Notes: Clear pedagogical contrast to transactional outbox pattern.

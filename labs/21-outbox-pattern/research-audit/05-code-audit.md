@@ -1,9 +1,17 @@
-# Code Audit
+# Code Audit: Transactional Outbox Pattern
 
-Status: NOT_APPLICABLE
+Target Lab: `labs/21-outbox-pattern`
+Research Set Under Audit: `research/2026-09-26-outbox-pattern/`
+Date: 2026-09-26
 
-Reason:
-Pipeline override explicitly instructed:
-"Audit research only. Do not audit implementation/code in this stage."
+---
 
-No implementation code was evaluated in this phase.
+## Status: NOT_APPLICABLE (PIPELINE OVERRIDE)
+
+Per explicit pipeline instruction:
+- "Audit research only."
+- "Do not audit implementation/code in this stage."
+- "Do not modify research files."
+
+Code audit, test execution (`go test ./...`), and implementation alignment checks are deferred to the Engineering Audit phase.
+No code execution was conducted during this stage.

@@ -1,17 +1,36 @@
-# Docs vs Code Audit
+# Documentation vs Code Audit
 
-## Comparison Matrix
+Target Lab: labs/21-outbox-pattern
 
-| Item | Documented Claim | Implemented Reality | Result |
-| :--- | :--- | :--- | :--- |
-| **Architecture** | In-memory transactional DB (`BeginTx`, `Commit`, `Rollback`), mock broker, service, relay, consumer. | Exactly matches `internal/outbox/` files. | PASS |
-| **Dual-Write Vulnerability** | Direct write fails on broker error, leaving DB committed. | Implemented in `service.CreateOrderDualWriteNaive` and proven in `TestDualWriteProblem_Failure` & Scenario 1 of demo. | PASS |
-| **Outbox Atomic Commit** | Entity and outbox event written in one transaction. | Implemented in `service.CreateOrderWithOutbox` via single `Tx`. | PASS |
-| **Relay Polling** | Background polling worker queries pending messages and pushes to broker. | Implemented in `relay.Relay` with ticker-based loop. | PASS |
-| **Consumer Idempotency** | Event ID deduplication cache drops duplicate messages. | Implemented in `consumer.Consumer` with `processedIDs` map. | PASS |
-| **Demo Output** | README references running `go run ./cmd/demo`. Execution result file records scenario output. | Actual `go run ./cmd/demo` output matches `engineering/03-execution-result.md` verbatim. | PASS |
+## Itemized Comparison
 
-## Discrepancy Checks
-- `DOC_CODE_MISMATCH`: None detected. README and engineering notes match code structure and behavior.
-- `TEST_CLAIM_MISMATCH`: None detected. All tests directly assert the documented guarantees.
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None detected. Implements Polling Publisher and Idempotent Consumer patterns matching research recommendations.
+### 1. Architectural Components
+- `README.md` lists:
+  - `internal/outbox/db.go`
+  - `internal/outbox/broker.go`
+  - `internal/outbox/service.go`
+  - `internal/outbox/relay.go`
+  - `internal/outbox/consumer.go`
+- Codebase check: All 5 files exist and implement the exact roles described.
+- Status: PASS
+
+### 2. Running Instructions
+- `README.md` provides commands:
+  - `go test ./...`
+  - `go test -race ./...`
+  - `go run ./cmd/demo`
+- Codebase check: All commands execute cleanly with zero errors or race conditions.
+- Status: PASS
+
+### 3. Claims vs Implementation
+- Atomicity claim: Domain entity and outbox message committed together.
+  - Implemented in `internal/outbox/service.go:52` via `tx.Commit()`. Tested in `TestTransactionalOutbox_HappyPath`.
+- Decoupled Polling Relay claim: Background worker queries pending records and forwards to broker.
+  - Implemented in `internal/outbox/relay.go`. Tested in `TestTransactionalOutbox_HappyPath`.
+- Consumer Idempotency claim: Consumer skips duplicate deliveries.
+  - Implemented in `internal/outbox/consumer.go:23-26`. Tested in `TestTransactionalOutbox_Idempotency_DuplicateDelivery`.
+- Dual-Write Vulnerability claim: Naive dual write leaves DB inconsistent if broker fails.
+  - Implemented in `internal/outbox/service.go:57-89`. Tested in `TestDualWriteProblem_Failure` and showcased in `cmd/demo/main.go`.
+
+## Mismatches Found
+- None. Documentation directly matches the implementation and execution.

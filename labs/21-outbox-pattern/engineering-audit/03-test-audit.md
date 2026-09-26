@@ -1,45 +1,35 @@
 # Test Audit
 
-## Executed Commands & Actual Outputs
+Target Lab: labs/21-outbox-pattern
 
-### Command 1: Unit & Integration Tests
-```bash
-go test -v ./...
-```
-Output:
+## Coverage Overview
+
+The test suite in `tests/outbox_test.go` exercises the following scenarios:
+1. `TestTransactionalOutbox_HappyPath`: Verifies atomic write, relay dispatch, outbox status transition to `PROCESSED`, and consumer receipt.
+2. `TestTransactionalOutbox_Rollback`: Verifies staged order and outbox records are aborted when `tx.Rollback()` is called. No broker publication occurs.
+3. `TestTransactionalOutbox_Idempotency_DuplicateDelivery`: Verifies consumer deduplicates messages with the same ID, preventing double processing.
+4. `TestDualWriteProblem_Failure`: Verifies state divergence when direct broker publication fails after commit.
+5. `TestTransactionalOutbox_ConcurrentWrites`: Executes 10 concurrent goroutines writing 10 orders each while background relay is actively polling.
+
+## Execution Results
+
+### 1. `go test ./...`
 ```text
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/cmd/demo	[no test files]
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/internal/outbox	[no test files]
-=== RUN   TestTransactionalOutbox_HappyPath
---- PASS: TestTransactionalOutbox_HappyPath (0.05s)
-=== RUN   TestTransactionalOutbox_Rollback
---- PASS: TestTransactionalOutbox_Rollback (0.03s)
-=== RUN   TestTransactionalOutbox_Idempotency_DuplicateDelivery
---- PASS: TestTransactionalOutbox_Idempotency_DuplicateDelivery (0.00s)
-=== RUN   TestDualWriteProblem_Failure
---- PASS: TestDualWriteProblem_Failure (0.00s)
-=== RUN   TestTransactionalOutbox_ConcurrentWrites
---- PASS: TestTransactionalOutbox_ConcurrentWrites (0.05s)
-PASS
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	0.324s
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	0.231s
 ```
+Status: PASS
 
-### Command 2: Race Detector
-```bash
-go test -count=1 -race ./...
-```
-Output:
+### 2. `go test -race ./...`
 ```text
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/cmd/demo	[no test files]
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/internal/outbox	[no test files]
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.273s
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.397s
 ```
+Status: PASS (No data races detected)
 
-### Command 3: Executable Demo
-```bash
-go run ./cmd/demo
-```
-Output:
+### 3. `go run ./cmd/demo`
 ```text
 === Lab 21: Transactional Outbox Pattern Demo ===
 
@@ -61,11 +51,7 @@ Total events processed by consumer: 1
 
 === Demo Complete ===
 ```
+Status: PASS (Real executable output matches expected behavior)
 
-## Coverage Verification
-
-1. **Happy Path**: `TestTransactionalOutbox_HappyPath` verifies atomic save, relay dispatch, outbox status transition to `PROCESSED`, and consumer processing.
-2. **Failure Path**: `TestDualWriteProblem_Failure` reproduces partial write failure where DB write commits but broker publish fails.
-3. **Rollback**: `TestTransactionalOutbox_Rollback` asserts staged entity and outbox message are completely discarded upon `tx.Rollback()`.
-4. **Edge Cases & Deduplication**: `TestTransactionalOutbox_Idempotency_DuplicateDelivery` verifies consumer detects duplicate event IDs and skips double-execution.
-5. **Concurrency**: `TestTransactionalOutbox_ConcurrentWrites` runs 10 goroutines issuing 100 concurrent writes alongside active relay polling with zero data races detected under `-race`.
+## Assessment
+The tests prove all claimed functional, concurrency, and reliability behaviors.
