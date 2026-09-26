@@ -181,3 +181,50 @@ func TestConcurrentAccess(t *testing.T) {
 		t.Fatalf("invalid state: %s", b.State())
 	}
 }
+
+func TestSuccessInClosedResetsFailures(t *testing.T) {
+	b := New(Config{FailureThreshold: 3, OpenTimeout: 50 * time.Millisecond, HalfOpenMaxCalls: 1})
+	for i := 0; i < 2; i++ {
+		_ = b.Execute(func() error { return errors.New("fail") })
+	}
+	if b.State() != Closed {
+		t.Fatalf("expected CLOSED, got %s", b.State())
+	}
+	if err := b.Execute(func() error { return nil }); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		_ = b.Execute(func() error { return errors.New("fail") })
+	}
+	if b.State() != Closed {
+		t.Fatalf("expected CLOSED, got %s", b.State())
+	}
+	_ = b.Execute(func() error { return errors.New("fail") })
+	if b.State() != Open {
+		t.Fatalf("expected OPEN, got %s", b.State())
+	}
+}
+
+func TestHalfOpenThrottlesExcessCalls(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, OpenTimeout: 30 * time.Millisecond, HalfOpenMaxCalls: 1})
+	_ = b.Execute(func() error { return errors.New("fail") })
+	time.Sleep(40 * time.Millisecond)
+
+	probeStarted := make(chan struct{})
+	probeRelease := make(chan struct{})
+
+	go func() {
+		_ = b.Execute(func() error {
+			close(probeStarted)
+			<-probeRelease
+			return nil
+		})
+	}()
+
+	<-probeStarted
+	err := b.Execute(func() error { return nil })
+	if err != ErrCircuitOpen {
+		t.Fatalf("expected ErrCircuitOpen when HalfOpenMaxCalls exceeded, got %v", err)
+	}
+	close(probeRelease)
+}
