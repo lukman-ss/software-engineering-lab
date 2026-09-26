@@ -1,9 +1,9 @@
 # Code Audit
 
-## Pipeline Override Status
-**NOT APPLICABLE**
+## Status
+**NOT_APPLICABLE (Pipeline Stage Override)**
 
+## Notes
 Per pipeline instructions:
-- Research-only audit mode was specified.
-- Target lab implementation, Go tests, and demo code were not in scope for this audit run.
-- Code correctness and implementation vs documentation verification will be executed during engineering audit stages.
+- This audit covers the **Research Stage** only.
+- Implementation, source code, demo binaries, and tests are excluded from this audit stage and will be verified during the Engineering Audit stage.

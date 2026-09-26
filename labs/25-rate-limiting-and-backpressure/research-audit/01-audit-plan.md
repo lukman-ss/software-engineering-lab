@@ -1,34 +1,47 @@
-# Audit Plan
+# Audit Plan: labs/25-rate-limiting-and-backpressure (Research Stage)
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`  
-Audit Type: Research-only Audit (Pipeline Override)  
-Audit Date: 2026-09-26  
+## Target Lab
+`labs/25-rate-limiting-and-backpressure`
 
-## Target Lab Summary
-`labs/25-rate-limiting-and-backpressure` focuses on System Design principles for Rate Limiting, Backpressure mechanisms, and Queue Management under high-load conditions in distributed systems.
+## Pipeline Stage & Scope Override
+- **Phase:** Research Stage Audit.
+- **Scope:** Audit research outputs (`research/01-plan.md`, `research/02-sources.md`, `research/03-evidence.md`, `research/04-contradictions.md`, `research/05-report.md`, `research/06-open-questions.md`).
+- **Code Audit:** Not applicable for this pipeline stage (implementation/code audit deferred to engineering stage audit).
+- **Target Output Directory:** `labs/25-rate-limiting-and-backpressure/research-audit/`
 
 ## Files Reviewed
-- `labs/25-rate-limiting-and-backpressure/research/01-plan.md`
-- `labs/25-rate-limiting-and-backpressure/research/02-sources.md`
-- `labs/25-rate-limiting-and-backpressure/research/03-evidence.md`
-- `labs/25-rate-limiting-and-backpressure/research/04-contradictions.md`
-- `labs/25-rate-limiting-and-backpressure/research/05-report.md`
-- `labs/25-rate-limiting-and-backpressure/research/06-open-questions.md`
-
-*(Note: Per Pipeline Override, code files under `internal/`, `cmd/`, `README.md`, and engineering notes were not audited in this stage.)*
+1. `labs/25-rate-limiting-and-backpressure/research/01-plan.md`
+2. `labs/25-rate-limiting-and-backpressure/research/02-sources.md` (13 sources)
+3. `labs/25-rate-limiting-and-backpressure/research/03-evidence.md` (15 evidence items)
+4. `labs/25-rate-limiting-and-backpressure/research/04-contradictions.md` (5 focus areas)
+5. `labs/25-rate-limiting-and-backpressure/research/05-report.md` (Executive summary, 7 findings, limitations, conclusion)
+6. `labs/25-rate-limiting-and-backpressure/research/06-open-questions.md` (Unanswered questions, weak evidence items, future directions)
 
 ## Claims To Verify
-1. HTTP 429 "Too Many Requests" definition and Retry-After usage in RFC 6585.
-2. Token Bucket algorithm mechanics, burst capability ($T_{max} = b / (M - r)$), and database I/O applications.
-3. Reactive Streams specification purpose and history (2013-2015, Java 9 JEP 266).
-4. Little's Law ($L = \lambda W$) queue mathematical model and capacity constraints.
-5. AWS Exponential Backoff with Jitter formulas (Full Jitter, Equal Jitter, Decorrelated Jitter) and performance impact (>50% work reduction).
-6. Multi-tenant rate limiting and datacenter resource allocation trade-offs.
-7. System stability conditions based on arrival rate vs processing rate.
+1. Token Bucket algorithm allows bursts up to bucket capacity while enforcing sustained average rate.
+2. Leaky Bucket vs. Token Bucket relationship: mathematical equivalence and meter vs queue distinction.
+3. Exponential Backoff with Jitter reduces retry storms / thundering herd (Full Jitter formula in AWS SDKs).
+4. RFC 6585 specifies HTTP 429 Too Many Requests as the standard rate limiting status code, including cacheability rules.
+5. Little's Law ($L = \lambda W$) queue backlog accumulation calculations ($5,000,000 / 2,000 = 2,500s \approx 41m40s$).
+6. Stripe 4-layer rate limiter model (Request rate limiter, Concurrent requests limiter, Fleet usage load shedder, Worker utilization load shedder).
+7. Distinction between Rate Limiting (ingress/perimeter) and Backpressure (internal flow control / overload propagation).
+8. Redis suitability for distributed rate limiting via atomic primitives (`INCR`, `EXPIRE`, sorted sets).
+9. Multi-tenant isolation and per-tenant rate limiting / fair queueing requirements.
+10. Cost-based rate limiting necessity vs pure request-count rate limiting.
+
+## Code To Execute
+- None (Code audit is explicitly disabled per pipeline override for research audit stage).
+
+## Primary Risks
+1. Over-reliance on Wikipedia entries (Sources 1, 2, 3, 4, 12) for fundamental distributed systems claims.
+2. Verification of external URLs and canonical attribution (IETF RFC 6585, AWS Architecture Blog, Google SRE book, Stripe blog).
+3. Over-generalization of specific vendor implementations (AWS SDK retry delay cap of 20s, base delay of 50ms/1000ms) as universal standards.
+4. Attribution of prompt-provided examples (Evidence 14 & 15) as external research sources without primary literature backing.
 
 ## Audit Strategy
-1. **Source Integrity Check**: Independently fetch and verify URLs, publishers, titles, dates, and tier classifications cited in `02-sources.md`.
-2. **Claim-to-Evidence Mapping**: Verify whether each major finding in `05-report.md` and `03-evidence.md` is strictly supported by cited primary/secondary sources or relies on unverified assertions.
-3. **Overgeneralization & Contradiction Inspection**: Check for internal inconsistencies, terminology confusion (e.g. Token Bucket vs Leaky Bucket), and implementation-specific claims presented as universal facts.
-4. **Gap Analysis & Severity Rating**: Classify any missing sources, unverified assertions, or outdated references according to the standard audit severity model.
-5. **Verdict Generation**: Render a final decision (`APPROVED`, `APPROVED_WITH_WARNINGS`, `NEEDS_REVISION`, `REJECTED`).
+1. Audit all 13 sources in `02-sources.md` against criteria: reachable, publisher accuracy, tier rating, relevance, topic support.
+2. Extract all major claims from `03-evidence.md` and `05-report.md` and evaluate in `03-claim-audit.md`.
+3. Assess nuance and contradictions in `04-contradictions.md` for validity and potential hidden conflicts.
+4. Record code audit scope as `NOT_APPLICABLE` in `05-code-audit.md` due to pipeline override.
+5. Analyze gaps, weak sources, and missing edge cases in `06-gaps.md`.
+6. Formulate evidence-based final verdict in `07-verdict.md`.
