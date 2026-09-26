@@ -2,54 +2,36 @@
 
 ## Finding 1
 
-Location: internal/outbox/db.go:48-57, 59-69
-Claimed Behavior: Polling relay queries pending outbox records and updates record state to PROCESSED safely.
-Observed Implementation: `DB.GetPendingOutbox` grabs `RLock()` and returns copies/slice of pending messages. `DB.MarkOutboxProcessed` acquires `Lock()` and updates `Status = MessageStatusProcessed`. Mutations on `Tx` are staged in local maps and atomically written to `DB.orders` and `DB.outbox` upon `Tx.Commit()` under `DB.mu.Lock()`.
+Location: `internal/outbox/db.go:25-31`, `84-140`
+Claimed Behavior: Atomic persistence across orders and outbox records with transactional staging and commit/rollback.
+Observed Implementation: `Tx` stages mutations in local maps under `Tx.mu`. `Commit()` acquires `DB.mu` lock and merges staged maps into main storage atomically. `Rollback()` marks tx closed and discards staged mutations.
 Assessment: PASS
 Severity: LOW
-Notes: Thread-safe in-memory database simulation satisfies single-node transactional boundary requirements.
+Notes: Correctly implements simulated in-memory ACID transaction staging.
 
 ## Finding 2
 
-Location: internal/outbox/service.go:18-53
-Claimed Behavior: Atomic insert of Order entity and Outbox record within a single database transaction.
-Observed Implementation: `OrderService.CreateOrderWithOutbox` creates `Tx`, stages both `Order` and `OutboxMessage` (`Status: MessageStatusPending`), and calls `tx.Commit()`. If marshaling or staging fails, `tx.Rollback()` is invoked.
+Location: `internal/outbox/service.go:18-53`, `57-90`
+Claimed Behavior: Atomic outbox creation vs dual-write failure simulation.
+Observed Implementation: `CreateOrderWithOutbox` binds `SaveOrder` and `SaveOutbox` in one transaction. `CreateOrderDualWriteNaive` commits order to DB first, then attempts broker publish; if broker publish fails, DB state persists while message broker receives nothing.
 Assessment: PASS
 Severity: LOW
-Notes: Atomicity guarantee is correctly structured.
+Notes: Accurately models the exact vulnerability of dual-writes and the atomic solution.
 
 ## Finding 3
 
-Location: internal/outbox/service.go:57-90
-Claimed Behavior: Naive dual-write demonstrates state inconsistency on broker failure.
-Observed Implementation: `OrderService.CreateOrderDualWriteNaive` commits `Order` to DB first, then attempts direct broker dispatch. If `broker.Publish` fails, error returns while `Order` remains persisted in DB.
+Location: `internal/outbox/relay.go:24-60`
+Claimed Behavior: Decoupled asynchronous polling worker querying pending outbox records and publishing to broker.
+Observed Implementation: Background goroutine polls DB pending records on ticker interval, calls `broker.Publish`, and marks records processed upon success. Handles stop signals via channel.
 Assessment: PASS
 Severity: LOW
-Notes: Clearly isolates and demonstrates the dual-write flaw.
+Notes: Polling loop and state transitions are thread-safe and properly synchronized.
 
 ## Finding 4
 
-Location: internal/outbox/relay.go:43-60
-Claimed Behavior: Asynchronous polling relay reads pending outbox messages, publishes to broker, and marks records processed.
-Observed Implementation: `Relay.PollAndDispatch` fetches pending outbox events via `db.GetPendingOutbox()`, publishes each message via `broker.Publish(msg)`, and on success updates status via `db.MarkOutboxProcessed(msg.ID)`. On failure, message remains `PENDING` for subsequent poll cycles.
+Location: `internal/outbox/consumer.go:19-31`
+Claimed Behavior: Downstream consumer idempotency enforcement using message ID deduplication.
+Observed Implementation: `Consumer` maintains `processedIDs` map guarded by `sync.Mutex`. Duplicate delivery check returns `false` and ignores payload.
 Assessment: PASS
 Severity: LOW
-Notes: Implements polling publisher pattern.
-
-## Finding 5
-
-Location: internal/outbox/consumer.go:19-31
-Claimed Behavior: Idempotent consumer skips duplicate events based on message ID tracking.
-Observed Implementation: `Consumer.Handle` locks mutex, verifies presence in `processedIDs[msg.ID]`, skips duplicate if present, otherwise marks ID as processed and appends to `received`.
-Assessment: PASS
-Severity: LOW
-Notes: Standard message deduplication table pattern correctly implemented.
-
-## Finding 6
-
-Location: engineering/01-design.md:14,25 vs internal/outbox
-Claimed Behavior: Design document mentions "Outbox cleanup job removes or archives processed outbox records after retention interval."
-Observed Implementation: No cleanup worker or table purging function is implemented in `internal/outbox`. `db.go` only updates status to `PROCESSED`.
-Assessment: WARNING
-Severity: LOW
-Notes: While documented as a potential expected behavior / success criteria in design doc, `engineering/02-implementation-notes.md` scopes the implementation to core outbox & idempotency. Does not block core verification.
+Notes: Correctly verifies consumer-side deduplication guarantee.
