@@ -1,35 +1,38 @@
-# Audit Plan — labs/23-optimistic-vs-pessimistic-locking
+# Audit Plan: Optimistic vs Pessimistic Locking Research
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
-Audit Date: 2026-09-25
-Scope: RESEARCH ONLY per pipeline override. No code audit, no implementation changes.
+## Target Lab
+`labs/23-optimistic-vs-pessimistic-locking`
+
+## Pipeline Mode
+- Research-only audit (per pipeline override instructions).
+- Implementation / runnable code audit deferred to implementation phase.
 
 ## Files Reviewed
-- research/01-plan.md (15 questions, search strategy)
-- research/02-sources.md (12 sources claimed)
-- research/03-evidence.md (20 evidence items)
-- research/05-report.md (16 findings + appendices)
-- research/06-open-questions.md (gaps disclosed)
-- research-revision/01-revision-plan.md, 02-changes-made.md, 03-revision-result.md
+- `labs/23-optimistic-vs-pessimistic-locking/research/01-plan.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/02-sources.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/03-evidence.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/04-contradictions.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/05-report.md`
+- `labs/23-optimistic-vs-pessimistic-locking/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Formal OCC/PCC definitions attributed to Bernstein (1987) and Silberschatz (2019) with page numbers.
-2. MVCC/FOR UPDATE/deadlock/isolation quotes attributed to PostgreSQL docs sections 13.1–13.4.
-3. `SELECT FOR UPDATE` vendor syntax matrix (PG / SQL Server / Oracle / MySQL).
-4. Numeric claims: contention crossover ≤10% / >30% / 15–20%; retry 3–5x, 10–50ms start, 1–5s cap.
-5. ORM claims: Hibernate `@Version` + "exponential backoff" quote; EF Core `[Timestamp]`; Laravel `lockForUpdate()/sharedLock()` + `$timestamps` as optimistic locking.
-6. Distributed DB claims (CockroachDB HLC, Spanner TrueTime).
-7. Version claims (PG 14 NOWAIT/SKIP LOCKED, PG 18/19).
-
-## Code To Execute
-N/A — research-only audit, no implementation in lab.
+1. Definition and reproducibility of "lost update" under READ COMMITTED isolation.
+2. Pessimistic locking semantics via `SELECT ... FOR UPDATE` (PostgreSQL, MySQL, Oracle).
+3. Deadlock risks, lock wait duration, and holding locks across slow/external calls as an anti-pattern.
+4. Optimistic locking mechanics via version guard in `WHERE` clause and checking affected rows.
+5. Selection criteria (pessimistic prevents vs optimistic detects; high contention vs low contention).
+6. Atomic single-statement updates (`UPDATE ... SET stock = stock - N WHERE stock >= N`) eliminating read-modify-write windows.
+7. Isolation level vs transaction misconception (transaction boundary alone does not prevent lost update).
+8. Default isolation levels and multi-database behavioral divergence.
 
 ## Primary Risks
-- Dead URLs cited as supporting evidence (Bernstein PDF, Oracle SELECT, EF Core page).
-- Numeric/benchmark quotes attributed to vendor docs that contain no such numbers.
-- Page-level academic quotes that cannot be verified from cited URLs.
-- MySQL behavior inferred without a source (honestly disclosed — lower risk).
-- Internal numeric inconsistency (≤10%/>30% vs 15–20%).
+- Overgeneralizing database-specific semantics across vendors (e.g., PostgreSQL Snapshot Isolation vs MySQL 2PL next-key locking).
+- Relying on secondary/unverified sources for edge cases (e.g. Hibernate versionless locking, Redis distributed lock boundaries).
+- Arbitrary numeric claims or unmeasured benchmark generalizations.
 
 ## Audit Strategy
-Fetch every URL source directly. Compare claimed quotes against actual page content. Check each numeric claim for anchoring. Cross-check evidence vs report vs revision-result for contradictions. Record gaps with severity; no silent repair.
+1. Validate all 14 cited sources for reachability, tier categorization, and substantive topical support.
+2. Audit all 9 major findings and 16 evidence items against source citations and claim scope.
+3. Review documented contradictions to verify they reflect actual engine behaviors without ungrounded assertions.
+4. Check gap analysis for completeness in capturing unverified areas (e.g., benchmark numbers, atomic decrement vendor recipes).
+5. Produce evidence-based verdict on research soundness.

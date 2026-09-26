@@ -1,162 +1,170 @@
-# Research Report: Optimistic vs Pessimistic Locking
+# Research Report: Optimistic vs Pessimistic Locking — Mencegah Data Diam-Diam Tertimpa oleh Request Lain
+
+Research date: 2026-09-26
 
 ## Research Question
-What are the technical foundations, implementation patterns, trade-offs, and best practices for optimistic and pessimistic locking mechanisms in database concurrency control?
+
+How do concurrent processes cause silent data loss ("lost update") when two requests read-modify-write the same record, and what are the verified mechanisms, trade-offs, and selection criteria for preventing it via pessimistic locking, optimistic locking, and atomic database operations?
 
 ## Executive Summary
-Optimistic and pessimistic locking represent two fundamental approaches to managing concurrent data access. Optimistic locking assumes conflicts are rare and validates data integrity at commit/update time using version checks or conditional WHERE clauses. Pessimistic locking assumes conflicts are common and prevents them by acquiring exclusive locks upfront via `SELECT FOR UPDATE` or equivalent database-specific mechanisms. The choice depends critically on contention level, isolation level, database vendor, transaction duration, and retry tolerance. Neither strategy is universally superior; proper application requires vendor/version-specific implementation and explicit scoping of claims to specific database configurations.
+
+Lost update is a verified concurrency anomaly where a second transaction overwrites a first transaction's committed change without error. All major databases (PostgreSQL, MySQL/InnoDB, Oracle) can exhibit it under their default isolation level (READ COMMITTED) when applications use a naive read-modify-write pattern. Three proven prevention strategies exist:
+
+1. **Pessimistic locking** (`SELECT ... FOR UPDATE`) blocks the second transaction until the first commits — verified in PostgreSQL, MySQL, and Oracle official docs.
+2. **Optimistic locking** (version/timestamp in `WHERE` clause + `affected_rows` check) detects the conflict at commit time and forces the application to retry or return 409 — verified by Fowler's Patterns and Oracle's WHERE-guard recommendation.
+3. **Atomic single-statement operations** (`UPDATE ... SET stock = stock - N WHERE stock >= N`) eliminate the read-modify-write window entirely.
+
+Pessimistic locking prevents conflicts (suited to high-contention, correctness-critical resources like balances, stock, seat reservations). Optimistic locking detects conflicts (suited to low-contention, read-heavy, multi-request business transactions like CMS/CRM/profile edits). No single isolation level prevents lost update automatically without explicit query design; even wrapping code in a transaction is insufficient.
 
 ## Findings
 
-### Finding 1: Formal Definitions and Theoretical Foundations (Q1)
-Claim: Optimistic concurrency control (OCC) validates transactions at commit time; pessimistic concurrency control (PCC) prevents conflicts via upfront locking.
-Evidence: Bernstein, Hadzilacos, and Goodman (1987) define OCC as "a protocol where each transaction executes without any restriction and then goes through a validation phase before committing." Silberschatz et al. (2019, p. 695) define PCC as obtaining "locks on all data items it will need before accessing them."
-Classification: FACT
+### Finding 1: Lost Update Is a Real, Reproducible Anomaly Under Default Isolation
+
+Claim: Two concurrent transactions reading the same value, computing new values independently, and writing back sequentially cause the first write to be silently lost. This occurs under READ COMMITTED (the default in PostgreSQL and Oracle) without explicit locking.
+
+Evidence: Wikipedia defines lost update as "A second transaction writes a second value ... on top of a first value written by a first concurrent transaction, and the first value is lost." Oracle documents a concrete case: Session 1 updates Banda salary to 7000; Session 2 reads stale 6200; Session 1 commits; Session 2 writes 6300 — 7000 is lost. PostgreSQL Read Committed re-evaluates the WHERE clause after a concurrent commit, allowing silent overwrite. MySQL READ COMMITTED uses semi-consistent reads with the same vulnerability if the application does not guard the WHERE clause.
+
+Sources:
+- Wikipedia - Concurrency Control (https://en.wikipedia.org/wiki/Concurrency_control)
+- Oracle 19c Concepts 9 Data Concurrency and Consistency (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html)
+- PostgreSQL 18 Docs 13.2 Transaction Isolation (https://www.postgresql.org/docs/current/transaction-iso.html)
+- MySQL 8.0 Docs 15.7.2.1 Transaction Isolation Levels (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-transaction-isolation-levels.html)
+
 Confidence: HIGH
-Scope: Universal database theory, independent of implementation.
 
-### Finding 2: MVCC as Optimistic Locking Foundation (Q1, Q13)
-Claim: Multiversion Concurrency Control (MVCC) provides the mechanism enabling optimistic locking by allowing readers to access consistent snapshots without blocking writers.
-Evidence: PostgreSQL documentation states: "The main advantage of using the MVCC model... is that locks acquired for querying (reading) data do not conflict with locks acquired for writing data, and so reading never blocks writing and writing never blocks reading." (PostgreSQL Docs, Section 13.1)
-Classification: FACT
+### Finding 2: Pessimistic Locking Blocks Concurrent Writers via SELECT ... FOR UPDATE
+
+Claim: `SELECT ... FOR UPDATE` acquires a row-level exclusive lock held until transaction commit/rollback. Concurrent transactions attempting UPDATE/DELETE/SELECT FOR UPDATE on the same row block (wait indefinitely unless NOWAIT/SKIP LOCKED or deadlock detection intervenes). Row locks do not block plain SELECT.
+
+Evidence: PostgreSQL 13.3.2: "FOR UPDATE causes the rows retrieved by the SELECT statement to be locked as though for update. This prevents them from being locked, modified or deleted by other transactions until the current transaction ends." MySQL InnoDB: "SELECT ... FOR UPDATE locks the rows and associated index entries ... All locks are released when the transaction is committed or rolled back. NOWAIT and SKIP LOCKED options are also available." Oracle: TX row lock acquired by SELECT ... FOR UPDATE, held until commit/rollback. PostgreSQL lock-compatibility tables confirm plain SELECT is blocked only by ACCESS EXCLUSIVE.
+
+Sources:
+- PostgreSQL 18 Docs 13.3 Explicit Locking (https://www.postgresql.org/docs/current/explicit-locking.html)
+- MySQL 8.0 Docs 15.7.2.4 Locking Reads (https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html)
+- Oracle 19c Concepts 9 Data Concurrency (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html)
+
 Confidence: HIGH
-Scope: PostgreSQL's MVCC implementation; other vendors (Oracle, SQL Server with RCSI/SNAPSHOT, CockroachDB) use similar MVCC architectures.
 
-### Finding 3: Pessimistic Locking SQL Implementation (Q2, Q5, Q7)
-Claim: Standard SQL `SELECT FOR UPDATE` and vendor-specific equivalents acquire exclusive row locks that block concurrent writers until transaction completion.
-Evidence: PostgreSQL: `SELECT FOR UPDATE [NOWAIT | SKIP LOCKED | WAIT n]` locks rows; SQL Server: `SELECT ... WITH (UPDLOCK, ROWLOCK)` acquires update locks; Oracle: `SELECT FOR UPDATE [WAIT n | NOWAIT | SKIP LOCKED]`.
-Classification: FACT
+### Finding 3: Pessimistic Locking Trade-offs — Concurrency Loss, Deadlock, and Hold-Time Sensitivity
+
+Claim: Pessimistic locking reduces concurrency, increases wait time, and introduces deadlock risk. Holding a lock during external calls (HTTP/gateway, PDF generation) is an anti-pattern. Deadlocks are auto-detected and one transaction is aborted unpredictably; consistent lock ordering and keeping transactions short are the documented defenses.
+
+Evidence: PostgreSQL 13.3.4: "PostgreSQL automatically detects deadlock situations and resolves them by aborting one of the transactions ... Exactly which transaction will be aborted is difficult to predict." Best defense: consistent lock order + most-restrictive lock first. Wikipedia: "Most non-optimistic mechanisms (with blocking) are prone to deadlocks." PostgreSQL: "A transaction seeking a lock will wait indefinitely ... it is a bad idea to hold transactions open for long periods (e.g., while waiting for user input)." This directly validates the topic spec's "Jangan melakukan Call Payment Gateway di dalam transaction yang memegang lock."
+
+Sources:
+- PostgreSQL 18 Docs 13.3.4 Deadlocks (https://www.postgresql.org/docs/current/explicit-locking.html)
+- Wikipedia Concurrency Control Categories (https://en.wikipedia.org/wiki/Concurrency_control)
+
 Confidence: HIGH
-Scope: Implementation-specific by vendor. PostgreSQL 14+ supports NOWAIT/SKIP LOCKED; earlier versions only WAIT. SQL Server lock hints depend on isolation level.
 
-### Finding 4: Optimistic Locking Implementation Patterns (Q2, Q5, Q7)
-Claim: Optimistic locking is implemented via version columns checked in UPDATE WHERE clauses, ORM-managed `@Version`/`[Timestamp]` annotations, or atomic conditional UPDATE statements.
-Evidence: SQL Server rowversion column; Hibernate `@Version` annotation includes version in UPDATE WHERE; PostgreSQL atomic `UPDATE ... WHERE version = ?`; EF Core `[Timestamp]` maps to rowversion.
-Classification: FACT
+### Finding 4: Optimistic Locking Detects Conflicts via Version/Timestamp Guard and Affected-Rows Check
+
+Claim: Optimistic locking assumes conflicts are rare, allows concurrent reads, and validates at commit by including the originally-read version in the UPDATE WHERE clause. Zero affected rows signals a conflict that the application must handle (reload/recalculate/retry or 409 Conflict). It cannot be ignored.
+
+Evidence: Fowler: "Optimistic Offline Lock solves this problem by validating that the changes about to be committed by one session don't conflict ... A successful pre-commit validation is, in a sense, obtaining a lock." Wikipedia optimistic: "only check for violations at each transaction's commit. If violations are detected, the transaction is aborted and restarted. Very efficient when few transactions are aborted." Oracle recommends `UPDATE ... WHERE last_name='Banda' AND salary=6200` (original-value guard). The topic spec pattern `UPDATE products SET stock=7, version=6 WHERE id=10 AND version=5` with `0 rows affected` is the exact implementation. Baeldung/Hibernate: version mismatch throws OptimisticLockException/StaleObjectStateException requiring retry.
+
+Sources:
+- Martin Fowler Optimistic Offline Lock (https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html)
+- Wikipedia Concurrency Control (https://en.wikipedia.org/wiki/Concurrency_control)
+- Oracle 19c Concepts 9 (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html)
+- Baeldung JPA Optimistic Locking (https://www.baeldung.com/jpa-optimistic-locking)
+- Hibernate ORM 6.3 User Guide (https://docs.jboss.org/hibernate/orm/6.3/userguide/html_single/Hibernate_User_Guide.html#locking-optimistic)
+
 Confidence: HIGH
-Scope: Implementation-specific. Patterns: (1) Application-managed version column; (2) ORM-managed version; (3) Conditional UPDATE with original values; (4) Database-managed rowversion (SQL Server).
 
-### Finding 5: Isolation Level Interaction with Pessimistic Locking (Q3, Q13)
-Claim: Pessimistic locking behavior under concurrent updates varies by isolation level: READ COMMITTED waits and re-evaluates; REPEATABLE READ/SERIALIZABLE may cause serialization failures.
-Evidence: PostgreSQL docs: "In Repeatable Read or Serializable transactions... an error will be thrown if a row to be locked has changed since the transaction started." (Section 13.3.2). SQL Server with SNAPSHOT isolation: UPDLOCK may cause update conflicts (Msg 3960).
-Classification: FACT
+### Finding 5: Selection Criteria — Pessimistic Prevents, Optimistic Detects
+
+Claim: Pessimistic = prevent conflict (block early). Optimistic = detect conflict (check late). Pessimistic suits high-contention or correctness-critical resources (balances, limited stock, queue numbers, seat reservations, inventory allocation). Optimistic suits low-contention, read-heavy, multi-request workflows (profile/CRM/CMS/master data/documents). When neither is needed, neither should be used.
+
+Evidence: Fowler: "Pessimistic Offline Lock assumes that the chance of session conflict is high and therefore limits the system's concurrency, Optimistic Offline Lock assumes that the chance of conflict is low." "Pessimistic prevents conflicts by avoiding them altogether. It forces a business transaction to acquire a lock before it starts to use it." Wikipedia: optimistic "very efficient when few transactions are aborted" vs pessimistic "Blocking ... typically involved with performance reduction." Baeldung: optimistic suitable when "many more reads than updates" and entities are detached. Topic spec's selection table matches these sources.
+
+Sources:
+- Martin Fowler Optimistic Offline Lock (https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html)
+- Martin Fowler Pessimistic Offline Lock (https://martinfowler.com/eaaCatalog/pessimisticOfflineLock.html)
+- Wikipedia Concurrency Control (https://en.wikipedia.org/wiki/Concurrency_control)
+- Baeldung JPA Optimistic Locking (https://www.baeldung.com/jpa-optimistic-locking)
+
 Confidence: HIGH
-Scope: PostgreSQL 18 behavior; SQL Server 2022+ behavior; Oracle FOR UPDATE behavior under READ COMMITTED vs SERIALIZABLE.
 
-### Finding 6: Isolation Level Interaction with Optimistic Locking (Q3, Q13)
-Claim: Optimistic locking (via MVCC/snapshot isolation) behavior depends on isolation level: REPEATABLE READ prevents non-repeatable reads but not serialization anomalies; SERIALIZABLE adds anomaly detection.
-Evidence: PostgreSQL Repeatable Read implements Snapshot Isolation (prevents phantoms beyond SQL standard). Serializable adds predicate locking for serialization anomaly detection.
-Classification: FACT
+### Finding 6: Atomic Single-Statement Updates Eliminate the Read-Modify-Write Window
+
+Claim: For simple counters/quota/stock decrements, a single conditional UPDATE (`UPDATE products SET stock = stock - 3 WHERE id=10 AND stock >= 3` + check `affected_rows == 1`) is atomic at the statement level and removes the race window without explicit locking. If affected_rows == 0, stock was insufficient.
+
+Evidence: Oracle ACID: "A SQL statement is an atomic unit; on failure, only its effects are rolled back." MySQL: under READ COMMITTED "InnoDB holds locks only for rows that it updates or deletes" — single conditional UPDATE holds lock only for the matched row. PostgreSQL transaction-iso confirms single-statement atomicity and that page-level locks are released immediately after fetch/update, implying statement-level atomicity. No Tier 1 source in this set states the exact `SET stock = stock - N WHERE stock >= N` recipe verbatim, but all component guarantees (statement atomicity + conditional WHERE + affected_rows check) are individually documented.
+
+Sources:
+- Oracle 19c Concepts 10 Transactions (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/transactions.html)
+- MySQL 8.0 Docs Innodb Transaction Isolation (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-transaction-isolation-levels.html)
+- PostgreSQL 18 Docs 13.2 Transaction Isolation (https://www.postgresql.org/docs/current/transaction-iso.html)
+
+Confidence: MEDIUM — component guarantees are HIGH; the specific decrement-with-guard recipe is industry best practice inferred from them but not quoted verbatim from a single vendor example.
+
+### Finding 7: Isolation Level Alone Does Not Prevent Lost Update
+
+Claim: Wrapping read-modify-write in a transaction does not automatically prevent lost update. The outcome depends on the queries and isolation level. PostgreSQL READ COMMITTED allows the anomaly; REPEATABLE READ/SERIALIZABLE throw an error instead. Oracle's lost-update example occurs inside transactions. MySQL's semi-consistent reads under READ COMMITTED still require WHERE-guard handling.
+
+Evidence: PostgreSQL: "Within a REPEATABLE READ or SERIALIZABLE transaction, however, an error will be thrown if a row to be locked has changed since the transaction started." Under READ COMMITTED re-evaluation permits overwrite. Oracle Table 10-2 lost-update occurs despite transactional boundaries. MySQL docs describe semi-consistent evaluation that still needs application handling.
+
+Sources:
+- PostgreSQL 18 Docs 13.3.2 Row-Level Locks (https://www.postgresql.org/docs/current/explicit-locking.html)
+- PostgreSQL 18 Docs 13.2 (https://www.postgresql.org/docs/current/transaction-iso.html)
+- Oracle 19c Concepts 9 (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html)
+- MySQL 8.0 Docs 15.7.2.1 (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-transaction-isolation-levels.html)
+
 Confidence: HIGH
-Scope: PostgreSQL 18; SQL Server SNAPSHOT isolation level provides statement-level (RCSI) or transaction-level (SNAPSHOT) read consistency.
 
-### Finding 7: Performance Under Different Contention Scenarios (Q4)
-Claim: Under low contention (<15% update conflict rate), optimistic locking yields higher throughput; under high contention (>30% conflict rate), pessimistic locking reduces retry overhead.
-Evidence: Bernstein et al. (1987) theoretical analysis: "Optimistic concurrency control performs better than two-phase locking when the probability of conflict is low, but worse when conflict probability is high." (Bernstein et al., 1987, p. 136) SQL Server benchmarks confirm crossover ~15-20% conflict rate.
-Classification: INTERPRETATION
-Confidence: MEDIUM
-Scope: General theoretical result; actual crossover depends on transaction duration, lock hold time, hardware, and isolation level. No universal numeric threshold.
+### Finding 8: Default Isolation Levels Differ Across Databases
 
-### Finding 8: Decision Framework - When to Prefer Each Strategy (Q9)
-Claim: Optimistic locking preferred for: read-heavy workloads, low contention, long user-think-time transactions, distributed systems with high latency. Pessimistic locking preferred for: write-heavy workloads, high contention, short transactions, strict consistency requirements, deadlock-avoidable lock ordering.
-Evidence: Literature consensus: Bernstein (OCC better at low conflict), Silberschatz (PCC for high contention). Practical guidance: retry cost vs lock hold cost trade-off.
-Classification: INTERPRETATION
-Confidence: MEDIUM
-Scope: Heuristic framework; must be validated per workload. Not a universal rule.
+Claim: PostgreSQL defaults to READ COMMITTED (READ UNCOMMITTED is a no-op identical to READ COMMITTED due to MVCC). Oracle defaults to READ COMMITTED and does not offer READ UNCOMMITTED or REPEATABLE READ. MySQL/InnoDB defaults to REPEATABLE READ. SERIALIZABLE in MySQL implicitly converts plain SELECT to SELECT ... FOR SHARE. Repeatable Read means Snapshot Isolation in PostgreSQL but gap-lock-based 2PL in MySQL.
 
-### Finding 9: Common Anti-Patterns and Failure Modes (Q10)
-Claim: Anti-patterns include: (1) SELECT then UPDATE without lock (lost update); (2) Holding pessimistic locks across user I/O (deadlock/starvation); (3) No retry logic for optimistic failures; (4) Using SELECT FOR UPDATE in REPEATABLE READ without handling serialization failures; (5) Ignoring version column in UPDATE WHERE.
-Evidence: PostgreSQL docs warn: "bad idea for applications to hold transactions open for long periods of time (e.g., while waiting for user input)" (Section 13.3.4). Hibernate docs require handling OptimisticLockException.
-Classification: FACT
-Confidence: HIGH
-Scope: Derived from vendor documentation warnings and common failure reports.
+Evidence: PostgreSQL 13.2: only three effective levels (Read Committed, Repeatable Read, Serializable); Read Uncommitted behaves identically to Read Committed. MySQL 15.7.2.1: REPEATABLE READ is default; SERIALIZABLE converts plain SELECT. Oracle Concepts: READ COMMITTED default; levels are READ COMMITTED, SERIALIZABLE, READ ONLY.
 
-### Finding 10: Distributed Systems Considerations (Q11)
-Claim: Distributed databases (CockroachDB, Spanner, TiDB) use hybrid logical clocks/timestamp ordering for optimistic concurrency; pessimistic locking requires distributed lock managers or two-phase commit.
-Evidence: CockroachDB uses HLC for serializable snapshot isolation. Google Spanner uses TrueTime for globally consistent timestamps. Traditional 2PC-based pessimistic locking doesn't scale.
-Classification: FACT
-Confidence: MEDIUM
-Scope: Modern distributed SQL databases; specific implementations vary. Traditional sharded systems often avoid distributed pessimistic locks.
+Sources:
+- PostgreSQL 18 Docs 13.2 (https://www.postgresql.org/docs/current/transaction-iso.html)
+- MySQL 8.0 Docs 15.7.2.1 (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-transaction-isolation-levels.html)
+- Oracle 19c Concepts 9 (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html)
 
-### Finding 11: Lost Update Anomaly Prevention (Q12)
-Claim: Both strategies prevent lost updates when correctly implemented: pessimistic via exclusive locks blocking concurrent writers; optimistic via version validation failing conflicting updates.
-Evidence: Silberschatz et al. (2019, p. 784): "The lost update anomaly can be prevented by using either locking protocols (pessimistic) or timestamp-based protocols (optimistic)."
-Classification: FACT
-Confidence: HIGH
-Scope: Universal database theory; requires correct implementation in both cases.
+Confidence: HIGH for PostgreSQL and Oracle (direct fetch verified); MEDIUM for MySQL (via Oracle CDN mirror)
 
-### Finding 12: MVCC and Snapshot Isolation Interaction (Q13)
-Claim: MVCC enables optimistic locking by providing snapshot reads; Snapshot Isolation (PostgreSQL Repeatable Read) prevents phantoms beyond standard; Serializable Snapshot Isolation (PostgreSQL Serializable) adds anomaly detection.
-Evidence: PostgreSQL docs: "Repeatable Read... prevents all phenomena... except serialization anomalies." "Serializable... monitors for conditions which could cause a cycle in the apparent order of execution." (Sections 13.2.2, 13.2.3)
-Classification: FACT
-Confidence: HIGH
-Scope: PostgreSQL 18; other vendors implement snapshot isolation differently (Oracle, SQL Server, CockroachDB).
+### Finding 9: Common Anti-Patterns Are Documented
 
-### Finding 13: Deadlock Implications of Pessimistic Locking (Q14)
-Claim: Pessimistic locking introduces deadlock risk when multiple transactions acquire locks in different orders; mitigated by consistent lock ordering, timeouts, and deadlock detection.
-Evidence: PostgreSQL: "The use of explicit locking can increase the likelihood of deadlocks... best defense... acquire locks on multiple objects in a consistent order." (Section 13.3.4). SQL Server uses deadlock monitor with victim selection.
-Classification: FACT
-Confidence: HIGH
-Scope: All databases supporting explicit row locks; deadlock detection/resolution is vendor-specific.
+Claim: Five recurring mistakes have verified support:
+1. Assuming transaction alone prevents lost update — false (Finding 7).
+2. Using distributed/Redis locks when database can solve it — PostgreSQL advisory locks doc states "A common use of advisory locks is to emulate pessimistic locking strategies ... While a flag stored in a table could be used, advisory locks are faster" — implying database-native mechanism is preferred before external locks.
+3. Holding pessimistic locks across network calls — violates PostgreSQL "do not hold transactions open waiting for user input" guidance.
+4. Ignoring 0-rows-affected on optimistic update — Fowler/Hibernate/Baeldung all require explicit handling (retry or 409).
+5. Naive read-modify-write (`$product->stock -= 1; $product->save()`) without concurrency guard — directly exhibits Finding 1.
 
-### Finding 14: Retry Logic for Optimistic Locking Conflicts (Q15)
-Claim: Optimistic locking requires application-level retry with exponential backoff; typical configuration: 3-5 retries, starting at 10-50ms, capped at 1-5 seconds.
-Evidence: Microsoft retry pattern: "retry up to 5 times with exponential backoff starting at 10ms" for transient faults. Hibernate requires handling OptimisticLockException with retry.
-Classification: EXAMPLE
-Confidence: MEDIUM
-Scope: Microsoft Azure Architecture Guide pattern; actual values workload-dependent. Not a universal best practice number.
+Sources:
+- PostgreSQL 18 Docs 13.3.4 + 13.3.5 (https://www.postgresql.org/docs/current/explicit-locking.html)
+- Martin Fowler Optimistic Offline Lock (https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html)
+- Baeldung / Hibernate optimistic docs
 
-### Finding 15: ORM Framework Support (Q8)
-Claim: Hibernate (JPA `@Version`), Entity Framework Core (`[Timestamp]`/`rowversion`), Laravel Eloquent (`lockForUpdate()`, `sharedLock()`) provide framework-level locking abstractions.
-Evidence: Hibernate 6.6 `@Version` auto-includes in UPDATE WHERE; EF Core 7+ `[Timestamp]` → SQL Server rowversion; Laravel 11.x query builder methods generate native FOR UPDATE/SHARE.
-Classification: FACT
-Confidence: HIGH
-Scope: Framework-specific versions; behavior translates to native SQL per database dialect.
-
-### Finding 16: Atomic UPDATE as Lock-Free Alternative (Q7)
-Claim: Conditional UPDATE with WHERE clause comparing original values provides atomic optimistic concurrency without separate version column or ORM.
-Evidence: PostgreSQL docs: "An UPDATE statement like `UPDATE accounts SET balance = balance - 100.00 WHERE acctnum = 12345 AND balance = 500.00` atomically checks and updates." (Section 13.4.2)
-Classification: FACT
-Confidence: HIGH
-Scope: All SQL databases supporting conditional UPDATE; basis for "optimistic locking without versions".
+Confidence: HIGH for 1, 3, 4, 5; MEDIUM for 2 (distributed-lock preference is strong industry consensus but not stated as "never use Redis" in fetched Tier 1 sources)
 
 ## Areas of Agreement
-- Lost update anomaly prevented by both strategies when correctly implemented
-- MVCC/snapshot isolation underpins modern optimistic locking
-- Pessimistic locking via explicit locks is universally supported but syntax varies
-- Contention level is primary decision factor (not universal rule)
-- Retry logic required for optimistic; deadlock handling required for pessimistic
+
+- All sources agree lost update is a real anomaly distinct from dirty read / non-repeatable read / phantom read.
+- All database vendors agree `SELECT ... FOR UPDATE` is the standard pessimistic row-level mechanism with commit/rollback release.
+- All sources agree optimistic locking is detection-not-prevention and requires application handling of version-mismatch / 0-rows.
+- All sources agree performance degrades with blocking (pessimistic) and with aborts/retries (optimistic); choice depends on conflict frequency.
+- All sources agree a plain transaction without appropriate query design (locking or version guard or atomic statement) does not prevent lost update.
 
 ## Areas of Disagreement
-- **Numeric thresholds**: No consensus on exact contention crossover point (15-20% from SQL Server benchmarks, but highly workload-dependent)
-- **Universal vs scoped claims**: Many tutorials present PostgreSQL-specific `FOR NOWAIT` behavior as universal; it's not
-- **ORM abstraction fidelity**: ORM locking may not map 1:1 to native SQL behavior across all dialects
-- **Distributed locking viability**: Some argue pessimistic locking is impractical in distributed systems; others use distributed lock managers (ZooKeeper, etcd) successfully
+
+- **What "Repeatable Read" guarantees:** PostgreSQL (Snapshot Isolation, no phantoms) vs MySQL (2PL with gap/next-key locks, prevents phantoms for locking reads but via different mechanism) vs ANSI spec (allows phantoms). Not a contradiction in advice but a semantic divergence requiring database-specific reasoning.
+- **READ UNCOMMITTED existence:** PostgreSQL treats it as identical to READ COMMITTED (no dirty reads possible); other systems allow dirty reads. Applications porting READ UNCOMMITTED logic to PostgreSQL get no benefit.
+- **Vendor emphasis on remedies:** Oracle's documented remedy is original-value WHERE guard; PostgreSQL docs emphasize explicit locking and SERIALIZABLE; MySQL emphasizes semi-consistent reads + gap locking. All are valid within their engine; none claims exclusivity.
 
 ## Limitations
-- MySQL 8.0 official documentation inaccessible during research (technical difficulties); behavior inferred from PostgreSQL/SQL Server/Oracle patterns and community knowledge
-- Performance benchmarks lack standardized methodology across vendors
-- Version-specific behaviors (e.g., PostgreSQL 14+ NOWAIT vs pre-14 WAIT only) require version qualification
-- Cloud-managed databases (RDS, Cloud SQL, Azure SQL) may have proprietary proxy layers altering locking behavior
+
+- MySQL documentation was accessed via Oracle CDN mirror (https://docs.oracle.com/cd/.../mysql-8.0-en/...) due to 403 on direct mysql.com fetch; content matches official MySQL docs but direct MySQL-domain verification was not completed — downgrade MySQL-specific claims to MEDIUM until re-fetched.
+- Hibernate source (versionless optimistic locking details) was reported by subagent but not directly fetched this session — treated as MEDIUM.
+- No single Tier 1 vendor source was found stating the exact `UPDATE ... SET stock = stock - N WHERE stock >= N` recipe verbatim; the atomic-operation finding is a synthesis of statement-atomicity guarantees — remains MEDIUM.
+- Distributed locking (Redis) trade-offs were not deeply sourced from a Tier 1 distributed-systems reference; assessment relies on inference from database-native lock preference.
+- Snapshot Isolation (SI) vs ANSI levels debate (Berenson et al. 1995 "Critique of ANSI SQL Isolation Levels") was cited via Wikipedia but not directly fetched.
+- Performance benchmarks (throughput/latency numbers for optimistic vs pessimistic under contention) were not found in Tier 1 sources; only qualitative trade-offs are verified.
 
 ## Conclusion
-Optimistic and pessimistic locking are complementary concurrency control strategies with distinct trade-offs. Optimistic locking (via MVCC snapshots, version columns, conditional UPDATEs) excels in low-contention, read-heavy scenarios with tolerance for retries. Pessimistic locking (via `SELECT FOR UPDATE`, `UPDLOCK`, `FOR SHARE`) excels in high-contention, write-heavy, short-transaction scenarios where retry overhead exceeds lock wait cost. Correct implementation requires: vendor/version-specific SQL syntax, isolation level awareness, deadlock prevention for pessimistic, retry handling for optimistic, and ORM-to-SQL behavior verification. No universal numeric thresholds exist; all claims must be scoped to specific database, version, isolation level, and workload.
 
-## Appendix: Quick Reference — Vendor-Specific Syntax
-
-| Pattern | PostgreSQL | SQL Server | Oracle | MySQL (NOT VERIFIED) |
-|---------|------------|------------|--------|----------------------|
-| Pessimistic (exclusive) | `SELECT ... FOR UPDATE [NOWAIT/SKIP LOCKED]` | `SELECT ... WITH (UPDLOCK, ROWLOCK)` | `SELECT ... FOR UPDATE [WAIT n/NOWAIT/SKIP LOCKED]` | `SELECT ... FOR UPDATE [NOWAIT/SKIP LOCKED]` |
-| Pessimistic (shared) | `SELECT ... FOR SHARE` | `SELECT ... WITH (HOLDLOCK)` | N/A (use LOCK TABLE) | `SELECT ... LOCK IN SHARE MODE` |
-| Optimistic (version column) | App-managed `version` in UPDATE WHERE | `rowversion` / `timestamp` column | `ORA_ROWSCN` / app-managed | App-managed `version` in UPDATE WHERE |
-| Optimistic (atomic UPDATE) | `UPDATE ... WHERE id=? AND version=?` | `UPDATE ... WHERE id=? AND rowversion=?` | `UPDATE ... WHERE id=? AND version=?` | `UPDATE ... WHERE id=? AND version=?` |
-| ORM optimistic | Hibernate `@Version` | EF Core `[Timestamp]` | EclipseLink `@Version` | Laravel `$timestamps` |
-
-## Appendix: Isolation Level Effects Summary
-
-| Isolation Level | Pessimistic Lock Behavior | Optimistic Lock Behavior |
-|-----------------|---------------------------|--------------------------|
-| READ COMMITTED | Waits for lock, re-evaluates WHERE | Statement-level snapshot; sees committed changes |
-| REPEATABLE READ | May fail with serialization error if row changed since txn start | Transaction-level snapshot; no phantoms (PG) |
-| SERIALIZABLE | May fail with serialization anomaly detection | Adds predicate locking; full serializability |
-| SNAPSHOT (SQL Server) | Update conflict (Msg 3960) if row modified | Statement (RCSI) or transaction (SNAPSHOT) consistent read |
+Lost update is a silent, error-free data corruption that reproduces under default isolation in major databases when applications use read-modify-write. Pessimistic locking (SELECT FOR UPDATE) and optimistic locking (version guard + affected_rows check) are both verified, complementary strategies — one prevents, one detects. For simple counters, a single conditional UPDATE is the minimal, verified alternative that avoids both. Isolation levels alone are insufficient; query design determines correctness. The documented selection heuristic is: atomic operation first, then optimistic if conflicts are rare, pessimistic if conflicts are frequent or correctness is critical, distributed locks only when the resource spans databases. Any optimistic conflict (0 rows affected) must be handled explicitly; any pessimistic lock must be held for the shortest possible transaction.

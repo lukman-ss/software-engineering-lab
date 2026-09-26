@@ -1,122 +1,173 @@
-# Sources
+# Sources: Optimistic vs Pessimistic Locking
+
+All sources accessed: 2026-09-26
+
+---
 
 ## Source 1
-Title: PostgreSQL Documentation: Explicit Locking (Section 13.3)
-Publisher: The PostgreSQL Global Development Group
+
+Title: PostgreSQL 18 Documentation - 13.3. Explicit Locking
+Publisher: PostgreSQL Global Development Group
 URL: https://www.postgresql.org/docs/current/explicit-locking.html
-Published: N/A (Current as of PostgreSQL 18)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Official specification for `SELECT FOR UPDATE`, `SELECT FOR SHARE`, `FOR UPDATE`, `FOR SHARE`, `FOR KEY SHARE`, row-level lock modes, conflict behavior, and deadlock handling.
-Notes: Covers all locking read variants; includes Table 13.2 (table-level) and Table 13.3 (row-level) lock compatibility matrices.
+Published: PostgreSQL 18.6 (current, accessed 2026-09-26)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official documentation)
+Relevance: Primary source for pessimistic locking semantics. Documents FOR UPDATE, FOR NO KEY UPDATE, FOR SHARE, FOR KEY SHARE row-level lock modes, lock compatibility matrix, deadlocks, and advisory locks. Direct evidence for RQ2 (pessimistic locking mechanism) and RQ6 (deadlock anti-patterns).
+
+---
 
 ## Source 2
-Title: PostgreSQL Documentation: Transaction Isolation (Section 13.2)
-Publisher: The PostgreSQL Global Development Group
+
+Title: PostgreSQL 18 Documentation - 13.2. Transaction Isolation
+Publisher: PostgreSQL Global Development Group
 URL: https://www.postgresql.org/docs/current/transaction-iso.html
-Published: N/A (Current as of PostgreSQL 18)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Defines READ COMMITTED, REPEATABLE READ, SERIALIZABLE isolation levels and their interaction with MVCC. Critical for understanding how optimistic vs pessimistic locking behaves under different isolation levels.
-Notes: PostgreSQL's Repeatable Read implements Snapshot Isolation. Serialization anomaly detection described.
+Published: PostgreSQL 18.6 (current, accessed 2026-09-26)
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official documentation)
+Relevance: Documents PostgreSQL isolation levels (Read Committed, Repeatable Read, Serializable), MVCC behavior, read-committed lost-update semantics, snapshot isolation. Direct evidence for RQ4 (isolation levels).
+
+---
 
 ## Source 3
-Title: PostgreSQL Documentation: Data Consistency Checks at the Application Level (Section 13.4)
-Publisher: The PostgreSQL Global Development Group
-URL: https://www.postgresql.org/docs/current/applevel-consistency.html
-Published: N/A (Current as of PostgreSQL 18)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Practical guidance on when to use explicit blocking locks (`SELECT FOR UPDATE`, `SELECT FOR SHARE`) vs serializable transactions for consistency checks. Documents `SELECT FOR UPDATE` behavior nuances (temporarily blocks, requires actual UPDATE to enforce).
-Notes: Documents the read/write conflict issue with serializable transactions and explicit locking patterns.
+
+Title: Concurrency Control
+Publisher: Wikipedia (community-maintained encyclopedia with academic citations)
+URL: https://en.wikipedia.org/wiki/Concurrency_control
+Published: Continuously updated (accepted revision reviewed 2026-09-07)
+Accessed: 2026-09-26
+Source Tier: Tier 2 (reputable technical reference, cites primary academic sources)
+Relevance: Provides academic definitions of optimistic, pessimistic, and semi-optimistic categories. Defines lost update, dirty read, incorrect summary problems. Cites Bernstein et al. (1987), Weikum & Vossen (2001), Kung & Robinson (1981). Direct evidence for RQ1 (lost update definition) and theoretical grounding for RQ2/RQ3.
+
+---
 
 ## Source 4
-Title: PostgreSQL Documentation: MVCC Introduction (Section 13.1)
-Publisher: The PostgreSQL Global Development Group
-URL: https://www.postgresql.org/docs/current/mvcc-intro.html
-Published: N/A (Current as of PostgreSQL 18)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Foundational explanation of Multiversion Concurrency Control (MVCC) and its relationship to optimistic locking. Explains how MVCC provides non-blocking reads while allowing writers to proceed.
-Notes: Establishes why PostgreSQL's Repeatable Read/SERIALIZABLE can serve as optimistic concurrency control.
+
+Title: Optimistic Offline Lock
+Publisher: Martin Fowler (Patterns of Enterprise Application Architecture)
+URL: https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html
+Published: 2003-03-05 (by David Rice)
+Accessed: 2026-09-26
+Source Tier: Tier 2 (established industry publication, expert technical article)
+Relevance: Defines optimistic locking for business transactions spanning multiple system transactions. States assumption: "the chance of conflict is low." Describes pre-commit validation approach. Direct evidence for RQ3 (optimistic locking, when appropriate).
+
+---
 
 ## Source 5
-Title: Microsoft SQL Server Documentation: Transaction Locking and Row Versioning Guide
-Publisher: Microsoft
-URL: https://learn.microsoft.com/en-us/sql/relational-databases/sql-server-transaction-locking-and-row-versioning-guide
-Published: 2026-04-22 (Updated)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Authoritative guide to SQL Server's optimistic concurrency via row versioning (READ COMMITTED SNAPSHOT, SNAPSHOT isolation) and pessimistic locking via table hints (`UPDLOCK`, `UPDATENAME`, etc.). Describes deadlock avoidance patterns.
-Notes: Documents SQL Server's "Optimized locking" (2023+) and row-versioning isolation levels.
+
+Title: Pessimistic Offline Lock
+Publisher: Martin Fowler (Patterns of Enterprise Application Architecture)
+URL: https://martinfowler.com/eaaCatalog/pessimisticOfflineLock.html
+Published: 2003 (Patterns of Enterprise Application Architecture, by David Rice)
+Accessed: 2026-09-26
+Source Tier: Tier 2 (established industry publication, expert technical article)
+Relevance: Defines pessimistic locking to "avoid conflicts altogether" by acquiring lock before use. Notes downsides when conflict rate is low vs Optimistic Offline Lock causing wasted work on conflicts. Direct evidence for RQ2 (pessimistic locking, when appropriate).
+
+---
 
 ## Source 6
-Title: Oracle Database SQL Language Reference: SELECT Statement
-Publisher: Oracle Corporation
-URL: https://docs.oracle.com/en/database/oracle/oracle-database/23/sql/SELECT.html
-Published: N/A (Current as of Oracle Database 23c)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Official documentation of `FOR UPDATE` clause syntax and semantics for Oracle's pessimistic locking. Includes `NOWAIT`, `WAIT`, `SKIP LOCKED` options.
-Notes: Documents that Oracle uses `ORA_ROWSCN` pseudo-column for optimistic locking via `SELECT ... FOR UPDATE` alternatives.
+
+Title: Optimistic Concurrency Control
+Publisher: Wikipedia
+URL: https://en.wikipedia.org/wiki/Optimistic_concurrency_control
+Published: Continuously updated
+Accessed: 2026-09-26 (via cross-reference from Concurrency Control article; content corroborated by subagent research)
+Source Tier: Tier 2
+Relevance: Academic reference for optimistic concurrency control theory (Kung & Robinson 1981: validate-read-write phases). Corroborates RQ3 mechanism definitions.
+
+---
 
 ## Source 7
-Title: Hibernate ORM User Guide: Locking
-Publisher: Red Hat Hibernate Team
-URL: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#locking
-Published: 2024 (Hibernate ORM 6.6)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Official documentation of Hibernate's `@OptimisticLock`, `@OptimisticLocking`, `@Version`, and `@PessimisticLock` annotations. Describes Entity-level and Property-level optimistic locking.
-Notes: Documents JPA locking modes and Hibernate-specific extensions.
+
+Title: MySQL 8.0 Reference Manual - 15.7.2.4 Locking Reads
+Publisher: Oracle / MySQL
+URL: https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html
+Published: MySQL 8.0 (current)
+Accessed: 2026-09-26 (referenced; direct fetch returned 403 but content extracted via subagent using alternate Oracle CDN mirror: https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-locking-reads.html)
+Source Tier: Tier 1 (official documentation)
+Relevance: Documents InnoDB SELECT ... FOR UPDATE and FOR SHARE semantics, NOWAIT and SKIP LOCKED options. Direct evidence for RQ2 cross-database verification (MySQL pessimistic locking).
+
+---
 
 ## Source 8
-Title: "Concurrency Control and Recovery in Database Systems" by Philip A. Bernstein, Vassos Hadzilacos, Nathan Goodman
-Publisher: Addison-Wesley
-Edition: 1st Edition (1987)
-ISBN: 978-0201107159
-URL: https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/ccontrol.pdf
-Accessed: 2026-09-25
-Source Tier: Tier 2 (Academic)
-Relevance: Foundational textbook defining optimistic vs pessimistic concurrency control theory, timestamp ordering, validation protocols, and distributed transaction models.
-Notes: Defines OCC validation phase and 2PL. Freely available PDF from Microsoft Research. Does not cover modern MVCC variants post-1987.
+
+Title: MySQL 8.0 Reference Manual - 15.7.1 InnoDB Locking
+Publisher: Oracle / MySQL
+URL: https://dev.mysql.com/doc/refman/8.0/en/innodb-locking.html
+Published: MySQL 8.0 (current)
+Accessed: 2026-09-26 (via alternate mirror: https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-locking.html)
+Source Tier: Tier 1 (official documentation)
+Relevance: Documents InnoDB lock types: shared (S), exclusive (X), intention locks, record locks, gap locks, next-key locks. Evidence for transaction-level locking internals, RQ2.
+
+---
 
 ## Source 9
-Title: "Database System Concepts" by Abraham Silberschatz, Henry F. Korth, S. Sudarshan
-Publisher: McGraw-Hill Education
-Edition: 7th Edition (2019)
-ISBN: 978-0078022159
-Accessed: 2026-09-25
-Source Tier: Tier 2 (Academic)
-Relevance: Standard database textbook covering locking protocols, Two-Phase Locking (2PL), strict 2PL, and serializability theory. Chapter 15 covers concurrency control in detail.
-Notes: Defines shared/exclusive locks, lock compatibility, deadlock detection, and recovery. Edition 2019 includes modern MVCC discussion.
+
+Title: MySQL 8.0 Reference Manual - 15.7.2.1 Transaction Isolation Levels
+Publisher: Oracle / MySQL
+URL: https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html
+Published: MySQL 8.0 (current)
+Accessed: 2026-09-26 (via alternate mirror: https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-transaction-isolation-levels.html)
+Source Tier: Tier 1 (official documentation)
+Relevance: Documents InnoDB default REPEATABLE READ, READ COMMITTED semi-consistent reads, SERIALIZABLE converting plain SELECT to SELECT FOR SHARE. Evidence for RQ4 cross-database comparison.
+
+---
 
 ## Source 10
-Title: MySQL 8.0 Reference Manual: InnoDB Locking Reads
-Publisher: Oracle Corporation (MySQL)
-URL: https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html
-Published: MySQL 8.0 (Current)
-Accessed: 2026-09-25 — NOT VERIFIED (Technical Difficulties error page returned)
-Source Tier: Tier 1
-Relevance: Official documentation of MySQL/InnoDB `SELECT ... FOR UPDATE`, `SELECT ... LOCK IN SHARE MODE`, `NOWAIT`, `SKIP LOCKED` syntax and behavior.
-Notes: URL returned "Technical Difficulties" page on 2026-09-25 (verified across 8.0 and 5.7). MySQL locking behavior in this research inferred from PostgreSQL/SQL Server/Oracle patterns and community knowledge. Requires re-verification when MySQL docs accessible.
+
+Title: Oracle Database Concepts 19c - 9 Data Concurrency and Consistency
+Publisher: Oracle
+URL: https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html
+Published: Oracle 19c
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official documentation)
+Relevance: Documents Oracle row locks (TX), lost update example table (Banda salary scenario), recommended WHERE-clause-with-old-values prevention, MVCC via undo segments, default READ COMMITTED isolation. Direct evidence for RQ1 (lost update example) and RQ2 (Oracle pessimistic).
+
+---
 
 ## Source 11
-Title: Laravel Database Documentation: Locking
-Publisher: Laravel
-URL: https://laravel.com/docs/11.x/queries#locking-rows
-Published: Laravel 11.x (2024)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Official documentation of Laravel's `lockForUpdate()`, `sharedLock()`, `lockForUpdateNowait()` query builder methods. Documents Eloquent ORM interpretation of SQL locking.
-Notes: Laravel translates to native SQL locking per database driver (PostgreSQL, MySQL, SQL Server).
+
+Title: Oracle Database Concepts 19c - 10 Transactions
+Publisher: Oracle
+URL: https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/transactions.html
+Published: Oracle 19c
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official documentation)
+Relevance: Documents ACID properties, statement-level atomicity, savepoint lock release behavior. Evidence for RQ5 (atomicity guarantees).
+
+---
 
 ## Source 12
-Title: Entity Framework Core Documentation: Concurrency
-Publisher: Microsoft
-URL: https://learn.microsoft.com/en-us/ef/core/performance/efficient-query-patterns/concurrent-updates
-Published: N/A (Current)
-Accessed: 2026-09-25
-Source Tier: Tier 1
-Relevance: Official Microsoft guidance on EF Core optimistic concurrency using `[Timestamp]`/`rowversion` columns and `ConcurrencyCheck` attributes. Documents retry logic patterns.
-Notes: EF Core translates optimistic concurrency to SQL `WHERE` clauses comparing original values.
+
+Title: Optimistic Locking in JPA
+Publisher: Baeldung
+URL: https://www.baeldung.com/jpa-optimistic-locking
+Published: Date not verified (continuously updated tutorial site)
+Accessed: 2026-09-26
+Source Tier: Tier 2 (established industry technical publication)
+Relevance: Documents @Version annotation approach, OptimisticLockException on concurrent update, recommendation for read-heavy workloads. Evidence for RQ3 implementation details.
+
+---
+
+## Source 13
+
+Title: DynamoDB Transaction APIs
+Publisher: Amazon Web Services
+URL: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html
+Published: Current AWS documentation
+Accessed: 2026-09-26
+Source Tier: Tier 1 (official cloud documentation)
+Relevance: Documents TransactWriteItems atomicity guarantees, ConditionCheck for optimistic concurrency, capacity consumption (2x per item). Useful for contrasting single-database locking vs distributed NoSQL transactions. Supporting evidence for RQ5 and distributed considerations.
+
+---
+
+## Source 14
+
+Title: Hibernate ORM 6.x User Guide - Optimistic Locking
+Publisher: JBoss / Hibernate team
+URL: https://docs.jboss.org/hibernate/orm/6.3/userguide/html_single/Hibernate_User_Guide.html#locking-optimistic
+Published: Hibernate 6.3
+Accessed: 2026-09-26 (via cached reference; URL provided by subagent research)
+Source Tier: Tier 1 (official ORM documentation)
+Relevance: Documents version-number strategy, timestamp strategy, versionless optimistic locking (ALL vs DIRTY), StaleObjectStateException. Evidence for RQ3 implementation variants.
+
+**Verification note:** This source was reported by subagent but direct fetch was not performed during this session. Content is consistent with Jakarta Persistence specification for @Version. Treat versionless-locking details as MEDIUM confidence pending direct verification.
