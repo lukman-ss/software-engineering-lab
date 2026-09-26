@@ -7,25 +7,25 @@ Previous Verdict: APPROVED
 
 Critical: 0
 High: 0
-Medium: 0
+Medium: 1
 Low: 0
 
 ## Resolution
 
-Resolved: 0
+Resolved: 1
 Partially Resolved: 0
 Unresolved: 0
 
 ## Validation
 
 Compilation: PASS
-Tests: PASS
+Tests: PASS (11/11 passed)
 Race Detector: PASS
 Demo: PASS
 
 ## Remaining Risks
 
-- None identified.
+- Tenant registry maintains in-memory maps without TTL eviction (documented design limit for lab scope).
 
 ## Re-Audit Status
 

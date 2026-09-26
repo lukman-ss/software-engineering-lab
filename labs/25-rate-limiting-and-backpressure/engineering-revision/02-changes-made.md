@@ -1,16 +1,15 @@
-# Changes Made
+## Revision 1
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
-
-## Revision Summary
-
-No code modifications were required. Audit passed with 0 blocking and 0 non-blocking issues.
-
-### Log
-
-Audit Issue: None
-Severity: N/A
-Files Changed: None
-Action: Verified existing implementation, tests, race detector, and demo execution.
-Verification: Passed `go test ./...`, `go test -race ./...`, `go run ./cmd/demo`.
+Audit Issue: BoundedQueue submission after Stop() panic
+Severity: MEDIUM
+Files Changed:
+- `internal/backpressure/queue.go`
+- `internal/backpressure/queue_test.go`
+Action:
+- Added `ErrQueueStopped = errors.New("backpressure: queue stopped")`.
+- Added `stopped atomic.Bool` to `BoundedQueue`.
+- Guarded `TrySubmit` with `stopped.Load()` and context check before queue channel send.
+- Ensured `Stop()` is idempotent using `stopped.CompareAndSwap(false, true)`.
+- Added `TestBoundedQueue_SubmitAfterStop` test covering post-stop submission and repeated `Stop()` calls.
+Verification: `go test -v -race ./...` PASS
 Status: RESOLVED

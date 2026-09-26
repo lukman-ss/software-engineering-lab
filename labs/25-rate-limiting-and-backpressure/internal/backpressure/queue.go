@@ -7,7 +7,10 @@ import (
 	"sync/atomic"
 )
 
-var ErrQueueFull = errors.New("backpressure: queue capacity exceeded")
+var (
+	ErrQueueFull    = errors.New("backpressure: queue capacity exceeded")
+	ErrQueueStopped = errors.New("backpressure: queue stopped")
+)
 
 type Job func(ctx context.Context) error
 
@@ -18,6 +21,7 @@ type BoundedQueue struct {
 	wg          sync.WaitGroup
 	ctx         context.Context
 	cancel      context.CancelFunc
+	stopped     atomic.Bool
 	accepted    atomic.Int64
 	rejected    atomic.Int64
 	processed   atomic.Int64
@@ -58,8 +62,15 @@ func (bq *BoundedQueue) workerLoop() {
 }
 
 // TrySubmit enqueues the job if capacity allows, otherwise drops immediately with ErrQueueFull.
+// Returns ErrQueueStopped if the queue has been stopped.
 func (bq *BoundedQueue) TrySubmit(job Job) error {
+	if bq.stopped.Load() {
+		return ErrQueueStopped
+	}
+
 	select {
+	case <-bq.ctx.Done():
+		return ErrQueueStopped
 	case bq.queue <- job:
 		bq.accepted.Add(1)
 		return nil
@@ -74,6 +85,9 @@ func (bq *BoundedQueue) Stats() (accepted, rejected, processed int64, queueLen i
 }
 
 func (bq *BoundedQueue) Stop() {
+	if !bq.stopped.CompareAndSwap(false, true) {
+		return
+	}
 	bq.cancel()
 	close(bq.queue)
 	bq.wg.Wait()

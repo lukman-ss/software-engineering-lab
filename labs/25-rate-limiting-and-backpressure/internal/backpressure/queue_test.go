@@ -66,3 +66,16 @@ func TestBoundedQueue_ConcurrencySafety(t *testing.T) {
 		t.Fatalf("expected total 30 requests recorded, got accepted=%d, rejected=%d", accepted, rejected)
 	}
 }
+
+func TestBoundedQueue_SubmitAfterStop(t *testing.T) {
+	bq := NewBoundedQueue(5, 1)
+	bq.Stop()
+
+	// Repeated Stop calls must be safe (idempotent)
+	bq.Stop()
+
+	err := bq.TrySubmit(func(ctx context.Context) error { return nil })
+	if err != ErrQueueStopped {
+		t.Fatalf("expected ErrQueueStopped, got %v", err)
+	}
+}
