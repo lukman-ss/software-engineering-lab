@@ -31,7 +31,7 @@ Ketika endpoint transaksional menerima beban konkuren yang melebihi kapasitas *c
 ## How It Works
 Sistem pengujian beban pada lab ini mengimplementasikan dua bagian terpisah:
 1. **Mock Server (`internal/server`)**: Menyediakan endpoint `POST /booking`. Kapasitas koneksi basis data dimodelkan menggunakan buffered channel (semafor) berukuran tetap (default 5 koneksi), di mana setiap transaksi menahan slot selama durasi tertentu (default 20ms).
-2. **Load Runner (`internal/loadtest`)**: Mengorkestrasi *Virtual Users* (VUs) independen menggunakan goroutine, mengeksekusi request HTTP berulang kali selama durasi yang ditentukan, mengumpulkan durasi latensi ke dalam slice privat per-VU guna menghindari overhead mutex, dan menghitung ringkasan statistik persentil setelah seluruh goroutine selesai.
+2. **Load Runner (`internal/loadtest`)**: Mengorkestrasi *Virtual Users* (VUs) independen menggunakan goroutine, mengeksekusi request HTTP berulang kali selama durasi yang ditentukan, mengumpulkan durasi latensi **hanya untuk request berhasil (HTTP 2xx)** ke dalam slice privat per-VU guna menghindari overhead mutex, dan menghitung ringkasan statistik persentil setelah seluruh goroutine selesai. Request yang gagal (transport error atau HTTP >= 400) tidak direkam dalam metrik latensi, hanya dihitung sebagai error.
 
 ## Architecture
 Komponen lab dirancang tanpa dependensi eksternal:
@@ -167,7 +167,7 @@ for i := 0; i < r.cfg.VUs; i++ {
 	}(i)
 }
 ```
-Setiap virtual user menulis data ke slice miliknya sendiri (`lats`). Agregasi metrik hanya dilakukan satu kali di thread utama setelah `wg.Wait()` selesai, memastikan eksekusi bebas dari kontensi kunci sinkronisasi.
+Setiap virtual user menulis data ke slice miliknya sendiri (`lats`). **Catatan**: Hanya request dengan status HTTP 2xx yang dicatat latensinya. Request yang gagal (transport error atau HTTP >= 400) tidak dimasukkan ke `lats`, tetapi dihitung sebagai `errs` secara terpisah. Agregasi metrik hanya dilakukan satu kali di thread utama setelah `wg.Wait()` selesai, memastikan eksekusi bebas dari kontensi kunci sinkronisasi.
 
 ### 3. Perhitungan Persentil (`internal/loadtest/metrics.go`)
 ```go
@@ -215,6 +215,7 @@ Ketika hasil uji beban mengidentifikasi bottleneck connection pool:
 - **Memori Perhitungan Persentil**: Pendekatan sorting slice (`sort.Slice`) dalam implementasi lab membutuhkan memori linier terhadap jumlah request ($O(N)$). Di lingkungan produksi dengan jutaan request, gunakan algoritma histogram streaming seperti `HdrHistogram` atau `t-digest` untuk menghemat memori.
 - **Isolasi Lingkungan Uji**: Uji beban skala penuh tidak boleh dijalankan langsung di database produksi aktif tanpa isolasi data yang ketat.
 - **Kapasitas Generator Beban**: Pastikan mesin runner tidak mengalami saturasi CPU, network socket exhaustion, atau pembatasan client connection pool (`MaxIdleConnsPerHost`) yang dapat menimbulkan hasil uji palsu (*false bottleneck*).
+- **Rekam Latency untuk Semua Request**: Pada produksi, pastikan error response juga dicatat latensinya (bukan hanya error count). Latency error dapat mengungkapkan problem seperti timeout database atau dependency failure yang penting untuk diagnosis.
 
 ## Common Mistakes
 1. **Mengabaikan Tahap Smoke Test**: Langsung menjalankan ratusan atau ribuan VU sehingga skrip yang salah konfigurasi memicu kegagalan tanpa mengetahui baseline yang benar.

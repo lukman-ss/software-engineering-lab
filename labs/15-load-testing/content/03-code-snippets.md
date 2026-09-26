@@ -97,7 +97,7 @@ for i := 0; i < r.cfg.VUs; i++ {
 }
 ```
 
-Explanation: Hasil dari tiap Virtual User (VU) tidak dikunci (lock-free) dengan menempatkannya di array `results` berbasis index unik `vuID`. Data ini baru diagregasikan usai fungsi generator tuntas, memastikan alat ukur tidak menjadi *bottleneck* akibat `sync.Mutex`.
+Explanation: Hasil dari tiap Virtual User (VU) tidak dikunci (lock-free) dengan menempatkannya di array `results` berbasis index unik `vuID`. Data ini baru diagregasikan usai fungsi generator tuntas, memastikan alat ukur tidak menjadi *bottleneck* akibat `sync.Mutex`. **Catatan**: Latency hanya direkam untuk request berhasil (HTTP 2xx); request dengan error transport atau HTTP >= 400 tidak menghasilkan entri di slice `lats`, tetapi dihitung sebagai `errs`. Ini berarti metrik P50/P95/P99 mencerminkan latensi permintaan berhasil saja.
 
 ## Snippet 3 — Percentile Calculation
 

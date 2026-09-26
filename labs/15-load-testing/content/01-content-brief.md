@@ -21,3 +21,4 @@ Warnings:
 - Penghitungan persentil menggunakan sorting slice (`sort.Slice`), cocok untuk dataset lab (<10.000 sampel), namun butuh histogram streaming (misal HdrHistogram) untuk beban jutaan sampel jangka panjang.
 - Penundaan kueri disimulasikan menggunakan `time.Timer` dan semafor in-memory, bukan engine database nyata dengan lock contention sebenarnya.
 - Server menambahkan 10% kemungkinan penundaan query 25x lebih lama saat request terakumulasi di atas kapasitas pool.
+- Metrik persentil (P50/P95/P99) hanya mencakup request berhasil (HTTP 201), bukan request gagal; error latency tidak diukur.
