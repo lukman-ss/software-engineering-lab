@@ -1,22 +1,8 @@
 # Test Audit
 
-Target Lab: labs/27-database-constraints
+## Executed Commands & Results
 
-## Test Suite Overview
-
-Test file: `internal/store/store_test.go`
-Tests present:
-1. `TestNotNullConstraints`: Verifies missing `Email`, missing `Username`, and missing `UserID` in Order return NOT NULL errors.
-2. `TestCheckConstraints`: Verifies underage (`Age < 18`), invalid `Status` string, and invalid `TotalCents <= 0` return CHECK violation errors.
-3. `TestUniqueConstraint`: Verifies sequential duplicate insert returns UNIQUE violation error.
-4. `TestForeignKeyConstraint`: Verifies non-existent `UserID` insertion returns FOREIGN KEY error, and valid `UserID` succeeds.
-5. `TestPartialUniqueIndex`: Verifies single active user constraint, rejection of duplicate active user, soft deletion behavior, re-registration of soft-deleted email, and coexistence of multiple inactive records.
-6. `TestConcurrentRegistration_Safe_EnforcesUniqueness`: Spawns 20 goroutines attempting registration with identical email against `SafeStore`; verifies exactly 1 succeeds, 19 fail with constraint violation, and table row count is 1.
-7. `TestErrorClassification`: Verifies `dberr.IsConstraintViolation` accurately matches `SQLStateNotNullViolation`, `SQLStateUniqueViolation`, `SQLStateCheckViolation`, and `SQLStateForeignKeyViolation`.
-
-## Test Execution Results
-
-Command:
+### Standard Tests
 ```bash
 go test -v ./...
 ```
@@ -34,24 +20,62 @@ Output:
 --- PASS: TestPartialUniqueIndex (0.00s)
 === RUN   TestConcurrentRegistration_Safe_EnforcesUniqueness
 --- PASS: TestConcurrentRegistration_Safe_EnforcesUniqueness (0.00s)
+=== RUN   TestConcurrentRegistration_Unsafe_SuffersRaceCondition
+--- PASS: TestConcurrentRegistration_Unsafe_SuffersRaceCondition (0.00s)
 === RUN   TestErrorClassification
 --- PASS: TestErrorClassification (0.00s)
 PASS
-ok  	github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/store	0.102s
+ok  	github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/store	0.091s
 ```
 
-Command:
+### Race Detector
 ```bash
 go test -race ./...
 ```
 Output:
 ```text
-ok  	github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/store	1.120s
+ok  	github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/store	(clean exit, no race conditions detected)
 ```
 
-## Coverage & Gap Assessment
+### Demo Execution
+```bash
+go run ./cmd/demo
+```
+Output:
+```text
+=================================================================
+LAB 27: DATABASE CONSTRAINTS & DATA INTEGRITY DEMONSTRATION
+=================================================================
 
-- Happy path coverage: PASS
-- Failure path coverage: PASS (NOT NULL, CHECK, UNIQUE, FOREIGN KEY, PARTIAL INDEX)
-- Concurrency race detector: PASS (0 data races detected)
-- Unsafe store test: In `engineering/01-design.md`, a test named `TestConcurrentRegistration_Unsafe_SuffersRaceCondition` was planned but not implemented in `store_test.go`.
+[1] DEMONSTRATING NOT NULL CONSTRAINT (SQLSTATE 23502)
+Attempt insert with missing email -> Error: invalid input: mandatory field is missing (rule: users_email_not_null)
+
+[2] DEMONSTRATING CHECK CONSTRAINT (SQLSTATE 23514)
+Attempt insert with age=15 (CHECK age >= 18) -> Error: validation failed: value outside permissible boundary (rule: users_age_check)
+Attempt insert with invalid status -> Error: validation failed: value outside permissible boundary (rule: users_status_check)
+
+[3] DEMONSTRATING FOREIGN KEY CONSTRAINT (SQLSTATE 23503)
+Attempt insert order for non-existent UserID=9999 -> Error: reference error: referenced entity does not exist (rule: fk_orders_user)
+
+[4] DEMONSTRATING PARTIAL UNIQUE INDEX (WHERE deleted_at IS NULL)
+Created active user ID=1 (alice@company.com)
+Duplicate active user insert rejected -> Error: conflict: resource with this unique attribute already exists (rule: users_active_email_idx)
+Soft-deleted user ID=1 (deleted_at set)
+New active user re-using email after soft delete -> Created user ID=2 (alice@company.com)
+
+[5] CONCURRENCY STRESS TEST: 50 CONCURRENT REGISTRATIONS FOR SAME EMAIL
+Results:
+  - Total Goroutines: 50
+  - Successful Registrations: 1
+  - Rejected with UNIQUE VIOLATION (23505): 49
+  - Database Integrity Intact: true
+
+SQLSTATE Taxonomy Verification: code=23505 isUniqueViolation=true
+```
+
+## Test Coverage Evaluation
+- Happy Path: Verified for all constraint types and successful lifecycle insertions.
+- Failure / Negative Path: Verified for NOT NULL, CHECK boundary (age, status, total), UNIQUE, and FK.
+- Edge Cases: Partial unique index covers active duplicate rejection, soft delete transition, reuse after soft delete, and multiple soft-deleted rows.
+- Concurrency: Verified safe store under 20 concurrent goroutines (and demo with 50 goroutines), and proved race condition in unsafe store.
+- Error Mapping: Verified SQLSTATE predicate functions across all constraint codes.

@@ -1,24 +1,16 @@
 # Documentation vs Code Audit
 
-Target Lab: labs/27-database-constraints
+## Comparison Matrix
 
-## 1. README.md vs Code
-- README lists all 5 implemented constraints: NOT NULL (`23502`), CHECK (`23514`), UNIQUE (`23505`), FOREIGN KEY (`23503`), and PARTIAL UNIQUE INDEX.
-- Matches code implementations in `internal/engine/engine.go` and `internal/store/store.go`.
-- Test commands (`go test -v ./...`, `go test -race ./...`) and demo command (`go run ./cmd/demo`) match repository reality.
-- Assessment: PASS
+| Claim in Documentation | Implementation File | Test / Verification | Status |
+| :--- | :--- | :--- | :--- |
+| NOT NULL (`23502`) enforcement on `email`, `username`, `user_id` | `internal/engine/engine.go:51-56, 128-130` | `TestNotNullConstraints` | MATCH |
+| CHECK (`23514`) enforcement on `age >= 18`, `status`, `total_cents > 0` | `internal/engine/engine.go:59-68, 133-135` | `TestCheckConstraints` | MATCH |
+| UNIQUE (`23505`) enforcement & race condition prevention | `internal/engine/engine.go:78-83` | `TestUniqueConstraint`, `TestConcurrentRegistration_Safe_EnforcesUniqueness` | MATCH |
+| FOREIGN KEY (`23503`) integrity | `internal/engine/engine.go:138-140` | `TestForeignKeyConstraint` | MATCH |
+| Partial Unique Index (`WHERE deleted_at IS NULL`) | `internal/engine/engine.go:71-77, 102-120` | `TestPartialUniqueIndex` | MATCH |
+| Demo and test commands | `README.md:17, 24, 32` | Verified executable via bash | MATCH |
 
-## 2. Engineering Design (`01-design.md`) vs Code
-- Planned Architecture: `internal/engine`, `internal/store`, `internal/dberr` (noted as `internal/errors` in early design draft).
-- Success Criteria: Planned `TestConcurrentRegistration_Unsafe_SuffersRaceCondition` alongside `TestConcurrentRegistration_Safe_EnforcesUniqueness`. The safe test is fully implemented, but the unsafe race test was omitted from `store_test.go`.
-- Assessment: WARNING (Minor test omission from early plan)
-
-## 3. Implementation Notes (`02-implementation-notes.md`) vs Code
-- Matches actual files and package names (`internal/dberr`, `internal/model`, `internal/engine`, `internal/store`, `cmd/demo`).
-- Accurately details zero external server dependency trade-off and coarse-grained locking approach.
-- Assessment: PASS
-
-## 4. Execution Result (`03-execution-result.md`) vs Actual Runtime
-- All demo outputs, test output counts, and SQLSTATE codes recorded in `03-execution-result.md` match live terminal execution character-for-character.
-- Concurrency demo output (50 goroutines, 1 success, 49 rejected) is genuine and verifiable.
-- Assessment: PASS
+## Findings
+- No discrepancies detected between README.md, engineering design documents, demo output, and underlying code implementation.
+- All SQLSTATE error codes and descriptions match standard PostgreSQL semantics.

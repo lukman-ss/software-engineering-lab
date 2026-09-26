@@ -2,40 +2,34 @@
 
 Target Lab: labs/27-database-constraints
 Implementation Files:
-- internal/dberr/errors.go
-- internal/model/model.go
-- internal/engine/engine.go
-- internal/store/store.go
-- cmd/demo/main.go
-
+- `internal/dberr/errors.go`
+- `internal/model/model.go`
+- `internal/engine/engine.go`
+- `internal/store/store.go`
+- `cmd/demo/main.go`
 Tests:
-- internal/store/store_test.go
-
+- `internal/store/store_test.go`
 Executable/Demo:
-- cmd/demo/main.go
-
+- `cmd/demo/main.go`
 Approved Research Inputs:
-- research/01-plan.md
-- research/02-sources.md
-- research/03-evidence.md
-- research/04-contradictions.md
-- research/05-report.md
-- research/06-open-questions.md
-- research-audit/07-verdict.md (APPROVED WITH WARNINGS)
-
+- `research/05-report.md`
+- `research-audit/07-verdict.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
 Main Claims To Verify:
-1. Implementation of NOT NULL (`23502`), CHECK (`23514`), UNIQUE (`23505`), FOREIGN KEY (`23503`), and PARTIAL UNIQUE INDEX (`WHERE deleted_at IS NULL`) constraints.
-2. In-memory relational storage engine concurrency safety and race condition elimination under concurrent registration.
-3. Domain error mapping of standard SQLSTATE Class 23 error codes.
-4. Accuracy of execution claims in `engineering/01-design.md`, `engineering/02-implementation-notes.md`, `engineering/03-execution-result.md`, and `README.md`.
-5. Code completeness and alignment between design claims and code implementation (e.g. UnsafeStore concurrency test claims).
-
+1. NOT NULL constraint enforcement (`SQLSTATE 23502`) on mandatory fields (`email`, `username`, `user_id`).
+2. CHECK constraint validation (`SQLSTATE 23514`) on boundary invariants (`age >= 18`, status enum, `total_cents > 0`).
+3. UNIQUE constraint enforcement (`SQLSTATE 23505`) preventing duplicates and race conditions.
+4. FOREIGN KEY referential integrity (`SQLSTATE 23503`) blocking orphan records.
+5. Partial unique index (`WHERE deleted_at IS NULL`) allowing re-registration after soft-delete while enforcing uniqueness across active records.
+6. Concurrency safety: SafeStore enforces exactly 1 success under concurrent inserts; UnsafeStore demonstrates read-then-write race condition duplicate leaks.
+7. Error classification and domain error mapping via SQLSTATE codes.
 Commands To Run:
-- `cd labs/27-database-constraints && go test -v ./...`
-- `cd labs/27-database-constraints && go test -race ./...`
-- `cd labs/27-database-constraints && go run ./cmd/demo`
-
+- `go test -v ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-- Discrepancy between design doc (`engineering/01-design.md`) claims vs actual implementation (e.g., claimed `TestConcurrentRegistration_Unsafe_SuffersRaceCondition` test in design doc vs actual code).
-- In-memory relational engine thread-safety locking scope and potential race conditions under full concurrency.
-- Incomplete coverage of failure edge cases or unhandled SQLSTATE codes.
+- Race condition or deadlocks in simulated storage engine under `-race`.
+- Mismatch between README documentation and actual implemented constraint rules / error mappers.
+- Fragile test assertions or unverified demo output.
