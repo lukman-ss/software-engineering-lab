@@ -19,7 +19,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None.
+- None. URL is active and contains the claimed documentation on `max_connections`, `superuser_reserved_connections`, and shared memory allocations.
 
 Assessment:
 PASS
@@ -36,7 +36,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY
+PRIMARY / COMMUNITY
 
 Relevant:
 YES
@@ -45,7 +45,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Exact formulas, oracle real-world performance citations, and principles verified.
+- None. URL is active. Quotes ("50x improvement", formula `Tn x (Cm - 1) + 1`, and `((core_count * 2) + effective_spindle_count)`) are exact matches to the page content.
 
 Assessment:
 PASS
@@ -62,7 +62,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY (Community Wiki)
+SECONDARY / COMMUNITY
 
 Relevant:
 YES
@@ -71,7 +71,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Provides foundational architectural background on context switching, disk contention, and memory exhaustion that aligns with the claims.
+- None. Content perfectly corroborates claims around lock contention, context switches, cache line contention, and disk thrashing.
 
 Assessment:
 PASS
@@ -97,7 +97,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Verifies 2kB memory overhead and transaction pooling mode features.
+- None. Document explicitly cites "Transaction pooling" and "Low memory requirements (2 kB per connection by default)".
 
 Assessment:
 PASS
@@ -123,7 +123,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Validates connection state tracking (`idle in transaction`) and wait event architectures (`ClientRead`).
+- None. Document lists state parameters (`idle in transaction`) and discusses client wait events.
 
 Assessment:
 PASS

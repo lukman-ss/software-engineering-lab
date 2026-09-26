@@ -1,7 +1,12 @@
-# Research Audit Plan: Database Connection Pooling
+# Audit Plan: Database Connection Pooling Research
 
 ## Target Lab
 `labs/19-database-connection-pooling`
+
+## Pipeline Scope & Override
+- Stage: Research Audit Only.
+- Implementation and code testing are deferred / NOT APPLICABLE in this stage per pipeline override.
+- Output directory: `labs/19-database-connection-pooling/research-audit/`.
 
 ## Files Reviewed
 - `labs/19-database-connection-pooling/research/01-plan.md`
@@ -12,24 +17,23 @@
 - `labs/19-database-connection-pooling/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Connection establishment overhead and backend process resource scaling in PostgreSQL.
-2. Throughput collapse and latency degradation ("the knee") past hardware saturation limits.
-3. Universal pool sizing formula `((core_count * 2) + effective_spindle_count)` and SSD behavior.
-4. Linear multiplication of client-side pools causing connection exhaustion in distributed topologies.
-5. Pool deadlock avoidance formula `pool size = Tn * (Cm - 1) + 1`.
-6. Detection of connection leaks via `pg_stat_activity` states (`idle in transaction`) and wait event `ClientRead`.
+1. Direct connection establishment imposes severe latency and per-process memory penalties.
+2. Pool sizes beyond core/hardware saturation degrade throughput ("the knee" / resource contention).
+3. The baseline sizing formula `((core_count * 2) + effective_spindle_count)` approaches `core_count * 2` under modern flash/SSD storage.
+4. Independent application worker connection pools multiply linearly, causing backend connection exhaustion unless multiplexed by a proxy pooler (e.g. PgBouncer).
+5. Connection pool deadlock formula `pool size = Tn x (Cm - 1) + 1` sets the theoretical minimum pool floor for multi-connection threads.
+6. Leaks and starvation are observable via `pg_stat_activity` wait states (`idle in transaction`, `ClientRead`).
 
 ## Code To Execute
-- N/A (Pipeline Override: Audit research only; code audit omitted in this stage).
+- Code audit and test suite execution are skipped per pipeline override (Research Audit Only).
 
 ## Primary Risks
-- Overreliance on historical spindle-disk sizing formulas in modern NVMe / cloud deployments.
-- Conflation of application-level pool sizing (HikariCP) with proxy-level multiplexing (PgBouncer).
-- Unverified mathematical claims regarding deadlock prevention or throughput degradation.
-- Misrepresentation of PostgreSQL connection state tracking in operational diagnostics.
+- Citation accuracy and hallucination in sizing formulas and quotes.
+- Conflating classical rotational storage heuristics (`effective_spindle_count`) with modern SSD/NVMe deployment reality.
+- Treating application-side pooling and proxy-layer pooling as mutually exclusive rather than complementary architectural layers.
 
 ## Audit Strategy
-1. Independently fetch and verify all cited URLs (PostgreSQL docs, HikariCP wiki, PostgreSQL wiki, PgBouncer docs).
-2. Validate claim fidelity against primary source text and engine specifications.
-3. Verify consistency between research report, evidence matrix, contradictions, and open questions.
-4. Identify research gaps and technical nuances before implementation begins.
+1. Live network verification of all cited source URLs.
+2. Exact string and semantic matching between research claims and source text.
+3. Analysis of architectural and hardware boundary conditions in sizing claims.
+4. Consistency check across research findings, contradiction synthesis, and open questions.

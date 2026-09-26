@@ -2,17 +2,16 @@
 
 ## Claim 1
 
-Claim:
-Increasing the connection pool size beyond a certain physical capacity limit degrades database throughput and increases response times.
+Claim: Direct database connection establishment imposes significant latency and backend process memory overhead; PostgreSQL allocates shared memory structures based on `max_connections`.
 
 Location:
-research/03-evidence.md (Evidence 1) and research/05-report.md (Finding 2)
+`05-report.md`: Finding 1 & `03-evidence.md`: Evidence 3
 
 Evidence Provided:
-Quotes regarding contention overhead and reducing pool size to improve response times (from ~100ms to ~2ms).
+PostgreSQL fork overhead per connection, `max_connections` shared memory sizing, compared to PgBouncer 2 kB connection memory footprint.
 
 Source:
-HikariCP Wiki & PostgreSQL Wiki
+PostgreSQL Documentation (`runtime-config-connection`) & PgBouncer Features
 
 Source Actually Supports Claim:
 YES
@@ -24,20 +23,19 @@ Severity:
 LOW
 
 Notes:
-Both sources explicitly describe performance degradation when concurrent connection counts exceed available processing resources, highlighting the "knee" in throughput graphs.
+Accurately reflects engine-level mechanics for process-per-connection architectures.
 
 ---
 
 ## Claim 2
 
-Claim:
-The optimal formula for baseline database connection sizing is `((core_count * 2) + effective_spindle_count)`.
+Claim: Increasing pool size beyond hardware resource saturation degrades transaction throughput and spikes response latency ("the knee").
 
 Location:
-research/03-evidence.md (Evidence 2) and research/05-report.md (Finding 3)
+`05-report.md`: Finding 2 & `03-evidence.md`: Evidence 1, 3
 
 Evidence Provided:
-Verbatim formula citation.
+HikariCP / Oracle benchmark references (decreasing pool size dropped response times from ~100ms to ~2ms) and PostgreSQL Wiki analysis of contention points (RAM/work_mem, lock contention, context switching, cache line contention).
 
 Source:
 HikariCP Wiki & PostgreSQL Wiki
@@ -52,48 +50,46 @@ Severity:
 LOW
 
 Notes:
-Formula is present in both sources as a recommended starting point for tuning, not a rigid absolute, which the research report accurately contextualizes regarding SSDs.
+Supported by empirical tests cited in both primary/secondary sources.
 
 ---
 
 ## Claim 3
 
-Claim:
-High connection counts degrade performance due to disk contention, memory exhaustion (work_mem), lock contention, context switching, and CPU cache line eviction.
+Claim: Baseline connection sizing formula is `((core_count * 2) + effective_spindle_count)`, simplifying toward `core_count * 2` (or closer to `core_count`) on modern SSD/NVMe storage.
 
 Location:
-research/03-evidence.md (Evidence 3)
+`05-report.md`: Finding 3 & `03-evidence.md`: Evidence 2 & `04-contradictions.md`: Contradiction 1
 
 Evidence Provided:
-Direct lists of bottlenecks.
+Formulas documented in HikariCP wiki and PostgreSQL Wiki with nuance regarding zero rotational latency on SSDs.
 
 Source:
-PostgreSQL Wiki
+HikariCP Wiki & PostgreSQL Wiki
 
 Source Actually Supports Claim:
 YES
 
 Classification:
-FACT
+INTERPRETATION
 
 Severity:
 LOW
 
 Notes:
-Source precisely lists these five mechanical reasons for throughput collapse.
+The formula serves as a baseline starting point for load testing, not an absolute invariant. The research correctly identifies this caveat.
 
 ---
 
 ## Claim 4
 
-Claim:
-Distributed deployments without an intermediate pooler easily exceed backend connection limits, resulting in starvation. Proxy pooling (PgBouncer) collapses virtual connections into a small real pool with low memory footprint (2kB).
+Claim: In horizontally scaled distributed deployments, aggregate application pools multiply linearly and can exhaust database backend slots unless decoupled by a proxy pooler like PgBouncer.
 
 Location:
-research/03-evidence.md (Evidence 4) and research/05-report.md (Finding 4)
+`05-report.md`: Finding 4 & `03-evidence.md`: Evidence 4
 
 Evidence Provided:
-Description of PgBouncer transaction pooling mode and 2kB overhead.
+Multiplication example (4 instances * 16 workers * 10 connections = 640 vs max_connections 200) and PgBouncer transaction pooling mechanics.
 
 Source:
 PgBouncer Features & PostgreSQL Documentation
@@ -102,26 +98,25 @@ Source Actually Supports Claim:
 YES
 
 Classification:
-FACT
+EXAMPLE
 
 Severity:
 LOW
 
 Notes:
-PgBouncer features page explicitly states transaction pooling mode and 2kB per connection memory requirement.
+Clear demonstration of pool multiplication risk in distributed architectures.
 
 ---
 
 ## Claim 5
 
-Claim:
-Connection deadlocks (pool locking) can be avoided using the resource allocation formula: `pool size = Tn x (Cm - 1) + 1`.
+Claim: Pool deadlocks occur when threads hold multiple connections simultaneously; the theoretical minimum pool size to avoid deadlock is `pool size = Tn x (Cm - 1) + 1`.
 
 Location:
-research/03-evidence.md (Evidence 5)
+`03-evidence.md`: Evidence 5
 
 Evidence Provided:
-Verbatim formula and variables mapping.
+Resource allocation formula from HikariCP documentation where `Tn` is maximum thread count and `Cm` is maximum simultaneous connections per thread.
 
 Source:
 HikariCP Wiki
@@ -136,23 +131,22 @@ Severity:
 LOW
 
 Notes:
-Formula and examples are taken verbatim from the HikariCP wiki section on "Pool-locking".
+Verified directly in HikariCP documentation.
 
 ---
 
 ## Claim 6
 
-Claim:
-Idle connections held open due to application leaks or long-running non-database tasks waste slots, observable via `pg_stat_activity` states like `idle in transaction` and wait events like `ClientRead`.
+Claim: Connection leaks and starvation are observable via `pg_stat_activity` when sessions remain in `idle in transaction` while waiting on client-side I/O (`ClientRead`).
 
 Location:
-research/03-evidence.md (Evidence 6) and research/05-report.md (Finding 5)
+`05-report.md`: Finding 5 & `03-evidence.md`: Evidence 6
 
 Evidence Provided:
-References to state and wait event tracking.
+`pg_stat_activity` state definitions and wait event descriptions from PostgreSQL documentation.
 
 Source:
-PostgreSQL Documentation (pg_stat_activity)
+PostgreSQL Documentation (`monitoring-stats.html`)
 
 Source Actually Supports Claim:
 YES
@@ -164,4 +158,4 @@ Severity:
 LOW
 
 Notes:
-`idle in transaction` state and `ClientRead` wait event are explicitly documented in PostgreSQL statistics documentation as indicators of backend waiting on client activity.
+Matches PostgreSQL catalog documentation and production diagnostic standards.

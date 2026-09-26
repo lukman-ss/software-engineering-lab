@@ -1,17 +1,17 @@
 ## Finding 1
 
-Location: internal/pool/mockdb.go
-Claimed Behavior: Simulates backend connection limits and handshake latency.
-Observed Implementation: Uses mutex and atomics to bound connections and track limits. Enforces connectDelay.
+Location: `internal/pool/mockdb.go`
+Claimed Behavior: Simulate connection establishment latency and backend max_connections limits.
+Observed Implementation: Uses a custom `database/sql/driver` with atomic counters and mutexes to enforce `maxConnections` and simulated `connectDelay`.
 Assessment: PASS
 Severity: LOW
-Notes: `database/sql/driver` implementation correctly simulates connection rejection without network complexity. Concurrency is handled safely.
+Notes: Correctly mocks backend limitations. Concurrency safe using atomic operations.
 
 ## Finding 2
 
-Location: internal/pool/service.go
-Claimed Behavior: Demonstrates safe vs unsafe connection holding during external I/O.
-Observed Implementation: `ProcessOrderSafe` performs external I/O outside DB connection lifecycle. `ProcessOrderUnsafeLeak` holds DB lock during external I/O.
+Location: `internal/pool/service.go`
+Claimed Behavior: Safe connection management vs unsafe connection leakage during external I/O.
+Observed Implementation: `ProcessOrderSafe` performs external I/O outside DB connection lifecycle. `ProcessOrderUnsafeLeak` holds DB connection open during external call.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly illustrates the starvation mechanism.
+Notes: Clearly demonstrates the connection leak anti-pattern.

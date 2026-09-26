@@ -1,49 +1,45 @@
-# Contradiction Audit
+# Contradictions Audit
 
 ## Contradiction 1
 
 Statement A:
-"for optimal throughput the number of active connections should be somewhere near ((core_count * 2) + effective_spindle_count)... There hasn't been any analysis so far regarding how well the formula works with SSDs."
-
+Active connections should be sized near `((core_count * 2) + effective_spindle_count)`.
 Location:
-PostgreSQL Wiki & HikariCP Wiki (Classical Sizing Formula)
+`04-contradictions.md`: Contradiction 1 (PostgreSQL Wiki / HikariCP Wiki)
 
 Statement B:
-"Don't be tricked into thinking, 'SSDs are faster and therefore I can have more threads'. That is exactly 180 degrees backwards. Faster, no seeks, no rotational delays means less blocking and therefore fewer threads [closer to core count] will perform better than more threads."
-
+SSDs eliminate seeks and rotational delays, meaning fewer threads (closer to `core_count`) perform better than higher connection numbers.
 Location:
-HikariCP Wiki (Modern Flash Storage Guidance)
+`04-contradictions.md`: Contradiction 1 (Modern Cloud / HikariCP Commentary)
 
 Type:
 SOURCE_CONFLICT
 
 Impact:
-Practitioners reading only the historical formula might attempt to guess an arbitrary non-zero number for `effective_spindle_count` on SSD arrays, inadvertently over-provisioning pools.
+Practitioners might oversize pools if assuming `effective_spindle_count` applies to flash storage.
 
 Assessment:
-PASS. The research explicitly highlights this divergence, resolves it correctly based on hardware physics (zero rotational latency eliminates I/O wait opportunities for thread context switching), and guides modern configurations toward `core_count * 2` or `core_count`.
+The research resolves this conflict accurately: modern NVMe/SSD storage effectively sets spindle wait times to zero, making `core_count` or `core_count * 2` the realistic upper ceiling rather than an inflated count.
 
 ---
 
 ## Contradiction 2
 
 Statement A:
-Application frameworks (HikariCP, Java EE) recommend direct client-side pooling for lowest borrow latency and zero proxy hops.
-
+Connection pooling should live inside the client application (in-memory, lowest latency, zero proxy hops).
 Location:
-HikariCP Architecture Documentation
+`04-contradictions.md`: Contradiction 2 (HikariCP / Java EE view)
 
 Statement B:
-PostgreSQL architecture documentation recommends external connection poolers (PgBouncer) outside the core server to handle horizontally scaled clients.
-
+PostgreSQL explicitly chose not to implement internal pooling and recommends intermediate proxy poolers (PgBouncer) for large, distributed deployments.
 Location:
-PostgreSQL Wiki ("The Need for an External Pool") & PgBouncer Documentation
+`04-contradictions.md`: Contradiction 2 (PostgreSQL Architecture / PgBouncer view)
 
 Type:
-SOURCE_CONFLICT
+INTERNAL / ARCHITECTURAL
 
 Impact:
-Architecture confusion regarding whether client-side pooling alone is adequate in cloud/microservice deployments.
+Engineers may believe client-side pooling and intermediate proxy pooling are incompatible or competing alternatives.
 
 Assessment:
-PASS. The research reconciles the two models: application-side pooling suffices for monolithic/single-instance architectures, while intermediary proxy pooling (e.g., PgBouncer in transaction mode) is necessary when aggregate application workers exceed backend `max_connections`.
+The research correctly delineates topology: single monolithic or small instances benefit from in-process client pooling; multi-instance auto-scaling worker tiers require proxy-based pooling (transaction pooling) to protect database backend resources from multiplication exhaustion.

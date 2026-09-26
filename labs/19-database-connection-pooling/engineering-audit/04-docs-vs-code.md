@@ -1,9 +1,11 @@
-# Docs vs Code
+# Docs VS Code
 
-README: Matches. Lists correct execution commands.
-Engineering Notes: Matches. Mentions custom `database/sql/driver` trade-off which is present in code.
-Research Claims: Matches. Proves connection exhaustion, latency reduction via pools, and starvation via leaks.
-Code & Tests: Synchronized.
-Demo: Output matches expected results and execution notes.
+## Comparison Scope
+- README: Accurate descriptions of files, running commands, and failure scenarios.
+- Engineering notes: Architecture diagrams and mock driver rationale in `01-design.md` match code in `internal/pool`.
+- Code: Implements `MockDriver`, `mockConn`, and `OrderService` precisely as outlined.
+- Tests: Test cases test overhead, limit exhaustion, and pool starvation as specified in design doc.
+- Demo: Matches README run instructions and displays expected output for 3 core scenarios.
 
-Assessment: PASS. No mismatches found.
+## Findings
+None. Documentation perfectly matches code implementation and demo runs.

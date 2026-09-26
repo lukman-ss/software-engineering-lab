@@ -1,21 +1,21 @@
-# Research Gap Analysis
+# Research Gaps
 
 ## Gap 1
 
 Type:
-MISSING_CASE
+UNVERIFIED_CLAIM
 
 Severity:
 LOW
 
 Location:
-research/06-open-questions.md (Dynamic vs Fixed Size Pools)
+`06-open-questions.md`: Unanswered Question 1 & Weak Evidence 1
 
 Problem:
-The research focuses primarily on fixed-size connection pools (matching standard sizing formulas) and does not detail concrete latency trade-offs of dynamic pool scaling (min-idle scaling up to max-pool-size) during sudden microsecond traffic spikes.
+The research posits open questions regarding the latency trade-offs between dynamic vs fixed-size pools under flash traffic, and notes the lack of empirical NVMe sizing constants for PostgreSQL 16+.
 
 Required Revision:
-Include brief note or future benchmark testing dynamic pool scaling latency in production implementation.
+None. The researcher has correctly classified these as open questions / future research directions rather than asserting unsupported claims.
 
 Can Be Approved Without Fix:
 YES
@@ -25,19 +25,19 @@ YES
 ## Gap 2
 
 Type:
-SCOPE_ERROR
+IMPLEMENTATION_GAP
 
 Severity:
 LOW
 
 Location:
-research/06-open-questions.md (PgBouncer Prepared Statement Trade-offs)
+`06-open-questions.md`: Unanswered Question 2
 
 Problem:
-Transaction pooling historically prevented protocol-level prepared statements. While modern PgBouncer (v1.21+) supports `max_prepared_statements`, memory overhead across distinct application schemas warrants explicit lab testing if prepared statements are utilized.
+The research touches upon `max_prepared_statements` in PgBouncer (v1.21+) but does not fully resolve its memory overhead in transaction pooling mode.
 
 Required Revision:
-Verify whether the upcoming practical lab exercises session-level vs transaction-level pooling features.
+None. Classified accurately as an open question.
 
 Can Be Approved Without Fix:
 YES
