@@ -1,32 +1,42 @@
-# Audit Plan
+# Audit Plan — Lab 15: Load Testing Research
 
-Target Lab: labs/15-load-testing
+## Target Lab
+`labs/15-load-testing`
 
 ## Files Reviewed
-- research/01-plan.md
-- research/02-sources.md
-- research/03-evidence.md
-- research/04-contradictions.md
-- research/05-report.md
-- research/06-open-questions.md
+- `labs/15-load-testing/research/01-plan.md`
+- `labs/15-load-testing/research/02-sources.md`
+- `labs/15-load-testing/research/03-evidence.md`
+- `labs/15-load-testing/research/04-contradictions.md`
+- `labs/15-load-testing/research/05-report.md`
+- `labs/15-load-testing/research/06-open-questions.md`
+
+## Scope & Overrides
+- **Research Only**: Auditing research methodology, claim validity, and source integrity.
+- **Code Audit**: Excluded per pipeline override (`research-only` stage).
 
 ## Claims To Verify
-- Load testing validates system behavior under expected and peak workloads.
-- Starting with a smoke test before large-scale load testing is a best practice.
-- Performance testing requires monitoring both client-side and server-side metrics.
-- Stress testing evaluates the system by increasing load above normal levels.
-- Average response time is misleading; percentiles are essential.
-- Bottleneck detection requires correlating client-side latency with server-side metrics.
-- Booking Bengkel load testing strategy (critical endpoints, virtual users, metrics, bottlenecks).
+1. Standard test types taxonomy: Average-load, Stress, Spike, Soak/Endurance.
+2. Metrics foundation: RED method (Rate, Errors, Duration) and Google SRE Four Golden Signals.
+3. Tail latency and percentiles (P50, P95, P99) vs average response times.
+4. Pass/fail criteria definition through SLO-driven thresholds.
+5. Multi-tool comparative tradeoffs: k6 (JS), Locust (Python/gevent), JMeter (Java/XML multi-protocol), Gatling (Scala/async).
+6. Bottleneck identification methodology: layer isolation, backend resource correlation.
+7. Requirement for realistic test environments and representative data volumes.
+8. Third-party and external dependency impact under load.
 
 ## Code To Execute
-None (Pipeline Override: Audit research only).
+- **NONE** (Pipeline override: Do not audit implementation/code in this stage).
 
 ## Primary Risks
-- System-specific recommendations ("Booking Bengkel") might be presented as universal facts.
-- Sources might not fully cover architectural bottleneck diagnosis claims.
+- Inaccessible or unverified sources (paywalled standards like ISO/IEC 25010, vendor 403 blocks like Gatling).
+- Overgeneralization of tool strengths or architectural claims without direct benchmark data.
+- Synthesized investigation procedures presented without single-source authoritative support.
+- Misrepresentation of tool support (e.g., Azure Load Testing framework compatibility).
 
 ## Audit Strategy
-- Verify URL accessibility.
-- Check alignment between cited evidence and major claims.
-- Assess whether Booking Bengkel recommendations are properly framed as interpretations of best practices.
+1. **Source Integrity**: Check URLs, publishers, accessibility status, and tier ratings.
+2. **Claim Grounding**: Verify if evidence directly supports claims without extrapolation.
+3. **Contradiction Analysis**: Ensure internal consistency across all research documents.
+4. **Gap Identification**: Highlight open questions, unverified areas, and empirical limits.
+5. **Quality Gating**: Deliver verdict based on factual rigor and methodological soundness.
