@@ -1,0 +1,6 @@
+# Open Questions and Future Research
+
+- **Frontend Client Synchronization**: How are breaking API changes handled for long-lived frontend clients (SPAs, mobile apps) that may hold old JavaScript/State while the backend undergoes a zero-downtime deployment and contract phase?
+- **Stateful WebSocket Draining**: How should extremely long-lived connections, such as WebSockets or Server-Sent Events, be gracefully drained or migrated when they exceed the standard infrastructure grace period (e.g., K8s 30-second default)?
+- **Database Connection Pooling Constraints**: During Blue-Green deployments, the total number of database connections can temporarily double as both environments are spun up. How can connection exhaustion be prevented at the database or proxy tier during the cut-over phase?
+- **Distributed Queue Worker Deadlocks**: In highly distributed queue workers, what are the best practices for handling jobs that strictly require new database schemas but are accidentally picked up by an old worker instance during a rolling deployment window?
