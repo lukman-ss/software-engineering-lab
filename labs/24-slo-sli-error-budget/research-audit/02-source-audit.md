@@ -1,6 +1,7 @@
-# Source Audit: SLO, SLI & Error Budget
+# Source Audit: Research for 24-slo-sli-error-budget
 
 ## Source 1
+
 Claimed Title: Service Level Objectives (Google SRE Book)
 Claimed Publisher: Google, Inc. / O'Reilly Media
 URL: https://sre.google/sre-book/service-level-objectives/
@@ -18,7 +19,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative origin of modern SRE SLI/SLO concepts.
+- None. Canonical chapter by Chris Jones, John Wilkes, Niall Murphy, et al. defining SLI, SLO, SLA, target selection, and multi-dimensional SLOs.
 
 Assessment:
 PASS
@@ -26,6 +27,7 @@ PASS
 ---
 
 ## Source 2
+
 Claimed Title: Embracing Risk (Google SRE Book)
 Claimed Publisher: Google, Inc. / O'Reilly Media
 URL: https://sre.google/sre-book/embracing-risk/
@@ -43,7 +45,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Primary source for error budget mechanics, velocity tradeoff, and risk tolerance.
+- None. Canonical chapter by Marc Alvidrez defining error budget concept, risk tolerance, availability calculation modes, and non-linear cost curves.
 
 Assessment:
 PASS
@@ -51,6 +53,7 @@ PASS
 ---
 
 ## Source 3
+
 Claimed Title: Monitoring Distributed Systems (Google SRE Book)
 Claimed Publisher: Google, Inc. / O'Reilly Media
 URL: https://sre.google/sre-book/monitoring-distributed-systems/
@@ -68,7 +71,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Establishes the Four Golden Signals (Latency, Traffic, Errors, Saturation) and symptom-based alerting.
+- None. Canonical chapter by Rob Ewaschuk introducing the four golden signals and symptom-based alerting.
 
 Assessment:
 PASS
@@ -76,6 +79,7 @@ PASS
 ---
 
 ## Source 4
+
 Claimed Title: Availability Table (Google SRE Book Appendix)
 Claimed Publisher: Google, Inc. / O'Reilly Media
 URL: https://sre.google/sre-book/availability-table/
@@ -93,7 +97,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Canonical reference table for downtime calculations per time period.
+- None. Canonical appendix tabulating allowed downtime for 90% through 99.999% availability targets.
 
 Assessment:
 PASS
@@ -101,6 +105,7 @@ PASS
 ---
 
 ## Source 5
+
 Claimed Title: Alerting (Prometheus Documentation)
 Claimed Publisher: Prometheus Authors / The Linux Foundation
 URL: https://prometheus.io/docs/practices/alerting/
@@ -118,7 +123,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Industry standard guidance on symptom-based alerting.
+- None. Official Prometheus practices documentation on symptom-based alerting and alert volume minimization.
 
 Assessment:
 PASS
@@ -126,6 +131,7 @@ PASS
 ---
 
 ## Source 6
+
 Claimed Title: Service Level Objectives (Datadog Documentation)
 Claimed Publisher: Datadog
 URL: https://docs.datadoghq.com/service_level_objectives/
@@ -134,7 +140,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY (Commercial platform documentation)
+SECONDARY
 
 Relevant:
 YES
@@ -143,7 +149,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Burn rate thresholds (1-6 elevated, >6 critical) and remaining error budget formula are proprietary Datadog implementation details, correctly classified in research as such.
+- Contains vendor-specific formulas and threshold values (e.g. burn rate 1-6 / 6+ indicator icon rules) that apply specifically to Datadog's product rather than universal SRE standards. Properly classified as Tier 2 in research.
 
 Assessment:
 PASS

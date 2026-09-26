@@ -1,8 +1,7 @@
-# Code Audit: SLO, SLI & Error Budget
+# Code Audit: Research Stage Excluded
 
-## Scope Status
-NOT APPLICABLE (PIPELINE OVERRIDE: RESEARCH AUDIT ONLY)
+Per PIPELINE OVERRIDE instructions for this audit:
+- Stage scope: Research artifacts only (`labs/24-slo-sli-error-budget/research/`).
+- Code audit: Excluded. Implementation files under `internal/`, `cmd/`, and `tests/` were not audited in this research phase.
 
-Per pipeline instructions:
-- This stage audits research artifacts only.
-- Code verification, execution tests, and implementation checks are deferred to the Engineering Audit phase.
+Status: NOT_APPLICABLE

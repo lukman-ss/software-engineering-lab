@@ -1,119 +1,107 @@
-# Claim Audit: SLO, SLI & Error Budget
+# Claim Audit: Research for 24-slo-sli-error-budget
 
-## Claim 1: Distinctions between SLI, SLO, SLA
-Claim: SLI is a quantitative measure of service quality; SLO is a target value for an SLI; SLA is a contract with explicit penalties/consequences for missing SLOs.
-Location: `research/03-evidence.md` (Evidence 1), `research/05-report.md` (Finding 1)
+## Claim 1: SLI, SLO, SLA Definitions
+Claim: SLI is a quantitative measure of service level; SLO is a target value for an SLI; SLA is a contract with consequences.
+Location: `research/05-report.md: Finding 1`, `research/03-evidence.md: Evidence 1`
+Evidence Provided: Direct quotes from Google SRE Book Chapter 4.
+Source: https://sre.google/sre-book/service-level-objectives/
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Authoritative and accurate.
+
+---
+
+## Claim 2: Common SLI Types by Service Category
+Claim: Common SLIs are latency, error rate, throughput, and availability; user-facing, storage, and big data systems prioritize distinct SLIs.
+Location: `research/05-report.md: Finding 2`, `research/03-evidence.md: Evidence 2 & 3`
 Evidence Provided: Quotes from Google SRE Book Chapter 4.
 Source: https://sre.google/sre-book/service-level-objectives/
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Canonical definitions from the originators of SRE.
+Notes: Supported by original text.
 
 ---
 
-## Claim 2: Common SLI Types by System Archetype
-Claim: User-facing systems focus on availability, latency, throughput; storage systems on latency, availability, durability; big data systems on throughput, end-to-end latency; all systems on correctness.
-Location: `research/03-evidence.md` (Evidence 2 & 3), `research/05-report.md` (Finding 2)
-Evidence Provided: Direct quotes from Google SRE Book Chapter 4.
-Source: https://sre.google/sre-book/service-level-objectives/
-Source Actually Supports Claim: YES
-Classification: FACT / BEST_PRACTICE
-Severity: LOW
-Notes: Fully supported by primary text.
-
----
-
-## Claim 3: Time-based vs Aggregate Availability Calculation
-Claim: Availability can be calculated as time-based `uptime / (uptime + downtime)` or aggregate `successful requests / total requests`. Distributed systems generally prefer aggregate (request success rate / yield).
-Location: `research/03-evidence.md` (Evidence 4), `research/05-report.md` (Finding 3)
-Evidence Provided: Direct quotes from Google SRE Book Chapter 3.
+## Claim 3: Availability Calculation Methods (Time-based vs Aggregate)
+Claim: Availability can be computed as time-based (uptime / (uptime + downtime)) or aggregate request success rate (successful requests / total requests).
+Location: `research/05-report.md: Finding 3`, `research/03-evidence.md: Evidence 4`
+Evidence Provided: Direct references from Google SRE Book Chapter 3.
 Source: https://sre.google/sre-book/embracing-risk/
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Accurately distinguishes between aggregate yield and uptime time-slices.
+Notes: Correctly highlights why aggregate is preferred in distributed services.
 
 ---
 
-## Claim 4: Availability Downtime Windows
-Claim: 99% availability equals 7.2 hours/month; 99.9% equals 43.2 minutes/month; 99.99% equals 4.32 minutes/month.
-Location: `research/03-evidence.md` (Evidence 5 & 21), `research/05-report.md` (Finding 4)
-Evidence Provided: Table from Google SRE Book Appendix A.
+## Claim 4: Availability Target to Downtime Mapping
+Claim: Standard availability percentages map to precise downtime budgets (e.g., 99% = 7.2 hours/month; 99.9% = 43.2 minutes/month; 99.99% = 4.32 minutes/month).
+Location: `research/05-report.md: Finding 4`, `research/03-evidence.md: Evidence 5 & 21`
+Evidence Provided: Appendix A Availability Table numbers.
 Source: https://sre.google/sre-book/availability-table/
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: The research explicitly caught and documented the arithmetic discrepancy in the topic specification (which stated 7h 18m and 4m 23s respectively).
+Notes: The research report correctly flags calculation inaccuracies in typical informal approximations (e.g. 7.2 hours = 7h 12m, not 7h 18m).
 
 ---
 
-## Claim 5: Error Budget Definition and Governance Mechanism
-Claim: Error budget equals 100% - SLO. It acts as an objective throttle for deployment risk: if budget is positive, release velocity can proceed; if exhausted, releases freeze or slow while stability engineering takes priority.
-Location: `research/03-evidence.md` (Evidence 6 & 18), `research/05-report.md` (Finding 5 & 8)
-Evidence Provided: Quotes from Google SRE Book Chapter 3.
+## Claim 5: Error Budget Definition and Governance
+Claim: Error budget is (100% - SLO), represents acceptable unreliability, and acts as a control loop governing release velocity and risk management.
+Location: `research/05-report.md: Finding 5 & 8`, `research/03-evidence.md: Evidence 6 & 18`
+Evidence Provided: Google SRE Book Chapter 3 quotes.
 Source: https://sre.google/sre-book/embracing-risk/
 Source Actually Supports Claim: YES
-Classification: FACT / IMPLEMENTATION-SPECIFIC
+Classification: FACT
 Severity: LOW
-Notes: Verified against primary SRE text.
+Notes: Core SRE principle verified.
 
 ---
 
-## Claim 6: Latency Distributions and Percentiles vs Averages
-Claim: Averages obscure tail latencies and changes across workloads; high percentiles (P95, P99, P99.9) must be used.
-Location: `research/03-evidence.md` (Evidence 10), `research/05-report.md` (Finding 7)
-Evidence Provided: Quotes and Figure 4-1 reference from Google SRE Book Chapter 4.
+## Claim 6: Percentile-based Latency SLIs over Averages
+Claim: Percentiles (P95, P99, P99.9) are required over averages for latency SLIs because arithmetic averages hide tail latency and distribution skews.
+Location: `research/05-report.md: Finding 7`, `research/03-evidence.md: Evidence 10`
+Evidence Provided: Google SRE Book Chapter 4 aggregation section.
 Source: https://sre.google/sre-book/service-level-objectives/
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Core statistical principle in SRE telemetry.
+Notes: Solid foundation verified.
 
 ---
 
-## Claim 7: Non-linear Cost of Increasing Reliability (100x per nine)
-Claim: Improving reliability by an additional nine may cost ~100x more due to redundant hardware and developer opportunity costs.
-Location: `research/03-evidence.md` (Evidence 17), `research/05-report.md` (Finding 11)
-Evidence Provided: Direct quote from Google SRE Book Chapter 3.
+## Claim 7: Symptom-Based Alerting
+Claim: Alerting should focus on user-visible symptoms (latency, errors) rather than low-level infrastructure causes (CPU/memory).
+Location: `research/05-report.md: Finding 9`, `research/03-evidence.md: Evidence 14`
+Evidence Provided: Prometheus Alerting documentation and Google SRE Book Chapter 6.
+Source: https://prometheus.io/docs/practices/alerting/, https://sre.google/sre-book/monitoring-distributed-systems/
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Verified across both sources.
+
+---
+
+## Claim 8: Non-Linear Cost of Reliability (100x per Nine)
+Claim: Each incremental improvement in reliability may cost ~100x more due to redundancy and engineering opportunity costs.
+Location: `research/05-report.md: Finding 11`, `research/03-evidence.md: Evidence 17`
+Evidence Provided: Quote from Google SRE Book Chapter 3.
 Source: https://sre.google/sre-book/embracing-risk/
 Source Actually Supports Claim: YES
-Classification: INTERPRETATION / HEURISTIC
+Classification: INTERPRETATION
 Severity: MEDIUM
-Notes: Quoted accurately from the SRE Book, but rightly flagged in `06-open-questions.md` as an empirical heuristic without published formal econometric models.
+Notes: The claim is in the SRE book as an illustrative heuristic/rule of thumb, but lacks empirical dataset citations. Research properly categorized this limitation in `06-open-questions.md`.
 
 ---
 
-## Claim 8: Burn Rate Alerting Thresholds
-Claim: Burn rate measures error budget consumption rate; Datadog uses 2-hour window where burn rate 1-6 is elevated and >6 is critical.
-Location: `research/03-evidence.md` (Evidence 12), `research/05-report.md` (Finding 8)
-Evidence Provided: Datadog documentation excerpt.
+## Claim 9: Vendor-Specific Error Budget Remaining Formula and Burn Rate
+Claim: Error budget remaining is computed as `100 * (current status - target) / (100 - target)` and burn rate levels (1-6 elevated, >6 critical).
+Location: `research/05-report.md: Finding 8 & 12`, `research/03-evidence.md: Evidence 12 & 13`
+Evidence Provided: Datadog documentation quotes.
 Source: https://docs.datadoghq.com/service_level_objectives/
 Source Actually Supports Claim: YES
 Classification: IMPLEMENTATION-SPECIFIC
 Severity: MEDIUM
-Notes: Supported by Datadog docs, but not an SRE universal constant. The research accurately labels it as implementation-specific in `04-contradictions.md` and `06-open-questions.md`.
-
----
-
-## Claim 9: Error Budget Remaining Calculation Formula
-Claim: Remaining error budget percentage is calculated as `100 * (current status - target) / (100 - target)`.
-Location: `research/03-evidence.md` (Evidence 13), `research/05-report.md` (Finding 12)
-Evidence Provided: Datadog documentation.
-Source: https://docs.datadoghq.com/service_level_objectives/
-Source Actually Supports Claim: YES
-Classification: IMPLEMENTATION-SPECIFIC / MATHEMATICAL FORMULATION
-Severity: LOW
-Notes: Derived mathematically from `(allowed_error - actual_error) / allowed_error * 100`.
-
----
-
-## Claim 10: Symptom-Based Alerting
-Claim: Alerts should page on user-visible symptoms rather than infrastructure causes to reduce alert fatigue and accurately reflect SLO impact.
-Location: `research/03-evidence.md` (Evidence 14 & 20), `research/05-report.md` (Finding 9)
-Evidence Provided: Prometheus Alerting Best Practices, Google SRE Book Chapter 6.
-Source: https://prometheus.io/docs/practices/alerting/, https://sre.google/sre-book/monitoring-distributed-systems/
-Source Actually Supports Claim: YES
-Classification: FACT / BEST_PRACTICE
-Severity: LOW
-Notes: Supported by both Google SRE and Prometheus official guidelines.
+Notes: The research report correctly notes that these formulas and thresholds are Datadog implementation details rather than universal SRE standards.

@@ -1,53 +1,36 @@
-# Research Audit Plan: SLO, SLI & Error Budget
+# Audit Plan: Research Audit for 24-slo-sli-error-budget
 
-## Target Lab
-`labs/24-slo-sli-error-budget`
-
-## Audit Scope
-Research artifacts only (PIPELINE OVERRIDE):
-- `research/01-plan.md`
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/04-contradictions.md`
-- `research/05-report.md`
-- `research/06-open-questions.md`
-
-*(Note: Code and implementation files are skipped during this research audit stage per pipeline instructions).*
+Target Lab: `labs/24-slo-sli-error-budget`
+Audit Scope: Research artifacts only (`research/` folder files and related claim verification).
+Scope Exclusion: Implementation, Go code, tests, and engineering execution per PIPELINE OVERRIDE.
 
 ## Files Reviewed
-1. `research/01-plan.md`
-2. `research/02-sources.md`
-3. `research/03-evidence.md`
-4. `research/04-contradictions.md`
-5. `research/05-report.md`
-6. `research/06-open-questions.md`
+- `labs/24-slo-sli-error-budget/research/01-plan.md`
+- `labs/24-slo-sli-error-budget/research/02-sources.md`
+- `labs/24-slo-sli-error-budget/research/03-evidence.md`
+- `labs/24-slo-sli-error-budget/research/04-contradictions.md`
+- `labs/24-slo-sli-error-budget/research/05-report.md`
+- `labs/24-slo-sli-error-budget/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Definitions of SLI, SLO, and SLA.
-2. Common SLI categories (availability, latency, throughput, correctness, durability) across system types.
-3. Time-based vs Aggregate availability calculation formulas.
-4. Standard availability tables (99%, 99.9%, 99.99%, 99.999% downtime per period).
-5. Error budget definition (100% - SLO) and governance mechanism for release velocity.
-6. Target selection principles (avoiding 100%, avoiding setting targets solely on current performance, keeping simple).
-7. Percentiles vs averages for latency SLIs.
-8. Client-side vs Server-side SLI collection.
-9. Burn rate alerting principles and specific threshold conventions.
-10. Error budget remaining formula `100 * (current - target) / (100 - target)`.
-11. Alerting on symptoms vs causes.
-12. Cost scaling non-linearity (~100x per nine).
-13. Safety margins and planned outages (anti-overachievement / Chubby case).
+1. Definitions of SLI, SLO, SLA from Google SRE Book and Datadog.
+2. Common SLI types across user-facing, storage, and big data systems.
+3. Availability calculation methods (time-based vs aggregate) and Availability Table downtime math.
+4. Error budget definitions, purpose, calculation formulas, and relationship with release velocity.
+5. Principles for choosing SLO targets, multi-dimensional/percentile SLOs, and alerting on symptoms over causes.
+6. Reliability cost escalation (100x cost per additional九) and service-level risk tolerance differences.
+7. Specific implementation formulas (Datadog burn rate thresholds and error budget remaining calculation).
 
 ## Code To Execute
-- None (research-only audit phase per pipeline override).
+- None (Code audit excluded by PIPELINE OVERRIDE).
 
 ## Primary Risks
-- Over-generalization of vendor-specific implementations (e.g. Datadog burn rate thresholds or status corrections) as universal SRE standards.
-- Calculation discrepancies between specification examples and standardized availability tables.
-- Lack of empirical backing for heuristics such as "100x cost per nine" or user variance preferences.
+- Relying on vendor-specific formulas (Datadog) as general SRE facts.
+- Misrepresenting non-linear cost claims without noting empirical proof limitations.
+- Discrepancy between topic specification downtime math and Google SRE Availability Table.
 
 ## Audit Strategy
-1. Audit all 6 listed sources for reachability, authority, relevance, and tier accuracy.
-2. Cross-examine all 21 evidence entries and 12 report findings against primary source texts.
-3. Validate mathematical consistency of availability and error budget formulas.
-4. Verify explicit identification of research gaps and vendor-specific limitations.
-5. Provide evidence-based final verdict.
+1. Source Audit: Assess 6 cited sources in `02-sources.md` for URL structure, publisher authority, tier classification, and scope.
+2. Claim Audit: Verify 21 evidence entries and 12 report findings for accurate representation and overgeneralization.
+3. Contradiction & Gap Analysis: Audit internal consistency, recorded open questions, and missing nuance.
+4. Verdict Determination: Apply standard verdict rules to produce `07-verdict.md`.

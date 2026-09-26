@@ -1,62 +1,27 @@
-# Research Gaps Analysis: SLO, SLI & Error Budget
+# Research Gap Analysis: 24-slo-sli-error-budget
 
-## Gap 1: Lack of Empirical Data for Cost of Nines
-Type:
-WEAK_SOURCE
+## Gap 1
 
-Severity:
-LOW
-
-Location:
-`research/05-report.md` (Finding 11), `research/06-open-questions.md`
-
+Type: SCOPE_ERROR / IMPLEMENTATION-SPECIFIC
+Severity: LOW
+Location: `research/05-report.md: Finding 8 & 12`
 Problem:
-The claim that each additional "nine" costs ~100x more is accepted as a rule of thumb from the Google SRE Book, but lacks empirical financial case studies or formulaic proofs.
-
+Burn rate numeric threshold bands (1 to 6 elevated, >6 critical) and the specific remaining percentage formula `100 * (current - target) / (100 - target)` stem from Datadog-specific documentation rather than universal SRE or Google SRE Book standards (which typically formulate burn rate as multi-window burn rate alerts, e.g. Google SRE Workbook Chapter 5).
 Required Revision:
-None required for approval; research transparently flagged this in `06-open-questions.md`.
-
+None required for baseline approval since the research explicitly marked these as vendor-specific in `05-report.md: Limitations` and `06-open-questions.md`. Future engineering implementation should cite multi-window burn rate alerting from Google SRE Workbook if standardizing vendor-neutral alerting.
 Can Be Approved Without Fix:
 YES
 
 ---
 
-## Gap 2: Specificity of Burn Rate Alerting Thresholds
-Type:
-OVERGENERALIZATION / IMPLEMENTATION_GAP
+## Gap 2
 
-Severity:
-MEDIUM
-
-Location:
-`research/05-report.md` (Finding 8), `research/03-evidence.md` (Evidence 12)
-
+Type: UNVERIFIED_CLAIM
+Severity: LOW
+Location: `research/05-report.md: Finding 11`
 Problem:
-Numeric burn rate thresholds (1-6 elevated, >6 critical over 2 hours) rely exclusively on Datadog documentation rather than an open standard (e.g., OpenTelemetry or Google SRE Workbook multi-window multi-burn rate alerts).
-
+The "100x cost per additional nine" statement is an illustrative heuristic from Google SRE Book Chapter 3, rather than an empirically measured formula across heterogeneous tech stacks.
 Required Revision:
-None required for approval; research clearly separated vendor implementation from canonical SRE theory.
-
-Can Be Approved Without Fix:
-YES
-
----
-
-## Gap 3: User Perception of Variance vs Speed Citation
-Type:
-MISSING_SOURCE
-
-Severity:
-LOW
-
-Location:
-`research/03-evidence.md` (Evidence 10), `research/06-open-questions.md`
-
-Problem:
-Google SRE Book asserts user studies show preference for consistent latency over lower mean latency with high variance, but does not explicitly cite the underlying academic paper/study in that section.
-
-Required Revision:
-None required for basic research approval; noted in open questions.
-
+Maintain the existing disclaimer in `06-open-questions.md: Weak Evidence Areas`.
 Can Be Approved Without Fix:
 YES
