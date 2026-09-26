@@ -57,9 +57,21 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 	defer atomic.AddInt64(&s.activeReq, -1)
 
 	// Acquire DB connection slot (simulates DB connection pool limit)
-	s.semaphore <- struct{}{}
-	time.Sleep(s.cfg.DBQueryDuration)
-	<-s.semaphore
+	select {
+	case s.semaphore <- struct{}{}:
+	case <-r.Context().Done():
+		return
+	}
+	defer func() { <-s.semaphore }()
+
+	t := time.NewTimer(s.cfg.DBQueryDuration)
+	defer t.Stop()
+
+	select {
+	case <-t.C:
+	case <-r.Context().Done():
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

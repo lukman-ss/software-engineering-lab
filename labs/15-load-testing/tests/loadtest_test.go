@@ -96,3 +96,39 @@ func TestServer_MethodNotAllowed(t *testing.T) {
 		t.Fatalf("expected 405 Method Not Allowed, got %d", resp.StatusCode)
 	}
 }
+
+func TestLoadTest_DialError(t *testing.T) {
+	cfg := loadtest.Config{
+		URL:      "http://127.0.0.1:1",
+		Method:   http.MethodGet,
+		VUs:      1,
+		Duration: 100 * time.Millisecond,
+	}
+	res := loadtest.NewRunner(cfg).Run(context.Background())
+	if res.TotalRequests == 0 {
+		t.Fatal("expected attempts to be made")
+	}
+	if res.ErrorCount != res.TotalRequests {
+		t.Fatalf("expected all requests to fail on dial error, got %d errors out of %d total", res.ErrorCount, res.TotalRequests)
+	}
+	if res.SuccessCount != 0 {
+		t.Fatalf("expected 0 successes, got %d", res.SuccessCount)
+	}
+}
+
+func TestServer_ContextCanceled(t *testing.T) {
+	srv := server.New(server.Config{
+		MaxDBConnections: 1,
+		DBQueryDuration:  100 * time.Millisecond,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := httptest.NewRequest(http.MethodPost, "/booking", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(w, req)
+
+	if w.Code == http.StatusCreated {
+		t.Fatal("expected request to abort on canceled context, got 201 Created")
+	}
+}

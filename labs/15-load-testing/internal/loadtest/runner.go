@@ -3,6 +3,7 @@ package loadtest
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -85,6 +86,7 @@ func (r *Runner) Run(ctx context.Context) Result {
 						}
 						continue
 					}
+					_, _ = io.Copy(io.Discard, resp.Body)
 					_ = resp.Body.Close()
 					
 					if resp.StatusCode >= 400 {
