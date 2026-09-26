@@ -1,46 +1,50 @@
 # Content Brief
 
-**Topic:** Optimistic vs Pessimistic Locking — Mencegah Lost Update pada Aplikasi Concurrent
+Topic:
+Optimistic vs Pessimistic Locking & Atomic Updates — mencegah anomali "lost update" pada read-modify-write konkuren.
 
-**Target Reader:** Backend engineers, database engineers, software architects yang membangun sistem dengan konkurensi tinggi pada resource terbatas (stok, saldo, reservasi).
+Target Reader:
+Pengembang perangkat lunak, insinyur basis data, dan arsitek sistem yang sudah akrab dengan konsep transaksi dan concinnity dasar, ingin memahami kapan dan bagaimana menerapkan strategi penguncian pada sumber daya yang diakses oleh banyak klien secara bersamaan.
 
-**Problem:** Dua transaksi konkurensi membaca nilai yang sama, memodifikasinya secara independen, dan menulis kembali secara berurutan menyebabkan penimpaan data diam-diam (lost update) tanpa error — bahkan di isolation level default (READ COMMITTED) di PostgreSQL, MySQL, Oracle.
+Problem:
+Dua proses (atau goroutine) yang membaca nilai yang sama, menghitung nilai baru secara independen, lalu menuliskan kembali secara berurutan menyebabkan perubahan dari transaksi pertama disamarkan — "lost update". Anomali ini terjadi secara diam-diam tanpa error, bahkan di bawah isolasi default (READ COMMITTED) pada PostgreSQL, Oracle, dan MySQL/InnoDB. Transaksi semata tidak mencegahnya.
 
-**Core Mental Model:**
-- Lost update ≠ dirty read ≠ phantom read. Ini adalah penimpaan *committed* write oleh write kedua tanpa deteksi.
-- Pessimistic locking = **prevent conflict early** (blokir writer lain via `SELECT ... FOR UPDATE`).
-- Optimistic locking = **detect conflict late** (version guard di `WHERE` clause, cek `affected_rows == 0`).
-- Atomic single-statement = **eliminate window entirely** (`UPDATE ... SET stock = stock - N WHERE stock >= N`).
+Core Mental Model:
+Locking = strategi konkurensi. Pessimistic = cegah konflik dengan memblokir (SELECT ... FOR UPDATE). Optimistic = deteksi konflik saat commit (version guard + affected_rows = 0). Atomic = hilangkan jeda read-modify-write lewat satu pernyataan UPDATE bersyarat. Setiap strategi adalah trade-off antara konsistensi, concinnity, dan kompleksitas operasional. Pilih berdasarkan frekuensi konflik dan kritisnya data.
 
-**Approved Research Status:** APPROVED (research-audit/07-verdict.md)
+Approved Research Status:
+APPROVED
 
-**Approved Engineering Status:** APPROVED (engineering-audit/06-verdict.md)
+Approved Engineering Status:
+APPROVED
 
-**Main Concepts:**
-1. Lost Update Anomaly — reproduktibel di default isolation tanpa explicit locking
-2. Pessimistic Locking (`SELECT ... FOR UPDATE`) — row-level exclusive lock hingga commit/rollback
-3. Optimistic Locking (version/timestamp + affected_rows check) — deteksi konflik saat commit
-4. Atomic Conditional Update — statement-level atomicity tanpa lock manual
-5. Selection Criteria — atomic first, optimistic untuk low-contention/read-heavy, pessimistic untuk high-contention/correctness-critical
-6. Anti-patterns — transaction alone ≠ protection; holding lock across network call; ignoring 0-rows-affected
+Main Concepts:
+1. Lost update — definisi, mekanisme, dan reproduksi under READ COMMITTED
+2. Pessimistic locking — SELECT ... FOR UPDATE, row-level TX lock, held hingga commit/rollback
+3. Optimistic locking — version/timestamp guard di WHERE clause, affected_rows = 0 sebagai sinyal konflik, perlu retry atau 409 Conflict
+4. Atomic single-statement — UPDATE ... SET stock = stock - N WHERE stock >= N, statement-level atomicity
+5. Isolation level limitation — hanya query design (lock, version guard, atau atomic statement) yang mencegah lost update, bukan isolasi semata
+6. Anti-patterns — transaksi semata, lock via jaringan/HTTP, ignore 0-rows-affected, naive read-modify-write
+7. Deadlock — auto-detected di PostgreSQL, satu transaksi abort secara tidak pasti; solusi konsisten lock order & transaksi pendek
 
-**Verified Behaviors (dari tests & demo):**
-- Naive read-modify-write: 50 deduct calls → final stock 99 (expected 50) — **lost update terbukti**
-- Pessimistic locking: 50 goroutines → final stock 50 (exact invariant) — **fully synchronized**
-- Optimistic locking (no retry): 20 goroutines → 1 success, 19 rejected conflicts, stock 99 — **zero corruption, state guarded**
-- Optimistic locking (with exponential backoff retry): 20 goroutines → 20 success, ~61 retries, stock 80 — **converged successfully**
-- Atomic conditional update: 50 goroutines → final stock 50 — **lockless single statement works**
-- Race detector: **zero race conditions** di semua test
-- All tests pass, build passes, demo runs successfully
+Verified Behaviors:
+- 50 goroutine melakukan DeductNaive(1, 1) pada stok awal 100 → stok akhir 99 (lost update terjadi; bukan 50)
+- 50 goroutine melakukan DeductPessimistic(2, 1) pada stok awal 100 → stok akhir 50 (invariant terjaga)
+- 20 goroutine melakukan DeductOptimisticDirect(3, 1) pada stok awal 100 → 1 sukses, 19 konflik (affected_rows = 0 setara)
+- 20 goroutine dengan retry (max 10, jittered exponential backoff) → semua 20 konvergen, stok akhir 80
+- 50 goroutine melakukan DeductAtomic(5, 1) pada stok awal 100 → stok akhir 50 (lockless, statement-atomic)
+- `go test -race ./...` lulus tanpa peringatan race
+- Stock insufficiency dengan pessimistic → ErrInsufficientStock yang benar (Seed 2, DeductPessimistic(20, 2) sukses, lalu DeductPessimistic(20, 1) gagal)
 
-**Available Case Studies:**
-- Lab demo in-memory simulation (5 skenario side-by-side)
-- Automated concurrency tests (6 test cases dengan invariant assertions)
-- Real database behavior documented via PostgreSQL, MySQL, Oracle official docs
+Available Case Studies:
+1. Demo CLI (`go run ./cmd/demo`): lima skenario berdampingan — Naive, Pessimistic, Optimistic Direct, Optimistic With Retry, Atomic — ditampilkan side-by-side dengan stok awal 100
+2. Test suite `tests/locking_test.go`: lima tes otomatis (NaiveLostUpdate, PessimisticLocking, PessimisticLockingInsufficientStock, OptimisticLockingConflict, OptimisticLockingWithRetry, AtomicConditionalUpdate)
 
-**Warnings:**
-- Lab menggunakan in-memory store (simulasi), bukan database nyata — perilaku deadlock, lock escalation, network partition tidak ditampilkan
-- Atomic decrement recipe (`SET stock = stock - N WHERE stock >= N`) disintesis dari jaminan atomicitas statement ACID, bukan kutipan vendor verbatim (confidence MEDIUM di research)
-- MySQL docs diakses via Oracle CDN mirror — claims MySQL-specific downgrade ke MEDIUM
-- No performance benchmarks (throughput/latency) — hanya qualitative trade-offs
-- Version overflow & Redis/distributed lock boundary conditions = open questions
+Warnings:
+- Lab ini adalah simulasi in-memory dengan `sync.Mutex` (bukan RDBMS riil). Perilaku row lock dimodelkan, bukan diprasyaratkan oleh database.
+- Artificial micro-delay (`time.Sleep`) pada NaiveDeduct (100µs) dan OptimisticDeduct (50µs) disisipkan untuk membuat lost update / conflict dapat direproduksi secara andal.
+- Deadlock detection disimulasi tidak mewujudkan karena ordering lock tunggal (single-resource).
+- MySQL docs diverifikasi via Oracle CDN mirror — domain dev.mysql.com return 403 pada fetch otomatis.
+- Versi optimisitis integer overflow tidak diuji; rekomendasi 64-bit/timestamp tersedia di research-revision.
+- Distribusi concurrency di antara goroutine bersifat nondeterministik; nilai stok akhir pada skenario naive/optimistic dapat bervariasi antar-run.
+- Nilai stock akhir 99 pada demo naive bersifat illustrative — jumlah presisi tergantung timing scheduler, tapi anomali lost update pada prinsipnya konsisten.

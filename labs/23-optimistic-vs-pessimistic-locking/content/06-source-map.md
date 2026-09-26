@@ -1,171 +1,104 @@
 # Source Map
 
-## Problem & Mental Model
+## Lost Update Anomaly (Problem & Core Concept)
 
-**Research:**
-- `research/05-report.md` (Finding 1: Lost Update Anomaly, Finding 5: Selection Criteria)
-- `research/03-evidence.md`
+Research:
+research/05-report.md — Finding 1 (Lost Update under READ COMMITTED)
 
-**Engineering:**
-- `engineering/01-design.md` (Problem, Concept To Prove)
+Implementation:
+internal/inventory/store.go — `NaiveDeduct()` method (lines 65-89)
 
----
+Tests:
+tests/locking_test.go — `TestNaiveLostUpdate()` (lines 10-38)
 
-## How It Works — Naive Deduct (Lost Update Path)
+Demo:
+cmd/demo/main.go — Scenario [1] Naive Read-Modify-Write (lines 16-34)
 
-**Implementation:**
-- `internal/inventory/store.go:65-89` (`NaiveDeduct`)
+## Pessimistic Locking (SELECT ... FOR UPDATE)
 
-**Tests:**
-- `tests/locking_test.go:10-38` (`TestNaiveLostUpdate`)
+Research:
+research/05-report.md — Finding 2 (Pessimistic Locking Blocks via FOR UPDATE)
+research/05-report.md — Finding 3 (Trade-offs: Deadlock, Hold-Time)
 
-**Audit:**
-- `engineering-audit/02-code-audit.md` (Finding 1)
-- `engineering-audit/03-test-audit.md` (TestNaiveLostUpdate)
+Implementation:
+internal/inventory/store.go — `PessimisticDeduct()` method (lines 93-116)
+internal/inventory/store.go — `GetRowLock()` method (lines 42-51)
 
----
+Tests:
+tests/locking_test.go — `TestPessimisticLocking()` (lines 40-67)
+tests/locking_test.go — `TestPessimisticLockingInsufficientStock()` (lines 69-83)
 
-## How It Works — Pessimistic Locking
+Demo:
+cmd/demo/main.go — Scenario [2] Pessimistic Locking (lines 36-53)
 
-**Implementation:**
-- `internal/inventory/store.go:93-116` (`PessimisticDeduct`)
-- `internal/inventory/store.go:42-51` (`GetRowLock`)
+## Optimistic Locking (Version Guard)
 
-**Tests:**
-- `tests/locking_test.go:40-67` (`TestPessimisticLocking`)
-- `tests/locking_test.go:69-83` (`TestPessimisticLockingInsufficientStock`)
+Research:
+research/05-report.md — Finding 4 (Optimistic Locking via Version Guard)
 
-**Audit:**
-- `engineering-audit/02-code-audit.md` (Finding 2)
-- `engineering-audit/03-test-audit.md` (TestPessimisticLocking, TestPessimisticLockingInsufficientStock)
+Implementation:
+internal/inventory/store.go — `OptimisticDeduct()` method (lines 120-152)
+internal/inventory/service.go — `DeductOptimisticDirect()` (lines 24-26)
+internal/inventory/service.go — `DeductOptimisticWithRetry()` (lines 28-45)
+internal/inventory/model.go — `ErrOptimisticLock` error (line 8)
 
----
+Tests:
+tests/locking_test.go — `TestOptimisticLockingConflict()` (lines 85-121)
+tests/locking_test.go — `TestOptimisticLockingWithRetry()` (lines 123-145)
 
-## How It Works — Optimistic Locking
+Demo:
+cmd/demo/main.go — Scenario [3] Optimistic Direct (lines 55-74)
+cmd/demo/main.go — Scenario [4] Optimistic With Retry (lines 76-97)
 
-**Implementation:**
-- `internal/inventory/store.go:120-152` (`OptimisticDeduct`)
-- `internal/inventory/service.go:28-45` (`DeductOptimisticWithRetry`)
+## Atomic Single-Statement Update
 
-**Tests:**
-- `tests/locking_test.go:85-121` (`TestOptimisticLockingConflict`)
-- `tests/locking_test.go:123-145` (`TestOptimisticLockingWithRetry`)
+Research:
+research/05-report.md — Finding 6 (Atomic Single-Statement Eliminates RMW Window)
+research/05-report.md — Finding 7 (Isolation Level Alone Does Not Prevent Lost Update)
 
-**Audit:**
-- `engineering-audit/02-code-audit.md` (Finding 3)
-- `engineering-audit/03-test-audit.md` (TestOptimisticLockingConflict, TestOptimisticLockingWithRetry)
+Implementation:
+internal/inventory/store.go — `AtomicDeduct()` method (lines 155-173)
+internal/inventory/service.go — `DeductAtomic()` (lines 47-49)
 
----
+Tests:
+tests/locking_test.go — `TestAtomicConditionalUpdate()` (lines 147-170)
 
-## How It Works — Atomic Single-Statement
+Demo:
+cmd/demo/main.go — Scenario [5] Atomic Operation (lines 99-116)
 
-**Implementation:**
-- `internal/inventory/store.go:154-173` (`AtomicDeduct`)
+## Isolation Level Limitation
 
-**Tests:**
-- `tests/locking_test.go:147-171` (`TestAtomicConditionalUpdate`)
+Research:
+research/05-report.md — Finding 7 (Isolation Level Alone Does Not Prevent Lost Update)
+research/05-report.md — Finding 8 (Default Isolation Levels Differ Across Databases)
 
-**Audit:**
-- `engineering-audit/02-code-audit.md` (Finding 5)
-- `engineering-audit/03-test-audit.md` (TestAtomicConditionalUpdate)
+## Anti-Patterns
 
----
+Research:
+research/05-report.md — Finding 9 (Common Anti-Patterns Are Documented)
 
-## Architecture
+## Model & Errors
 
-**Implementation:**
-- `internal/inventory/model.go` (domain model, errors)
-- `internal/inventory/store.go` (in-memory engine)
-- `internal/inventory/service.go` (business layer)
-- `cmd/demo/main.go` (CLI runner)
+Source File:
+internal/inventory/model.go — Product struct, error definitions
 
-**Engineering:**
-- `engineering/01-design.md` (Architecture, Components)
+## Service Layer
 
-**Research:**
-- `research/05-report.md` (Finding 6: Atomic Single-Statement)
+Source File:
+internal/inventory/service.go — Business logic wrappers for all strategies
 
----
+## Store Engine (Central Logic)
 
-## Demo
+Source File:
+internal/inventory/store.go — Simulated storage engine with locking, versioning, atomic operations
 
-**Implementation:**
-- `cmd/demo/main.go`
+## Research Status Verification
 
-**Engineering:**
-- `engineering/03-execution-result.md` (Demo output)
+- research-audit/07-verdict.md — APPROVED
+- engineering-audit/06-verdict.md — APPROVED
 
----
+## Execution Verification
 
-## Race Detector
-
-**Engineering:**
-- `engineering/03-execution-result.md` (Race Detector output)
-- `engineering-audit/03-test-audit.md` (Race detector verification)
-
----
-
-## Selection Criteria
-
-**Research:**
-- `research/05-report.md` (Finding 5: Selection Criteria)
-- `research/03-evidence.md`
-
----
-
-## Anti-Patterns & Common Mistakes
-
-**Research:**
-- `research/05-report.md` (Finding 9: Common Anti-Patterns)
-
----
-
-## Isolation Levels
-
-**Research:**
-- `research/05-report.md` (Finding 7: Isolation Level Does Not Prevent Lost Update)
-- `research/05-report.md` (Finding 8: Default Isolation Levels Differ)
-- `research/03-evidence.md`
-
----
-
-## Recovery / Rollback
-
-**Implementation:**
-- `internal/inventory/service.go:28-45` (`DeductOptimisticWithRetry`)
-
-**Tests:**
-- `tests/locking_test.go:123-145` (`TestOptimisticLockingWithRetry`)
-
----
-
-## Input Validation
-
-**Implementation:**
-- `internal/inventory/store.go:66` (`NaiveDeduct` validation)
-- `internal/inventory/store.go:94` (`PessimisticDeduct` validation)
-- `internal/inventory/store.go:121` (`OptimisticDeduct` validation)
-- `internal/inventory/store.go:156` (`AtomicDeduct` validation)
-
-**Audit:**
-- `engineering-audit/02-code-audit.md` (Finding 6)
-
----
-
-## Model (Product struct, Errors)
-
-**Implementation:**
-- `internal/inventory/model.go`
-
-**Audit:**
-- `engineering-audit/05-gaps.md`
-
----
-
-## Verdict & Approval
-
-**Research:**
-- `research-audit/07-verdict.md` (APPROVED)
-
-**Engineering:**
-- `engineering-audit/06-verdict.md` (APPROVED)
+- engineering/03-execution-result.md — Test results, race detector output, demo output
+- engineering/01-design.md — Architecture design
+- engineering/02-implementation-notes.md — Implementation decisions, trade-offs, limitations
