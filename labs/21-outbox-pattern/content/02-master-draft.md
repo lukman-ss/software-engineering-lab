@@ -228,10 +228,10 @@ type Order struct {
 }
 ```
 
-Source File: `internal/outbox/model.go:12-32`
+Source File: `internal/outbox/model.go:12-17`
 
 ```go
-// model.go:19-32
+// model.go:26-31
 type OutboxMessage struct {
 	ID        string
 	EventType string
@@ -323,7 +323,7 @@ Pesan yang sama dikirim lagi ke konsumen. Karena ID sudah tercatat, konsumen men
 
 ## What the Tests Prove
 
-Ada 5 tes yang semuanya lolos, termasuk di bawah Go race detector.
+Ada 6 tes yang semuanya lolos, termasuk di bawah Go race detector.
 
 ```text
 === RUN   TestTransactionalOutbox_HappyPath
@@ -336,8 +336,10 @@ Ada 5 tes yang semuanya lolos, termasuk di bawah Go race detector.
 --- PASS: TestDualWriteProblem_Failure (0.00s)
 === RUN   TestTransactionalOutbox_ConcurrentWrites
 --- PASS: TestTransactionalOutbox_ConcurrentWrites (0.05s)
+=== RUN   TestTransactionalOutbox_PurgeProcessed
+--- PASS: TestTransactionalOutbox_PurgeProcessed (0.00s)
 PASS
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.257s
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.256s
 ```
 
 Source: `engineering-audit/03-test-audit.md:34-47`
@@ -557,7 +559,7 @@ Jika terjadi error sebelum `Commit()` — seperti kegagalan marshal JSON — `Ro
 
 1. **Persisten pada disk** — In-memory map tidak bertahan restart proses.
 2. **Exponential backoff** pada relay — Polling dilakukan dengan interval tetap.
-3. **Outbox cleanup/retention** — Record dengan status `PROCESSED` tidak pernah dihapus.
+3. **Outbox cleanup/retention** — Fungsi `PurgeProcessedOutbox()` tersedia dan diuji (`TestTransactionalOutbox_PurgeProcessed`), tetapi tidak dipanggil dalam alur demo.
 4. **CDC / Transaction Log Tailing** — Hanya polling publisher yang diimplementasikan.
 
 ### Rekomendasi untuk Skala Produksi
@@ -653,7 +655,7 @@ Source: `engineering/03-execution-result.md:44-62`
 - `internal/outbox/consumer.go` — Idempotent consumer
 
 ### Tests
-- `tests/outbox_test.go` — 5 test functions
+- `tests/outbox_test.go` — 6 test functions
 
 ### Engineering
 - `engineering/01-design.md` — Engineering Design

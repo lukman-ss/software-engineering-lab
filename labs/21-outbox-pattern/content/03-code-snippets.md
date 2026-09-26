@@ -94,7 +94,7 @@ Explanation: Marks transaction as closed and discards staged changes. No data is
 
 ## Snippet 4 — Message Relay Polling
 
-Source File: `internal/outbox/relay.go:43-59`
+Source File: `internal/outbox/relay.go:43-60`
 Purpose: Polls pending outbox messages, publishes to broker, and marks as processed.
 
 ```go
