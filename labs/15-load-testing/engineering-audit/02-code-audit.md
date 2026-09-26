@@ -1,39 +1,28 @@
 # Code Audit
 
-Target Lab: labs/15-load-testing
-
 ## Finding 1
 
-Location: `internal/server/server.go:61-81`
-Claimed Behavior: Server enforces max concurrent DB operations via channel semaphore and respects request context cancellations during queueing and query execution.
-Observed Implementation: Buffered channel semaphore of size `cfg.MaxDBConnections` properly guards critical section; uses `select` on `r.Context().Done()` during acquire and query sleep; timers properly stopped via `defer t.Stop()`.
+Location: `internal/loadtest/runner.go:48-53, 68`
+Claimed Behavior: Concurrently collect VU metrics without lock contention or race conditions.
+Observed Implementation: Each VU goroutine appends locally to its own slice (`lats`) and writes to an indexed position in `results[vuID]` upon exit. WaitGroup ensures completion before combining.
 Assessment: PASS
 Severity: LOW
-Notes: Correct context lifecycle management preventing goroutine leaks when client cancels.
+Notes: Clean concurrent architecture; avoids mutex contention under load.
 
 ## Finding 2
 
-Location: `internal/loadtest/runner.go:48-114`
-Claimed Behavior: Concurrency runner allocates separate per-VU metric slices to avoid lock contention during high throughput runs, and aggregates latencies and errors post-run.
-Observed Implementation: Each worker goroutine writes exclusively to its indexed `results[vuID]` struct without shared mutex locks, synchronized via `sync.WaitGroup`. Latency slices aggregated after `wg.Wait()`.
+Location: `internal/loadtest/metrics.go:45-64`
+Claimed Behavior: Accurately compute percentiles (P50, P90, P95, P99) and summary statistics.
+Observed Implementation: Makes a defensive copy of latencies slice, sorts it via `sort.Slice`, and calculates percentiles by mapping `(len-1) * pct / 100`. Returns zero metrics gracefully on empty input.
 Assessment: PASS
 Severity: LOW
-Notes: Clean concurrent architecture with zero race conditions detected under `go test -race`.
+Notes: Correct standard percentile calculation and defensive against mutation of input slices.
 
 ## Finding 3
 
-Location: `internal/loadtest/metrics.go:44-73`
-Claimed Behavior: Accurate calculation of percentiles (P50, P90, P95, P99), min, max, average, and RPS.
-Observed Implementation: Uses sorted latency copies, correct 0-indexed linear rank indexing, defensive checks for empty input slices, and accurate integer duration arithmetic.
+Location: `internal/server/server.go:61-76`
+Claimed Behavior: Simulate DB connection saturation with context cancellation support.
+Observed Implementation: Uses buffered channel semaphore to bound concurrent DB slots. Accurately aborts on `r.Context().Done()`. Defers slot release.
 Assessment: PASS
 Severity: LOW
-Notes: Formula invariant property verified by unit tests.
-
-## Finding 4
-
-Location: `internal/loadtest/runner.go:30-34`
-Claimed Behavior: HTTP transport configured to avoid client-side connection pooling bottlenecks hiding server saturation.
-Observed Implementation: `MaxIdleConns` and `MaxIdleConnsPerHost` set to 1000 with a 5s client timeout.
-Assessment: PASS
-Severity: LOW
-Notes: Sound load test client design.
+Notes: Properly handles context cancellation and limits concurrency to `MaxDBConnections`.

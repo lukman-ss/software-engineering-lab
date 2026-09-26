@@ -1,27 +1,24 @@
 # Docs vs Code Audit
 
-Target Lab: labs/15-load-testing
+## Consistency Checklist
 
-## Document Comparison
+1. **README File Structure vs Codebase**:
+   - `README.md` lists `cmd/demo`, `internal/server`, `internal/loadtest`, `tests`, `engineering/`. All exist and match structure.
+   - Status: MATCH
 
-### README.md vs Code
-- Structure listed in `README.md`:
-  - `cmd/demo`: Present and matches.
-  - `internal/server`: Present and matches.
-  - `internal/loadtest`: Present and matches.
-  - `tests`: Present and matches.
-  - `engineering/`: Present and matches.
-- Commands listed in `README.md`:
-  - `go run ./cmd/demo`: Works as described.
-  - `go test -v ./...`: Works as described.
-  - `go test -race ./...`: Works as described.
+2. **Run Instructions vs Implementation**:
+   - `README.md` specifies `go run ./cmd/demo`. Verified working and produces expected benchmark output.
+   - `README.md` specifies `go test -v ./...` and `go test -race ./...`. Verified working and passing.
+   - Status: MATCH
 
-### Engineering Notes & Design vs Code
-- `engineering/01-design.md` defines runner with custom Transport, decoupled per-VU results, and percentile calculator. Matched exactly in code.
-- `engineering/02-implementation-notes.md` details context cancellation handling, timer cleanup, and error status tracking. Matched in `internal/server/server.go` and `internal/loadtest/runner.go`.
+3. **Research Claims vs Implementation**:
+   - Research outlines load testing principles (Smoke vs Stress), tail latency degradation under queueing, and percentiles (P50, P95, P99).
+   - Implementation in `cmd/demo/main.go` and `internal/loadtest` directly implements these concepts.
+   - Status: MATCH
 
-### Research Alignment vs Code
-- Research focus on percentiles (P50, P95, P99), queueing theory, connection pool saturation, and tail latency explosion is faithfully realized in `internal/server/server.go` and measured by `internal/loadtest/metrics.go`.
+4. **Demo Execution Output Verification**:
+   - Running `go run ./cmd/demo` produces real Smoke (2 VUs) vs Stress (50 VUs) results demonstrating queuing latency jump (Smoke P95 ~21ms vs Stress P95 ~794ms).
+   - Status: MATCH (No fake results detected).
 
-## Mismatches Found
-None. Zero `DOC_CODE_MISMATCH`, zero `TEST_CLAIM_MISMATCH`, zero `RESEARCH_IMPLEMENTATION_MISMATCH`.
+## Discrepancies
+None detected.

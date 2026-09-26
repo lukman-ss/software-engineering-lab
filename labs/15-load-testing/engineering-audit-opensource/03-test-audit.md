@@ -1,39 +1,94 @@
 # Test Audit
 
-## Coverage matrix
+## Test Coverage Summary
 
-| Package        | Tests                                  | Purpose                                    | Result |
-|----------------|----------------------------------------|--------------------------------------------|--------|
-| loadtest (unit)| TestCalculateMetrics                   | Min/Max/ Avg, P50, P95, P99 exactness      | PASS   |
-|                | TestCalculateMetrics_Empty             | nil latencies → zero Result                | PASS   |
-|                | TestCalculateMetrics_Invariants        | P50<=P90<=P95<=P99<=Max ordering           | PASS   |
-| tests (integ)  | TestLoadTest_SmokeVsStress             | 10x pool limit causes P95 tail spike       | PASS   |
-|                | TestLoadTest_ErrorCount                | 500 responses → all errors, 0 success     | PASS   |
-|                | TestServer_MethodNotAllowed            | GET /booking → 405                         | PASS   |
-|                | TestLoadTest_DialError                 | refused conn → all errors                 | PASS   |
-|                | TestServer_ContextCanceled             | pre-canceled ctx → no 201                  | PASS   |
+| Test File | Tests |
+|-----------|-------|
+| internal/loadtest/metrics_test.go | TestCalculateMetrics, TestCalculateMetrics_Empty, TestCalculateMetrics_Invariants (3) |
+| tests/loadtest_test.go | TestLoadTest_SmokeVsStress, TestLoadTest_ErrorCount, TestServer_MethodNotAllowed, TestLoadTest_DialError, TestServer_ContextCanceled (5) |
 
-Verified results (count=1, real run):
-- `go test -v -count=1 ./...` → 8/8 PASS
-- `go test -race -count=1 ./...` → PASS, 0 races
-- `go vet ./...` → clean
-- `go build ./...` → SUCCESS
+Total: 8 tests, all passing.
 
-## Covered scenarios
+## Finding 1
+Location: tests/loadtest_test.go:14-58
+Claimed Behavior: Smoke test should have lower latency than stress test; stress test should show tail latency exceeding average
+Observed Implementation: The test compares smoke P95 vs stress P95, and stress P95 vs stress Avg. Both assertions pass.
+Assessment: PASS
+Severity: LOW
+Notes: Validates core research claims: (1) stress causes higher tail latency, (2) averages mask tail spikes. Demonstrates smoke vs stress differentiation.
 
-- Happy path: smoke load produces 186 requests, 0 errors (live). Unit metrics exact match.
-- Failure path: HTTP 500 (all errors), connection refused (all errors) — both assert `ErrorCount == TotalRequests`.
-- Negative case: method-not-allowed returns 405.
-- Edge case: empty latencies slice returns zero Result without panic.
-- Transition / recovery: canceled context aborts handler (no 201 written, no leak).
-- Invariant: latency percentiles strictly ordered by value.
+## Finding 2
+Location: internal/loadtest/metrics_test.go:8-41
+Claimed Behavior: Percentile calculations (P50, P95, P99, Avg) compute correctly
+Observed Implementation: Uses 100 latency samples (1ms to 100ms) with known expected values. All assertions pass.
+Assessment: PASS
+Severity: LOW
+Notes: Deterministic test with mathematical verification of percentile correctness.
 
-## Weakness / gaps
+## Finding 3
+Location: tests/loadtest_test.go:60-85
+Claimed Behavior: HTTP 500 errors are counted as errors, not successes
+Observed Implementation: Mock server returns 500 for all requests. Test verifies ErrorCount == TotalRequests and SuccessCount == 0.
+Assessment: PASS
+Severity: LOW
+Notes: Covers failure path. All errors are correctly counted.
 
-1. MISSING_TEST — Server overload spike branch (`activeReq > MaxDB` → 10% chance of 25x duration) has NO test forcing > MaxDB concurrency; the slow path is undocumented and unverified.
-2. MISSING_TEST — Zero/negative `Duration`, empty/blank `URL`, empty `Method`, `VUs<=0` defaulting: not exercised.
-3. RACE_DESIGN — Smoke test asserts `P95 > Avg` and `stress P95 > smoke P95`. With only 1 VU / 500ms these are timing-sensitive; on a contended host the stress tail could collapse below smoke, flipping the comparison. Passes now; latent flakiness.
-4. UNVERIFIED_RESULT — `engineering/03-execution-result.md` "sample run" figures not byte-for-byte reproducible (host-dependent). Demo note acknowledges; acceptable, but the doc should avoid implying fixed values.
-5. MISSING_EDGE_CASE — No test for `ContentType` header propagation; no test that load generator sends the configured `Body`/`Method` (errors/dial tests use GET).
+## Finding 4
+Location: tests/loadtest_test.go:87-101
+Claimed Behavior: GET requests to /booking return 405 Method Not Allowed
+Observed Implementation: Sends GET request, verifies response code is 405.
+Assessment: PASS
+Severity: LOW
+Notes: Covers edge case for HTTP method validation.
 
-Assessment: Test suite proves stated behavior but has medium coverage gaps in server slow-path and config-validation edge cases. No fake results; live run reproduced documented output shape.
+## Finding 5
+Location: tests/loadtest_test.go:103-120
+Claimed Behavior: Dial errors are counted as errors
+Observed Implementation: Requests sent to localhost:1 (unreachable port). Verifies ErrorCount == TotalRequests.
+Assessment: PASS
+Severity: LOW
+Notes: Covers network failure path (connection refused).
+
+## Finding 6
+Location: tests/loadtest_test.go:122-137
+Claimed Behavior: Server aborts processing when request context is already cancelled
+Observed Implementation: Creates a context, cancels it immediately, sends POST request. Verifies response is not 201 Created.
+Assessment: PASS
+Severity: LOW
+Notes: Covers context cancellation handling in server handler.
+
+## Finding 7
+Location: internal/loadtest/metrics_test.go:53-79
+Claimed Behavior: Percentile ordering invariants hold (Min <= P50 <= P90 <= P95 <= P99 <= Max)
+Observed Implementation: Tests with 12 unordered latency values. Verifies all ordering invariants.
+Assessment: PASS
+Severity: LOW
+Notes: Validates that sorted percentile output maintains proper ordering.
+
+## Finding 8
+Location: tests/loadtest_test.go
+Missing Coverage: No unit tests directly cover server.go's random slow-query behavior (10% chance at 25x duration)
+Assessment: WARNING
+Severity: MEDIUM
+Notes: The server's random query degradation is never tested in isolation. The SmokeVsStress test implicitly covers it but does not specifically validate this behavior. A dedicated test for the slow-query simulation would strengthen coverage.
+
+## Finding 9
+Location: tests/loadtest_test.go
+Missing Coverage: No test validates P99 specifically shows degradation under stress
+Assessment: WARNING
+Severity: MEDIUM
+Notes: The SmokeVsStress test checks P95 degradation but not P99. The design doc claims P99 should spike significantly under stress. The demo output shows P99=1486ms (stress) vs P50=21.2ms (smoke), but this is not asserted in any test.
+
+## Finding 10
+Location: tests/loadtest_test.go
+Missing Coverage: No negative test for missing/empty URL or zero VUs in loadtest.Config
+Assessment: WARNING
+Severity: LOW
+Notes: NewRunner handles VUs <= 0 by defaulting to 1, but this behavior is not tested. An empty URL would cause all dial errors but this path is not explicitly tested as a configuration edge case.
+
+## Finding 11
+Location: tests/loadtest_test.go
+Missing Coverage: No test validates that TotalRequests = SuccessCount + ErrorCount invariant holds
+Assessment: WARNING
+Severity: LOW
+Notes: The metrics calculation ensures this invariant (total = len(latencies) + errors), but no test explicitly asserts `TotalRequests == SuccessCount + ErrorCount`. This is a basic safety invariant that should be verified.
