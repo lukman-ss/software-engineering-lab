@@ -142,7 +142,9 @@ func TransferWithRetry(ctx context.Context, from, to *bank.Account, amount int, 
 ```
 
 Explanation:
-Fungsi membungkus pemanggilan transaksi dalam perulangan hingga batas `maxRetries`. Jika terjadi `bank.ErrDeadlock` atau `context.DeadlineExceeded`, sistem melakukan penundaan (*backoff*) singkat sebesar 2 milidetik sebelum mencoba kembali transaksi naif dari awal.
+Fungsi membungkus pemanggilan transaksi dalam perulangan hingga batas `maxRetries`. Jika terjadi `bank.ErrDeadlock` atau `context.DeadlineExceeded`, sistem melakukan penundaan (*backoff*) tetap sebesar 2 milidetik sebelum mencoba kembali transaksi naif dari awal.
+
+> Note: Backoff di lab ini bersifat tetap (fixed 2ms), bukan exponential backoff dengan jitter sebagaimana disarankan oleh riset (AWS, Microsoft). Ini adalah simplifications yang terdokumentasi secara eksplisit pada `engineering/02-implementation-notes.md` untuk keperluan keterbacaan.
 
 ---
 

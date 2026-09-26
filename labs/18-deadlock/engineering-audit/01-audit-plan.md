@@ -1,21 +1,26 @@
 # Engineering Audit Plan
 
 Target Lab: labs/18-deadlock
-Implementation Files: internal/bank/account.go, internal/transfer/transfer.go
-Tests: tests/transfer_test.go
-Executable/Demo: cmd/demo/main.go
-Approved Research Inputs: research/runs/2026-09-25-deadlock/05-report.md
+Implementation Files: `internal/bank/account.go`, `internal/transfer/transfer.go`
+Tests: `tests/transfer_test.go`
+Executable/Demo: `cmd/demo/main.go`
+Approved Research Inputs:
+- Deadlock occurs via circular wait condition (Coffman conditions).
+- Systems resolve deadlocks by aborting one transaction as victim.
+- Lock ordering prevents circular wait and avoids deadlocks entirely.
+- Transaction duration correlates directly with deadlock probability.
+- Application-level retries recover aborted transactions.
 Main Claims To Verify:
-1. Deadlock causes circular wait (Finding 1)
-2. Deadlock victim aborts (Finding 2)
-3. Lock ordering prevents deadlock (Finding 3)
-4. Long transactions increase deadlock probability (Finding 4)
-5. Retry mechanism recovers deadlocks (Finding 5)
+- Concurrent bidirectional naive transfers trigger deadlocks and return `ErrDeadlock`.
+- Lock-ordered concurrent bidirectional transfers complete successfully without deadlocks.
+- Application retry recovers from aborted deadlock attempts.
+- Longer transaction duration increases deadlock occurrence compared to zero delay.
+- Concurrency is safe and race detector passes without data races.
 Commands To Run:
-1. go test ./...
-2. go test -race ./...
-3. go run ./cmd/demo
+- `go test ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-1. Inaccurate simulation of database locking
-2. Deadlock not deterministically triggered
-3. Race conditions in test/demo orchestration
+- Simulation may fail to produce deadlocks reliably under fast schedulers if timeouts/delays are misconfigured.
+- Flaky test execution if concurrency timings are too tight.
+- Race conditions during shared balance updates if locks are improperly managed.

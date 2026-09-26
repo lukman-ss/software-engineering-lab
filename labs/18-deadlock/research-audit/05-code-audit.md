@@ -1,10 +1,6 @@
 # Code Audit
 
-## Status
+**Status:** NOT EXECUTED
 
-NOT_APPLICABLE
-
-## Reason
-
-Pipeline override specifies: "Audit research only. Do not audit implementation/code in this stage."
-Code execution and audit skipped for this research audit phase.
+**Reason:** Pipeline override explicitly specified: "Do not audit implementation/code in this stage."
+Code execution and code-to-research compliance verification are skipped.

@@ -1,36 +1,38 @@
-# Audit Plan
+# Audit Plan: Deadlock Research
 
-Target Lab: labs/18-deadlock (research-only phase)
+## Target Lab
+`labs/18-deadlock`
 
-Files Reviewed:
-- research/runs/2026-09-26-deadlock/01-plan.md
-- research/runs/2026-09-26-deadlock/02-sources.md
-- research/runs/2026-09-26-deadlock/03-evidence.md
-- research/runs/2026-09-26-deadlock/04-contradictions.md
-- research/runs/2026-09-26-deadlock/05-report.md
-- research/runs/2026-09-26-deadlock/06-open-questions.md
+## Files Reviewed
+- `labs/18-deadlock/research/01-plan.md`
+- `labs/18-deadlock/research/02-sources.md`
+- `labs/18-deadlock/research/03-evidence.md`
+- `labs/18-deadlock/research/04-contradictions.md`
+- `labs/18-deadlock/research/05-report.md`
+- `labs/18-deadlock/research/06-open-questions.md`
 
-Claims To Verify:
-1. Deadlock definition and Coffman conditions.
-2. PostgreSQL automatic deadlock detection and victim selection.
-3. PostgreSQL error codes 40P01 and 40001 requiring retry.
-4. Difference between deadlock_timeout and lock_timeout.
-5. Lock ordering prevents deadlocks.
-6. Transaction duration and contention risk (no external calls in transactions).
-7. Deadlock handling: idempotent retry with backoff and jitter in Go.
-8. Observability metrics for deadlocks in PostgreSQL.
-9. Isolation level behavior related to deadlocks and serialization failures.
+## Claims To Verify
+1. Deadlock requires all 4 Coffman conditions simultaneously (mutual exclusion, hold-and-wait, no preemption, circular wait).
+2. Two individually correct transactions can deadlock solely due to inverted lock ordering.
+3. RDBMS (PostgreSQL, MySQL/InnoDB, SQL Server) detect deadlocks automatically and abort a victim transaction.
+4. Transaction duration directly increases deadlock probability by holding locks longer.
+5. Consistent lock ordering is the primary architectural mitigation.
+6. Deadlock resolution at the application level requires idempotent retry with exponential backoff and jitter.
+7. Deadlock is fundamentally distinct from lock timeout.
+8. Engine-specific defaults and behaviors (e.g., PostgreSQL `deadlock_timeout` default 1s, MySQL 1213 error code, SQL Server 1205 error code).
 
-Code To Execute:
-None (Pipeline override: Audit research only).
+## Code To Execute
+None. Pipeline override specifies: "Audit research only. Do not audit implementation/code in this stage."
 
-Primary Risks:
-- Source hallucination (e.g., MySQL references yielding 403).
-- Overgeneralization of PostgreSQL behavior to other systems.
-- Misinterpreting general application patterns (like PPOB specific external call handling) as database absolute facts.
+## Primary Risks
+- Use of secondary/tertiary summaries (Wikipedia) for fundamental academic concepts (Coffman conditions, 2PL).
+- Use of archived Wayback Machine URLs for MySQL documentation due to direct fetch blocks.
+- Potential conflation of implementation-specific behavior (e.g., PostgreSQL `deadlock_timeout`) with generic RDBMS behavior.
+- Contextual application to PPOB (Indonesian payment aggregator) being speculative or unbacked by primary domain literature.
 
-Audit Strategy:
-- Validate PostgreSQL documentation URLs.
-- Cross-reference claims against verbatim evidence.
-- Ensure research distinguishes between generic engineering practices and database-specific facts.
-- Verify contradictions and gaps are reported correctly.
+## Audit Strategy
+1. Audit all 12 listed sources for reachability, tier classification, scope, and evidence fidelity.
+2. Cross-examine claims in `05-report.md` and `03-evidence.md` against original text and database standards.
+3. Evaluate contradictions and implementation divergences noted in `04-contradictions.md`.
+4. Surface research gaps, missing cases, and overgeneralizations into `06-gaps.md`.
+5. Issue final verdict in `07-verdict.md`.

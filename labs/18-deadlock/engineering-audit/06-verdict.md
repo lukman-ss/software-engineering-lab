@@ -1,18 +1,15 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/18-deadlock
-Audit Date: 2026-09-25
+Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed: internal/bank/account.go, internal/transfer/transfer.go, cmd/demo/main.go
-Tests Reviewed: tests/transfer_test.go
-Commands Executed:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+Code Files Reviewed: 3 (`cmd/demo/main.go`, `internal/bank/account.go`, `internal/transfer/transfer.go`)
+Tests Reviewed: 1 (`tests/transfer_test.go`)
+Commands Executed: 3 (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo`)
 Failures: 0
-Warnings: 1 (Self-transfer edge case unguarded)
+Warnings: 1
 
 ## Quality Gates
 
@@ -27,8 +24,7 @@ Documentation Accuracy: PASS
 None.
 
 ## Non-Blocking Issues
-1. Self-transfer (`from == to`) not guarded, resulting in self-deadlock if invoked with identical accounts.
-2. Business edge-case test coverage (insufficient balance, single-account transfers) is absent; focus is strictly on concurrency.
+1. `TransferWithRetry` uses fixed delay rather than exponential backoff with jitter. Documented in implementation notes as deliberate pedagogical trade-off.
 
 ## Required Revisions
 None.
