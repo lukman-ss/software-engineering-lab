@@ -1,33 +1,21 @@
-# Documentation vs Code Verification
+# Docs vs Code Analysis
 
-## Documents Inspected
+## Verification Matrix
 
-- `labs/25-rate-limiting-and-backpressure/README.md`
-- `labs/25-rate-limiting-and-backpressure/engineering/01-design.md`
-- `labs/25-rate-limiting-and-backpressure/engineering/02-implementation-notes.md`
-- `labs/25-rate-limiting-and-backpressure/engineering/03-execution-result.md`
-- Source code and demo execution output
+| Claim in README / Design Doc | Implementation Location | Test Verification | Verdict |
+|---|---|---|---|
+| Token Bucket with burst allowance and continuous refill | `internal/ratelimit/bucket.go:8-79` | `internal/ratelimit/bucket_test.go:9` | MATCH |
+| Leaky Bucket traffic smoothing with constant leak rate | `internal/ratelimit/bucket.go:81-121` | `internal/ratelimit/bucket_test.go:32` | MATCH |
+| Tenant key isolation guarding against CGNAT IP collisions | `internal/ratelimit/registry.go:6-37` | `internal/ratelimit/bucket_test.go:51` | MATCH |
+| Bounded queue non-blocking submit with immediate rejection | `internal/backpressure/queue.go:60-70` | `internal/backpressure/queue_test.go:10` | MATCH |
+| AWS exponential backoff with Full / Equal / Decorrelated Jitter | `internal/retry/backoff.go:24-63` | `internal/retry/backoff_test.go:8` | MATCH |
+| HTTP RFC 6585 status 429 response with Retry-After header | `internal/httputil/middleware.go:17-40` | `internal/httputil/middleware_test.go:11` | MATCH |
+| Interactive CLI Demo matching actual execution output | `cmd/demo/main.go` | Run verified via `go run ./cmd/demo` | MATCH |
 
-## Comparison Findings
+## Findings
 
-### 1. Directory Structure
-- **README / Design Claim**: `cmd/demo/main.go`, `internal/backpressure/`, `internal/httputil/`, `internal/ratelimit/`, `internal/retry/`.
-- **Actual Code**: Exactly matches filesystem layout.
-- **Status**: PASS
-
-### 2. Algorithmic Specifications
-- **Token Bucket**: Matches burst limit $B$ and replenishment $R$.
-- **Leaky Bucket**: Matches continuous leak rate and water level capacity.
-- **Bounded Queue**: Matches fast rejection load shedding behavior on buffer saturation.
-- **Jitter Algorithms**: Formulas for NoJitter, FullJitter, EqualJitter, and DecorrelatedJitter match Marc Brooker's AWS Architecture paper.
-- **Status**: PASS
-
-### 3. Demo Output Veracity
-- **Execution Log in `03-execution-result.md`**: Compared against output from direct execution of `go run ./cmd/demo`.
-- **Observed**: Output format, step ordering (1. Token Bucket Burst, 2. Leaky Bucket, 3. Bounded Queue Backpressure, 4. AWS Retry Backoff), rejection strings, and token levels match live runtime output exactly.
-- **Status**: PASS
-
-### 4. Mismatch Checks
 - `DOC_CODE_MISMATCH`: None detected.
 - `TEST_CLAIM_MISMATCH`: None detected.
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None detected. Implementation covers Findings 1, 2, 4, 5, 7 from approved research report (`research/05-report.md`).
+- `RESEARCH_IMPLEMENTATION_MISMATCH`: None detected.
+
+Documentation accurately reflects the code and runtime output.

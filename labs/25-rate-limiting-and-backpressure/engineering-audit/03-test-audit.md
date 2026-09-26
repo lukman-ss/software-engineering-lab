@@ -1,28 +1,26 @@
 # Test Audit
 
-## Test Suite Execution Results
+## Coverage Summary
 
-Executed commands:
-```bash
-go test -v -count=1 ./...
-go test -race -count=1 ./...
-go run ./cmd/demo
-```
+- Happy Path: Covered (Token bucket allow, leaky bucket allow, queue submit accept, HTTP 200 OK).
+- Failure Path / Rejection: Covered (Token bucket exhaustion, leaky bucket capacity rejection, queue `ErrQueueFull`, HTTP 429 response).
+- Edge Cases: Covered (Refill sleep recovery, RetryAfterSeconds estimation, tenant key isolation).
+- Concurrency & Race Safety: Covered (`TestTokenBucket_ConcurrencyRace`, `TestBoundedQueue_ConcurrencySafety`, verified with `go test -count=1 -race ./...`).
 
-### Raw Test Execution Output
+## Execution Verification
 
+### Command 1: `go test -v ./...`
 ```text
-?   	labs/25-rate-limiting-and-backpressure/cmd/demo	[no test files]
 === RUN   TestBoundedQueue_RejectionUnderLoad
 --- PASS: TestBoundedQueue_RejectionUnderLoad (0.00s)
 === RUN   TestBoundedQueue_ConcurrencySafety
---- PASS: TestBoundedQueue_ConcurrencySafety (0.01s)
+--- PASS: TestBoundedQueue_ConcurrencySafety (0.02s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	0.345s
+ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	0.031s
 === RUN   TestRateLimitMiddleware_RFC6585
 --- PASS: TestRateLimitMiddleware_RFC6585 (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	0.343s
+ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	0.015s
 === RUN   TestTokenBucket_BurstAndRefill
 --- PASS: TestTokenBucket_BurstAndRefill (0.20s)
 === RUN   TestLeakyBucket_LeakRate
@@ -34,38 +32,56 @@ ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	0.343s
 === RUN   TestTokenBucket_ConcurrencyRace
 --- PASS: TestTokenBucket_ConcurrencyRace (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	1.381s
+ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	1.056s
 === RUN   TestComputeBackoff_Bounds
 --- PASS: TestComputeBackoff_Bounds (0.00s)
 === RUN   TestDecorrelatedJitter_Bounds
 --- PASS: TestDecorrelatedJitter_Bounds (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/retry	0.327s
+ok  	labs/25-rate-limiting-and-backpressure/internal/retry	0.012s
 ```
 
-Race detector: clean pass (`go test -race -count=1 ./...` PASSED across all packages with 0 data races detected).
+### Command 2: `go test -count=1 -race ./...`
+```text
+?   	labs/25-rate-limiting-and-backpressure/cmd/demo	[no test files]
+ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	1.148s
+ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	1.098s
+ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	2.131s
+ok  	labs/25-rate-limiting-and-backpressure/internal/retry	1.074s
+```
 
-## Coverage Analysis
+### Command 3: `go run ./cmd/demo`
+```text
+=== 1. Token Bucket Burst & Rate Limiting ===
+Request #1: Allowed=true (Remaining Tokens: 2.0)
+Request #2: Allowed=true (Remaining Tokens: 1.0)
+Request #3: Allowed=true (Remaining Tokens: 0.0)
+Request #4: Allowed=false (Remaining Tokens: 0.0)
+Request #5: Allowed=false (Remaining Tokens: 0.0)
+After 300ms pause: Allowed=true (Remaining Tokens: 0.5)
 
-1. **Token Bucket & Leaky Bucket (`internal/ratelimit`)**:
-   - `TestTokenBucket_BurstAndRefill`: Happy path burst allowance, token exhaustion rejection, and refill after sleep.
-   - `TestLeakyBucket_LeakRate`: Enforces water capacity limit and leak drainage over time.
-   - `TestRegistry_TenantIsolation`: Negative & cross-tenant isolation test (Tenant A quota exhaustion does not affect Tenant B).
-   - `TestTokenBucket_RetryAfterSeconds`: Verifies correct calculation of `Retry-After` seconds.
-   - `TestTokenBucket_ConcurrencyRace`: 50 goroutines concurrently calling `Allow()`.
+=== 2. Leaky Bucket Traffic Smoothing ===
+Request #1: Allowed=true (Current Water Level: 1.0)
+Request #2: Allowed=true (Current Water Level: 2.0)
+Request #3: Allowed=true (Current Water Level: 3.0)
+Request #4: Allowed=false (Current Water Level: 3.0)
+Request #5: Allowed=false (Current Water Level: 3.0)
 
-2. **Bounded Queue Backpressure (`internal/backpressure`)**:
-   - `TestBoundedQueue_RejectionUnderLoad`: Tests full queue buffer rejection returning `ErrQueueFull`.
-   - `TestBoundedQueue_ConcurrencySafety`: 30 concurrent submitters into queue, verified accepted + rejected count equals 30.
+=== 3. Bounded Queue Backpressure (Load Shedding) ===
+Job #1: ACCEPTED into bounded buffer
+Job #2: ACCEPTED into bounded buffer
+Job #3: ACCEPTED into bounded buffer
+Job #4: REJECTED (Backpressure Shedding: backpressure: queue capacity exceeded)
+Job #5: REJECTED (Backpressure Shedding: backpressure: queue capacity exceeded)
+Job #6: REJECTED (Backpressure Shedding: backpressure: queue capacity exceeded)
+Stats: Accepted=3, Rejected=3, Processed=1
 
-3. **HTTP Middleware (`internal/httputil`)**:
-   - `TestRateLimitMiddleware_RFC6585`: Verifies 200 OK on first request, 429 Too Many Requests on second, and presence of `Retry-After` header.
+=== 4. AWS Retry Backoff Strategies (Attempts 0..3) ===
+Attempt 0 -> NoJitter: 100ms  | FullJitter: 43ms   | EqualJitter: 72ms  
+Attempt 1 -> NoJitter: 200ms  | FullJitter: 178ms  | EqualJitter: 172ms 
+Attempt 2 -> NoJitter: 400ms  | FullJitter: 93ms   | EqualJitter: 231ms 
+Attempt 3 -> NoJitter: 800ms  | FullJitter: 149ms  | EqualJitter: 642ms 
+```
 
-4. **Retry Backoff (`internal/retry`)**:
-   - `TestComputeBackoff_Bounds`: Verifies FullJitter, EqualJitter, NoJitter stay within $[0, Cap]$ and expected bounds across 10 iterations.
-   - `TestDecorrelatedJitter_Bounds`: Verifies DecorrelatedJitter bounded between Base and Cap.
-
-## Test Quality Assessment
-
-Assessment: PASS
-All core behavioral claims are directly asserted and verified with automated tests. No mocked or synthetic test passes.
+Test Audit Assessment: PASS
+No weak or fake tests found. All claimed behaviors are validated programmatically and race-detector verified.
