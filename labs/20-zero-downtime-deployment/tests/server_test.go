@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -11,13 +12,29 @@ import (
 	"zero-downtime-deployment/internal/server"
 )
 
+func waitForServerReady(addr string) error {
+	deadline := time.Now().Add(2 * time.Second)
+	url := fmt.Sprintf("http://%s/healthz/live", addr)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			return nil
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return fmt.Errorf("server at %s did not start within timeout", addr)
+}
+
 func TestServerProbes(t *testing.T) {
 	srv := server.NewServer("127.0.0.1:8081", 0)
 
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8081"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 
 	defer func() {
 		_ = srv.Shutdown(context.Background())
@@ -48,7 +65,9 @@ func TestServerGracefulShutdown(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8082"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 
 	done := make(chan bool)
 	go func() {
@@ -90,7 +109,9 @@ func TestServerPreStopHook(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8083"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -115,7 +136,9 @@ func TestServerPreStopContextCancellation(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8084"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -139,7 +162,9 @@ func TestServerInvalidDurationFallback(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8086"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 	defer func() {
 		_ = srv.Shutdown(context.Background())
 	}()
@@ -165,7 +190,9 @@ func TestServerReadyUnreadyTransition(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8087"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 	defer func() {
 		_ = srv.Shutdown(context.Background())
 	}()
@@ -190,7 +217,9 @@ func TestServerMultiRequestDrain(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8088"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 
 	const n = 3
 	results := make([]bool, n)
@@ -234,7 +263,9 @@ func TestServerWorkRequestCancellation(t *testing.T) {
 	go func() {
 		_ = srv.Start()
 	}()
-	time.Sleep(50 * time.Millisecond)
+	if err := waitForServerReady("127.0.0.1:8085"); err != nil {
+		t.Fatalf("failed waiting for server: %v", err)
+	}
 	defer func() {
 		_ = srv.Shutdown(context.Background())
 	}()

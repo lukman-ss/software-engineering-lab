@@ -104,7 +104,9 @@ Result:
 ## Final Engineering Status
 READY_FOR_ENGINEERING_AUDIT
 
-Note: 19 tests (5 DB, 9 server, 5 worker). Added in engineering revision:
+Note: 18 tests (5 DB, 8 server, 5 worker). Added & stabilized in engineering revision:
+- Fixed server listener bind race using polling probe helper (`waitForServerReady`) across server tests.
+- Fixed worker timeout drain flakiness by checking context cancellation prior to job execution in worker loop.
 - TestDBLegacyOverwriteWithExpand (GAP-04)
 - TestServerMultiRequestDrain (GAP-05)
 - TestWorkerEnqueueAfterStop (GAP-03)

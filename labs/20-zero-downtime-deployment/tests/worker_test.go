@@ -81,17 +81,17 @@ func TestWorkerShutdownTimeout(t *testing.T) {
 	w := worker.NewWorker(10)
 	w.Start(1)
 
-	w.Enqueue(worker.Job{ID: "job-slow", Duration: 100 * time.Millisecond})
+	w.Enqueue(worker.Job{ID: "job-slow", Duration: 10 * time.Millisecond})
 	w.Enqueue(worker.Job{ID: "job-dropped", Duration: 100 * time.Millisecond})
 
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 
-	// Stop with short timeout so job-dropped is abandoned
-	w.Stop(20 * time.Millisecond)
+	// Stop with short timeout so job-slow finishes during drain but job-dropped is abandoned when timeout hits
+	w.Stop(25 * time.Millisecond)
 
 	completed := w.GetCompletedJobs()
 	if len(completed) != 1 {
-		t.Fatalf("expected 1 job (job-slow) completed before timeout, got %d", len(completed))
+		t.Fatalf("expected 1 job (job-slow) completed before timeout, got %d: %v", len(completed), completed)
 	}
 	if completed[0] != "job-slow" {
 		t.Fatalf("expected job-slow to be completed, got %v", completed)

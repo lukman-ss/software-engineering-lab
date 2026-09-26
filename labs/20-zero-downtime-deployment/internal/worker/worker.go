@@ -44,22 +44,29 @@ func (w *Worker) Start(concurrency int) {
 				select {
 				case <-w.ctx.Done():
 					return
-				default:
-				}
-
-				select {
-				case <-w.ctx.Done():
-					return
 				case job, ok := <-w.jobChan:
 					if !ok {
 						return
 					}
+					// If context canceled after channel dequeue, do not execute
+					select {
+					case <-w.ctx.Done():
+						log.Printf("Worker %d dropping job %s due to shutdown context cancellation", workerID, job.ID)
+						return
+					default:
+					}
+
 					log.Printf("Worker %d starting job %s", workerID, job.ID)
-					time.Sleep(job.Duration)
-					w.completedMu.Lock()
-					w.completed = append(w.completed, job.ID)
-					w.completedMu.Unlock()
-					log.Printf("Worker %d finished job %s", workerID, job.ID)
+					select {
+					case <-time.After(job.Duration):
+						w.completedMu.Lock()
+						w.completed = append(w.completed, job.ID)
+						w.completedMu.Unlock()
+						log.Printf("Worker %d finished job %s", workerID, job.ID)
+					case <-w.ctx.Done():
+						log.Printf("Worker %d aborted job %s due to shutdown timeout", workerID, job.ID)
+						return
+					}
 				}
 			}
 		}(i)
