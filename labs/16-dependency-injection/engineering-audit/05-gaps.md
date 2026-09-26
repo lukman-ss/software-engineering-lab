@@ -1,13 +1,8 @@
-# Gap Analysis
+# Engineering Gap Analysis
 
-## Gaps Identified
+| Gap ID | Gap Type | Severity | Description | Remediation |
+|---|---|---|---|---|
+| GAP-01 | UNHANDLED_ERROR | LOW | `NewProcessor` does not validate `nil` dependency pointer; causes panic on `ProcessPayment` if passed nil. | Add defensive nil check if strict safety is required; optional in idiomatic Go constructors. |
+| GAP-02 | MISSING_EDGE_CASE | LOW | Currency is hardcoded as `"USD"` in both processors instead of being parameterized. | Accept currency as parameter or use default value configuration if needed. |
 
-### Gap 1
-Type: MISSING_TEST
-Location: `tests/processor_test.go`
-Severity: LOW
-Description: The `BadProcessor` (Service Locator anti-pattern) test only exercises the happy path (`TestBadProcessor_Success`). The validation failure (negative amount) and gateway failure (mock error) paths are not explicitly tested for `BadProcessor`, though they are functionally identical to the covered `Processor` paths.
-
-## Assessment
-
-No medium, high, or critical gaps found. The implementation perfectly reflects the research and architecture claims.
+Zero HIGH or CRITICAL gaps found. Implementation fulfills all requirements cleanly.
