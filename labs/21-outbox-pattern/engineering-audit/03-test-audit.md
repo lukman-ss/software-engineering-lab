@@ -1,57 +1,49 @@
 # Test Audit
 
-Target Lab: labs/21-outbox-pattern
+## Coverage Analysis
 
-## Coverage Overview
+1. **Happy Path**: `TestTransactionalOutbox_HappyPath`
+   - Verifies atomic creation of order and outbox record.
+   - Verifies relay polling and dispatch to mock broker.
+   - Verifies outbox status transition to `PROCESSED`.
+   - Verifies consumer initial message acceptance.
+   - Assessment: PASS
 
-The test suite in `tests/outbox_test.go` exercises the following scenarios:
-1. `TestTransactionalOutbox_HappyPath`: Verifies atomic write, relay dispatch, outbox status transition to `PROCESSED`, and consumer receipt.
-2. `TestTransactionalOutbox_Rollback`: Verifies staged order and outbox records are aborted when `tx.Rollback()` is called. No broker publication occurs.
-3. `TestTransactionalOutbox_Idempotency_DuplicateDelivery`: Verifies consumer deduplicates messages with the same ID, preventing double processing.
-4. `TestDualWriteProblem_Failure`: Verifies state divergence when direct broker publication fails after commit.
-5. `TestTransactionalOutbox_ConcurrentWrites`: Executes 10 concurrent goroutines writing 10 orders each while background relay is actively polling.
+2. **Rollback Path**: `TestTransactionalOutbox_Rollback`
+   - Verifies staged order and outbox records are completely discarded on rollback.
+   - Verifies relay sends no messages for aborted transactions.
+   - Assessment: PASS
+
+3. **Idempotency & Duplicate Delivery**: `TestTransactionalOutbox_Idempotency_DuplicateDelivery`
+   - Verifies consumer processes initial delivery (`true`) and rejects duplicate delivery (`false`).
+   - Verifies consumer received count remains 1.
+   - Assessment: PASS
+
+4. **Dual-Write Vulnerability Demonstration**: `TestDualWriteProblem_Failure`
+   - Simulates broker failure during naive dual-write.
+   - Verifies DB order is persisted while broker received no events, proving state inconsistency.
+   - Assessment: PASS
+
+5. **Concurrency Safety**: `TestTransactionalOutbox_ConcurrentWrites`
+   - Spawns 10 concurrent goroutines writing 10 orders each while relay actively polls.
+   - Executed under `go test -race ./...`.
+   - Assessment: PASS
 
 ## Execution Results
 
-### 1. `go test ./...`
 ```text
-?   	github.com/software-engineering-lab/labs/21-outbox-pattern/cmd/demo	[no test files]
-?   	github.com/software-engineering-lab/labs/21-outbox-pattern/internal/outbox	[no test files]
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	0.231s
+=== RUN   TestTransactionalOutbox_HappyPath
+--- PASS: TestTransactionalOutbox_HappyPath (0.05s)
+=== RUN   TestTransactionalOutbox_Rollback
+--- PASS: TestTransactionalOutbox_Rollback (0.03s)
+=== RUN   TestTransactionalOutbox_Idempotency_DuplicateDelivery
+--- PASS: TestTransactionalOutbox_Idempotency_DuplicateDelivery (0.00s)
+=== RUN   TestDualWriteProblem_Failure
+--- PASS: TestDualWriteProblem_Failure (0.00s)
+=== RUN   TestTransactionalOutbox_ConcurrentWrites
+--- PASS: TestTransactionalOutbox_ConcurrentWrites (0.05s)
+PASS
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.257s
 ```
-Status: PASS
 
-### 2. `go test -race ./...`
-```text
-?   	github.com/software-engineering-lab/labs/21-outbox-pattern/cmd/demo	[no test files]
-?   	github.com/software-engineering-lab/labs/21-outbox-pattern/internal/outbox	[no test files]
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.397s
-```
-Status: PASS (No data races detected)
-
-### 3. `go run ./cmd/demo`
-```text
-=== Lab 21: Transactional Outbox Pattern Demo ===
-
-[Scenario 1: The Dual-Write Problem]
-Direct write failed: failed to publish to broker after DB commit: broker unavailable
-State Inconsistency: Order in DB = true, Broker Message Count = 0
-
-[Scenario 2: Transactional Outbox Solution]
-Creating order with transactional outbox...
-Order and Outbox record atomically saved to DB.
-Broker received messages: 1
- - Event ID: evt-order-outbox-success, Type: OrderCreated, Payload: {"ID":"order-outbox-success","CustomerID":"cust-2","Amount":300,"Status":"CREATED"}
- - Consumer processing initial message: accepted=true
-
-[Scenario 3: At-Least-Once Delivery & Idempotent Consumer]
-Simulating duplicate delivery to consumer...
-Consumer processing duplicate delivery: accepted=false (Duplicate safely skipped!)
-Total events processed by consumer: 1
-
-=== Demo Complete ===
-```
-Status: PASS (Real executable output matches expected behavior)
-
-## Assessment
-The tests prove all claimed functional, concurrency, and reliability behaviors.
+All 5 tests pass cleanly with zero race conditions detected under Go race detector.

@@ -1,20 +1,29 @@
 # Engineering Audit Plan
 
 Target Lab: labs/21-outbox-pattern
-Implementation Files: internal/outbox/broker.go, internal/outbox/consumer.go, internal/outbox/db.go, internal/outbox/model.go, internal/outbox/relay.go, internal/outbox/service.go, cmd/demo/main.go
-Tests: tests/outbox_test.go
-Executable/Demo: cmd/demo/main.go
-Approved Research Inputs: research/ (including research/2026-09-26-outbox-pattern/ and research/runs/2026-09-25-the-outbox-pattern/)
+Implementation Files:
+- labs/21-outbox-pattern/internal/outbox/db.go
+- labs/21-outbox-pattern/internal/outbox/broker.go
+- labs/21-outbox-pattern/internal/outbox/service.go
+- labs/21-outbox-pattern/internal/outbox/relay.go
+- labs/21-outbox-pattern/internal/outbox/consumer.go
+- labs/21-outbox-pattern/internal/outbox/model.go
+Tests: labs/21-outbox-pattern/tests/outbox_test.go
+Executable/Demo: labs/21-outbox-pattern/cmd/demo/main.go
+Approved Research Inputs: (Not audited in this stage per pipeline override)
 Main Claims To Verify:
-1. Atomic persistence between domain entities and event logs (outbox pattern ensures both are saved in same transaction)
-2. Decoupled polling relay dispatch to a message broker (relay polls outbox and publishes to broker without blocking transaction)
-3. Downstream consumer idempotency (consumer tracks processed event IDs to avoid duplicate processing)
+1. Atomic persistence between domain entities and event logs (outbox pattern)
+2. Decoupled polling relay dispatch to a message broker
+3. Downstream consumer idempotency
+4. The dual-write problem leads to inconsistency
+5. The outbox pattern prevents inconsistency even under failures
+6. Concurrent writes are handled safely (no races)
 Commands To Run:
 - go test ./...
 - go test -race ./...
 - go run ./cmd/demo
 Primary Risks:
-- Race conditions in relay polling and broker publish
-- Improper transaction rollback on failure
-- Idempotency key collision or missing tracking
-- Deadlock in concurrent access to shared resources
+- Race conditions in the in-memory DB or broker
+- Incorrect state transitions in outbox processing
+- Missing error handling in relay or service
+- Demo might not reflect actual test conditions

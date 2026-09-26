@@ -2,30 +2,26 @@
 
 Target Lab: labs/21-outbox-pattern
 Implementation Files:
-- `internal/outbox/model.go`: Domain and outbox data models and status enums.
-- `internal/outbox/db.go`: In-memory transactional database engine supporting `BeginTx`, `SaveOrder`, `SaveOutbox`, `Commit`, `Rollback`, and outbox querying.
-- `internal/outbox/broker.go`: Thread-safe mock message broker simulating event publishing and failure injection.
-- `internal/outbox/service.go`: Business logic contrasting dual-write and transactional outbox approaches.
-- `internal/outbox/relay.go`: Asynchronous background polling worker querying pending outbox records and publishing to broker.
-- `internal/outbox/consumer.go`: Message consumer implementing idempotent deduplication based on event IDs.
-
+- internal/outbox/model.go
+- internal/outbox/db.go
+- internal/outbox/broker.go
+- internal/outbox/relay.go
+- internal/outbox/consumer.go
+- internal/outbox/service.go
 Tests:
-- `tests/outbox_test.go`: End-to-end integration and concurrency unit tests.
-
+- tests/outbox_test.go
 Executable/Demo:
-- `cmd/demo/main.go`: Runnable demonstration showing dual-write failure, outbox atomicity, and consumer idempotency.
-
+- cmd/demo/main.go
 Approved Research Inputs:
-- `research-audit/07-verdict.md` (APPROVED)
-- `research/2026-09-26-outbox-pattern/05-report.md`
-
+- research/05-report.md (and research-revision/03-revision-result.md)
 Main Claims To Verify:
-1. Atomicity of domain state changes and outbox event persistence in a single transaction.
-2. Rollback safety: Outbox events must not persist if the transaction aborts.
-3. Decoupled polling relay worker dispatches events asynchronously to a message broker.
-4. Downstream consumer handles at-least-once duplicate delivery idempotently.
-5. Dual-write failure path correctly demonstrates state inconsistency when direct publish fails.
-6. Thread-safety under concurrent writes and race condition absence.
+1. Atomic persistence: Entity state change and outbox message are written atomically in a single local transaction.
+2. Rollback safety: Aborted transactions persist neither entity changes nor outbox records.
+3. Decoupled polling relay: Asynchronous relay polls pending outbox records and publishes to message broker.
+4. Outbox state transition: Upon successful broker publish, outbox message status transitions from PENDING to PROCESSED.
+5. Idempotent consumer / At-least-once delivery: Downstream consumer handles duplicate event deliveries idempotently via event ID deduplication.
+6. Dual-write vulnerability comparison: Naive dual write leaves database and message broker in an inconsistent state when broker is unavailable.
+7. Concurrency safety: Zero race conditions during concurrent writes and relay processing (`go test -race ./...`).
 
 Commands To Run:
 - `go test ./...`
@@ -33,6 +29,6 @@ Commands To Run:
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions between transaction commits, relay polling, and consumer deduplication.
-- Sleep-based test timing flakiness.
-- Discrepancies between documentation and implementation mechanics.
+- Race conditions or deadlocks in in-memory DB / Transaction mutex synchronization.
+- Mock relay polling leaks or dangling goroutines upon test completion.
+- Discrepancies between demo execution output and documented README claims.
