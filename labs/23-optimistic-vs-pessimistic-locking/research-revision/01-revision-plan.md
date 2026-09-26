@@ -1,36 +1,36 @@
-# Revision Plan
+# Revision Plan: Optimistic vs Pessimistic Locking
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
+Pipeline Override: Research revision only. No code changes.
+Revision Directory: `labs/23-optimistic-vs-pessimistic-locking/research-revision/`
 
-Previous Audit Status: NEEDS_REVISION
+Previous Audit Status: **APPROVED_WITH_WARNINGS**
 
 ## Blocking Issues
 
-1. [HIGH] No research output — directory contains only `research/01-plan.md`; 15 questions unanswered, no evidence, no excerpts. (Gap 1-2)
-2. [HIGH] No verifiable sources — 8 expected sources are aspirational only, no URLs, no reachability check, no scope assessment. (Source audit; Gap 1)
-3. [HIGH] Isolation/MVCC/locking interactions and version-specific behavior flagged as risks in plan but no mitigation/evidence provided. (Gap 3)
-4. [MEDIUM] Universal framing risk (Q2, Q9) without vendor/version/isolation qualification. (Gap 4)
-5. [MEDIUM] Academic sources lack edition/year; insufficient alone for modern implementation claims. (Gap 5)
-6. [MEDIUM] Performance/decision-threshold guidance (Q4, Q9) has no benchmark methodology or sourced numeric recommendation. (Gap 6)
-7. [MEDIUM] Implementation patterns (Q5-Q8: version columns, SELECT FOR UPDATE/SHARE, atomic UPDATE WHERE, ORM support) have no SQL/ORM doc citations. (Gap 7)
+None.
 
 ## Non-Blocking Issues
 
-1. [LOW] Plan structure sound; search strategy tiers appropriate if actually executed.
-2. No README at lab root — not blocking for research-only stage but required before publication.
+1. **Source 14 (Hibernate ORM 6.x)**: Reachability recorded but direct HTTP fetch not executed in audit session. Status: LOW severity.
+2. **Atomic Decrement Pattern**: Conditional `UPDATE ... SET stock = stock - N WHERE stock >= N` supported by synthesized evidence (statement atomicity + conditional guard) but no single Tier 1 source quotes recipe verbatim. Status: MEDIUM severity.
+3. **MySQL Mirror Dependency**: MySQL 8.0 docs fetched via Oracle CDN mirror due to 403 on direct mysql.com endpoint. Status: WARNING (not a revision blocker, documented in report limitations).
 
 ## Files To Modify
 
-- labs/23-optimistic-vs-pessimistic-locking/research/02-sources.md (NEW)
-- labs/23-optimistic-vs-pessimistic-locking/research/03-evidence.md (NEW)
-- labs/23-optimistic-vs-pessimistic-locking/research/05-report.md (NEW)
-- labs/23-optimistic-vs-pessimistic-locking/research/06-open-questions.md (NEW)
+- `research/02-sources.md`: Clarify Source 14 verification note; clarify Source 13 as contrastive NoSQL example.
+- `research/03-evidence.md`: No change needed; Evidence 10 correctly marked MEDIUM confidence with explanation.
+- `research/05-report.md`: No change needed; Limitations section correctly documents MySQL mirror, Hibernate, and atomic-pattern gaps.
+- `research/06-open-questions.md`: No change needed; OQ-1 and OQ-2 correctly identify the gaps.
 
 ## Verification Plan
 
-- source verification: verify all URLs reachable, excerpts match claims
-- classification: each finding classified as FACT / INTERPRETATION / EXAMPLE / HYPOTHESIS / IMPLEMENTATION-SPECIFIC
-- scope: all implementation claims scoped by DB/version/isolation level
-- numeric claims: any thresholds anchored to vendor recommendation or benchmark with URL
-- academic sources: edition/year cited
-- no unsupported universal claims
+- [x] Inspect audit verdict
+- [x] Inspect claim audit (7 claims, 0 unsupported)
+- [x] Inspect source audit (14 sources, 1 MEDIUM warning)
+- [x] Inspect contradictions (3 vendor divergences, properly documented)
+- [x] Inspect gaps (4 gaps, 1 MEDIUM, 3 LOW, all non-blocking)
+- [x] Confirm research files correctly classify confidence and document limitations
+- [x] Confirm open questions correctly identify upgrade paths
+
+Verification status: **PASS** — Research is internally consistent and correctly classifies confidence. Warnings do not block approval but should be tracked for future revision cycles.

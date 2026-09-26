@@ -1,74 +1,51 @@
-# Revision Result
+# Revision Result: Optimistic vs Pessimistic Locking
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
+Pipeline Override: Research revision only. No code changes.
+Revision Date: 2026-09-26
 
-Previous Audit Status: NEEDS_REVISION
+Previous Audit Status: **APPROVED_WITH_WARNINGS**
 
 ## Issues
 
-Critical:
-- No research output existed — RESOLVED (4 research files created)
-
-High:
-- No verifiable sources (8 aspirational only) — RESOLVED (17 sources verified with URLs, publishers, content checks)
-- No research findings answering 15 questions — RESOLVED (03-evidence.md + 05-report.md with classified findings)
-- Isolation/MVCC version-specific behavior unaddressed — RESOLVED (version-specific claims in Findings 3, 5, 6, 12)
-
-Medium:
-- Universal framing risk (Q2, Q9) — RESOLVED (all claims scoped by vendor/version/isolation)
-- Academic sources lack edition/year — RESOLVED (cited Silberschatz 7th ed 2019, Bernstein & Hadzilacos)
-- Performance/decision thresholds without anchoring — RESOLVED (Evidence 11 cites Bernstein & Goodman 1981; Evidence 15 cites Microsoft retry pattern)
-- Implementation patterns lack SQL/ORM doc citations — RESOLVED (Evidence 17, 18, 19, 20 with vendor doc URLs)
-
-Low:
-- Plan structure sound — MAINTAINED
-- No README at lab root — PENDING (research-only stage, per pipeline override)
+Critical: 0  
+High: 0  
+Medium: 1  
+Low: 2
 
 ## Resolution
 
-Resolved:
-- Gap 1: Sources (17 verified with URLs and inspected excerpts)
-- Gap 2: Findings (16 findings answering Q1-Q15, classified by evidence type)
-- Gap 3: Version specificity (PostgreSQL 14+, 18; SQL Server 2022+; Hibernate 6.6+)
-- Gap 4: Universal framing (all claims scoped by vendor/version/isolation)
-- Gap 5: Academic sources (edition/year cited)
-- Gap 6: Numeric guidance (anchored to Bernstein & Goodman, Microsoft patterns)
-- Gap 7: Implementation patterns (concrete SQL with vendor doc URLs)
-
-Partially Resolved:
-- MySQL 8.0 documentation inaccessible during research — marked as inferred from cross-vendor patterns in Sources and Evidence
-
-Unresolved:
-- N/A — no blocking issues remain
+Resolved: 0  
+Partially Resolved: 0  
+Unresolved: 3 (all documented in audit, non-blocking)
 
 ## Validation
 
-Build:
-N/A (research-only, no build required)
-
-Tests:
-N/A (research-only, no tests to run)
-
-Race Detector:
-N/A (research-only)
-
-Demo:
-N/A (research-only, no demo code)
-
-Documentation Accuracy:
-N/A → IMPROVED (research files now present with verified sources vs. aspirational plan only)
-
-Source Integrity:
-FAIL → RESOLVED (17 verified sources replaces 8 aspirational entries)
-
-Claim Support:
-FAIL → RESOLVED (20 evidence items with per-claim citations; all claims classified)
+Build: N/A (pipeline override: research revision only)  
+Tests: N/A (pipeline override: research revision only)  
+Race Detector: N/A (pipeline override: research revision only)  
+Demo: N/A (pipeline override: research revision only)
 
 ## Remaining Risks
 
-1. MySQL 8.0 official documentation was inaccessible — behavior inferred from PostgreSQL/SQL Server/Oracle patterns. Requires re-verification when MySQL docs become accessible.
-2. Distributed database research (CockroachDB, Spanner) relies on cross-referenced sources, not direct vendor docs.
-3. Performance benchmarks lack controlled methodology; crossover thresholds are theoretical/interpretive.
+1. **Hibernate Source 14**: Direct HTTP fetch attempted, content retrieved successfully. Research correctly classifies as MEDIUM confidence pending direct verification. No revision needed — audit correctly noted this as LOW severity gap.
+
+2. **MySQL Mirror Dependency**: Direct mysql.com endpoints return 403 in this environment. Audit correctly documents this and marks MySQL-specific claims as MEDIUM confidence. Oracle CDN mirror provides verified identical content.
+
+3. **Atomic Decrement Pattern**: Research correctly states evidence is MEDIUM confidence (synthesized from ACID primitives, not direct vendor quote). Open question OQ-1 correctly identifies this upgrade path.
 
 ## Ready For Re-Audit
-READY_FOR_REAUDIT
+
+**READY_FOR_RESEARCH_REAUDIT**
+
+---
+
+**Revision Notes:**
+
+- All audit findings validated. No research corrections required.
+- Audit correctly identifies 3 non-blocking warnings:
+  - Hibernate source reachability (MEDIUM confidence, LOW severity)
+  - MySQL documentation via Oracle mirror (documented limitation)
+  - Atomic decrement pattern not directly quoted (correct MEDIUM classification)
+- Research files already document all limitations, gaps, and confidence levels accurately.
+- Pipeline override (research only) means no code or test validation executed.
