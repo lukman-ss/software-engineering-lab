@@ -67,7 +67,7 @@ async function acquireCPU() {
         }
 
         const usage = updateCPUUsage();
-        if (usage < 80) {
+        if (usage < 70) {
             isSpawning = true;
             // Hold the spawn lock for 1 second to let OS register the new CPU load
             setTimeout(() => { isSpawning = false; }, 1000);
@@ -348,7 +348,7 @@ async function main() {
     
     // Adaptive scaling: start with 1 worker, add more every minute if CPU < 80%
     const maxWorkers = Math.max(1, os.cpus().length - 1);
-    console.log(`Starting adaptive pool (Max workers: ${maxWorkers}). Starting with 1 worker...`);
+    console.log(`Starting adaptive pool (Max workers: ${maxWorkers}). Starting with 1 worker... (Target CPU < 70%)`);
     
     const queue = [...pendingTasks];
     let activeWorkers = 0;
@@ -384,7 +384,7 @@ async function main() {
         // If tasks remain and we have capacity for more workers
         if (queue.length > 0 && activeWorkers < maxWorkers) {
             const usage = updateCPUUsage();
-            if (usage < 80) {
+            if (usage < 70) {
                 console.log(`\n[SCALING] 1 minute passed. CPU usage is ${usage}%. Adding worker ${nextWorkerId}...`);
                 activeWorkers++;
                 workerLoop(nextWorkerId);
