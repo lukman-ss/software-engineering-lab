@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -79,8 +80,8 @@ func TestOversizedPoolExhaustsServerConnections(t *testing.T) {
 
 	wg.Wait()
 
-	if errCount == 0 {
-		t.Errorf("expected some connection attempts to fail due to server limits, but got 0 errors")
+	if errCount < 10 {
+		t.Errorf("expected at least 10 connection attempts to fail (server max=10, pool size=20), got %d errors", errCount)
 	}
 }
 
@@ -94,16 +95,23 @@ func TestConnectionStarvationDueToLeak(t *testing.T) {
 
 	svc := pool.NewOrderService(db)
 
+	acquired := make(chan struct{})
+
 	// Start unsafe request that holds connection for 100ms
 	go func() {
 		_ = svc.ProcessOrderUnsafeLeak(context.Background(), 1, func() error {
+			close(acquired)
 			time.Sleep(100 * time.Millisecond)
 			return nil
 		})
 	}()
 
-	// Give goroutine time to acquire connection
-	time.Sleep(10 * time.Millisecond)
+	// Wait until goroutine has acquired the connection and is in externalCall
+	select {
+	case <-acquired:
+	case <-time.After(2 * time.Second):
+		t.Fatal("leak goroutine did not acquire connection within 2s")
+	}
 
 	// Subsequent request with 20ms timeout should fail due to pool starvation
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -185,5 +193,59 @@ func TestMockConnDoubleClose(t *testing.T) {
 
 	if mockDriver.ActiveConnections() != 0 {
 		t.Errorf("expected 0 active connections, got %d", mockDriver.ActiveConnections())
+	}
+}
+
+func TestExternalCallErrorPropagation(t *testing.T) {
+	callErr := errors.New("external service unavailable")
+
+	t.Run("ProcessOrderSafe", func(t *testing.T) {
+		mockDriver := pool.NewMockDriver(10, 0)
+		db := pool.OpenDB(mockDriver)
+		svc := pool.NewOrderService(db)
+
+		err := svc.ProcessOrderSafe(context.Background(), 1, func() error {
+			return callErr
+		})
+		if err != callErr {
+			t.Errorf("expected %v, got %v", callErr, err)
+		}
+		db.Close()
+		if mockDriver.ActiveConnections() != 0 {
+			t.Errorf("expected 0 active connections after safe error, got %d", mockDriver.ActiveConnections())
+		}
+	})
+
+	t.Run("ProcessOrderUnsafeLeak", func(t *testing.T) {
+		mockDriver := pool.NewMockDriver(10, 0)
+		db := pool.OpenDB(mockDriver)
+		svc := pool.NewOrderService(db)
+
+		err := svc.ProcessOrderUnsafeLeak(context.Background(), 2, func() error {
+			return callErr
+		})
+		if err != callErr {
+			t.Errorf("expected %v, got %v", callErr, err)
+		}
+		db.Close()
+		if mockDriver.ActiveConnections() != 0 {
+			t.Errorf("expected 0 active connections after unsafe error (defer close), got %d", mockDriver.ActiveConnections())
+		}
+	})
+}
+
+func TestPreCancelledContextProcessOrderSafe(t *testing.T) {
+	mockDriver := pool.NewMockDriver(10, 0)
+	db := pool.OpenDB(mockDriver)
+	defer db.Close()
+
+	svc := pool.NewOrderService(db)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := svc.ProcessOrderSafe(ctx, 1, nil)
+	if err == nil {
+		t.Fatal("expected error with pre-cancelled context, got nil")
 	}
 }
