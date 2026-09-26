@@ -1,18 +1,18 @@
 # Engineering Revision Result
 
 Target Lab: labs/15-load-testing
-Previous Verdict: APPROVED_WITH_WARNINGS
+Previous Verdict: APPROVED
 
 ## Issue Summary
 
 Critical: 0
 High: 0
 Medium: 0
-Low: 2
+Low: 0
 
 ## Resolution
 
-Resolved: 2
+Resolved: 0
 Partially Resolved: 0
 Unresolved: 0
 
