@@ -1,48 +1,37 @@
-# Code Audit
-
-Target Lab: `labs/24-slo-sli-error-budget`
+# Code Audit Findings
 
 ## Finding 1
 
-Location: `internal/metrics/tracker.go:46-104`
-Claimed Behavior: Thread-safe, ordered bucket insertion for sliding window metrics.
-Observed Implementation: `Record(e Event)` acquires write lock `w.mu.Lock()`, runs `evictStaleLocked(e.Timestamp)`, truncates bucket start time, updates existing matching bucket or inserts out-of-order buckets at the correct index maintaining sorted order by `StartTime`.
+Location: `internal/metrics/tracker.go:22-128`
+Claimed Behavior: Thread-safe, sliding-window time-bucketed event tracker with sorted bucket management and stale bucket eviction.
+Observed Implementation: `WindowTracker` uses a `sync.RWMutex` to serialize access. Eviction strips buckets strictly older than `cutoff = now - windowSize`. Buckets are kept sorted by `StartTime`, including insertions for out-of-order timestamps.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles both in-order and out-of-order timestamps without panics or index corruption.
+Notes: Thread-safety verified with Go race detector.
 
 ## Finding 2
 
-Location: `internal/metrics/tracker.go:106-115`
-Claimed Behavior: Sliding window eviction of stale buckets.
-Observed Implementation: `evictStaleLocked(now)` computes `cutoff := now.Add(-w.windowSize)`. Since buckets are maintained in chronological order, it slices out all buckets where `StartTime.Before(cutoff)`.
+Location: `internal/slo/evaluator.go:41-71`
+Claimed Behavior: Accurate evaluation of SLI ratio, allowed error budget, remaining budget, and release freeze policy enforcement (`CanDeploy = false` when budget is depleted).
+Observed Implementation: Calculates `sli = good / total` (defaulting to 1.0 on zero events), `totalErrorBudget = (1 - TargetUptime) * total`, `budgetRemaining = totalErrorBudget - bad`, and sets `canDeploy = false` when `budgetRemaining <= 0` and `total > 0`.
 Assessment: PASS
 Severity: LOW
-Notes: Linear scan on sorted bucket list slices out expired buckets cleanly.
+Notes: Rounding logic applied to presentation fields without compromising calculation fidelity.
 
 ## Finding 3
 
-Location: `internal/slo/evaluator.go:41-70`
-Claimed Behavior: SLI ratio and remaining error budget calculation with deployment freeze trigger.
-Observed Implementation: Evaluates `good / total` ratio. Computes `allowedFailureRate := 1.0 - targetUptime`, `totalErrorBudget := allowedFailureRate * total`, and `budgetRemaining := totalErrorBudget - bad`. If `total > 0 && budgetRemaining <= 0`, flags `CanDeploy = false`. Handles zero traffic safely with default SLI = 1.0 and `CanDeploy = true`.
+Location: `internal/alerting/engine.go:51-88`
+Claimed Behavior: Multi-window burn-rate calculation enforcing alert triggers only when both short and long windows exceed threshold factors.
+Observed Implementation: Evaluates `actualErrorRate / allowedErrorRate` across `shortTracker` and `longTracker`. Both `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor` must be satisfied.
 Assessment: PASS
 Severity: LOW
-Notes: Mathematical definitions match Google SRE Handbook principles.
+Notes: Handles edge cases where `total == 0` or `allowedErrorRate <= 0` returning 0.0.
 
 ## Finding 4
 
-Location: `internal/alerting/engine.go:51-88`
-Claimed Behavior: Multi-window multi-burn-rate alerting logic.
-Observed Implementation: `CalculateBurnRate` computes `actualErrorRate / allowedErrorRate`. `Check(now)` samples both short window and long window trackers. Alert triggers if and only if both `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
+Location: `cmd/demo/main.go:12-151`
+Claimed Behavior: Demonstrates baseline normal traffic, severe incident budget exhaustion, burn rate alert evaluation, and endpoint criticality differences.
+Observed Implementation: Full end-to-end runnable demo implementing 4 distinct phases matching design specifications.
 Assessment: PASS
 Severity: LOW
-Notes: Prevents false alarms on brief transient spikes as required by Google SRE alerting design.
-
-## Finding 5
-
-Location: `internal/metrics/tracker.go:117-128`
-Claimed Behavior: Thread-safe summary computation.
-Observed Implementation: `Summary(now)` locks mutex `w.mu.Lock()`, executes stale bucket eviction against `now`, and aggregates total, good, and bad event counters across remaining buckets.
-Assessment: PASS
-Severity: LOW
-Notes: Thread-safety verified with `-race` flag.
+Notes: Executed cleanly without dependencies or panics.
