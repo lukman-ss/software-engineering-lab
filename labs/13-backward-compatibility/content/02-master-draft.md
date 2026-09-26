@@ -1,109 +1,192 @@
-# Panduan Kompatibilitas Mundur: Implementasi Pola Expand → Migrate → Contract untuk Evolusi Skema dan API
+# Panduan Kompatibilitas Mundur: Pola Expand → Migrate → Contract untuk Evolusi Skema dan API Tanpa Downtime
 
-## Masalah
-Sistem produksi sering menghadapi kebutuhan untuk mengubah kontrak data—misalnya mengubah relasi 1:1 (satu nomor telepon per pengguna) menjadi 1:N (banyak nomor telepon per pengguna). Perubahan langsung seperti `DROP COLUMN phone` atau mengubah struktur JSON API dapat menyebabkan:
-- Crash aplikasi bagi klien lama yang masih mengandalkan struktur lama
-- Downtime selama migrasi skema berat
-- Risiko kehilangan data jika rollback dilakukan setelah kontrak lama dihapus
+## Problem
 
-Lab ini membuktikan bahwa perubahan struktural dapat dilakukan dengan aman tanpa downtime atau merusak kompatibilitas dengan menggunakan pola **Expand → Migrate → Contract** (Parallel Change Pattern).
+Sistem produksi sering memerlukan perubahan struktural pada data — misalnya mengubah relasi
+`1:1` (`users.phone`, satu nomor per pengguna) menjadi `1:N` (`user_phones`, banyak nomor per
+pengguna), atau mengubah satu field string `phone` menjadi array `phones` pada kontrak JSON.
+Dilakukan sekaligus, perubahan ini *breaking*:
 
-## Mengapa Ini Penting
-Kompatibilitas mundur adalah fondasian layanan yang dapat diandalkan. Tanpa strategi ini:
-- Tim engineering terpaksa menjadwalkan downtime yang mahal
-- Klien eksternal (mobile app, mitra API) mungkin tidak pernah mengupdate, menciptakan beban dukungan permanen
-- Setiap perubahan skema menjadi kegiatan berisiko tinggi yang menghambat kecepatan pengiriman fitur
+- **Crash klien lama**: klien V1 yang mem-parse `phone` akan rusak jika field dihapus atau tipe diganti.
+- **Downtime migrasi**: backfill tabel penuh dalam satu transaksi bisa menguncang blokir selama berjam-jam.
+- **Data loss pada rollover**: jika kolom legacy sudah dihapus, rollback ke versi lama menyebabkan data
+  yang ditulis *setelah* transisi menghilang bagi V1.
 
-Dengan parallel change, organisasi dapat:
-- Melatih deploy-anytime kultur melalui continuous delivery
-- Menjaga pengalaman pengguna selama transisi infrastruktur
-- Mengurangi beban operasional dari pemeliharaan versi ganda
+Tanpa strategi, setiap evolusi skema menjadi *release-coordinated* — memaksa semua klien dan semua
+instance aplikasi berkoordinasi serentak, yang justru meningkatkan risiko kegagalan.
 
-## Model Mental
-Pola parallel change membagi perubahan yang traditionally breaking menjadi tiga fase yang masing-masing non-breaking:
-1. **Expand**: Tambahkan representasi baru bersama-sama dengan lama tanpa mengubah yang sudah ada
-2. **Migrate**: Secara gradual salurkan traffic dan data dari representasi lama ke baru
-3. **Contract**: Hapus representasi lama hanya setelah penggunaan baru mencapai 100% dan penggunaan lama mencapai 0%
+Lab ini membuktikan (8/8 tes lolos termasuk `-race`, demo berjalan) bahwa transisi
+`1:1 → 1:N` dapat dilakukan dengan aman dengan tiga fase bertahap yang masing-masing
+*non-breaking*.
 
-Kunci psikologis: tidak ada fase yang mengharuskan koordinasi simultan antara penyedia layanan dan semua konsumen. Sistem dapat beroperasi dalam salah satu fase tiganya secara independen.
+## Why This Matters
 
-## Konsep Inti
+Kompatibilitas mundur adalah fondasi SLO service yang dapat diandalkan. Tanpa pendekatan
+inkremental:
 
-### Expand (Perluasan)
-Fase pertama menambah kemampuan baru tanpa menyentuh yang sudah ada:
-- Database: Buat tabel/kolom baru (misal: `user_phones` bersama-sama dengan kolom lama `users.phone`)
-- API: Tambahkan field baru secara aditif (misal: field `phones` array bersama-sama dengan field lama `phone`)
-- Payload: Respons JSON menjadi enriched—berisi baik field lama maupun field baru
+- Tim terpaksa menjadwalkan *maintenance window* mahal untuk setiap migrasi skema.
+- Klien eksternal (aplikasi mobile, mitra API) yang tidak pernah upgrade menciptakan
+  *technical debt* permanen dan beban dukungan operasional.
+- Setiap perubahan skema menjadi *high-sca" change* yang menghambat kecepatan pengiriman
+  fitur di bawah prinsip *Continuous Delivery*.
+
+Dengan pola *parallel change*, organisasi dapat *deploy-any-phase* — kode baru dapat
+dideploy ke produksi bahkan hanya untuk satu fase, karena setiap fase dirancang untuk
+tidak memutus klien lama.
+
+## Mental Model
+
+Satu breaking change dipecah menjadi tiga fase yang masing-masing *independently deployable*:
+
+```text
+EXPAND   ->   MIGRATE   ->   CONTRACT
+(tambah       (pindah      (hapus lama)
+ keduanya)    data/traffic)
+```
+
+- **Expand**: tambahkan representasi baru **di samping** representasi lama. Tidak ada
+  yang berkurang — klien lama tidak menyadari adanya perubahan.
+- **Migrate**: alirkan data historis dan traffic ke representasi baru secara bertahap.
+  Selama ini, sistem menulis dan membaca dari **kedua** representasi.
+- **Contract**: hapus representasi lama **hanya ketika** traffic legacy sudah nol.
+
+Kunci psikologis: tidak ada fase yang mengharuskan koordinasi simultan antara penyedia
+layanan dan semua konsumen. Sistem dapat berada di fase mana saja secara independen,
+bahkan dengan versi aplikasi yang berbeda berjalan bersamaan (rolling deployment).
+
+## Core Concept
+
+### Expand — Tambahkan tanpa mengubah yang ada
+
+Pada fase ini, sistem belajar "berbicara dua bahasa" sekaligus:
+
+- **Schema**: buat tabel/kolom baru (`user_phones`) yang *nullable*, tanpa menyentuh
+  kolom lama (`users.phone`). Pada produksi PostgreSQL ini berarti
+  `ALTER TABLE ... ADD COLUMN ... DEFAULT` yang tidak menulis ulang baris.
+- **API/Payload**: tambahkan field baru secara aditif (`phones` array) bersamaan
+  dengan field lama (`phone`). Respons JSON menjadi *enriched*.
 
 Klien lama tetap bekerja karena:
-- Mereka tidak melihat perubahan apa-apa (kolom/field lama tetap ada)
-- Mereka mengabaikan field baru yang tidak dikenal (perilaku standar JSON parser)
+1. Field lama (`phone`) masih ada dan diisi.
+2. Parser JSON standar meng-*ignore*-kan field baru (`phones`) yang tidak dikenal.
 
-### Migrate (Migrasi)
-Fase tengah menangkap aliran data dan traffic:
-- **Dual-write**: Setiap tulisan baru dilakukan ke kedua skema (legacy dan modern) secara atomik
-- **Backfill**: Worker latar belakang meng-copy data historis dari skema lama ke baru dalam batch kecil dengan checkpoint resumable
-- **Fallback read (dual-read)**: Baca dari skema baru terlebih dahulu; jika kosong/null, baca dari skema lama dan secara opsional lakukan lazy backfill
-- **Migrasi konsumen**: Tim klien (mobile, backend internal) diupdate untuk menggunakan struktur baru
+#### Bukti (Martin Fowler, *Parallel Change*):
 
-Fase ini adalah yang terpanjang karena tergantung pada adopsi eksternal.
+> "In the *expand* phase you augment the interface to support both the old and the new
+> versions. In our example, we introduce a new `Map<Coordinate, Cell>` data structure and
+> the new methods that can receive `Coordinate` instances without changing the existing code."
 
-## Struktur Implementasi
-Lab ini mengimplementasikan pola ini dengan arsitektur berikut:
+### Migrate — Alihkan data dan traffic
 
+Fase ini berlangsung paling lama karena bergantung pada adopsi klien eksternal:
+
+- **Dual-write**: setiap tulisan baru ditulis ke kedua skema. Pada lab ini dilakukan
+  *atomic* dalam satu *critical section* `sync.RWMutex`; pada produksi memerlukan transaksi
+  database tunggal atau pola *transactional outbox*.
+- **Backfill**: worker batch menyalin data historis dari skema lama ke baru, dengan
+  *checkpoint* `last_processed_id` dan logika *idempotent* (cek keberadaan sebelum insert).
+- **Fallback read**: baca dari skema baru dulu; jika kosong, baca dari skema lama dan
+  *lazy backfill* ke skema baru.
+
+Feature flag memisahkan *deployment* dari *aktivasi*: `WriteMode` dan `ReadMode` dapat
+diubah runtime tanpa redeploy, memungkinkan *canary* 1% → 10% → 100%.
+
+### Contract — Hapus lama hanya pada traffic nol
+
+Setelah semua klien bermigrasi dan `LegacyReadHits` = 0:
+1. Berhenti menulis ke skema lama (`WriteNewOnly`).
+2. Hapus *code path* legacy dan *adapter transform*.
+3. Drop kolom/tabel lama (`ALTER TABLE users DROP COLUMN phone`).
+
+#### Bukti (Martin Fowler):
+
+> "Once all usages have been migrated to the new version, you perform the *contract* phase
+> to remove the old version."
+> "If the contract phase is not executed you might end up in a worse state than you started."
+
+## Failure Scenario
+
+Jika fase dilewati atau urutannya salah, kegagalan sistematis terjadi:
+
+| # | Failure Mode | Dampak | Penyebab |
+|---|-------------|--------|----------|
+| 1 | Destructive alter | klien V1 crash / 500 | `DROP COLUMN phone` sebelum semua klien migrasi |
+| 2 | Dual-write drift | data antar skema berbeda | write tak atomic atau outbox tidak idle |
+| 3 | Missing backfill | data starvation | baca ke skema baru sebelum semua legacy ter-backfill |
+| 4 | Abandoned expand | teknical debt / kemusatan | lupa fase Contract |
+| 5 | Type-change corruption | nil/err salah tipe | `phone TEXT` → `phone INT` (non-additive) |
+| 6 | Premature rollback | data loss | rollback setelah `WriteNewOnly` berhenti |
+
+Pada produksi, semua failure mode ini berpotensi menyebabkan *customer-affecting incident*.
+Lab ini tidak melakukan failure mode #5 (type change) karena tidak bagian dari 1:1→1:N,
+tapi mem-buktikan #3 (fallback read mencegahnya) dan #6 (Skenario B pada tes).
+
+## How It Works
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                    HTTP / Service Layer                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  Feature Flags (WriteMode, ReadMode, ContractApplied)   │  │
+│  │  Observability (LegacyReadHits, NewReadHits, ...)       │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└──────┬───────────────────────────────┬─────────────┬─────────┘
+       │                               │             │
+       ▼                               ▼             ▼
+┌──────────────┐              ┌──────────────┐  ┌──────────┐
+│  /api/v1/users  │              │  /api/v2/users │  │ Backfill │
+│  (LegacyConsumerDTO)│              │  (ModernConsumerDTO)│  │ Worker   │
+└──────────────┘              └──────────────┘  └────┬─────┘
+       │                                    │       │
+       │  Deprecation: true / Sunset date   │       │
+       ▼                                    ▼       │
+┌────────────────────────────────────────────────────│────────┐
+│             MemoryStore (simulasi relasional)         │        │
+│  users(id, name, phone*)        user_phones(id,    │        │
+│                            │ user_id FK, │        │
+│                            │ number, is_primary) │        │
+└────────────────────────────────────────────────────┴────────┘
 ```
-[ Client V1 (Legacy) ]     [ Client V2 (Modern) ]
-           │                         │
-           ▼                         ▼
-┌──────────────────────────────────────────────────┐
-│              HTTP / Service Layer                │
-│  - Transformation / Deprecation Pipeline         │
-│  - Feature Flags (WriteMode, ReadMode)           │
-│  - Observability Metrics (Legacy/New Traffic)    │
-└─────────┬────────────────────────────────┬───────┘
-          │                                │
-          ▼                                ▼
-┌──────────────────┐             ┌─────────────────┐
-│ Legacy Storage   │◄──Backfill──┤ Modern Storage  │
-│ (users.phone)    │   Worker    │ (user_phones)   │
-└──────────────────┘             └─────────────────┘
-```
 
-### Komponen Kunci
-1. **Storage**: Implementasi thread-safe in-memory yang mensimulasikan tabel relasional dengan dukungan untuk dual-write dan operasi drop kolom
-2. **FeatureFlagManager**: Mengontrol tiga mode tulis (`WriteLegacyOnly`, `WriteDual`, `WriteNewOnly`) dan tiga mode baca (`ReadLegacyOnly`, `ReadFallback`, `ReadNewOnly`)
-3. **MetricsCollector**: Melacak counter untuk traffic lama/baru, kesalahan dual-write, progres backfill, dan deteksi drift data
-4. **BackfillWorker**: Worker yang dapat dihentikan dan dilanjutkan lagi dengan idempotent melalui checkpoint `last_processed_id`
-5. **CompatService**: Facade domain yang mengorkestrasi operasi baca/tulis, rekonsiliasi data, dan siklus deprecasi
-6. **HTTPHandler**: Mengembalikan kontrak JSON dengan header Deprecation dan Sunset sesuai RFC 8594
+**Lifecycle 6-fase** (demo `cmd/demo/main.go` + tes `tests/migration_test.go`):
 
-## Arsitekural Detail
+1. **Baseline**: `WriteLegacyOnly` + `ReadLegacyOnly`. V1 baca/tulis `users.phone`.
+2. **Expand**: deploy kode yang mendukung `user_phones`. `WriteDual` menulis ke keduanya.
+3. **Migrate — Dual-write**: semua write baru ke kedua skema. Payload *enriched*.
+4. **Migrate — Backfill**: worker menyalin data historis ke `user_phones`.
+5. **Read switch**: `ReadNewOnly` — V2 baca dari skema baru. V1 masih baca dari `phone`.
+6. **Contract**: `ApplyContract` setelah `LegacyReadHits == 0`. Drop kolom legacy. V1 dapat `410 Gone`.
 
-### Dual-Write dalam Transaksi
-Pada mode `WriteDual`, setiap operasi CREATE:
-1. Menulis ke tabel `users` (kolom `phone` legacy)
-2. Menulis ke tabel `user_phones` (record dengan `is_primary = true`)
-3. Kedua operasi dilakukan dalam kritial section yang sama menggunakan `sync.RWMutex`
+## Architecture
 
-Ini menjamin konsistensi data selama migrasi—jika sistem crash, baik keduanya diperbarui atau keduanya tidak berubah.
+Empat komponen inti di `internal/compat/`:
 
-### Mekanisme Backfill
-BackfillWorker bekerja dengan pola:
-1. Mengambil chunk ID pengguna (misal: 100 ID per batch) mulai dari `last_processed_id`
-2. Untuk setiap ID, memeriksa apakah record legacy memiliki `phone` dan apakah `user_phones` kosong untuk pengguna tersebut
-3. Jika ya, melakukan insert idempotent ke `user_phones` (menggunakan UPSERT logic via pengecekan duplikasi)
-4. Menerapkan batasan waktu antar batch untuk mencegah kontensi database
-5. Melanjutkan dari checkpoint terakhir jika proses dihentikan
+- **`store.go`** — `MemoryStore` dengan `sync.RWMutex`, tabel `users` (legacy) dan
+  `user_phones` (modern), dual-write atomik via `CreateDual`, drop kolom via
+  `ApplyContractDropLegacyColumn`.
+- **`flags.go`** — `FeatureFlags` dengan `atomic.Value`/`atomic.Bool` untuk
+  `WriteMode` (`WriteLegacyOnly`/`WriteDual`/`WriteNewOnly`),
+  `ReadMode` (`ReadLegacyOnly`/`ReadFallback`/`ReadNewOnly`),
+  dan `ContractApplied`.
+- **`metrics.go`** — `Observability` counter atomik: `LegacyReadHits`,
+  `NewReadHits`, `DualWriteCount`, `DualWriteErrors`, `BackfillProcessed`,
+  `DriftDetected`.
+- **`backfill.go`** — `BackfillWorker` resumable + idempotent via
+  `BackfillCheckpoint.LastProcessedID`.
+- **`service.go`** — `CompatService` facade: `CreateUser`, `GetUser`,
+  `GetLegacyUser`, `GetModernUser`, `ReconcileData`, `ApplyContract`.
+- **`handler.go`** — `APIHandler` HTTP `/api/v1/users` + `/api/v2/users`.
 
-### Fallback Read
-Pada mode `ReadFallback`, operasi GET:
-1. Mencoba membaca dari `user_phones` terlebih dahulu
-2. Jika kosong dan mode adalah `ReadFallback`, maka baca dari `users.phone`
-3. Jika berhasil, secara opsional menulis kembali ke `user_phones` (lazy backfill) untuk mengurangi beban bacaan di kemudian hari
+> **Boundary yang disadari**: lab ini in-memory (bukan PostgreSQL). `CREATE INDEX CONCURRENTLY`,
+> `NOT VALID`, lock-timeout tidak dieksekusi — hanya didokumentasikan di `schema.sql` dan
+> `research/04-database-migration.md`. Dual-write memakai mutex, bukan transaksi DB. Ini
+> ilustrasi yang disederhanakan untuk edukasi; *swapping* ke `database/sql` adalah jalur upgrade
+> yang tersedia.
 
-## Kode yang Diverifikasi
+## Implementation
 
-### Model Data dan DTO
+### Model & DTO — payload *enriched* bersatu
+
 File: `internal/compat/model.go`
 
 ```go
@@ -114,6 +197,7 @@ type User struct {
     CreatedAt time.Time
 }
 
+// UserResponse is an enriched additive response supporting both legacy and modern clients
 type UserResponse struct {
     ID     int          `json:"id"`
     Name   string       `json:"name"`
@@ -122,237 +206,245 @@ type UserResponse struct {
 }
 ```
 
-Komentar: Field `Phone` menggunakan pointer `*string` sehingga dapat menjadi `nil` setelah kontrak diterapkan, menunjukkan kolom yang telah di-drop. Field `Phones` selalu berisi array, memenuhi kontrak konsumen V2.
+`Phone` memakai `*string` agar dapat `nil` setelah kontrak diterapkan (simulasi kolom
+yang *tadi dipaksa*). `UserResponse` mengekspor field lama maupun baru — ini inti
+kompatibilitas mundur/aditif: klien lama pakai `phone`, klien baru pakai `phones`.
 
-### Handler HTTP dengan Header Deprecasi
+### Dual-write atomic
+
+File: `internal/compat/store.go` (`CreateDual`)
+
+```go
+func (s *MemoryStore) CreateDual(name, phone string) (*User, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    // ... write both users.Phone and user_phones in the same critical section ...
+}
+```
+
+Kedua penulisan terjadi dalam satu *critical section* yang sama — jika crash di tengah,
+atau keduanya masuk atau keduanya tidak. Isolasi `sync.RWMutex` menggantikan transaksi DB
+pada lab ini. Audit mencatat: dual-write atomik *within the store lock* (engineering-audit-opensource/02-code-audit.md, Finding 1).
+
+### Backfill resumable + idempotent
+
+File: `internal/compat/backfill.go` (`RunBatch`)
+
+```go
+ids := b.store.GetUserIDs(b.checkpoint.LastProcessedID, b.batchSize)
+// ... idempotent: only SavePhoneEntry if GetPhones is empty ...
+b.checkpoint.LastProcessedID = id
+```
+
+Idempotensi pada dua lapisan:
+1. **Storage** (`SavePhoneEntry`): cek nomor sudah ada → return existing entry, tidak insert duplikat.
+2. **Checkpoint** (`LastProcessedID`): lanjut dari ID terakhir yang selesai diproses.
+
+Tes `TestBackfillIdempotentAndResumable` membuktikan: 10 record, batch=3 → 3+3+4,
+run kedua = 0 migrasi.
+
+### Fallback read + lazy backfill
+
+File: `internal/compat/service.go` (`GetUser`, mode `ReadFallback`)
+
+```go
+case ReadFallback:
+    if len(phones) > 0 { /* baca modern, pilih primary */ }
+    else if u.Phone != nil {
+        phoneVal = *u.Phone
+        _, _ = s.store.SavePhoneEntry(id, phoneVal, true) // lazy backfill
+    }
+```
+
+Mencegah *data starvation* pada record yang belum terbackfill. Tes
+`TestFallbackRead` memverifikasi: sebelum baca, `user_phones` kosong; sesudah
+fallback GET, modern store terisi dengan satu entry.
+
+### Contract dengan traffic guard
+
+File: `internal/compat/service.go` (`ApplyContract`)
+
+```go
+if !force && s.obs.LegacyReadHits.Load() > 0 {
+    return fmt.Errorf("%w: recorded %d legacy reads", ErrContractViolation, ...)
+}
+s.flags.SetWriteMode(WriteNewOnly)
+s.flags.SetReadMode(ReadNewOnly)
+s.flags.SetContractApplied(true)
+s.store.ApplyContractDropLegacyColumn()
+```
+
+Guard memakai counter kumulatif `LegacyReadHits`. Lab dokumentasi pelariangan ini
+melalui parameter `force=true` ("simulating after 30-day zero traffic window"). Pada
+produksi, counter ini perlu *sliding window* reset — audit mencatat ini sebagai
+gap LOW, bukan bug kebenaran (engineering-audit-opensource/05-gaps.md, Gap 3).
+
+### Header Deprecasi
+
 File: `internal/compat/handler.go`
 
 ```go
-func (h *APIHandler) GetUserV1(w http.ResponseWriter, r *http.Request) {
-    // ... logic untuk mendapatkan data legacy ...
-    
-    // Inject Deprecation Headers
-    w.Header().Set("Deprecation", "true")
-    w.Header().Set("Sunset", "Mon, 31 Dec 2026 23:59:59 GMT") // Sunset date
-    w.Header().Set("Content-Type", "application/json")
-    
-    json.NewEncoder(w).Encode(dto)
-}
+w.Header().Set("Deprecation", "true")
+w.Header().Set("Sunset", "Mon, 31 Dec 2026 23:59:59 GMT")
 ```
 
-Komentar: Header `Deprecation: true` dan `Sunset: <tanggal>` sesuai RFC 8594 memberi tahu klien bahwa endpoint ini akan dihapus dan kapan hal tersebut akan terjadi.
+`Deprecation` memindahkan ke RFC 9224; `Sunset` ke RFC 8594. README menyatukan keduanya
+sebagai RFC 8594 — catatan akurasi LOW (engineering-audit-opensource/05-gaps.md, Gap 2).
+Setelah kontrak, V1 mendapatkan `410 Gone`.
 
-### Mekanisme Kontrakt dengan Penghitung Lalu Lintas
-File: `internal/compat/service.go`
+## Code Walkthrough
 
-```go
-func (s *Service) ApplyContract(force bool) error {
-    // Guard: Pastikan tidak ada trafic legacy kecuali jika dipaksa
-    if !force && s.obs.LegacyReadHits.Load() > 0 {
-        return fmt.Errorf("%w: recorded %d legacy reads", ErrContractViolation, s.obs.LegacyReadHits.Load())
-    }
-    
-    // 1. Beralih mode tulis ke NewOnly
-    s.flags.SetWriteMode(WriteNewOnly)
-    // 2. Beralih mode baca ke NewOnly  
-    s.flags.SetReadMode(ReadNewOnly)
-    // 3. Tandai kontrak sebagai diterapkan
-    s.flags.SetContractApplied(true)
-    // 4. Drop kolom legacy dari storage
-    s.store.ApplyContractDropLegacyColumn()
-    
-    return nil
-}
-```
+Demo `cmd/demo/main.go` mengeksekusi seluruh siklus dalam 6 langkah:
 
-Komentar: Kontrakt hanya dapat diterapkan ketika meter `LegacyReadHits` menunjukkan nol, memastikan tidak ada klien lama yang masih aktif.
+1. **Baseline**: `CreateUser("Alice","+62811111111")`, `CreateUser("Bob","+62822222222")`
+   — klien V1 baca via `GetLegacyUser`.
+2. **Expand**: `SetWriteMode(WriteDual)`, `CreateUser("Charlie","+62833333333","+62833334444")`
+   — response *enriched*: V1 parset `phone`, V2 parse `phones` (2 entry, `is_primary=true`).
+3. **Migrate**: `RunAll` backfill 2 — output: "2 legacy records migrated".
+   `ReconcileData` → 0 drift.
+4. **Read switch**: `SetReadMode(ReadNewOnly)` — V2 baca historical Alice dari
+   `user_phones`: `[{Number:+62811111111 IsPrimary:true}]`.
+5. **Rollback demo**: kembali ke `WriteLegacyOnly`+`ReadLegacyOnly`, V1 baca Charlie =
+   "+62833333333" — tidak ada data loss selama dual-write.
+6. **Contract**: `ApplyContract(true)` — legacy read error (410), V2 modern tetap bekerja.
 
-### Backfill yang Idempotent dan Resumable
-File: `internal/compat/backfill.go`
+Snapshot akhir: `legacy_reads:3`, `new_reads:2`, `dual_writes:1`, `dual_write_errors:0`,
+`backfilled:2`, `drift_detected:0`.
 
-```go
-func (b *BackfillWorker) RunBatch(ctx context.Context) (int, bool, error) {
-    b.checkpoint.mu.Lock()
-    defer b.checkpoint.mu.Unlock()
+## What the Tests Prove
 
-    if b.checkpoint.IsComplete {
-        return 0, true, nil
-    }
+| Perilaku | Tes | Asersi |
+|---|---|---|
+| Payload enriched kompatibel V1 + V2 | `TestSerializationBackwardCompatibility` | V1 dapat `phone` exact; V2 dapat 2 `phones` dengan `IsPrimary=true` pada pertama |
+| Backfill resumable + idempotent | `TestBackfillIdempotentAndResumable` | batch 3+3+4; run ke-2 = 0 |
+| Fallback read + lazy backfill | `TestFallbackRead` | sebelum baca kosong; sesudah 1 entry |
+| Drift detect pre/post backfill | `TestDataReconciliationAndDrift` | drift=1 → drift=0 |
+| Header deprecasi + contract guard | `TestDeprecationHeadersAndContractEnforcement` | header ada; `ApplyContract(false)` error; `ApplyContract(true)` aman; 410; V2 200 |
+| Siklus penuh | `TestFullExpandMigrateContractLifecycle` | Expand dual-write ✓; backfill 2 ✓; drift 0 ✓; read switch ✓; contract legacy error ✓; V2 tetap ✓ |
+| Rollback safety | `TestRollbackScenarios` | Skenario A: data aman saat dual-write; Skenario B: `phone=""` setelah rollback pasca-NewOnly (data loss terbukti, tidak diasumsikan) |
+| Konkuren under `-race` | `TestConcurrency` | 10 writer × 20, 10 reader × 50, backfill, drift — `DualWriteErrors == 0`, tidak ada race |
 
-    ids := b.store.GetUserIDs(b.checkpoint.LastProcessedID, b.batchSize)
-    if len(ids) == 0 {
-        b.checkpoint.IsComplete = true
-        return 0, true, nil
-    }
+Semua asersi memeriksa nilai eksak (count, field, status code), bukan sekadar "no error".
+`go test -race ./...` → 8/8 PASS, tidak ada data race.
 
-    migratedInBatch := 0
-    for _, id := range ids {
-        // ... proses backfill untuk setiap ID ...
-        
-        // Idempotency check: hanya proses jika belum ada di user_phones
-        if user.Phone != nil && *user.Phone != "" {
-            phones, _ := b.store.GetPhones(id)
-            if len(phones) == 0 {
-                // Insert hanya jika belum ada entri
-                _, err := b.store.SavePhoneEntry(id, *user.Phone, true)
-                // ... error handling ...
-                migratedInBatch++
-            }
-        }
-        b.checkpoint.LastProcessedID = id
-    }
+## Recovery / Rollback
 
-    // ... update checkpoint dan cek selesai ...
-}
-```
+Rollback hanya aman **selama fase dual-write**. Mekanisme dan batasannya:
 
-Komentar: Idempotency dicapai dengan memeriksa keberadaan entri sebelum insert. Resumabilitas dicapai dengan menyimpan `LastProcessedID` dalam struktur yang dilindungi mutex.
+- **Rollback ke V1 saat `WriteDual` aktif** → data aman. V1 menulis ke `users.phone`,
+  V2 menulis ke `user_phones`. Setiap record baru ada di kedua skema. Demo langkah 5 +
+  `TestRollbackScenarios` Skenario A membuktinya.
+- **Rollback setelah `WriteNewOnly`** → **data loss**. Record yang dibuat di fase ini
+  tidak pernah ditulis ke `users.phone`. `TestRollbackScenarios` Skenario B memverifikasi:
+  `legacyU2.Phone == ""` (dokumen string kosong, bukan error).
+- **Recovery backfill**: worker bersifat *resumable* — `LastProcessedID` checkpoint
+  memungkinkan melanjutkan dari titik hentikan setelah crash.
+- **Recovery drift**: `ReconcileData` mendeteksi ketidak-konsistenan; tidak ada *self-healing*
+  otomatis (operasional harus diintervensi manual).
 
-## Apa yang Dibuktikan oleh Tes
+> **Batasan demonstrasi**: rollback simulasi hanya pada flag runtime, bukan pada versi
+> biner yang sebenarnya. Lab tidak mensimulasikan *multi-instance rolling rollback*
+> yang melibatkan multiple binary versions concurrently — hanya *mode flag* yang berubah.
 
-### Serialisasi Kompatibel Mundur
-File: `internal/compat/service_test.go` (TestSerializationBackwardCompatibility)
-- Membuat user dengan nomor telepon utama dan tambahan
-- Meng-serialize ke format enriched JSON
-- Memverifikasi bahwa klien V1 (menggunakan LegacyConsumerDTO) dapat deserialize tanpa crash dan mendapatkan nomor telepon utama
-- Memverifikasi bahwa klien V2 (menggunakan ModernConsumerDTO) dapat deserialize dan mendapatkan array nomor telepon lengkap
+## Production Considerations
 
-### Backfill Idempotent dan Resumable
-File: `internal/compat/service_test.go` (TestBackfillIdempotentAndResumable)
-- Membuat 10 pengguna legacy
-- Mengjalankan backfill dengan batch size 3
-- Memverifikasi bahwa batch pertama memproses 3 record, batch kedua memproses 3 record, dan sisa memproses 4 record
-- Memverifikasi bahwa menjalankan backfill lagi menghasilkan 0 migrasi (idempotent)
+### Apa yang perlu dipertimbangkan saat produksi
 
-### Mekanisme Fallback Read
-File: `internal/compat/service_test.go` (TestFallbackRead)
-- Membuat satu pengguna legacy
-- Mengatur mode baca ke `ReadFallback`
-- Memverifikasi bahwa sebelum baca, tabel modern kosong
-- Memverifikasi bahwa operasi GET mengembalikan nomor telepon dari field legacy
-- Memverifikasi bahwa setelah baca, tabel modern telah terisi secara lazy (nomor telepon disalin ke user_phones)
+- **Database DDL nyata**: gunakan `ALTER TABLE ADD COLUMN ... DEFAULT <const>` (PostgreSQL
+  tidak mere-write baris), `CREATE INDEX CONCURRENTLY` (hindari lock lama), dan
+  `ADD CONSTRAINT ... NOT VALID` + `VALIDATE CONSTRAINT` (validasi async).
+  Lihat `research/04-database-migration.md`. Lab hanya mensimulasikan secara in-memory.
+- **Dual-write cross-storage / cross-service**: tanpa 2PC, gunakan *transactional outbox*
+  (satu tabel event + relay idempotent) — lihat `research/03-core-concepts.md` Evidence 7
+  (Microservices.io). Lab memakai mutex, bukan outbox.
+- **Siklus hapus kolom**: 3-release rule (M, M+1, M+2) adalah artefak ActiveRecord/GitLab,
+  bukan aturan universul (research-audit/04-contradictions.md). GitHub memakai 24 bulan
+  untuk public API. Jadewan observasi "30 hari" pada lab tidak divalidasi — ilustratif.
+- **Monitoring cutover**: counter `LegacyReadHits` perlu *sliding window reset* pada
+  produksi; laboratorium memakai counter kumulatif + `force` (gap LOW, documented escape).
+- **Scale dual-write**: pada volume tinggi, throttle via rate limiter / outbox; mutex
+  dalam memori tidak scale ke banyak instance.
 
-### Deteksi Drift Data dan Rekonsiliasi
-File: `internal/compat/service_test.go` (TestDataReconciliationAndDrift)
-- Membuat pengguna legacy tanpa menjalankan backfill
-- Memverifikasi bahwa rekonsiliasi mendeteksi 1 drift (data ada di legacy tetapi tidak di modern)
-- Menjalankan backfill hingga selesai
-- Memverifikasi bahwa rekonsiliasi setelah backfill menunjukkan 0 drift
+### Apa yang TIDAK ditunjukkan
 
-### Penegakan Kontrakt dan Header Deprecasi
-File: `internal/compat/service_test.go` (TestDeprecationHeadersAndContractEnforcement)
-- Memverifikasi bahwa endpoint legacy (`/v1/users`) mengembalikan header `Deprecation: true` dan `Sunset`
-- Memverifikasi bahwa kontrak tidak dapat diterapkan (`ApplyContract(false)`) ketika masih ada trafic legacy
-- Memverifikasi bahwa kontrak paksa (`ApplyContract(true)`) berhasil
-- Memverifikasi bahwa setelah kontrakt, endpoint legacy mengembalikan HTTP 410 Gone
-- Memverifikasi bahwa endpoint modern (`/v2/users`) tetap berfungsi normal setelah kontrakt
+- Koordinasi transaksi terdistribusi (2PC) atau event streaming (Kafka/CDC).
+- DDL runtime PostgreSQL (`SET lock_timeout`, `CREATE INDEX CONCURRENTLY`).
+- Multi-release database refactorings berlapis (GitLab 3-release rule).
+- Cross-microservice dual-write tanpa outbox — didokumentasikan sebagai *open research*
+  (research/04-database-migration.md, research/10-open-questions.md).
 
-### Keseluruhan Siklus Hidup
-File: `tests/migration_test.go` (TestFullExpandMigrateContractLifecycle)
-- Memulai dengan data historis legacy
-- Fase Expand: mengaktifkan dual-write dan membuat pengguna baru
-- Memverifikasi bahwa data baru ditulis ke kedua skema
-- Fase Migrate: menjalankan backfill hingga selesai
-- Memverifikasi bahwa nol drift terdeteksi sebelum pergantian jalur baca
-- Pergantian jalur baca ke `ReadNewOnly`
-- Memverifikasi bahwa klien modern dapat membaca data historis dari skema baru
-- Fase Contract: menerapkan kontrak dengan paksa
-- Memverifikasi bahwa baca legacy setelah kontrak menghasilkan error
-- Memverifikasi bahwa baca modern setelah kontrak terus berfungsi dengan data lengkap
+## Common Mistakes
 
-### Keamanan Rollback
-File: `tests/migration_test.go` (TestRollbackScenarios)
-- **Skenario A (Rollback Aman selama Dual-Write)**:
-  - Membuat pengguna selama mode dual-write
-  - Mengganti kembali ke mode legacy-only (menyimulasikan rollback dari N+1 ke N)
-  - Memverifikasi bahwa klien legacy masih dapat membaca nomor telepon yang dibuat selama dual-write (tidak ada kehilangan data)
-  
-- **Skenario B (Rollback Berhenti Dual-Write Terlalu Awal)**:
-  - Membuat pengguna selama mode new-only (setelah dual-write dihentikan)
-  - Mengganti kembali ke mode legacy-only
-  - Memverifikasi bahwa klien legacy menerima string kosong untuk nomor telepon (mendemonstrasikan kehilangan data jika rollback dilakukan setelah dual-write dihentikan)
+1. **Melewatkan fase Contract** → technical debt permanen, dua skema hidup untuk selalu.
+   *Mitigasi*: buat *ticket* kontrak per epic; *alert* otomatis pada `LegacyReadHits == 0`
+   selama periode observasi.
 
-### Keseluruhan Concurrency
-File: `tests/concurrency_test.go` (TestConcurrency)
-- Menjalankan 10 goroutine penulis legacy bersamaan
-- Menjalankan 10 goroutine pembaca legacy dan modern bersamaan  
-- Menjalankan 1 goroutine worker backfill
-- Menjalankan 1 goroutine perekoncilian drift
-- Semua berjalan dengan timeout 2 deteksi
-- Memverifikasi bahwa tidak ada kesalahan dual-write yang dilaporkan di bawah beban bersamaan
+2. **Beralih baca terlalu awal** → data starvation (404/kosong) untuk record belum backfill.
+   *Mitigasi*: pakai `ReadFallback` selama migrasi, atau pastikan backfill 100% selesai
+   sebelum `ReadNewOnly`.
 
-## Demonstrasi End-to-End
-File: `cmd/demo/main.go`
+3. **Asumsikan idempotent tanpa cek eksplisit** → duplikat pada rerun backfill.
+   *Mitigasi*: periksa eksistensi sebelum insert, atau pakai `UPSERT`/`ON CONFLICT DO NOTHING`.
 
-Demo menunjukkan seluruh siklus hidup:
-1. **Baseline**: Membuat pengguna historis Alice dan Bob; klien V1 membaca nomor telepon mereka
-2. **Expand**: Mengaktifkan dual-write; membuat pengguna Charlie dengan dua nomor telepon; klien V1 masih bisa membaca nomor pertama
-3. **Migrate**: Menjalankan backfill untuk data historis; rekonsiliasi menunjukkan nol drift
-4. **Switch Read Path**: Mengalihkan mode baca ke NewOnly; klien V2 membaca data historis Alice dari skema baru
-5. **Rollback Demo**: Mensimulasikan rollback ke Version N selama dual-write; klien V1 masih bisa membaca nomor telepon Charlie (bukti keamanan rollback)
-6. **Contract**: Menerapkan kontrak; klien V1 menerima error 410 Gone; klien V2 terus bekerja dengan data lengkap
+4. **Abaiakan overhead dual-write pada skala** → kontensi DB, latency tulis naik.
+   *Mitigasi*: pola outbox (satu tulisan lokal, proses async ke tujuan kedua).
 
-## Pertimbangan Produksi
+## Case Study
 
-### Keamanan Rollback
-Keamanan rollback hanya terjamin selama fase dual-write. Jika dual-write dihentikan (beralih ke `WriteNewOnly`) kemudian rollback dilakukan ke Version N, data yang ditulis selama fase new-only akan hilang karena tidak pernah ditulis ke skema legacy.
+Lab ini mementr. **Case Study A: Customer Phone 1:1 → 1:N** (research/09-case-studies.md):
 
-### Deteksi Konsumen Lama
-Sistem mengandalkan metrik untuk mengetahui ketika kontrak aman untuk diterapkan:
-- Meter `LegacyReadHits` harus mencapai nol dan tetap pada nol selama jendela observasi
-- Dalam produksi, ini biasanya dicapai dengan memonitor traffic selama 30 hari setelah traffic legacy menunjukkan penurunan signifikan
-- Header Deprecasi dan Sunset memberikan waktu untuk klien eksternal melakukan migrasi
+- **Baseline**: `users.phone TEXT` satu nomor per pengguna (Alice `+62811111111`).
+- **Target**: banyak nomor per pengguna, dengan bendera `is_primary`.
 
-### Kompleksitas dan Overhead
-- **Latensi Tulis**: Dual-write meningkatkan latensi tulis karena setiap operasi harus menyelesaikan dua penulisan
-- **Kompleksitas Kode**: Perlu menjaga dua jalur baca dan logika sinkronisasi data
-- **Beban Storage**: Diperlukan penyimpanan ganda selama fase migrasi (legacy + modern)
-- **Beban Operational**: Perlu monitoring terus-meterus untuk metrik lalu lintas dan drift data
+Transisi:
+1. `schema.sql` V2: buat `user_phones(user_id, number, is_primary)` — kolom `phone` tidak disentuh.
+2. Mode `WriteDual`: tiap `CreateUser` tulis ke kedua tabel.
+3. Backfill historis: Alice, Bob — migrasi ke `user_phones`.
+4. `ReadNewOnly`: V2 baca `user_phones`; `ReadFallback` melindungi sebelum selesai.
+5. `ApplyContract`: drop `phone` setelah traffic V1 = 0.
 
-### Keterbatasan Implementasi Demonstrasi
-Lab ini menggunakan beberapa penyederhanaannya untuk tujuan edukasi:
-- **Penyimpanan Dalam-Memori**: Menggunakan `sync.RWMutex` dengan peta alih daripada PostgreSQL aktual (ditandai dengan komentar `ponytail: in-memory mock storage; replace with database/sql for persistent store.`)
-- **Emulasi DDL**: Perintah PostgreSQL spesifik seperti `SET lock_timeout` dan `CREATE INDEX CONCURRENTLY` hanya didokumentasikan dalam `schema.sql` dan penelitian, bukan dieksekusi runtime karena penggunaan penyimpanan dalam-memori
-- **Skala Transaksi**: Dual-write diimplementasikan dalam kritial section tunggal alih-alih transaksi database yang sebenarnya
+> research/09-case-studies.md berisi tambahan **Case Study B** (CMMS Invoice 1:1→N:M)
+> dan **Case Study C** (Multi-Currency schema split). Keduanya tidak diimplementasikan
+> dalam kode lab — mereferensikan contoh konseptual, bukan perilaku lab yang diverifikasikan.
 
-## Kesalahan Umum yang Harus Dihindari
+## Checklist
 
-### 1. Mengabaikan Fase Contract
-Menghgalkan kontrakt menyebabkan:
-- Teknical debt yang terus-menerus menumpuk
-- Pemborongan sumber dari memejaga dua skema untuk selamanya
-- Kebingungan tentang mana skema yang "sebenarnya" digunakan
+- [ ] Fase Expand: tabel/field baru ditambahkan, lama **tidak disentuh**
+- [ ] Payload additive: klien lama parset field lama; field baru di-ignore
+- [ ] Dual-write aktif: tiap record baru ada di kedua skema
+- [ ] Backfill selesai: `ReconcileData` → drift = 0
+- [ ] Fallback read siap: record un-backfill tetap readable
+- [ ] Feature flag siap: `WriteMode`/`ReadMode` dapat di-flip runtime
+- [ ] Observability online: `LegacyReadHits` dilacak
+- [ ] Traffic lama = 0 selama jendela observasi
+- [ ] Contract: `ApplyContract` sukses; V1 dapat `410 Gone`; V2 tetap `200`
+- [ ] Rollback simulasi: V1 masih baca data V2 — tidak ada data loss
+- [ ] Audit lapis bawaan: `go test -race ./...` — 0 data race, 0 error
 
-Mitasi: Buat tiket kontrak sebagai bagian dari setiap epic expand, dan gunakan metrik usage untuk memicu peringatan ketika penggunaan legacy = 0 selama periode observasi.
+## Key Takeaways
 
-### 2. Beralih Jalan Baca Terlalu Awal
-Beralih ke `ReadNewOnly` sebelum backfill selesai menyebabkan:
-- Kelahiran data (404/respons kosong) untuk rekaman yang belum terbackfill
-- Pengalaman pengguna yang buruk untuk klien yang beralih terlebih dahulu
+1. Perubahan struktural tidak harus berhenti jasa — pecahkan menjadi Expand/Migrate/Contract.
+2. Dual-write adalah jaminan atomicity sempat-pinjam; pada memori pakai mutex, pada prod pakai outbox/transaksi.
+3. Backfill harus *idempotent + resumable* (checkpoint + dedup) — bukan batch besar satu kali.
+4. `ReadFallback` (dual-read) adalah *parachute* sebelum backfill selesai — wajib ada.
+5. Contract (hapus kolom/field) hanya saat traffic legacy = 0 — dikunci oleh metrik, bukan asumsi.
+6. Rollback hanya aman di fase dual-write — setelah `WriteNewOnly`, rollback = data loss.
+7. Feature flags memisahkan *deploy* dari *activate* — enabler canary dan rollback instan.
+8. Header `Deprecation`/`Sunset` + metrik adalah antarmuka manusia ke putus-kepaksaan teknis.
+9. Penyederhanaan lab (in-memory, mutex) tidak mengaburkan mekanika relasional — tapi
+   jalur upgrade ke `database/sql`/outbox jelas didokumentasikan.
+10. "30 hari" jendela observasi adalah heuristik terbuka — tidak berlaku sebagai aturan universal.
 
-Mitasi: Gunakan mode `ReadFallback` selama fase backfill, atau Pastikan backfill 100% selesai sebelum beralih ke `ReadNewOnly`.
+## Sources
 
-### 3. Mengasumsikan Idempotensi Tanpa Pemeriksaan
-Worker backfill yang tidak memeriksa duplikasi dapat:
-- Membuat entri ganda jika diulang
-- Menyebabkan pelanggaran constraint unik jika ada
-- Memboroskan sumber I/O dengan operasi yang tidak perlu
+- **Martin Fowler, *Parallel Change* (2014-05-13)**: konsep Expand/Migrate/Contract, Grid contoh, feature flag, blue-green. `research/06-expand-migrate-contract.md`, `research/03-core-concepts.md` (Evidence 2,4,9,12,14).
+- **PostgreSQL Global Development Group (PG 18)**: additive `ALTER TABLE`, `CREATE INDEX CONCURRENTLY`, `NOT VALID`/`VALIDATE CONSTRAINT`. `research/04-database-migration.md`, `research/03-core-concepts.md` (Evidence 5,13).
+- **Google AIP-180 (2019-07-23)**: definisi additive/non-breaking, larangan type change, source/wire/semantic compatibility. `research/03-core-concepts.md`, `research/05-api-compatibility.md`.
+- **GitHub REST API (2026-03-10)**: 24-month support window, Deprecation/Sunset header, breaking/non-breaking daftar. `research/05-api-compatibility.md`, `research/03-core-concepts.md` (Evidence 10,11,15).
+- **Stripe API Versioning (2017-08-05)**: request-time version transformation pipeline, pin-by-first-request. `research/05-api-compatibility.md`.
+- **Microservices.io / Chris Richardson, *Transactional Outbox***: dual-write 2PC kebutuhatan, relay idempotency. `research/03-core-concepts.md` (Evidence 7).
+- **Confluent Schema Registry**: definisi BACKWARD / FORWARD / compatibility. `research/03-core-concepts.md` (Evidence 2).
 
-Mitasi: Selalu terapkan logika idempotent (misal: periksa keberadaan sebelum insert, atau gunakan sintaks UPSERT/ON CONFLICT DO NOTHING).
+Audit status: Research APPROVED (research-audit/07-verdict.md); Engineering APPROVED + APPROVED_WITH_WARNINGS (engineering-audit/06-verdict.md, engineering-audit-opensource/06-verdict.md — 7 temuan LOW).
 
-### 4. Mengabaikan Overhead Dual-Write dalamencapaian Skala
-Dual-write yang tidak di-throttle pada sistem dengan volume tinggi dapat:
-- Menyebabkan kontensi database yang signifikan
-- Meningkatkan latensi tulis secara berlebihan
-- Mengkonsumsi lebih banyak koneksi pool database
-
-Mitasi: Implementasikan dual-write melalui pola outbox (tulis ke tabel tunggal, lalu proses async ke tujuan kedua) untuk sistem dengan skala tinggi.
-
-## Ringkasan
-Pola Expand → Migrate → Contract memberikan rangka yang teruji untuk mengubah kontrak data dan skema secara bertahap tanpa downtime atau memutus klien lama. Lab ini membuktikan bahwa dengan kombinasi dual-write, backfill yang dapat dihentikan dan dilanjutkan lagi, fallback baca, dan pengontrol lintas lalu lintas berbasis fitur flag, organisasi dapat:
-- Melakukan migrasi skema besar selama operasi normal
-- Menjaga kompatibilitas dengan klien lama yang tidak bisa langsung diupdate  
-- Memastikan keamanan rollback selama fase transisi
-- Mengukur dan memverifikasi ketika aman untuk menghapus representasi lama
-
-Kunci keberhasilan terletak pada memperlakukan perubahan infrastruktur sebagai proses pengalihan traffic gradual alih-alih kejadian yang bersifat putus-putus, dengan metrik dan observasi sebagai panduan untuk mengambil keputusan pada setiap fase transisi.
+Catatan akurasi: 7 temuan LOW pada engineering-audit-opensource tidak menggangu kebenaran inti. Lihat `content/05-key-takeaways.md` poin 9 dan `06-source-map.md` Failure Modes.

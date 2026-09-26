@@ -1,109 +1,42 @@
-## Finding 1
+# Test Audit
 
-Location: internal/compat/service_test.go:TestSerializationBackwardCompatibility
-Claimed Behavior: Tests that serialized UserResponse can be unmarshalled by both legacy and modern consumers.
-Observed Implementation: Creates user via WriteDual, serializes response, unmarshals into LegacyConsumerDTO and ModernConsumerDTO, verifies fields.
-Assessment: PASS
-Severity: 
-Notes: Verifies backward/forward compatibility of JSON payload.
+Coverage Matrix (claims vs tests):
 
-## Finding 2
+| Claim / Behavior | Covered By Test | Result |
+|---|---|---|
+| Expand: dual-write to legacy + modern, additive payload | TestSerializationBackwardCompatibility, migration_test.TestFullExpandMigrateContractLifecycle | PASS |
+| V1 legacy consumer parses `phone` string (backward compat) | TestSerializationBackwardCompatibility | PASS |
+| V2 modern consumer parses `phones` array w/ is_primary | TestSerializationBackwardCompatibility | PASS |
+| Migrate: backfill resumable + idempotent | TestBackfillIdempotentAndResumable | PASS |
+| Migrate: fallback read + lazy backfill | TestFallbackRead | PASS |
+| Migrate: drift reconciliation before/after | TestDataReconciliationAndDrift, TestFullExpandMigrateContractLifecycle | PASS |
+| Read switch (ReadNewOnly) reads historical from modern | TestFullExpandMigrateContractLifecycle | PASS |
+| Rollback safety during DualWrite (no data loss) | TestRollbackScenarios Scenario A | PASS |
+| Premature rollback after NewOnly data loss (negative case) | TestRollbackScenarios Scenario B | PASS |
+| Contract: deprecation headers on V1 | TestDeprecationHeadersAndContractEnforcement | PASS |
+| Contract: guard blocks forced migration while traffic active | TestDeprecationHeadersAndContractEnforcement | PASS |
+| Contract: 410 Gone after apply + V2 still works | TestDeprecationHeadersAndContractEnforcement, TestFullExpandMigrateContractLifecycle | PASS |
+| Concurrency: parallel writes/reads/backfill/drift | TestConcurrency (under -race) | PASS |
 
-Location: internal/compat/service_test.go:TestBackfillIdempotentAndResumable
-Claimed Behavior: Tests backfill worker processes records in batches, is idempotent (second run does nothing), and resumable (checkpointing).
-Observed Implementation: Creates 10 legacy users, runs backfill with batchSize=3, verifies first two batches process 3 each, then RunAll processes remaining 4, second RunAll processes 0.
-Assessment: PASS
-Severity: 
-Notes: Thoroughly tests backfill batching, idempotency, and resumability via checkpoint.
+Happy Path: PASS — Expand, Migrate, Contract lifecycle fully covered in migration_test.
 
-## Finding 3
+Failure Path: PASS — drift detection, premature contract rejection (ErrContractViolation), post-contract 410, legacy-unavailable error propagation. Scenario B proves data loss when rollback occurs after NewOnly writes (negative case demonstrated, not merely asserted).
 
-Location: internal/compat/service_test.go:TestFallbackRead
-Claimed Behavior: Tests fallback read mode works and lazily backfills.
-Observed Implementation: Creates legacy user, sets ReadMode=ReadFallback, calls GetUser (which triggers fallback), verifies phone value and that lazy backfill occurred.
-Assessment: PASS
-Severity: 
-Notes: Tests fallback read and lazy backfill mechanism.
+Edge Cases:
+- Batch boundaries: covered (batchSize=3 over 10 records; asserts 3+3+4 distribution + completion flag).
+- Empty final batch: covered (RunBatch sets IsComplete when ids empty).
+- Idempotent rerun: covered (second RunAll == 0).
+- Un-backfilled drift: covered (ReconcileData detects drift=1 before backfill, 0 after).
 
-## Finding 4
+Concurrency: PASS — `go test -race ./...` exits cleanly across `TestConcurrency` (10 writers x 20, 10 readers x 50, backfill, drift) and all other tests. No data races, deadlocks, or `DualWriteErrors` spikes.
 
-Location: internal/compat/service_test.go:TestDataReconciliationAndDrift
-Claimed Behavior: Tests drift detection works and is corrected by backfill.
-Observed Implementation: Creates legacy user (no backfill), calls ReconcileData (expects 1 drift), runs backfill, calls ReconcileData again (expects 0 drift).
-Assessment: PASS
-Severity: 
-Notes: Tests drift detection and reconciliation.
+Negative Cases: PASS — contract guard rejection, empty legacy phone assertion, unmigrated-record fallback.
 
-## Finding 5
+Gaps (missing / weakly asserted):
+1. HTTP handler input validation: no test for invalid/missing `id` (Atoi error path) -> 404 vs 400. MISSING_TEST (LOW).
+2. No unit test asserting `SavePhoneEntry` returns the pre-existing entry on duplicate (idempotency at storage method level). Covered only indirectly via backfill rerun. MISSING_TEST (LOW).
+3. No test driving `WriteNewOnly` CreateUser end-to-end through the service; only `WriteDual`/`WriteLegacyOnly`/`CreateModern` direct path. MISSING_TEST (LOW).
+4. `GetUserIDs` returns empty-slice + IsComplete behavior with zero users: covered indirectly via TestBackfillIdempotentAndResumable second-run. Acceptable.
 
-Location: internal/compat/service_test.go:TestDeprecationHeadersAndContractEnforcement
-Claimed Behavior: Tests legacy endpoint returns deprecation headers and contract enforcement guards against premature contract.
-Observed Implementation: Creates user, hits legacy endpoint (checks for Deprecation/Sunset headers), attempts ApplyContract without force (should fail), then ApplyContract with force (should succeed), then legacy endpoint returns 410 Gone.
-Assessment: PASS
-Severity: 
-Notes: Tests contract enforcement and deprecation headers.
-
-## Finding 6
-
-Location: tests/migration_test.go:TestFullExpandMigrateContractLifecycle
-Claimed Behavior: Tests full lifecycle: expand (dual-write), migrate (backfill), switch read path, contract (drop legacy).
-Observed Implementation: 
-- Step 0: Create historical users
-- Step 1: Set WriteDual, create dual-write user
-- Step 2: Backfill historical users
-- Step 3: Verify zero drift before read switch
-- Step 4: Switch ReadNewOnly, verify modern read of historical user
-- Step 5: ApplyContract (force), verify legacy reads fail, modern reads work
-Assessment: PASS
-Severity: 
-Notes: Excellent end-to-end test of the full lifecycle.
-
-## Finding 7
-
-Location: tests/migration_test.go:TestRollbackScenarios
-Claimed Behavior: Tests two rollback scenarios: safe rollback during dual-write, and unsafe rollback after stopping dual-write prematurely.
-Observed Implementation: 
-- Scenario A: Deploy dual-write, create user, rollback to WriteLegacyOnly/ReadLegacyOnly, verify legacy read works (no data loss)
-- Scenario B: Deploy dual-write, switch to WriteNewOnly, create user, rollback to WriteLegacyOnly/ReadLegacyOnly, verify legacy phone is empty (data loss demonstrated)
-Assessment: PASS
-Severity: 
-Notes: Well-designed test showing rollback safety boundary.
-
-## Finding 8
-
-Location: tests/concurrency_test.go:TestConcurrency
-Claimed Behavior: Tests concurrent reads, writes, backfill, and reconciliation under race detector.
-Observed Implementation: 
-- Pre-populate 50 legacy users
-- Set WriteDual, ReadFallback
-- Launch 10 legacy writer goroutines
-- Launch 10 legacy+modern reader goroutines
-- Launch backfill worker goroutine
-- Launch drift reconciliation goroutine (5 iterations)
-- Wait for all, check no dual write errors
-Assessment: PASS
-Severity: 
-Notes: Good concurrency test covering multiple simultaneous operations.
-
-Test coverage assessment:
-- Happy path: Covered by lifecycle test, serialization test, demo
-- Failure path: Covered by contract enforcement test (premature contract failure), drift detection test
-- Edge cases: Backfill batch boundaries tested, empty phones tested implicitly
-- Transitions: Lifecycle test covers expand->migrate->read switch->contract
-- Recovery: Not explicitly tested (but rollback tests show recovery capability)
-- Rollback: Covered by rollback scenarios test
-- Concurrency: Covered by concurrency test
-- Negative cases: Legacy read after contract returns error tested
-
-Tests are comprehensive and cover all major aspects of the implementation. They verify:
-1. Backward/forward compatibility (JSON serialization)
-2. Idempotent, resumable backfill
-3. Fallback read with lazy backfill
-4. Data drift detection and reconciliation
-5. Contract enforcement with legacy traffic guard
-6. Deprecation headers
-7. Full lifecycle execution
-8. Rollback safety boundaries
-9. Concurrency safety under race detector
-
-No significant gaps in test coverage observed.
+Test Strength: PASS
+A passing suite here is not a façade — assertions check exact counts (migrated==2, drifts==0/1, 2 phones parsed, is_primary flagged), not just "no error".
