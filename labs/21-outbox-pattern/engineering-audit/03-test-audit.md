@@ -1,33 +1,49 @@
 # Test Audit
 
-## Coverage Analysis
+## Overview
+Test suite located in `tests/outbox_test.go` contains 5 tests covering happy path, transaction rollback, consumer idempotency on duplicate deliveries, dual-write vulnerability, and concurrent writes under the race detector.
 
-1. **Happy Path**: `TestTransactionalOutbox_HappyPath`
-   - Verifies atomic creation of order and outbox record.
-   - Verifies relay polling and dispatch to mock broker.
-   - Verifies outbox status transition to `PROCESSED`.
-   - Verifies consumer initial message acceptance.
-   - Assessment: PASS
+## Test Inventory & Assessment
 
-2. **Rollback Path**: `TestTransactionalOutbox_Rollback`
-   - Verifies staged order and outbox records are completely discarded on rollback.
-   - Verifies relay sends no messages for aborted transactions.
-   - Assessment: PASS
+### 1. `TestTransactionalOutbox_HappyPath`
+- **Focus**: End-to-end transactional write, polling dispatch, status update, downstream consumer handling.
+- **Coverage**:
+  - Atomic DB write of `Order` and `OutboxMessage`.
+  - Relay polling picks up message and publishes to `MockBroker`.
+  - DB outbox record marked `PROCESSED`.
+  - Consumer receives and processes message.
+- **Assessment**: PASS
 
-3. **Idempotency & Duplicate Delivery**: `TestTransactionalOutbox_Idempotency_DuplicateDelivery`
-   - Verifies consumer processes initial delivery (`true`) and rejects duplicate delivery (`false`).
-   - Verifies consumer received count remains 1.
-   - Assessment: PASS
+### 2. `TestTransactionalOutbox_Rollback`
+- **Focus**: Transaction abort/rollback.
+- **Coverage**:
+  - Simulates failed transaction via `tx.Rollback()`.
+  - Asserts neither `Order` nor `OutboxMessage` persisted in `db`.
+  - Asserts relay sends zero messages to broker.
+- **Assessment**: PASS
 
-4. **Dual-Write Vulnerability Demonstration**: `TestDualWriteProblem_Failure`
-   - Simulates broker failure during naive dual-write.
-   - Verifies DB order is persisted while broker received no events, proving state inconsistency.
-   - Assessment: PASS
+### 3. `TestTransactionalOutbox_Idempotency_DuplicateDelivery`
+- **Focus**: Consumer-side idempotency against at-least-once delivery retries.
+- **Coverage**:
+  - Initial message processed successfully (`accepted=true`).
+  - Identical duplicate message rejected (`accepted=false`).
+  - Total processed count remains 1.
+- **Assessment**: PASS
 
-5. **Concurrency Safety**: `TestTransactionalOutbox_ConcurrentWrites`
-   - Spawns 10 concurrent goroutines writing 10 orders each while relay actively polls.
-   - Executed under `go test -race ./...`.
-   - Assessment: PASS
+### 4. `TestDualWriteProblem_Failure`
+- **Focus**: Demonstrating dual-write state inconsistency.
+- **Coverage**:
+  - Simulates broker down via `broker.SetFailNext(true)`.
+  - DB commit succeeds, broker publish fails.
+  - Asserts DB has persisted order while broker received 0 messages.
+- **Assessment**: PASS
+
+### 5. `TestTransactionalOutbox_ConcurrentWrites`
+- **Focus**: Concurrency safety under high concurrent load.
+- **Coverage**:
+  - 10 concurrent goroutines writing 10 transactions each (100 operations total) alongside background polling relay worker.
+  - Verified with `-race` flag. Zero data races detected.
+- **Assessment**: PASS
 
 ## Execution Results
 
@@ -43,7 +59,8 @@
 === RUN   TestTransactionalOutbox_ConcurrentWrites
 --- PASS: TestTransactionalOutbox_ConcurrentWrites (0.05s)
 PASS
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.257s
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.439s
 ```
 
-All 5 tests pass cleanly with zero race conditions detected under Go race detector.
+Race detector output:
+- `go test -count=1 -race ./...` PASSED with 0 warnings or race warnings.

@@ -1,18 +1,27 @@
 # Docs vs Code Audit
 
-## Item Comparison
+## 1. README.md vs Code
+- **README Claims**:
+  - Components: `db.go` (in-memory transactional DB), `broker.go` (mock message broker), `service.go` (dual-write vs atomic outbox writes), `relay.go` (asynchronous polling worker), `consumer.go` (idempotent subscriber).
+  - Test command: `go test ./...` and `go test -race ./...`.
+  - Demo command: `go run ./cmd/demo`.
+- **Reality**: All listed files exist, exports and responsibilities match exactly. Commands run without errors.
+- **Assessment**: PASS
 
-| Documented Item | Claimed Location / Behavior | Actual Implementation in Code | Discrepancy Found |
-| :--- | :--- | :--- | :--- |
-| `internal/outbox/db.go` | In-memory transactional DB simulating BeginTx, Commit, and Rollback across orders and outbox | Exact match (`DB`, `Tx`, `BeginTx`, `Commit`, `Rollback`) | None |
-| `internal/outbox/broker.go` | Thread-safe mock message broker simulating failures and event reception | Exact match (`MockBroker` with mutex, `SetFailNext`, `Publish`, `GetPublished`) | None |
-| `internal/outbox/service.go` | Business logic comparing naive dual-write vs atomic outbox writes | Exact match (`CreateOrderWithOutbox` vs `CreateOrderDualWriteNaive`) | None |
-| `internal/outbox/relay.go` | Asynchronous polling worker querying pending outbox records and dispatching them to the broker | Exact match (`Relay` polling loop, `PollAndDispatch`) | None |
-| `internal/outbox/consumer.go` | Subscriber enforcing idempotency through event ID tracking | Exact match (`Consumer.Handle` checking `processedIDs`) | None |
-| Test commands | `go test ./...` and `go test -race ./...` | Both run cleanly and pass | None |
-| Demo command | `go run ./cmd/demo` | Runs cleanly, outputs 3 scenarios matching README claims | None |
+## 2. engineering/01-design.md vs Code
+- **Design Claims**:
+  - Mentions SQLite DB in Section 4. Architecture (`SQLite Database`, `orders`, `outbox_events`).
+  - Mentions cleanup worker in Section 2 & 3.
+- **Reality**:
+  - Section 7 of design doc clarifies implementation decision: in-memory mock transactional DB is chosen for zero external CGO dependencies and portable testing.
+  - Cleanup worker is listed in design doc but omitted in `engineering/02-implementation-notes.md` as non-core scope.
+- **Assessment**: WARNING (Minor discrepancy regarding cleanup worker in early design doc, clarified in implementation notes).
 
-## Finding Summary
-
-No documentation-to-code mismatch identified.
-README accurately describes file structure, design concepts, and verification commands.
+## 3. engineering/03-execution-result.md vs Execution
+- **Recorded Results**:
+  - `go build ./...`: PASS (exit code 0).
+  - `go test -count=1 ./...`: PASS.
+  - `go test -count=1 -race ./...`: PASS.
+  - `go run ./cmd/demo`: Output exactly matches Scenario 1, Scenario 2, Scenario 3 outputs.
+- **Reality**: All executed outputs reproduced 1:1 against current codebase.
+- **Assessment**: PASS
