@@ -1,9 +1,15 @@
-# Contradictions Audit
+# Contradiction Audit
 
-## Summary
-No internal or source contradictions found in the research files.
+## Internal Consistency
+- Comparison of `research/01-plan.md`, `research/03-evidence.md`, and `research/05-report.md` shows full internal alignment on definitions, ORM mechanics, detection mechanisms, and mitigation techniques.
+- Nuances between joined eager loading (SQL JOINs) and separated batch loading (`IN (...)`) are clearly distinguished across all research artifacts.
 
-## Detailed Checks
-- **Research File vs Research File**: Definitions in `01-plan.md`, `03-evidence.md`, and `05-report.md` are aligned.
-- **Source A vs Source B**: Relational ORM solutions (Laravel docs, Vlad Mihalcea) and network API batching solutions (Shopify Engineering) complement each other without logical conflict.
-- **Trade-off Balance**: The trade-off between lazy loading (causes N+1 queries) and global eager loading (causes memory bloat / unnecessary fetching) is consistently presented.
+## Source Conflicts
+- No factual contradictions found among authoritative primary sources (Django, Rails, Laravel, EF Core, SQLAlchemy). All agree on root cause (lazy loading defaults) and mitigation strategies.
+- Differences are purely idiomatic ORM design choices:
+  - Django separates single-value (`select_related`) and collection (`prefetch_related`).
+  - Rails uses unified `includes` with underlying heuristic.
+  - SQLAlchemy provides explicit control (`joinedload`, `selectinload`, `subqueryload`).
+
+## Assessment
+No material contradictions found.

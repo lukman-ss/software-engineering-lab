@@ -1,19 +1,19 @@
 # Research Gap Analysis
 
 ## Gap 1
+Type: WEAK_SOURCE
+Severity: MEDIUM
+Location: `research/02-sources.md:Source 7`, `research/03-evidence.md:Evidence 8`
+Problem: Network N+1 and microservices bulk call analogies rely on internal lab specification (Tier 3) rather than primary literature or official GraphQL DataLoader specifications.
+Required Revision: If publishing broader literature on network N+1, include official GraphQL DataLoader documentation or academic microservice performance references.
+Can Be Approved Without Fix: YES (Research correctly limits scope and classifies confidence as MEDIUM).
 
-Type: MISSING_CASE
-Severity: LOW
-Location: `05-report.md:Finding 3`
-Problem: The report primarily addresses ORM-level eager loading (e.g. Laravel Eloquent, Hibernate `JOIN FETCH`). It does not detail plain SQL solutions (e.g. multi-table JOINs, subqueries, or window functions) for non-ORM architectures.
-Required Revision: None required for research approval; can be demonstrated in engineering / implementation stage.
-Can Be Approved Without Fix: YES
+---
 
 ## Gap 2
-
-Type: MISSING_CASE
+Type: UNVERIFIED_CLAIM
 Severity: LOW
-Location: `05-report.md:Limitations`
-Problem: Specific latency impact numbers are omitted because they depend on infrastructure.
-Required Revision: None required. Acknowledging this variation as a limitation is standard and accurate.
+Location: `research/06-open-questions.md:Weak Evidence 1`
+Problem: Specific numeric figures ("712 queries = 2.4s", "180ms target") are scenario examples without empirical hardware/network profiling test harness in the research artifact itself.
+Required Revision: None required for research stage as report explicitly identifies these as illustrative scenario parameters rather than universal facts.
 Can Be Approved Without Fix: YES

@@ -1,7 +1,7 @@
 # Engineering Design
 
 Target Lab: labs/22-n-plus-one-query-problem
-Research Status: APPROVED_WITH_WARNINGS
+Research Status: APPROVED
 
 ## Concept To Prove
 Demonstrate the N+1 query problem and how eager loading (batching queries) reduces database round-trips from N+1 down to 2 queries.

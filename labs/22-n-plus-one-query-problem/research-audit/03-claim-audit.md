@@ -1,99 +1,107 @@
 # Claim Audit
 
 ## Claim 1
-
-Claim: The N+1 query problem occurs when a data access framework executes N additional SQL statements to fetch data that could have been retrieved in a primary query.
-
-Location: `03-evidence.md:1-9`, `05-report.md:11-18`
-
-Evidence Provided: Direct quote from Vlad Mihalcea: "The N+1 query problem happens when the data access framework executes N additional SQL statements to fetch the same data that could have been retrieved when executing the primary SQL query."
-
-Source: https://vladmihalcea.com/n-plus-1-query-problem/
-
+Claim: Fetching N related objects via lazy loading triggers N+1 database queries (1 main query + N child queries).
+Location: `research/05-report.md:Finding 1`, `research/03-evidence.md:Evidence 1`
+Evidence Provided: Documentation quotes from Rails Guides, Django Docs, Laravel Eloquent, SQLAlchemy.
+Source: Sources 1, 2, 4, 5
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Standard definition across relational databases and ORMs.
+Notes: Authoritative universal consensus across all ORM implementations.
 
 ---
 
 ## Claim 2
-
-Claim: N+1 issues are difficult to detect during development because individual queries execute quickly enough to bypass slow query logs, yet aggregate volume severely impacts response times.
-
-Location: `03-evidence.md:10-17`, `05-report.md:19-25`
-
-Evidence Provided: Direct quote: "...unlike the slow query log that can help you find slow-running queries, the N+1 issue won’t be spotted because each individual additional query runs sufficiently fast to not trigger the slow query log."
-
-Source: https://vladmihalcea.com/n-plus-1-query-problem/
-
+Claim: Eager loading eliminates per-object lazy queries, reducing query count to O(1) or O(k) queries.
+Location: `research/05-report.md:Finding 2`, `research/03-evidence.md:Evidence 2`
+Evidence Provided: `includes()` in Rails, `prefetch_related()` in Django, `with()` in Laravel, `selectinload()` in SQLAlchemy, `Include()` in EF Core.
+Source: Sources 1, 2, 3a, 4, 5
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Valid observability insight. Correctly captures blind spot in query logging.
+Notes: Confirmed across all primary ORM documentation sources.
 
 ---
 
 ## Claim 3
-
-Claim: Eager loading solves the relational N+1 query problem by loading necessary related models concurrent with the parent query, vastly reducing the total query count.
-
-Location: `03-evidence.md:18-26`, `05-report.md:26-32`
-
-Evidence Provided: Direct quote from Laravel documentation: "Eloquent can 'eager load' relationships at the time you query the parent model. Eager loading alleviates the 'N + 1' query problem."
-
-Source: https://laravel.com/docs/11.x/eloquent-relationships#eager-loading
-
+Claim: Eager loading has trade-offs including memory overhead, over-fetching, and cartesian product explosion.
+Location: `research/05-report.md:Finding 3`, `research/03-evidence.md:Evidence 3`
+Evidence Provided: SQLAlchemy joinedload warnings, Django prefetch reverse/m2m multiplier notes, EF Core split query recommendations.
+Source: Sources 3a, 5, 6
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Standard pattern supported by relational ORMs (e.g. Laravel Eloquent, Hibernate `JOIN FETCH`).
+Notes: Well documented in official ORM performance caveats.
 
 ---
 
 ## Claim 4
-
-Claim: Unrestricted eager loading creates memory bloat by fetching excessive amounts of unneeded data.
-
-Location: `03-evidence.md:27-34`, `05-report.md:33-39`
-
-Evidence Provided: Direct quote: "Using FetchType.EAGER either implicitly or explicitly for your JPA associations is a bad idea because you are going to fetch way more data that you need."
-
-Source: https://vladmihalcea.com/n-plus-1-query-problem/
-
+Claim: Column selection (`select`, `pluck`, `values`, `defer`, `only`) and aggregation (`withCount`) replace relationship loading when scalar values or subset fields are required.
+Location: `research/05-report.md:Finding 4`, `research/03-evidence.md:Evidence 4, Evidence 7`
+Evidence Provided: Django `values`/`annotate`, Rails `pluck`, Laravel `withCount`.
+Source: Sources 1, 2, 4, 6
 Source Actually Supports Claim: YES
-
-Classification: IMPLEMENTATION-SPECIFIC / FACT
-
+Classification: FACT
 Severity: LOW
-
-Notes: Correctly scoped to JPA/Hibernate `FetchType.EAGER` and accurately framed as a pitfall of unrestricted eager loading.
+Notes: Supported by primary sources as optimal alternative to full entity hydration.
 
 ---
 
 ## Claim 5
-
-Claim: The N+1 problem also occurs over network API boundaries (e.g., GraphQL), where executing multiple external round trips introduces massive latency, which can be resolved via batch loaders.
-
-Location: `03-evidence.md:35-50`, `05-report.md:40-46`
-
-Evidence Provided: Direct quote from Shopify Engineering: "The n+1 problem means that the server executes multiple unnecessary round trips to datastores for nested data... GraphQL Batch allows applications to define batch loaders that specify how to group and load similar data..."
-
-Source: https://shopify.engineering/solving-the-n-1-problem-for-graphql-through-batching
-
+Claim: Lazy loading is the default loading strategy across major ORMs and is the root cause of N+1 problems in production.
+Location: `research/05-report.md:Finding 5`, `research/03-evidence.md:Evidence 12`
+Evidence Provided: Direct quotes from SQLAlchemy, Django, Rails, EF Core, Laravel.
+Source: Sources 1, 2, 3, 4, 5
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
+Notes: Core architectural design choice across mainstream ORMs.
 
-Notes: Extends N+1 concept cleanly to network and GraphQL domains.
+---
+
+## Claim 6
+Claim: N+1 cannot be reliably detected by code review or small test datasets; it requires profiling tools, query counting, or strict loading modes.
+Location: `research/05-report.md:Finding 6`, `research/03-evidence.md:Evidence 6`
+Evidence Provided: Rails `strict_loading`, SQLAlchemy `raiseload`, Django `connection.queries`/`django-debug-toolbar`.
+Source: Sources 1, 4, 5
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Explicitly advised in ORM guides.
+
+---
+
+## Claim 7
+Claim: The recommended troubleshooting workflow follows "measure first → profile → identify N+1 → fix root cause → scale infrastructure only if needed".
+Location: `research/05-report.md:Finding 7`, `research/03-evidence.md:Evidence 9`
+Evidence Provided: Django "Profile first" doc section, aligned with standard performance engineering steps.
+Source: Source 1, Source 7
+Source Actually Supports Claim: YES
+Classification: INTERPRETATION
+Severity: LOW
+Notes: Methodological guidance matching authoritative advice.
+
+---
+
+## Claim 8
+Claim: N+1 pattern extends beyond databases to network/microservice API calls and GraphQL resolvers.
+Location: `research/05-report.md:Finding 8`, `research/03-evidence.md:Evidence 8`
+Evidence Provided: Specification analogy, GraphQL DataLoader concept reference.
+Source: Source 7, External DataLoader documentation reference
+Source Actually Supports Claim: PARTIAL
+Classification: EXAMPLE
+Severity: MEDIUM
+Notes: Analogy is conceptually valid, but evidence relies partly on internal lab spec rather than primary microservices benchmarking paper. Research report correctly flags confidence as MEDIUM.
+
+---
+
+## Claim 9
+Claim: "1 request = 712 queries = 2.4 seconds, target 180ms" represents realistic production monitoring signals.
+Location: `research/05-report.md:Executive Summary & Limitations`, `research/06-open-questions.md:Weak Evidence 1`
+Evidence Provided: Lab topic specification.
+Source: Source 7
+Source Actually Supports Claim: PARTIAL
+Classification: IMPLEMENTATION-SPECIFIC
+Severity: MEDIUM
+Notes: Research correctly notes that numeric values are scenario-specific illustrative figures, not universal benchmarks.

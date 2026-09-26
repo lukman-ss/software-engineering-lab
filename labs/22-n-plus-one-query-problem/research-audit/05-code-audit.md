@@ -1,5 +1,5 @@
 # Code Audit
 
-PIPELINE OVERRIDE:
-- Code and implementation auditing is excluded for this stage.
-- Research audit focus only.
+Status: NOT_APPLICABLE
+
+Note: Under the current pipeline execution rules, this stage is a Research Audit only. Code and runnable implementation audits are performed in subsequent pipeline stages (`engineering-audit`).

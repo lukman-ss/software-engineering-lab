@@ -1,32 +1,42 @@
-# Audit Plan
+# Research Audit Plan: N+1 Query Problem
 
-Target Lab: labs/22-n-plus-one-query-problem
-Audit Date: September 26, 2026
+Target Lab: `labs/22-n-plus-one-query-problem`
+Audit Date: 2026-09-26
+Auditor: Technical Research Auditor Agent
 
 ## Files Reviewed
-- `research/runs/2026-09-25-n-plus-one-query-problem/01-plan.md`
-- `research/runs/2026-09-25-n-plus-one-query-problem/02-sources.md`
-- `research/runs/2026-09-25-n-plus-one-query-problem/03-evidence.md`
-- `research/runs/2026-09-25-n-plus-one-query-problem/04-contradictions.md`
-- `research/runs/2026-09-25-n-plus-one-query-problem/05-report.md`
-- `research/runs/2026-09-25-n-plus-one-query-problem/06-open-questions.md`
+- `labs/22-n-plus-one-query-problem/research/01-plan.md`
+- `labs/22-n-plus-one-query-problem/research/02-sources.md`
+- `labs/22-n-plus-one-query-problem/research/03-evidence.md`
+- `labs/22-n-plus-one-query-problem/research/04-contradictions.md`
+- `labs/22-n-plus-one-query-problem/research/05-report.md`
+- `labs/22-n-plus-one-query-problem/research/06-open-questions.md`
+- `labs/22-n-plus-one-query-problem/research/runs/2026-09-25-n-plus-one-query-problem/*`
 
 ## Claims To Verify
-1. Definition and mechanism of N+1 query problem in ORMs and databases.
-2. Observability blind spot: N+1 queries bypassing slow query logs due to fast individual execution times.
-3. Eager loading as a primary mitigation reducing total query count.
-4. Eager loading pitfalls (memory bloat / FetchType.EAGER code smell).
-5. Network N+1 manifestation in APIs/GraphQL and resolution via batching/DataLoaders.
+1. N+1 definition & mechanics (1 main query + N child queries via lazy loading).
+2. Eager loading reduces query count from N+1 to O(1) / O(k).
+3. Eager loading trade-offs (memory overhead, cartesian product explosion).
+4. Column selection & aggregation (`pluck`, `values`, `withCount`) as alternatives.
+5. Lazy loading default behavior across ORMs (Django, Laravel, Rails, EF Core, SQLAlchemy).
+6. Detection via tooling (query logging, strict loading, profiling).
+7. Profiling-first troubleshooting workflow.
+8. Network/API N+1 analogy.
+9. Lab specific metrics (712 queries = 2.4s) classification as scenario vs universal benchmark.
 
-## Code To Execute
-- PIPELINE OVERRIDE: Code audit is excluded for this stage. No code execution required.
+## Scope & Constraints
+- Pipeline override active: Research audit only.
+- Do not audit implementation code/tests in this run.
+- All output written strictly to `labs/22-n-plus-one-query-problem/research-audit/`.
 
 ## Primary Risks
-- Relying on snippet-level claims without inspecting source context.
-- Overgeneralization of framework-specific ORM behaviors (e.g., Hibernate FetchType.EAGER) to all data access patterns.
+- Overgeneralized performance metrics treated as universal benchmarks.
+- Missing primary sources for specific ORM version claims or missing external verification of Tier 3 internal source.
+- Silent assumption that internal lab spec equals authoritative external evidence.
 
 ## Audit Strategy
-1. Audit all 4 cited sources for reachability, tier, relevance, and accuracy of claims.
-2. Verify each claim in `03-evidence.md` and `05-report.md` against source evidence.
-3. Check for internal contradictions or missing nuances in research findings.
-4. Document research gaps and assign final verdict based on evidence integrity.
+- Verify each cited source for reachability, tier, accuracy, and scope.
+- Audit each claim against extracted evidence and source content.
+- Check for internal and source contradictions.
+- Identify gaps and assign severity under strict auditor rules.
+- Issue final evidence-based verdict.
