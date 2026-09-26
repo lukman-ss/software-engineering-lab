@@ -1,41 +1,36 @@
-# Audit Plan: Research Audit for Lab 15 (Load Testing)
+# Audit Plan
 
 ## Target Lab
 `labs/15-load-testing`
 
-## Audit Scope
-Research artifact audit only (per pipeline override). Implementation/code execution excluded.
-
 ## Files Reviewed
-- `labs/15-load-testing/research/01-plan.md`
-- `labs/15-load-testing/research/02-sources.md`
-- `labs/15-load-testing/research/03-evidence.md`
-- `labs/15-load-testing/research/04-contradictions.md`
-- `labs/15-load-testing/research/05-report.md`
-- `labs/15-load-testing/research/06-open-questions.md`
+- `research/01-plan.md`
+- `research/02-sources.md`
+- `research/03-evidence.md`
+- `research/04-contradictions.md`
+- `research/05-report.md`
+- `research/06-open-questions.md`
 
 ## Claims To Verify
-1. Six industry test types: smoke, average-load, stress, soak/endurance, spike, breakpoint.
-2. Percentile monitoring (P50/P95/P99) + throughput + error rate + resource utilization.
-3. Bottleneck isolation methodology (TTFB vs connecting time vs external dependencies).
-4. Load calculation method for VUs ($Sessions/sec \times Duration$).
-5. Tool selection characteristics (k6 JS vs Locust Python vs JMeter GUI vs Gatling Scala).
-6. Common pitfalls (health-only testing, synthetic/low data, unmonitored infrastructure).
-7. SDLC timing for performance testing.
+1. Six primary performance test types: Smoke, Average-Load, Stress, Soak/Endurance, Spike, Breakpoint.
+2. Key metrics to monitor: Percentiles (P50, P95, P99), Error Rate, Throughput (RPS), Resource Utilization (CPU, Memory, Disk I/O, Network).
+3. Tool comparison and positioning: k6 (JS/APIs), JMeter (GUI/Multi-protocol), Locust (Python/Greenlets), Gatling (Scala/JVM).
+4. Bottleneck identification methodology across Application, Database, and External dependencies via metric correlation and request phase breakdown.
+5. Common load testing pitfalls: testing `/health` only, unrealistic test data, unmonitored infrastructure, lack of predefined SLAs/thresholds, non-representative test environments.
+6. Timing of load testing across the SDLC (pre-release, post-major changes, architecture shifts, migrations).
 
 ## Code To Execute
-None (Research-only audit per instruction).
+None (Pipeline override: Audit research only).
 
 ## Primary Risks
-- Inaccurate citation or stray references from previous labs (e.g. Spring DI mentions).
-- Tool-specific claims overgeneralized as universal truths.
-- Arbitrary numeric recommendations (e.g. ramp-up 5-15%, specific soak durations).
-- Source availability/tier accuracy.
+- Overgeneralized recommendations or numeric SLA targets presented as universal facts.
+- Outdated or unreachable tool documentation URLs.
+- Paywalled standards (e.g., ISO/IEC 25010) cited without disclaiming verification status.
+- Tool-specific nuances (e.g., k6 cloud evaluation latency vs local, elastic cloud limits in breakpoint tests) mischaracterized.
 
 ## Audit Strategy
-1. Examine all 21 sources listed in `02-sources.md` for relevance, reachability, tier classification, and scope match.
-2. Cross-check claims in `03-evidence.md` and `05-report.md` against cited sources.
-3. Identify unsupported, overgeneralized, or erroneous claims.
-4. Evaluate contradictions recorded in `04-contradictions.md`.
-5. Check research completeness and gaps in `06-open-questions.md`.
-6. Deliver final quality verdict.
+1. Verify source URLs, tiers, publishers, and relevance.
+2. Cross-reference claims against citations in evidence and report files.
+3. Check for internal contradictions and unaddressed open questions.
+4. Document research gaps and assign appropriate severity.
+5. Emit verdict based strictly on research validity and evidentiary rigor.

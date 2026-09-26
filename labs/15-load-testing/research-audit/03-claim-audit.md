@@ -1,83 +1,83 @@
 # Claim Audit
 
 ## Claim 1
-Claim: Industrial standard recognizes six primary performance test types: smoke, average-load, stress, soak/endurance, spike, and breakpoint.  
-Location: `research/03-evidence.md:3-19`, `research/05-report.md:13-30`  
-Evidence Provided: Detailed definitions from k6, Azure Well-Architected Framework, and Google SRE Book.  
-Source: Sources 1-7, 9, 11  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Solid consensus across primary sources.
+Claim: Load testing encompasses six primary test types: smoke, average-load, stress, soak/endurance, spike, and breakpoint.
+Location: `research/05-report.md` (Finding 1), `research/03-evidence.md` (Evidence 1)
+Evidence Provided: Detailed breakdown of each test type with load patterns and objectives.
+Source: Grafana k6 docs (Sources 1-7), Microsoft Azure Well-Architected Framework (Source 11), Google SRE Book (Source 9).
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Fully supported across multiple authoritative Tier 1 sources.
 
 ---
 
 ## Claim 2
-Claim: Senior engineers monitor P50, P95, P99 response times, error rate, RPS, and resource utilization (CPU, memory, disk I/O, network).  
-Location: `research/03-evidence.md:21-37`, `research/05-report.md:31-52`  
-Evidence Provided: ISO/IEC 25010 subcharacteristics, k6 metrics definitions, Azure performance targets.  
-Source: Sources 10, 11, 20  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Well supported by ISO standards and cloud architecture guidelines.
+Claim: Standard performance evaluation relies on percentiles (P50, P95, P99), error rates, throughput (RPS), and system resource metrics (CPU, memory, disk, network) rather than arithmetic averages alone.
+Location: `research/05-report.md` (Finding 2), `research/03-evidence.md` (Evidence 2)
+Evidence Provided: k6 metric percentiles definition, Azure performance targets, ISO/IEC 25010 Quality Model subcharacteristics.
+Source: Grafana k6 Metrics Reference (Source 20), Azure Performance Testing (Source 11), ISO/IEC 25010 (Source 10).
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Soundly evidenced; correctly emphasizes percentile evaluation over unweighted averages to catch tail latency.
 
 ---
 
 ## Claim 3
-Claim: Bottleneck layer (application vs database vs external API) can be identified via TTFB (`http_req_waiting`), connection time (`http_req_connecting`), and external dependency metrics breakdown.  
-Location: `research/03-evidence.md:38-55`, `research/05-report.md:73-91`  
-Evidence Provided: k6 HTTP metric breakdown and Azure hypothesis-driven testing guidelines.  
-Source: Sources 11, 20  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Standard request lifecycle metric correlation methodology.
+Claim: Tools serve distinct operational contexts: k6 is specialized for API and script-driven testing in JS; Locust provides lightweight greenlet coroutines in Python; JMeter supports multi-protocol enterprise workflows via GUI/XML; Gatling offers high performance on the JVM.
+Location: `research/05-report.md` (Finding 3), `research/03-evidence.md` (Evidence 7)
+Evidence Provided: Architecture descriptions for Locust (gevent greenlets), k6 execution model, JMeter and Gatling capabilities.
+Source: Locust docs (Source 13), k6 docs (Source 1), Azure docs (Source 11).
+Source Actually Supports Claim: YES
+Classification: INTERPRETATION
+Severity: LOW
+Notes: Appropriately qualified with MEDIUM confidence where specific benchmark comparisons are absent.
 
 ---
 
 ## Claim 4
-Claim: Concurrent virtual users are calculated as: Peak sessions per second $\times$ Average session duration.  
-Location: `research/03-evidence.md:56-72`  
-Evidence Provided: k6 calculate-concurrent-users guide and Azure throughput guidance.  
-Source: Sources 2, 18, 11  
-Source Actually Supports Claim: YES  
-Classification: FACT  
-Severity: LOW  
-Notes: Mathematically equivalent to Little's Law applied to user concurrency.
+Claim: Bottlenecks across application, database, and external APIs can be isolated by decomposing the HTTP lifecycle (e.g. `http_req_waiting` vs `http_req_connecting`) and correlating latency shifts with component-level metrics.
+Location: `research/05-report.md` (Finding 4), `research/03-evidence.md` (Evidence 3)
+Evidence Provided: k6 metric component breakdown equation and Azure hypothesis-driven testing guidelines.
+Source: Azure Performance Testing (Source 11), k6 Built-in Metrics Reference (Source 20).
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Core diagnosis strategy is backed by standard request timeline decomposition principles.
 
 ---
 
 ## Claim 5
-Claim: Common pitfalls include health-endpoint-only testing, insufficient data volume, testing without server monitoring, lack of defined targets, and testing on developer laptops.  
-Location: `research/03-evidence.md:73-89`, `research/05-report.md:92-110`  
-Evidence Provided: Azure Well-Architected Framework performance testing anti-patterns and Google SRE reliability principles.  
-Source: Sources 9, 11  
-Source Actually Supports Claim: YES  
-Classification: FACT / BEST_PRACTICE  
-Severity: LOW  
-Notes: Directly aligns with cloud well-architected anti-patterns.
+Claim: Calculating virtual users for transactional scenarios uses peak sessions per second multiplied by average session duration (Little's Law application).
+Location: `research/03-evidence.md` (Evidence 4)
+Evidence Provided: k6 VU calculation guidelines and Azure throughput estimation formulas.
+Source: k6 VU calculation guide (Source 18), Azure Performance Testing (Source 11).
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Standard queuing theory and performance engineering calculation.
 
 ---
 
 ## Claim 6
-Claim: Tool selection (k6 vs JMeter vs Locust vs Gatling) should be based on language/protocol fit rather than popularity.  
-Location: `research/03-evidence.md:107-123`, `research/05-report.md:53-72`  
-Evidence Provided: Locust official architecture docs (greenlet/gevent), k6 documentation, Gatling/JMeter general properties.  
-Source: Sources 13, 14  
-Source Actually Supports Claim: PARTIAL  
-Classification: INTERPRETATION  
-Severity: MEDIUM  
-Notes: JMeter and Gatling citations are weak/secondary (unreachable URLs noted in Limitations section of 05-report.md). However, Locust and k6 claims are firmly backed.
+Claim: Common performance testing anti-patterns include testing `/health` exclusively, using miniature data fixtures, running tests against unmonitored infrastructure, testing without strict SLO thresholds, and using developer laptops as production proxies.
+Location: `research/05-report.md` (Finding 5), `research/03-evidence.md` (Evidence 5)
+Evidence Provided: Azure anti-pattern documentation and Google SRE reliability principles.
+Source: Azure Performance Testing (Source 11), Google SRE Book (Source 9).
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Highly practical, directly cited from Azure Well-Architected and Google SRE guidance.
 
 ---
 
 ## Claim 7
-Claim: Ramp-up duration should be 5-15% of total test duration.  
-Location: `research/02-sources.md:21`, `research/06-open-questions.md:61`  
-Evidence Provided: k6 load testing guide.  
-Source: Source 2  
-Source Actually Supports Claim: YES  
-Classification: IMPLEMENTATION-SPECIFIC  
-Severity: LOW  
-Notes: Specific to k6 staging guidance, correctly flagged in open questions as system-dependent.
+Claim: Load testing is a continuous SDLC activity required before go-live, ahead of major traffic events, and following major database, cloud, or architectural changes.
+Location: `research/05-report.md` (Finding 6), `research/03-evidence.md` (Evidence 6)
+Evidence Provided: Google SRE equivalence testing principles, Azure continuous testing guidance, CI/CD automated testing references.
+Source: Google SRE Book (Source 9), Azure Performance Testing (Source 11), k6 docs (Source 1).
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Fully aligned with modern CI/CD and SRE practices.
