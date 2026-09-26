@@ -5,7 +5,6 @@ Implementation Files:
 - `internal/inventory/model.go`
 - `internal/inventory/store.go`
 - `internal/inventory/service.go`
-- `go.mod`
 
 Tests:
 - `tests/locking_test.go`
@@ -19,28 +18,27 @@ Approved Research Inputs:
 - `research/03-evidence.md`
 - `research/04-contradictions.md`
 - `research/05-report.md`
-- `research-audit/07-verdict.md`
-- `engineering/01-design.md`
+- `research-audit/07-verdict.md` (Verdict: APPROVED)
 
 Main Claims To Verify:
-1. Unsynchronized read-modify-write causes lost update anomalies under concurrent goroutines.
-2. Pessimistic row-level locking (`SELECT ... FOR UPDATE` equivalent) prevents lost updates and serializes access cleanly.
-3. Optimistic locking with version checks detects concurrent conflicts, rejects stale writes, and prevents silent corruption.
-4. Optimistic locking with jittered exponential backoff retries converges successfully under contention.
-5. Atomic conditional updates (`UPDATE ... SET stock = stock - qty WHERE stock >= qty`) guarantee consistency without explicit application-level row lock holding.
-6. Zero race conditions occur across the codebase under Go `-race` analysis.
-7. Documentation and demo output reflect real executable behavior.
+1. Naive read-modify-write causes lost updates when executed concurrently.
+2. Pessimistic locking (`SELECT ... FOR UPDATE` simulation via granular row mutex) serializes access and prevents data corruption / over-allocation.
+3. Optimistic locking rejects stale writes based on version mismatch (`ErrOptimisticLock`).
+4. Optimistic locking with jittered exponential backoff retries converges successfully under concurrent load.
+5. Atomic conditional update (`UPDATE ... WHERE stock >= qty`) prevents negative stock and lost updates locklessly without full transactions.
+6. Code compiles cleanly with zero external third-party dependencies.
+7. Go race detector (`go test -race ./...`) runs with zero data races.
+8. README documentation matches implementation and runnable demo commands.
 
 Commands To Run:
 ```bash
-go build ./...
-go test -v -count=1 ./...
-go test -race -count=1 ./...
+go test -v ./...
+go test -race ./...
 go run ./cmd/demo
 ```
 
 Primary Risks:
-- Race conditions in mock storage mutex handling or metrics counters.
-- Flaky concurrency tests if artificial sleep / contention timings are poorly calibrated.
-- Unhandled negative quantity or insufficient stock edge cases.
-- Documentation overclaiming feature capabilities not implemented in code.
+- Thread-safety of in-memory datastore internal state during concurrent test execution.
+- Flakiness in lost update test if artificial delay is insufficient or scheduling timing varies.
+- Live-lock or timeout in optimistic retry test if backoff parameters are misconfigured.
+- Discrepancies between database semantic claims and in-memory mock semantics.
