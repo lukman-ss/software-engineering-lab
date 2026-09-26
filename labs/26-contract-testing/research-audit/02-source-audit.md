@@ -1,4 +1,4 @@
-# Source Audit — Contract Testing Research
+# Source Audit — Lab 26: Contract Testing
 
 ## Source 1
 
@@ -10,7 +10,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY (Official project documentation)
+PRIMARY
 
 Relevant:
 YES
@@ -19,8 +19,8 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Page footer literally reads "Last updated on Aug 25, 2026 by Matt Fellows", confirming the Research Agent's observed date in production docs.
-- No inaccuracies found.
+- Publication date in source documentation states "Last updated on Aug 25, 2026 by Matt Fellows" and "Copyright © 2026 Pact Foundation". This matches live site text verbatim.
+- Citation accurately quotes definitions of contract tests, test double equivalence, message queues, and consumer-driven contracts.
 
 Assessment:
 PASS
@@ -37,7 +37,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY / CANONICAL (Authoritative bliki post)
+SECONDARY (Expert Technical Publication / Canonical Industry Bliki)
 
 Relevant:
 YES
@@ -46,7 +46,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Text validates test doubles verification, frequency in pipelines, and communication triggers.
+- None. Martin Fowler's 2011/2018 bliki post accurately supports the role of test doubles, running against external services, and evolutionary communication with provider teams.
 
 Assessment:
 PASS
@@ -63,7 +63,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY / CANONICAL (Original article defining Consumer-Driven Contracts)
+PRIMARY (Canonical defining publication for Consumer-Driven Contracts pattern)
 
 Relevant:
 YES
@@ -72,7 +72,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Article explicitly presents provider contracts, consumer contracts, and consumer-driven contracts.
+- None. 2006 Ian Robinson / Martin Fowler article directly defines provider contracts, consumer contracts, and consumer-driven contracts.
 
 Assessment:
 PASS
@@ -89,7 +89,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY (Tooling vendor authoritative blog)
+SECONDARY (Reputable Vendor Technical Blog)
 
 Relevant:
 YES
@@ -98,7 +98,8 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Verifies E2E pitfalls, test pyramid placement, and code-first contract generation.
+- Page metadata shows update date 2 September 2023 (with original ~2019/2021 graphics). The research accurately noted this update date.
+- Content accurately supports problems of integrated E2E tests, fast feedback, test pyramid positioning, and independent execution.
 
 Assessment:
 PASS
@@ -115,7 +116,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY (Tooling vendor knowledge base)
+SECONDARY (Reputable Vendor Technical Explainer)
 
 Relevant:
 YES
@@ -124,7 +125,8 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Undated on page, accurately noted as "NOT VERIFIED (no date on page)" by the Research Agent.
+- Undated on page as correctly acknowledged by research agent.
+- Accurately details explicit contracts vs implicit contracts, contract verification in provider CI builds, and preventing breaking releases.
 
 Assessment:
 PASS
@@ -141,7 +143,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY (Tooling vendor authoritative technical article)
+SECONDARY (Reputable Vendor Technical Blog)
 
 Relevant:
 YES
@@ -150,7 +152,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Directly validates 8 pros and 9 cons of schema vs contract testing, code-schema drift, and interaction evolution.
+- Publication date on live site is "Updated 5 January 2023" (headline updated date). Research report cites "May 30, 2023" in footer list while `02-sources.md` correctly says "Updated 5 January 2023". Minor internal typo between research files, but URL and substantive points match exact text.
 
 Assessment:
 PASS
@@ -159,15 +161,15 @@ PASS
 
 ## Source 7
 
-Claimed Title: Lab 06 — API Versioning (internal cross-reference)
-Claimed Publisher: software-engineering-lab repo
-URL: /labs/06-api-versioning/README.md
+Claimed Title: Lab 06 — API Versioning: Cara Mengubah API Tanpa Merusak Ribuan Client (internal cross-reference)
+Claimed Publisher: Lukman SS / software-engineering-lab
+URL: /labs/06-api-versioning/README.md (local repo, no external URL)
 
 Reachable:
-YES (Local workspace path)
+YES (Local file exists in workspace)
 
 Source Type:
-PRIMARY (Internal lab series standard)
+COMMUNITY / INTERNAL (Workspace-internal pedagogical reference)
 
 Relevant:
 YES
@@ -176,7 +178,15 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Internal baseline reference. Correctly treated as internal taxonomy.
+- Internal repository reference, not an external industry standard. However, the research correctly explicitly disclosed this as an internal reference for taxonomy alignment between labs.
 
 Assessment:
 PASS
+
+---
+
+## Verification of Unsuccessful Fetches Noted in Research
+
+- `https://docs.pact.io/getting_started/what_is_pact`: confirmed 404/redirected in reorganization.
+- `https://docs.pact.io/getting_started/testing_scope`: confirmed 404/restructured.
+The research agent transparently recorded these failures rather than hallucinating content.

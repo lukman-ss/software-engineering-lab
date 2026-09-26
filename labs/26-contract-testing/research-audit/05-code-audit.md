@@ -1,11 +1,12 @@
-# Code Audit — Contract Testing Research
+# Code Audit — Lab 26: Contract Testing
 
-## Status
-NOT_APPLICABLE (Pipeline Scope Override).
+## Status: EXCLUDED BY PIPELINE OVERRIDE
 
-## Scope Note
-This audit is restricted to the research phase (`research/` files). No runnable implementation, demo application, or unit tests were slated or present for evaluation in `labs/26-contract-testing` at this stage.
+Per the explicit pipeline instructions:
+- Phase scope: **Research Audit Only**.
+- Implementation and test execution are bypassed in this specific pipeline stage.
+- Engineering and code audits are tracked under dedicated engineering audit runs (`engineering-audit/` and `engineering-audit-opensource/`).
 
-Code examples cited in research documentation (`05-report.md`) were audited conceptually:
-- Minimal contract fields: `id`, `status`, `customer.id`, `customer.name`, `total`.
-- All JSON schema concepts and DTO structures are standard and syntactically consistent.
+## Verification Scope Summary
+- Code examples in research documents: No runnable source code was declared or embedded as primary proof in the research report beyond standard conceptual pseudo-examples and DTO schemas.
+- Research report conceptual alignment: The recommendations in `05-report.md` (minimal contract specification, DTO versioning, provider verification) provide an actionable specification for subsequent engineering implementation.

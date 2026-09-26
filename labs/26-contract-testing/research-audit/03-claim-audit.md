@@ -1,95 +1,95 @@
-# Claim Audit — Contract Testing Research
+# Claim Audit — Lab 26: Contract Testing
 
 ## Claim 1
-Claim: Contract testing verifies that inter-application messages conform to a shared understanding (contract) in isolation without running full end-to-end environments.
-Location: `05-report.md:Finding 1` & `03-evidence.md:Evidence 1`
-Evidence Provided: Direct quotes from docs.pact.io and Martin Fowler ContractTest.
-Source: Source 1 (`https://docs.pact.io/`), Source 2 (`https://martinfowler.com/bliki/ContractTest.html`)
+Claim: Contract testing asserts that inter-application messages conform to a shared understanding documented in a contract, validating integration without executing full end-to-end environments.
+Location: `research/05-report.md: Finding 1`; `research/03-evidence.md: Evidence 1`
+Evidence Provided: Pact Docs and Martin Fowler Bliki quotes.
+Source: Source 1 (docs.pact.io), Source 2 (martinfowler.com/bliki/ContractTest.html)
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Core industry definition.
+Notes: Fully verified against live documentation.
 
 ---
 
 ## Claim 2
-Claim: In Consumer-Driven Contracts (CDC), expectations are authored by consumers (what is consumed) and verified against providers in automated CI test suites.
-Location: `05-report.md:Finding 2` & `03-evidence.md:Evidence 3`
-Evidence Provided: Quotes from Ian Robinson (2006) and docs.pact.io.
-Source: Source 1 (`https://docs.pact.io/`), Source 3 (`https://martinfowler.com/articles/consumerDrivenContracts.html`)
+Claim: In Consumer-Driven Contracts (CDC), expectations are defined from the perspective of what the consumer needs (open and incomplete subset), and provider verifies adherence.
+Location: `research/05-report.md: Finding 2, Finding 9`; `research/03-evidence.md: Evidence 3, 10`
+Evidence Provided: Ian Robinson / Martin Fowler (2006), Pact Docs.
+Source: Source 3 (martinfowler.com/articles/consumerDrivenContracts.html), Source 1 (docs.pact.io), Source 5 (pactflow.io)
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Canonical concept.
+Notes: Canonical concept accurately synthesized from original foundational paper.
 
 ---
 
 ## Claim 3
-Claim: Schema testing (OpenAPI/JSON Schema) tests single-system compliance at a point in time, while Contract testing asserts bidirectional interaction consensus and supports service evolution.
-Location: `05-report.md:Finding 3` & `03-evidence.md:Evidence 4`
-Evidence Provided: Quotes and analysis from Pactflow Schema vs Contract (Part 1).
-Source: Source 6 (`https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1`), Source 1 (`https://docs.pact.io/`)
+Claim: Schema/OpenAPI testing tests a single system's adherence to a specification at a point in time, whereas code-based contract testing tests agreement between two communicating systems with concrete examples and execution of real application code.
+Location: `research/05-report.md: Finding 3`; `research/03-evidence.md: Evidence 4`
+Evidence Provided: Matt Fellows (Pactflow) breakdown of schema vs contract testing.
+Source: Source 6 (pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1), Source 1 (docs.pact.io)
 Source Actually Supports Claim: YES
-Classification: FACT
+Classification: FACT / INTERPRETATION
 Severity: LOW
-Notes: Clear distinction accurately captured.
+Notes: Accurately captures industry distinction between specification conformance and bidirectional agreement.
 
 ---
 
 ## Claim 4
-Claim: Contract tests can and should block deployment on contract verification failure in CI/CD pipelines.
-Location: `05-report.md:Finding 4` & `03-evidence.md:Evidence 3`
-Evidence Provided: Pactflow `can-i-deploy` workflow, Fowler bliki blurb.
-Source: Source 4 (`https://pactflow.io/blog/what-is-contract-testing/`), Source 2 (`https://martinfowler.com/bliki/ContractTest.html`)
+Claim: Contract verification can run in provider CI to fail builds or block deployments (`can-i-deploy`) when consumer contracts are broken.
+Location: `research/05-report.md: Finding 4`; `research/03-evidence.md: Evidence 3`
+Evidence Provided: Pact Docs, Pactflow explainer, Martin Fowler bliki nuance.
+Source: Source 1, Source 4, Source 5, Source 2
 Source Actually Supports Claim: YES
-Classification: INTERPRETATION / IMPLEMENTATION-SPECIFIC
+Classification: FACT / IMPLEMENTATION-SPECIFIC
 Severity: LOW
-Notes: Nuanced difference noted: Fowler notes it can trigger communication rather than hard-break in legacy/daily runs, while modern CDC tooling defaults to blocking releases via `can-i-deploy`. Accurately captured.
+Notes: The research report accurately captures the nuance that while Martin Fowler originally suggested contract tests might trigger out-of-band communication rather than immediate build breaks, modern CDC tooling (Pact / Pact Broker) specifically implements automated deployment blocking.
 
 ---
 
 ## Claim 5
-Claim: Contract testing principles apply equally to message queues / asynchronous event systems (e.g. Kafka, RabbitMQ).
-Location: `05-report.md:Finding 5` & `03-evidence.md:Evidence 11`
-Evidence Provided: docs.pact.io message testing reference.
-Source: Source 1 (`https://docs.pact.io/`)
+Claim: Contract testing concepts apply equally to asynchronous message-based systems (message queues, event streams like Kafka/RabbitMQ) as to synchronous HTTP APIs.
+Location: `research/05-report.md: Finding 5`; `research/03-evidence.md: Evidence 11`
+Evidence Provided: Pact Docs quote regarding queues and messages.
+Source: Source 1 (docs.pact.io), Source 5 (pactflow.io)
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Explicitly verified in official Pact docs.
+Notes: Supported directly in Pact documentation.
 
 ---
 
 ## Claim 6
-Claim: All three target lab changes (`status` enum casing, `customer.name -> customer.full_name`, and `total` integer to string) constitute breaking changes.
-Location: `05-report.md:Finding 7` & `03-evidence.md:Evidence 8`
-Evidence Provided: API versioning taxonomy and consumer compatibility analysis.
-Source: Source 7 (`/labs/06-api-versioning/README.md`) + industry guidelines.
+Claim: All three proposed backend modifications in the lab scenario (`status: IN_PROGRESS -> in_progress`, `customer.name -> customer.full_name`, `total: integer -> string`) constitute breaking changes for consumers expecting the original schema.
+Location: `research/05-report.md: Finding 7`; `research/03-evidence.md: Evidence 8`
+Evidence Provided: Analysis based on strict JSON deserialization, semantic typing, enum matching, and Lab 06 API versioning taxonomy.
+Source: Source 7 (Lab 06), Topic spec
 Source Actually Supports Claim: YES
-Classification: FACT
+Classification: FACT / INTERPRETATION
 Severity: LOW
-Notes: Field rename, primitive type alteration, and enum case change alter parser and type expectations in consumer runtimes.
+Notes: Sound analysis. Field rename and primitive type modification are unconditionally breaking in standard JSON parsers/strongly-typed clients; enum casing is breaking unless client-side normalization is explicitly guaranteed across all consumers.
 
 ---
 
 ## Claim 7
-Claim: Additive changes (adding optional fields) are backward-compatible provided consumers are tolerant to unknown fields.
-Location: `05-report.md:Finding 6` & `03-evidence.md:Evidence 9`
-Evidence Provided: Robustness Principle / Must Ignore pattern analysis and CDC subset validation rules.
-Source: Source 3 (`https://martinfowler.com/articles/consumerDrivenContracts.html`), Source 7 (`/labs/06-api-versioning/README.md`)
+Claim: Additive changes (adding optional fields) are backward-compatible under the condition that consumers are tolerant of unknown fields.
+Location: `research/05-report.md: Finding 6`; `research/03-evidence.md: Evidence 9`
+Evidence Provided: Robustness Principle, Go `json.Unmarshal` default behavior, Fowler CDC paper.
+Source: Source 3, Source 7
 Source Actually Supports Claim: YES
-Classification: FACT
+Classification: FACT / IMPLEMENTATION-SPECIFIC
 Severity: LOW
-Notes: Nuance about strict vs tolerant parsers is correctly handled in contradiction analysis.
+Notes: The research correctly caveats that backward compatibility of additive changes relies on the consumer parsing mode (tolerant vs strict/fail-on-unknown).
 
 ---
 
 ## Claim 8
-Claim: Safe API evolution strategy for mandatory breaking changes combines minimal contracts, dual DTO mapping, and versioned routes (`/v2/work-orders`).
-Location: `05-report.md:Finding 8` & `03-evidence.md:Evidence 13`
-Evidence Provided: Lab 06 Dual DTO architecture and deprecation lifecycle.
-Source: Source 7 (`/labs/06-api-versioning/README.md`)
+Claim: Managing provider states and test data fixtures represents an operational complexity trade-off in code-based contract testing compared to schema-only testing.
+Location: `research/05-report.md: Finding 10`; `research/03-evidence.md: Evidence 14`
+Evidence Provided: Pactflow article trade-off analysis.
+Source: Source 6 (pactflow.io)
 Source Actually Supports Claim: YES
-Classification: EXAMPLE / INTERPRETATION
+Classification: FACT / INTERPRETATION
 Severity: LOW
-Notes: Standard evolutionary architecture pattern.
+Notes: Accurately reflected from source text.

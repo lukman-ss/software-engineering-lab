@@ -1,39 +1,45 @@
-# Audit Plan — Contract Testing Research
+# Research Audit Plan — Lab 26: Contract Testing
 
 ## Target Lab
 `labs/26-contract-testing`
 
-## Pipeline Scope
-Research-only audit. Implementation and runnable code checks are omitted at this stage as per pipeline override.
+## Pipeline Override Notice
+- Research audit only.
+- Implementation/code files are excluded from this audit stage per pipeline override.
+- Research files are evaluated as-is without modification.
+- Output directory: `labs/26-contract-testing/research-audit/`
 
 ## Files Reviewed
-1. `labs/26-contract-testing/research/01-plan.md`
-2. `labs/26-contract-testing/research/02-sources.md`
-3. `labs/26-contract-testing/research/03-evidence.md`
-4. `labs/26-contract-testing/research/04-contradictions.md`
-5. `labs/26-contract-testing/research/05-report.md`
-6. `labs/26-contract-testing/research/06-open-questions.md`
+- `labs/26-contract-testing/research/01-plan.md`
+- `labs/26-contract-testing/research/02-sources.md`
+- `labs/26-contract-testing/research/03-evidence.md`
+- `labs/26-contract-testing/research/04-contradictions.md`
+- `labs/26-contract-testing/research/05-report.md`
+- `labs/26-contract-testing/research/06-open-questions.md`
+- Cross-reference file: `labs/06-api-versioning/README.md` (Source 7)
 
 ## Claims To Verify
-1. Contract testing definition: Inter-application messaging verification in isolation.
-2. Consumer-Driven Contracts (CDC): Consumer defines expectation, provider verifies.
-3. Contract vs Schema/OpenAPI: Schema tests compatibility of a single system; contract tests interaction consensus between two systems.
-4. CI/CD integration: Provider verification blocking deployment via tools like `can-i-deploy`.
-5. Message queues / async event contract testing validity.
-6. Breaking vs Additive changes taxonomy.
-7. Three lab scenarios (`status` casing, `customer.name -> customer.full_name`, `total` integer to string) as breaking changes.
-8. API evolution strategies (Dual DTO, minimal contracts, deprecation lifecycle).
+1. Contract testing validates inter-application communication in isolation, not just domestic component correctness.
+2. Consumer-Driven Contracts (CDC) express expectations driven by the consumer, verifying only used subset of interactions.
+3. Code-based contract testing differs fundamentally from schema/OpenAPI testing (specification vs example/conversation, ambiguity vs concrete guarantees).
+4. CI/CD integration models: build failure / deployment gating via contract verification.
+5. Contract testing principles apply equally to asynchronous message/event architectures.
+6. Taxonomies of breaking vs additive changes and classification of the lab's three changes (enum casing change, field rename, primitive type change).
+7. Contract test scope: contracts need not be complete snapshots of payloads, only what consumers require.
+8. Trade-offs around provider states and test data complexity.
 
 ## Code To Execute
-None (Research-only stage).
+- None (research-only audit phase per pipeline override).
 
 ## Primary Risks
-1. Verification of future/automated dates in documentation footers (e.g. Pact Docs Aug 25, 2026).
-2. Distinction between authoritative definitions vs vendor marketing positions (Pact / SmartBear / Fowler).
-3. Overgeneralization of additive backward compatibility without highlighting strict consumer parsers.
+- Verification of external citations against live sources for quote accuracy and context preservation.
+- Discrepancy between Martin Fowler's classic CDC view (contract tests might not strictly break regular deployment builds immediately) vs modern tooling (Pact `can-i-deploy` blocking build).
+- Verification of whether local references (Lab 06) are appropriate evidence for technical claims.
+- Detection of unverified claims, overgeneralizations, or temporal anomalies.
 
 ## Audit Strategy
-1. Live fetch and verify all external URLs cited in `02-sources.md`.
-2. Cross-reference claims in `03-evidence.md` and `05-report.md` against fetched source text.
-3. Validate contradiction handling and open question classification.
-4. Issue verdict based on evidence completeness and factual accuracy.
+1. Live network verification of all cited web URLs via WebFetch tool.
+2. Direct comparison of quotations and claims in `02-sources.md`, `03-evidence.md`, and `05-report.md` against authoritative source text.
+3. Detailed analysis of source tiers, scope boundaries, and potential cherry-picking.
+4. Evaluation of contradictions and open questions recorded by research agent.
+5. Formal grading across quality gates and issuance of final verdict.

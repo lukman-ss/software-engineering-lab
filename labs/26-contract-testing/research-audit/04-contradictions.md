@@ -1,24 +1,36 @@
-# Contradiction Audit — Contract Testing Research
+# Contradictions Audit — Lab 26: Contract Testing
 
-## Contradiction 1: Provider-only schema verification vs Integration Contract Testing
-- Statement A: "Contract testing" is sometimes used to describe standalone provider validation against OpenAPI schemas (`04-contradictions.md:Section 1`, citing `docs.pact.io`).
-- Statement B: Canonical contract testing requires isolated tests across both consumer and provider (`05-report.md:Finding 1`, citing Fowler & Pact Docs).
-- Type: TERMINOLOGY_AMBIGUITY
-- Impact: Can cause confusion between schema testing and CDC.
-- Assessment: Handled cleanly. The report explicitly documents this distinction and specifies that "integration contract testing" is the standard adopted.
+## Evaluation of Research Contradiction Analysis
 
-## Contradiction 2: CI failure blocking vs communication trigger
-- Statement A: Martin Fowler notes that a contract test failure might not necessarily break the build immediately like a unit test, but trigger reconciliation (`04-contradictions.md`, citing Fowler 2011).
-- Statement B: Modern tooling (Pact / Pactflow) emphasizes hard release blocking (`can-i-deploy`) to ensure breaking changes never hit production (`05-report.md:Finding 4`).
-- Type: EVOLUTIONARY_PRACTICE
-- Impact: Operational difference depending on pipeline tooling.
-- Assessment: Handled accurately. Fowler described 2011 external partner integration rhythm; modern microservice CDC uses automated CI gates.
+The research agent documented potential points of tension across sources in `research/04-contradictions.md`. These were examined during this audit:
 
-## Contradiction 3: Additive changes safety vs strict consumer validation
-- Statement A: Additive changes are backward-compatible (`03-evidence.md:Evidence 9`).
-- Statement B: If a consumer enforces strict schema validation (e.g. rejecting unknown properties), an additive change is breaking (`04-contradictions.md:Section 3`).
-- Type: INTERNAL_QUALIFICATION
-- Impact: Edge-case failure in strict parsers.
-- Assessment: Accurately qualified. The report highlights that additive changes rely on consumer tolerance (e.g. Go `json.Unmarshal` default behavior).
+### 1. Dual Usage of Term "Contract Testing" (Provider-only vs Integration)
+- **Statement A:** In some vendor contexts and literature, "contract testing" refers to provider-only schema validation (e.g., verifying OpenAPI specs against endpoints).
+- **Statement B:** In Pact and CDC canonical literature, "contract testing" strictly means integration verification across two communicating parties.
+- **Type:** SOURCE_CONFLICT / TERMINOLOGY
+- **Impact:** LOW. The research explicitly distinguishes between "provider schema testing" and "integration contract testing" and focuses the lab on the latter.
+- **Assessment:** Handled properly and clearly disambiguated.
 
-No unresolved material contradictions found.
+### 2. Immediate Build Failure vs Out-of-Band Task
+- **Statement A (Fowler 2011):** "A failure in a contract test shouldn't necessarily break the build in the same way that a normal test failure would. It should, however, trigger a task to get things consistent again."
+- **Statement B (Pact / Pactflow):** Contract verification failures in CI block provider deployments (`can-i-deploy`) to prevent broken contracts in production.
+- **Type:** SOURCE_CONFLICT (Historical pattern evolution vs Modern tooling)
+- **Impact:** LOW. The research report explicitly notes this evolutionary difference in Finding 4 and Confidence notes.
+- **Assessment:** Accurately reconciled.
+
+### 3. Additive Changes Safety vs Strict Deserializers
+- **Statement A:** Adding optional fields is backward-compatible.
+- **Statement B:** If a consumer configures strict deserialization (e.g., Jackson `FAIL_ON_UNKNOWN_PROPERTIES`), adding fields breaks the client.
+- **Type:** IMPLEMENTATION_SPECIFIC_BOUNDARY
+- **Impact:** LOW. The research report notes this assumption and records it under Limitations and Open Questions.
+- **Assessment:** Accurately qualified.
+
+---
+
+## Direct Document Cross-Check
+
+- `research/01-plan.md` vs `research/05-report.md`: All research questions mapped directly to corresponding findings.
+- `research/02-sources.md` vs `research/03-evidence.md`: All evidence citations trace to reachable, evaluated sources.
+- `research/05-report.md` vs `research/06-open-questions.md`: Open limitations and boundary conditions are appropriately isolated.
+
+No material internal contradictions found.
