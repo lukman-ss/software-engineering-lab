@@ -4,60 +4,75 @@ Target Lab: labs/21-outbox-pattern
 Research Status: APPROVED
 
 ## Concept To Prove
-The Transactional Outbox pattern guarantees that state changes to an entity and corresponding domain events are written atomically within a single local transaction, eliminating the dual-write problem. An asynchronous Message Relay then publishes these events to a message broker with at-least-once delivery, requiring consumers to be idempotent.
+The Transactional Outbox pattern guarantees atomic persistence of business operations and outgoing event records within a single database transaction, resolving the dual-write problem. An asynchronous polling relay worker then reads pending events, dispatches them to a broker/consumer, and updates status, providing at-least-once delivery semantics coupled with idempotent consumer handling.
 
 ## Expected Behavior
-1. In a single local transaction, an entity update and an outbox event are saved.
-2. If the transaction commits, both records persist. If it rolls back, neither persists.
-3. A decoupled Message Relay periodically polls or extracts unprocessed events from the outbox table.
-4. The Message Relay dispatches events to an external message broker.
-5. Upon successful delivery to the broker, the relay marks the event as processed (or deletes it).
-6. Downstream consumers track event IDs to handle duplicate deliveries gracefully (idempotency).
+1. Creating an order atomically inserts the order record into the `orders` table and an outbox event into the `outbox_events` table within a single SQL transaction.
+2. If database transaction rolls back, neither the order nor outbox event is persisted.
+3. Polling relay fetches pending outbox events, dispatches them to the message broker, and marks outbox events as `PROCESSED`.
+4. Consumer tracks processed event IDs (`message_log` table / set) to enforce idempotency when processing duplicate events.
+5. Outbox cleanup job removes or archives processed outbox records after retention interval.
 
 ## Failure Scenario
-1. **Dual-write failure**: Direct write to DB succeeds, but broker is unavailable or write fails, leaving system inconsistent. (Outbox prevents this by avoiding direct broker writes in the application transaction).
-2. **Transaction Rollback**: An error occurs before commit; both entity change and outbox message are discarded. No spurious event is sent.
-3. **Relay Crash / Duplicate Delivery**: Relay publishes to broker, but crashes before updating outbox status. On restart, it republishes the message. The idempotent consumer detects the duplicate ID and ignores it.
+1. **Direct broker write failure (dual-write without outbox)**: DB commit succeeds but broker write fails, leading to state inconsistency.
+2. **Relay crash / Network error during publish**: Relay dispatches message but fails before marking outbox record as `PROCESSED`. On retry, duplicate message is sent. Consumer detects duplicate via event ID and ignores payload execution.
+3. **Transaction rollback**: Invalid order parameters cause DB transaction rollback. No event is added to outbox, zero messages dispatched.
 
 ## Success Criteria
-- Demonstration of atomic write (entity + outbox message).
-- Demonstration of rollback safety (no outbox record on abort).
-- Working decoupled relay picking up outbox messages and sending to mock broker.
-- Demonstration of at-least-once delivery and consumer-side idempotent deduplication.
-- Thread-safe implementations with zero race conditions.
+- 100% atomicity between business state and outbox state.
+- Zero lost events under broker network disconnect / relay retries.
+- Zero duplicate processing by idempotent consumers despite at-least-once relay delivery.
+- Cleanup worker successfully purges processed events.
+- All unit and concurrency tests pass with zero data races (`go test -race ./...`).
 
 ## Architecture
-- `Database`: Thread-safe mock relational DB supporting transactions (`Tx`) with tables:
-  - `Entities` (e.g., Orders or Users)
-  - `Outbox` (Message ID, Payload, Status, CreatedAt)
-- `Broker`: Thread-safe mock message broker/queue receiving published messages.
-- `OrderService`: Writes order state and outbox record inside the same transaction.
-- `Relay`: Asynchronous polling worker that queries pending outbox records, publishes to broker, and updates status.
-- `Consumer`: Reads from broker and uses an idempotency key set to avoid double-processing.
+```text
+[ Client ] -> [ Order Service ]
+                    |
+                    v (Single DB Tx)
+      +-----------------------------+
+      |  SQLite Database            |
+      |  - orders table             |
+      |  - outbox_events table      |
+      +-----------------------------+
+                    ^
+                    | Poll (FOR UPDATE / Lock)
+            [ Outbox Relay ]
+                    |
+                    v Publish
+            [ Message Broker ]
+                    |
+                    v Deliver
+           [ Idempotent Consumer ] -> (Consumer DB message_log)
+```
 
 ## Components
-- `internal/outbox/db.go`: In-memory transactional DB simulation (`DB`, `Tx`).
-- `internal/outbox/broker.go`: Thread-safe broker interface & implementation.
-- `internal/outbox/service.go`: Business service implementing order creation with transactional outbox.
-- `internal/outbox/relay.go`: Polling message relay.
-- `internal/outbox/consumer.go`: Idempotent consumer.
+- `SQLite DB`: Embedded SQL engine storing business data (`orders`) and outbox queue (`outbox_events`).
+- `OrderService`: Business service performing atomic order creation + outbox insertion.
+- `OutboxRelay`: Background worker polling pending events, delivering to broker, marking processed, with retry / cleanup support.
+- `MessageBroker`: In-memory broker interface simulating async event transport with configurable fault injection (failures, latency, retries).
+- `IdempotentConsumer`: Event subscriber keeping an processed event registry to prevent duplicate processing.
 
 ## Test Strategy
-- Unit & integration tests in `tests/outbox_test.go`:
-  - Happy path: Save entity + outbox, relay dispatches to broker, consumer processes it.
-  - Rollback path: Transaction rollback discards outbox entry; relay sends nothing.
-  - Duplicate delivery / Idempotency: Relay publishes duplicate message, consumer safely deduplicates.
-  - Concurrency: Multiple concurrent orders and relays without data race (`-race`).
+1. **Unit Tests**:
+   - Atomic Tx: Order creation + Outbox event insertion.
+   - Rollback handling on invalid order.
+2. **Relay & Idempotency Tests**:
+   - Outbox polling dispatch and marking processed.
+   - Duplicate message delivery handling by idempotent consumer.
+   - Broker failure retry mechanism.
+3. **Concurrency & Race Detector**:
+   - Multiple concurrent order creation requests and relay polling cycles.
+   - Go race detector verification (`go test -race`).
 
 ## Execution Plan
-1. Set up Go module.
-2. Implement components in `internal/outbox`.
-3. Create automated tests in `tests/outbox_test.go`.
-4. Create executable demo in `cmd/demo/main.go`.
-5. Run tests, race detector, demo.
-6. Record execution results in `03-execution-result.md` and implementation notes in `02-implementation-notes.md`.
+1. Create SQLite DB schema (`orders`, `outbox_events`, `consumer_log`).
+2. Implement outbox models, DB repository, OrderService, OutboxRelay, and IdempotentConsumer.
+3. Write test suite in `tests/outbox_test.go`.
+4. Implement `cmd/demo/main.go` demonstrating dual-write comparison vs transactional outbox.
+5. Run tests & demo; output execution results to `engineering/03-execution-result.md`.
 
 ## Implementation Decisions
-- Implementation Decision: In-memory transaction model used to simulate relational DB transaction semantics (BEGIN, COMMIT, ROLLBACK) without external CGO/SQLite dependencies.
-- Implementation Decision: Polling publisher pattern chosen for the relay mechanism as outlined in the research report.
-- Implementation Decision: Consumer idempotency implemented via message ID deduplication cache.
+- **Database Engine**: `modernc.org/sqlite` or stdlib `database/sql` with in-memory SQLite / mock DB driver to ensure zero CGO dependencies and portable test execution.
+- **Relay Mechanism**: Polling Publisher model with configurable interval and batch size.
+- **Event Structure**: JSON-serialized payloads with unique UUID event identifiers.

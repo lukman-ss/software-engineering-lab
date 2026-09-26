@@ -1,47 +1,37 @@
 # Implementation Notes
 
 ## Files Added
-- `go.mod`: Module definition for `github.com/software-engineering-lab/labs/21-outbox-pattern`.
-- `internal/outbox/model.go`: Domain models (`Order`, `OutboxMessage`, statuses).
-- `internal/outbox/db.go`: Thread-safe transactional mock database with staged mutations on `Tx`.
-- `internal/outbox/broker.go`: Mock message broker with configurable failure simulation.
-- `internal/outbox/service.go`: Order creation service implementing both naive dual-write and transactional outbox approaches.
-- `internal/outbox/relay.go`: Polling message relay worker querying pending outbox records and updating status upon publish.
-- `internal/outbox/consumer.go`: Idempotent consumer tracking processed message IDs.
-- `cmd/demo/main.go`: End-to-end runnable demo showcasing the dual-write problem, outbox resolution, and duplicate suppression.
-- `tests/outbox_test.go`: Automated tests for happy path, rollback safety, duplicate delivery deduplication, dual-write failure, and concurrent execution.
-- `engineering/01-design.md`: Engineering design specification.
-- `engineering/02-implementation-notes.md`: Implementation choices, trade-offs, and limitations.
-- `engineering/03-execution-result.md`: Recorded execution outputs.
-- `README.md`: Lab overview and execution guide.
+- `cmd/demo/main.go`: Interactive executable demonstrating dual-write failure, transactional outbox atomicity, and idempotent message consumption.
+- `internal/outbox/model.go`: Domain structures (`Order`, `OutboxMessage`) and statuses.
+- `internal/outbox/db.go`: Thread-safe transactional memory database supporting transactional staging, atomic commit, rollback, and status updates.
+- `internal/outbox/broker.go`: Thread-safe mock message broker supporting fault-injection (`SetFailNext`) to test resilience.
+- `internal/outbox/service.go`: Business logic illustrating naive dual-write vs atomic outbox writes.
+- `internal/outbox/relay.go`: Asynchronous polling relay worker querying `PENDING` outbox records and updating status to `PROCESSED`.
+- `internal/outbox/consumer.go`: Downstream consumer tracking processed message IDs for idempotency.
+- `tests/outbox_test.go`: Suite covering happy path, tx rollback, duplicate handling, dual-write flaw, and concurrent writes.
 
 ## Core Design Decisions
-- Atomicity: Used an in-memory transactional wrapper where staged mutations to both `orders` and `outbox` commit together or discard on rollback.
-- Asynchronous Polling Relay: Employed a background ticker that fetches pending messages, publishes them to the broker, and updates outbox status to `PROCESSED`.
-- Idempotent Consumption: Maintained an in-memory set of processed event IDs in the consumer to filter duplicates.
+- **In-Memory Transactional DB**: Standardized transactional boundary (`Tx` struct with staged maps) to demonstrate exact database transactional guarantees without external DB server setup.
+- **Polling Publisher Relay**: Asynchronous background polling goroutine fetching pending records, publishing to broker, and marking as processed.
+- **Consumer ID Tracking**: Deduplication map keyed by event UUID ensuring idempotency on duplicate deliveries.
 
 ## Implementation-Specific Choices
-- Implementation Decision: In-memory simulation rather than external SQL / CGO-based SQLite driver to keep dependencies minimal (pure Go standard library).
-- Implementation Decision: Polling publisher pattern chosen instead of Transaction Log Tailing (CDC), matching the primary simplest relay option identified in the research.
+- Custom `MockBroker` with configurable network failures to test dual-write inconsistency and relay recovery.
+- Event payload marshaled into standard JSON format (`OrderCreated`).
 
 ## Known Limitations
-- In-memory persistence does not survive process restarts.
-- Polling frequency is fixed and does not implement exponential backoff on broker failures.
-- No outbox cleanup/retention worker implemented for old `PROCESSED` events.
+- High-throughput DB table partitioning is omitted for clarity.
+- Log-tailing (CDC/Debezium) is not implemented; polling publisher pattern is used instead.
 
 ## Trade-offs
-- Simplicity vs Production Scale: In-memory maps provide clear concurrency-safe semantics for proving the pattern without introducing external operational complexity.
-- Polling Overhead: Polling introduces slight latency and database query overhead compared to log-tailing CDC solutions (e.g. Debezium), but is simpler to understand and test.
+- **Polling Latency vs Operational Complexity**: Polling relies on configurable ticker interval, introducing minor delivery latency compared to transaction log tailing, but requires zero database plugin configuration.
 
 ## What Is Demonstrated
-- The dual-write flaw when broker write fails after database commit.
-- Atomic commit of business entities and outbox events in a single transaction.
-- Discarding outbox events on transaction rollback.
-- Message relay polling and successfully publishing outbox events.
-- Consumer deduplication ensuring at-least-once delivery does not cause duplicate processing.
-- Thread-safe concurrent execution under the Go race detector.
+- Dual-write failure where database commits but broker fails.
+- Atomic persistence of domain entity (`Order`) and `OutboxMessage`.
+- At-least-once message dispatch via outbox polling relay.
+- Idempotent deduplication on consumer side.
 
 ## What Is Not Demonstrated
-- Change Data Capture (CDC) via database transaction logs.
-- Distributed broker partitions, consumer groups, or dead-letter queues.
-- Outbox table compaction and long-term purging strategies.
+- Distributed transaction log tailing (Debezium / Postgres WAL tailing).
+- Dead-letter queue (DLQ) routing for non-retryable poison payloads.

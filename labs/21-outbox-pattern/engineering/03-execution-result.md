@@ -7,31 +7,31 @@ go build ./...
 ```
 Result:
 ```text
-(no output - compiled successfully)
+PASS (exit code 0)
 ```
 
 ## Tests
 Command:
 ```bash
-go test ./...
+go test -count=1 ./...
 ```
 Result:
 ```text
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/cmd/demo	[no test files]
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/internal/outbox	[no test files]
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	0.574s
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	0.497s
 ```
 
 ## Race Detector
 Command:
 ```bash
-go test -race ./...
+go test -count=1 -race ./...
 ```
 Result:
 ```text
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/cmd/demo	[no test files]
 ?   	github.com/software-engineering-lab/labs/21-outbox-pattern/internal/outbox	[no test files]
-ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.526s
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.487s
 ```
 
 ## Demo
