@@ -1,32 +1,43 @@
-# Research Gap Analysis — Lab 26: Contract Testing
+# Research Gap Analysis
 
-## Gap 1: Date Inconsistency for Source 6 Reference
+## Gap 1
 
-- **Type:** OUTDATED_SOURCE / TYPO
-- **Severity:** LOW
-- **Location:** `research/05-report.md:line 208` vs `research/02-sources.md:line 58`
-- **Problem:** `05-report.md` cites `pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1 (May 30, 2023)` whereas `02-sources.md` cites `Updated 5 January 2023`. The live URL has "Updated 5 January 2023" as the article update date.
-- **Required Revision:** Standardize the citation date string in the report footer to match the source file.
-- **Can Be Approved Without Fix:** YES (Minor non-material typographical discrepancy; URL and content are fully authentic).
+Type:
+OUTDATED_SOURCE
+
+Severity:
+LOW
+
+Location:
+`research/02-sources.md` — Source 10 & `research/06-open-questions.md`
+
+Problem:
+Spring Cloud Contract was archived in July 2026. While included for historical context as a provider-driven CDC alternative, it presents a deprecation risk for teams building new projects.
+
+Required Revision:
+None required for research approval. The research agent explicitly noted this archival status and flagged it in open questions.
+
+Can Be Approved Without Fix:
+YES
 
 ---
 
-## Gap 2: Clarification of Enum Case Changes across Frameworks
+## Gap 2
 
-- **Type:** UNVERIFIED_CLAIM / OVERGENERALIZATION
-- **Severity:** LOW
-- **Location:** `research/05-report.md:line 101`
-- **Problem:** The statement that `IN_PROGRESS -> in_progress` is universally breaking is true for standard string equality and case-sensitive JSON unmarshalers, but can be non-breaking if clients normalize string enums or use case-insensitive deserializers.
-- **Required Revision:** Kept accurately in `06-open-questions.md`. No further research revision needed since it was explicitly marked with confidence boundaries.
-- **Can Be Approved Without Fix:** YES.
+Type:
+WEAK_SOURCE
 
----
+Severity:
+LOW
 
-## Gap 3: Client Strict Parsing Configuration
+Location:
+`research/02-sources.md` — Source 11 & `research/06-open-questions.md`
 
-- **Type:** SCOPE_ERROR / WEAK_SOURCE
-- **Severity:** LOW
-- **Location:** `research/05-report.md:line 86-89`
-- **Problem:** Additive changes are described as backward-compatible with general appeal to industry consensus, but client ecosystems that default to strict schema validation (e.g. XML Schemas, strict JSON schema validators, or specific Java/Python configs) will fail.
-- **Required Revision:** The research noted this limitation in `04-contradictions.md` and `06-open-questions.md`.
-- **Can Be Approved Without Fix:** YES.
+Problem:
+AsyncAPI documentation was inspected primarily for event-driven API specification concepts, but automated test-harness verification mechanics (Message Pact equivalent) were not deeply verified from AsyncAPI sources directly.
+
+Required Revision:
+None required for research approval. The research agent accurately flagged this limitation under Weak Evidence in `06-open-questions.md`.
+
+Can Be Approved Without Fix:
+YES

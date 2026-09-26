@@ -1,45 +1,50 @@
-# Research Audit Plan — Lab 26: Contract Testing
+# Audit Plan: Research Audit
 
 ## Target Lab
 `labs/26-contract-testing`
 
-## Pipeline Override Notice
-- Research audit only.
-- Implementation/code files are excluded from this audit stage per pipeline override.
-- Research files are evaluated as-is without modification.
-- Output directory: `labs/26-contract-testing/research-audit/`
+## Scope
+Research files audit only (per pipeline override instructions).
+- Target directory: `labs/26-contract-testing/research/`
+- Target files:
+  - `01-plan.md`
+  - `02-sources.md`
+  - `03-evidence.md`
+  - `04-contradictions.md`
+  - `05-report.md`
+  - `06-open-questions.md`
 
 ## Files Reviewed
-- `labs/26-contract-testing/research/01-plan.md`
-- `labs/26-contract-testing/research/02-sources.md`
-- `labs/26-contract-testing/research/03-evidence.md`
-- `labs/26-contract-testing/research/04-contradictions.md`
-- `labs/26-contract-testing/research/05-report.md`
-- `labs/26-contract-testing/research/06-open-questions.md`
-- Cross-reference file: `labs/06-api-versioning/README.md` (Source 7)
+1. `labs/26-contract-testing/research/01-plan.md`
+2. `labs/26-contract-testing/research/02-sources.md`
+3. `labs/26-contract-testing/research/03-evidence.md`
+4. `labs/26-contract-testing/research/04-contradictions.md`
+5. `labs/26-contract-testing/research/05-report.md`
+6. `labs/26-contract-testing/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Contract testing validates inter-application communication in isolation, not just domestic component correctness.
-2. Consumer-Driven Contracts (CDC) express expectations driven by the consumer, verifying only used subset of interactions.
-3. Code-based contract testing differs fundamentally from schema/OpenAPI testing (specification vs example/conversation, ambiguity vs concrete guarantees).
-4. CI/CD integration models: build failure / deployment gating via contract verification.
-5. Contract testing principles apply equally to asynchronous message/event architectures.
-6. Taxonomies of breaking vs additive changes and classification of the lab's three changes (enum casing change, field rename, primitive type change).
-7. Contract test scope: contracts need not be complete snapshots of payloads, only what consumers require.
-8. Trade-offs around provider states and test data complexity.
+1. Definition and operational mechanism of Consumer-Driven Contract (CDC) Testing vs schema validation.
+2. Pact execution model: mock provider generating pact file during consumer test, provider verification in CI.
+3. Contract content scope: HTTP semantics, headers, status codes, field types, and error behaviors.
+4. Independent test pass paradox: unit/integration tests passing while distributed integration breaks.
+5. Breaking change classification: field rename, type mutation, deletion vs additive safe evolution.
+6. Expand/Contract (Parallel Change) 3-phase pattern for breaking change mitigation in continuous delivery.
+7. Anti-patterns: testing validation rules/side effects in contract tests causing provider lock-in.
+8. Role of Pact Broker and `can-i-deploy` verification matrices in CI/CD pipeline maturity.
+9. Message Pact applicability to event-driven architectures (Kafka, RabbitMQ, SNS/SQS).
+10. Test pyramid reallocation: contract testing replacing broad brittle E2E tests while retaining focused business logic tests.
 
 ## Code To Execute
-- None (research-only audit phase per pipeline override).
+None. Pipeline override explicitly states research audit only; implementation code audit excluded from this stage.
 
 ## Primary Risks
-- Verification of external citations against live sources for quote accuracy and context preservation.
-- Discrepancy between Martin Fowler's classic CDC view (contract tests might not strictly break regular deployment builds immediately) vs modern tooling (Pact `can-i-deploy` blocking build).
-- Verification of whether local references (Lab 06) are appropriate evidence for technical claims.
-- Detection of unverified claims, overgeneralizations, or temporal anomalies.
+1. Over-reliance on tool-specific features (Pact) presented as generic CDC theoretical guarantees.
+2. Citations referencing deprecated or archived projects (e.g., Spring Cloud Contract archived July 2026).
+3. Vague or unverified claims regarding event-driven contract testing mechanisms (e.g., AsyncAPI validation depth).
+4. Potential confusion between functional side-effect testing and message boundary verification.
 
 ## Audit Strategy
-1. Live network verification of all cited web URLs via WebFetch tool.
-2. Direct comparison of quotations and claims in `02-sources.md`, `03-evidence.md`, and `05-report.md` against authoritative source text.
-3. Detailed analysis of source tiers, scope boundaries, and potential cherry-picking.
-4. Evaluation of contradictions and open questions recorded by research agent.
-5. Formal grading across quality gates and issuance of final verdict.
+1. Cross-verify every cited source in `02-sources.md` against reported titles, URLs, publishers, and relevance.
+2. Audit evidence items in `03-evidence.md` against extracted claims in `05-report.md`.
+3. Check consistency across `04-contradictions.md`, `05-report.md`, and `06-open-questions.md`.
+4. Formulate gap analysis in `06-gaps.md` and deliver final verdict in `07-verdict.md`.

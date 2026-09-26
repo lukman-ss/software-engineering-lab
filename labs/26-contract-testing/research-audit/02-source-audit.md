@@ -1,9 +1,9 @@
-# Source Audit — Lab 26: Contract Testing
+# Source Audit
 
 ## Source 1
 
-Claimed Title: Introduction | Pact Docs
-Claimed Publisher: Pact Foundation (docs.pact.io)
+Claimed Title: Introduction - Pact Docs
+Claimed Publisher: Pact Foundation
 URL: https://docs.pact.io/
 
 Reachable:
@@ -19,8 +19,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Publication date in source documentation states "Last updated on Aug 25, 2026 by Matt Fellows" and "Copyright © 2026 Pact Foundation". This matches live site text verbatim.
-- Citation accurately quotes definitions of contract tests, test double equivalence, message queues, and consumer-driven contracts.
+- None. Canonical official documentation defining contract testing and consumer-driven contracts.
 
 Assessment:
 PASS
@@ -29,15 +28,15 @@ PASS
 
 ## Source 2
 
-Claimed Title: Contract Test
-Claimed Publisher: Martin Fowler (martinfowler.com/bliki)
-URL: https://martinfowler.com/bliki/ContractTest.html
+Claimed Title: How Pact works
+Claimed Publisher: Pact Foundation
+URL: https://docs.pact.io/getting_started/how_pact_works
 
 Reachable:
 YES
 
 Source Type:
-SECONDARY (Expert Technical Publication / Canonical Industry Bliki)
+PRIMARY
 
 Relevant:
 YES
@@ -46,7 +45,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Martin Fowler's 2011/2018 bliki post accurately supports the role of test doubles, running against external services, and evolutionary communication with provider teams.
+- None. Details the two-sided contract generation and verification workflow, provider states, and Message Pact.
 
 Assessment:
 PASS
@@ -55,15 +54,15 @@ PASS
 
 ## Source 3
 
-Claimed Title: Consumer-Driven Contracts: A Service Evolution Pattern
-Claimed Publisher: Martin Fowler / Ian Robinson (martinfowler.com/articles)
-URL: https://martinfowler.com/articles/consumerDrivenContracts.html
+Claimed Title: When to use Pact
+Claimed Publisher: Pact Foundation
+URL: https://docs.pact.io/getting_started/what_is_pact_good_for
 
 Reachable:
 YES
 
 Source Type:
-PRIMARY (Canonical defining publication for Consumer-Driven Contracts pattern)
+PRIMARY
 
 Relevant:
 YES
@@ -72,7 +71,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. 2006 Ian Robinson / Martin Fowler article directly defines provider contracts, consumer contracts, and consumer-driven contracts.
+- None. Documents operational boundaries, non-goals (e.g. public APIs with unknown consumers, functional/load testing).
 
 Assessment:
 PASS
@@ -81,15 +80,15 @@ PASS
 
 ## Source 4
 
-Claimed Title: What is contract testing and why should I try it?
-Claimed Publisher: Pactflow (Matt Fellows)
-URL: https://pactflow.io/blog/what-is-contract-testing/
+Claimed Title: Consumer-Driven Contracts: A Service Evolution Pattern
+Claimed Publisher: martinfowler.com / Ian Robinson (ThoughtWorks)
+URL: https://martinfowler.com/articles/consumerDrivenContracts.html
 
 Reachable:
 YES
 
 Source Type:
-SECONDARY (Reputable Vendor Technical Blog)
+PRIMARY
 
 Relevant:
 YES
@@ -98,8 +97,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Page metadata shows update date 2 September 2023 (with original ~2019/2021 graphics). The research accurately noted this update date.
-- Content accurately supports problems of integrated E2E tests, fast feedback, test pyramid positioning, and independent execution.
+- None. Foundational 2006 pattern paper outlining Provider Contracts, Consumer Contracts, and Consumer-Driven Contracts.
 
 Assessment:
 PASS
@@ -108,15 +106,15 @@ PASS
 
 ## Source 5
 
-Claimed Title: What is consumer driven contract testing?
-Claimed Publisher: Pactflow
-URL: https://pactflow.io/what-is-consumer-driven-contract-testing
+Claimed Title: ContractTest (bliki)
+Claimed Publisher: martinfowler.com / Martin Fowler
+URL: https://martinfowler.com/bliki/ContractTest.html
 
 Reachable:
 YES
 
 Source Type:
-SECONDARY (Reputable Vendor Technical Explainer)
+PRIMARY
 
 Relevant:
 YES
@@ -125,8 +123,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Undated on page as correctly acknowledged by research agent.
-- Accurately details explicit contracts vs implicit contracts, contract verification in provider CI builds, and preventing breaking releases.
+- None. Defines contract test as verification of test doubles against real external provider behavior.
 
 Assessment:
 PASS
@@ -135,15 +132,15 @@ PASS
 
 ## Source 6
 
-Claimed Title: Schema-based contract testing with JSON schemas and Open API (Part 1)
-Claimed Publisher: Pactflow (Matt Fellows)
-URL: https://pactflow.io/blog/contract-testing-using-json-schemas-and-open-api-part-1
+Claimed Title: Contract Tests vs Functional Tests
+Claimed Publisher: Pact Foundation
+URL: https://docs.pact.io/consumer/contract_tests_not_functional_tests
 
 Reachable:
 YES
 
 Source Type:
-SECONDARY (Reputable Vendor Technical Blog)
+PRIMARY
 
 Relevant:
 YES
@@ -152,7 +149,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Publication date on live site is "Updated 5 January 2023" (headline updated date). Research report cites "May 30, 2023" in footer list while `02-sources.md` correctly says "Updated 5 January 2023". Minor internal typo between research files, but URL and substantive points match exact text.
+- None. Documents test boundaries and anti-pattern of testing provider validation logic inside consumer contracts.
 
 Assessment:
 PASS
@@ -161,15 +158,15 @@ PASS
 
 ## Source 7
 
-Claimed Title: Lab 06 — API Versioning: Cara Mengubah API Tanpa Merusak Ribuan Client (internal cross-reference)
-Claimed Publisher: Lukman SS / software-engineering-lab
-URL: /labs/06-api-versioning/README.md (local repo, no external URL)
+Claimed Title: FAQ - Pact Docs
+Claimed Publisher: Pact Foundation
+URL: https://docs.pact.io/faq
 
 Reachable:
-YES (Local file exists in workspace)
+YES
 
 Source Type:
-COMMUNITY / INTERNAL (Workspace-internal pedagogical reference)
+PRIMARY
 
 Relevant:
 YES
@@ -178,15 +175,111 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Internal repository reference, not an external industry standard. However, the research correctly explicitly disclosed this as an internal reference for taxonomy alignment between labs.
+- None. Covers schema vs contract by example, expand/contract integration, and test pyramid transitions.
 
 Assessment:
 PASS
 
 ---
 
-## Verification of Unsuccessful Fetches Noted in Research
+## Source 8
 
-- `https://docs.pact.io/getting_started/what_is_pact`: confirmed 404/redirected in reorganization.
-- `https://docs.pact.io/getting_started/testing_scope`: confirmed 404/restructured.
-The research agent transparently recorded these failures rather than hallucinating content.
+Claimed Title: CI/CD Setup Guide (Pact Nirvana)
+Claimed Publisher: Pact Foundation
+URL: https://docs.pact.io/pact_nirvana
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Authoritative guide on progressive CI/CD maturity (Bronze to Diamond), Pact Broker, and `can-i-deploy`.
+
+Assessment:
+PASS
+
+---
+
+## Source 9
+
+Claimed Title: Parallel Change (expand and contract)
+Claimed Publisher: martinfowler.com / Danilo Sato
+URL: https://martinfowler.com/bliki/ParallelChange.html
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Primary pattern bliki entry for expand-migrate-contract technique across breaking interface evolutions.
+
+Assessment:
+PASS
+
+---
+
+## Source 10
+
+Claimed Title: spring-cloud-contract (archived repository)
+Claimed Publisher: spring-attic / Spring (GitHub)
+URL: https://github.com/spring-attic/spring-cloud-contract
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+PARTIAL
+
+Problems:
+- Project was archived in July 2026. While relevant as historical context for provider-driven CDC in Spring, it no longer represents an actively maintained standard path. The research explicitly documents this limitation.
+
+Assessment:
+WARNING
+
+---
+
+## Source 11
+
+Claimed Title: AsyncAPI Initiative — Docs (Concepts, Tutorials)
+Claimed Publisher: AsyncAPI Initiative (Linux Foundation project)
+URL: https://www.asyncapi.com/docs/tutorials and https://www.asyncapi.com/docs/concepts
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+PARTIAL
+
+Problems:
+- Source covers schema and API specification for event-driven systems, but does not specify executable consumer-driven contract test enforcement tooling directly comparable to Pact. The research notes that page bodies fetched were navigation-heavy and spec details remain unverified for test harness mechanics.
+
+Assessment:
+WARNING
