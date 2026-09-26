@@ -1,52 +1,72 @@
-# 07 Fallback & Bulkhead
+# Fallback and Bulkhead
 
 ## Fallback
-When circuit is OPEN, provide degraded response instead of hard failure.
 
-### Safe Fallbacks
-- **Cached/stale read response**: return previously cached data with expiry indicator (e.g. "data may be up to N minutes stale").
-- **Degraded static response**: default values, empty list, placeholder banner.
-- **Queued processing**: defer non-critical write to durable queue; return "request received, will process async" (PPOB WhatsApp case).
+### Definition
+A fallback is an alternative response strategy when a service dependency is unavailable (Circuit Breaker OPEN). It provides degraded but functional behavior rather than a hard error.
 
-### Unsafe Fallbacks (AVOID)
-- Defaulting a financial transaction amount to 0 or a cached balance to succeed a payment write.
-- Silencing an error in a critical path that masks permanent data inconsistency.
+**Evidence**:
+- Azure: "In some cases, rather than returning a failure and raising an exception, the Open state can return a default value that's meaningful to the application." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+- Martin Fowler: "Breakers on their own are valuable, but clients using them need to react to breaker failures. As with any remote invocation you need to consider what to do in case of failure. Does it fail the operation you're carrying out, or are there workarounds you can do? A credit card authorization could be put on a queue to deal with later, failure to get some data may be mitigated by showing some stale data that's good enough to display." — https://martinfowler.com/bliki/CircuitBreaker.html
 
-**Source**: Azure Circuit Breaker — "rather than returning a failure and raising an exception, the Open state can return a default value that's meaningful to the application." Microsoft explicitly warns fallback must not mask errors that should propagate. — Confidence HIGH.
+### Safe Fallback Strategies
+| Strategy | Description | Safety Condition | Source |
+|----------|-------------|------------------|--------|
+| Cached response | Return previously cached data | Cache is reasonably fresh | Martin Fowler: "failure to get some data may be mitigated by showing some stale data that's good enough to display" |
+| Default placeholder | Return static/default value (e.g., empty list, zero) | Placeholder is semantically safe for display | Azure: "the Open state can return a default value that's meaningful to the application" |
+| Queued processing | Accept request, queue for async processing when dependency recovers | Request is not user-facing / not critical path | Martin Fowler: "A credit card authorization could be put on a queue to deal with later" |
+| Degraded mode | Serve reduced-accuracy or limited-feature version | Core function preserved, non-critical data omitted | Google SRE: "serve degraded results when necessary" — https://sre.google/sre-book/handling-overload/ |
+
+### Unsafe / Context-Dependent Fallbacks
+| Strategy | Risk | When Prohibited |
+|----------|------|-----------------|
+| Silent success (200 OK with dummy data) | Data corruption / silent errors | Financial transactions, state mutations |
+| Infinite retry queue | Resource exhaustion / delayed failure detection | Critical path user requests |
+| Bypass validation | Security violations / invalid state | Any mutation requiring consistency checks |
+
+### Financial Fallback Guidance (PPOB principle)
+**Claim**: In financial systems (e.g., PPOB: Order → Payment Gateway), fallback must never silently deduct balance or alter account state without explicit confirmation.
+
+**Evidence**:
+- From topic spec: "Do not make unsafe assumptions about financial fallback behavior."
+- Principle: Financial mutations must be synchronous and confirmed; they cannot rely on asynchronous fallback when the gateway is down.
+- Corroborated by Martin Fowler's credit-card example implying queued retry is acceptable only if the operation is not finalized until successful processing.
+
+### NOT VERIFIED
+- Universal fallback strategy for all service types (depends on domain: financial vs content vs telemetry).
+- Specific cache TTL recommendations (depends on data volatility).
+
+---
 
 ## Bulkhead
-- **Definition**: Isolate resources so failure in one dependency cannot consume resources needed by others.
-- **Mechanism**: Separate thread pools / connection pools / memory quotas per dependency.
-- **Example**: ThreadPool A for Service X; ThreadPool B for Service Y. X exhausts its pool → only X's calls fail; Y unaffected.
 
-**Sources**: Azure Bulkhead pattern (2026-03-19) — "isolate resources for specific dependencies so that a disruption in one service doesn't affect the entire application"; Hystrix Wiki Isolation — "isolating dependencies from each other and limiting concurrent access to any one of them."
+### Definition
+Bulkhead isolates resources (threads, connection pools, memory, CPU) per dependency or tenant so that exhaustion in one bulkhead does not affect others.
 
-## Bulkhead vs Circuit Breaker — Distinct
-| | Bulkhead | Circuit Breaker |
-|---|---|---|
-| **Controls** | Resource consumption concurrency | Request pass/fail decision |
-| **Goal** | Prevent pool exhaustion propagation | Prevent repeated known-fail calls |
-| **Triggers on** | Resource quota depletion | Error-rate threshold breach |
-| **State** | Count of available slots | State machine (3 states) |
+**Evidence**:
+- Azure: "Isolate the elements of an application into pools so that if one fails, the others continue to function." — https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
+- Azure analogy: "This pattern is named after the sectioned partitions (bulkheads) of a ship's hull. If the hull of a ship is compromised, only the damaged section fills with water, which prevents the ship from sinking."
+- Azure: "A consumer can also partition resources to ensure that resources used to call one service don't affect the resources used to call another service."
 
-**Corroborated**: Azure Bulkhead — "Circuit breakers, throttling — combine [bulkhead] with retry, circuit breaker, and throttling patterns"; Azure Circuit Breaker — separate pattern pages.
+### Bulkhead vs Circuit Breaker
+| Aspect | Bulkhead | Circuit Breaker |
+|--------|----------|-----------------|
+| **Primary Goal** | Resource isolation | Failure detection + traffic gating |
+| **Mechanism** | Separate pools (threads, connections) | State machine (CLOSED/OPEN/HALF_OPEN) |
+| **When it helps** | Dependency A fails → its bulkhead exhausted, but bulkhead B for dependency C still has resources | Dependency fails → circuit OPEN → fail fast saves caller resources |
+| **Do they conflict?** | No — complementary | No — complementary |
+| **Can be combined?** | Yes | Yes |
 
-## Load Shedding vs Circuit Breaker
-- **Circuit Breaker**: Caller-side. Stops *outbound calls* to a known-failing dependency.
-- **Load Shedding**: Target/Sever-side. Drops *inbound requests* when CPU/memory saturated (503/429).
+**Evidence**:
+- Azure Bulkhead: "To provide more sophisticated fault handling, consider combining bulkheads with retry, circuit breaker, and throttling patterns." — https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
+- Azure Circuit Breaker: Notes on resource differentiation: "Be careful when you use a single circuit breaker for one type of resource if there might be multiple underlying independent providers."
 
-**Source**: Google SRE Managing Load (Ch 11, 2018) — load shedding is server-side drop; Dressy case study where load shedding + load balancing misconfigured in isolation caused wrong routing. — https://sre.google/workbook/managing-load/ — Tier 1.
+### Implementation Examples
+- Thread pools per dependency (Azure: "Processes, thread pools, and semaphores. Projects like resilience4j and Polly offer a framework for creating consumer bulkheads.")
+- Connection pools per service (Azure diagram showing separate connection pools for Service A, B, C)
+- Container/VM isolation (Azure: "When you partition services into bulkheads, consider deploying them into separate virtual machines, containers, or processes.")
+- Queue-per-client for async services (Azure: "Services that communicate by using asynchronous messages can be isolated through different sets of queues.")
 
-## Queue-Based Load Leveling (Async Fallback)
-- Decouples caller from synchronous dependency via durable queue.
-- Enables degraded async processing when sync dependency is down.
-- Requires: idempotency, dead-letter for poison, durability.
-
-**Source**: Azure Queue-Based Load Leveling (2026-06-09) — "application can continue to post messages to the queue even when the service isn't available." — NOT a circuit breaker; complements by converting sync-fail into async-buffer.
-
-## PPOB / CMMS Guidance
-- **Critical write path** (Order → Provider): must persist Order locally before attempting provider call. If provider down, queue the outbound integration message (idempotent) — never silently drop or fake success.
-- **Non-critical notification** (WhatsApp send): can degrade to queue + retry without blocking user flow. Circuit breaker around integration client allows fail-fast on persistent failures.
-- **Unsafe**: falling back a payment charge to "cached payment success."
-
-**Sources**: Azure Queue-Based Load Leveling idempotency guidance (2026-06-09); Azure Retry idempotency (2024-07-18).
+### NOT VERIFIED
+- Specific numeric pool sizes (depends on traffic profile and SLAs — no universal recommendation).
+- Whether bulkhead alone prevents cascade failure without circuit breaker (it contains resource exhaustion but does not fail-fast or provide recovery probing; circuit breaker adds these properties).

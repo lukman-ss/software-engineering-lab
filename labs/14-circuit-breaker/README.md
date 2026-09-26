@@ -104,19 +104,21 @@ go test -race ./...
 ## Expected Behavior
 ```text
 === SCENARIO 1: WITHOUT CIRCUIT BREAKER (SLOW DEPENDENCY) ===
-request=1 result=timeout/error duration=103ms
-request=2 result=timeout/error duration=102ms
-request=3 result=timeout/error duration=102ms
-downstream_calls=3 (all requests blocked and hit downstream)
+request=1 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=101.25ms state=CLOSED
+request=2 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=101.17ms state=CLOSED
+request=3 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=100.30ms state=CLOSED
+
+downstream_calls=3
 
 === SCENARIO 2: WITH CIRCUIT BREAKER (FAIL-FAST ON DOWN DEPENDENCY) ===
-request=1 result=payment_error              state=CLOSED    duration=499.25µs
-request=2 result=payment_error              state=CLOSED    duration=100.208µs
-request=3 result=payment_error              state=OPEN      duration=82.083µs
-request=4 result=circuit_open (fail-fast)   state=OPEN      duration=375ns
-request=5 result=circuit_open (fail-fast)   state=OPEN      duration=208ns
-request=6 result=circuit_open (fail-fast)   state=OPEN      duration=208ns
-downstream_calls=3 (downstream calls stopped once OPEN)
+request=1 result=err=payment failed: status 500 duration=366.75µs state=CLOSED
+request=2 result=err=payment failed: status 500 duration=96.08µs state=CLOSED
+request=3 result=err=payment failed: status 500 duration=76.38µs state=OPEN
+request=4 result=err=circuit breaker is open duration=125ns state=OPEN
+request=5 result=err=circuit breaker is open duration=41ns state=OPEN
+request=6 result=err=circuit breaker is open duration=42ns state=OPEN
+
+downstream_calls=3
 
 === SCENARIO 3: RECOVERY (HALF_OPEN -> CLOSED) ===
 initial state=OPEN
@@ -132,9 +134,9 @@ circuit forced back to: OPEN
 waiting for cooldown (300ms)...
 dependency still DOWN. Current CB state=HALF_OPEN
 sending probe request...
-probe result: err=true, state after failed probe=OPEN
+probe result: err=payment failed: status 500, state after failed probe=OPEN
 sending next request while re-opened...
-next request result: err=checkout payment failed (with CB): circuit breaker is open, state=OPEN
+next request result: err=circuit breaker is open, state=OPEN
 ```
 
 ## Failure Modes

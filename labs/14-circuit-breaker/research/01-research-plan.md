@@ -1,35 +1,50 @@
-# Research Plan: Circuit Breaker Pattern & Cascading Failure Mitigation
+# Research Plan
 
 ## Research Topic
-Circuit Breaker Pattern — Preventing a single degraded dependency from taking down the entire system.
+Circuit Breaker Pattern — Cara Mencegah Satu Service Down Menjatuhkan Seluruh Sistem
 
 ## Objective
-Investigate operational mechanics, failure dynamics, and interplay between Circuit Breaker, Timeout, Retry with Exponential Backoff + Jitter, Fallback, Bulkhead, and Load Shedding in distributed microservices. Output must be evidence-backed (Tier 1 primary sources opened, not snippets) and suitable to inform Go implementation with real state machine.
+Produce structured research covering:
+1. Circuit Breaker core concepts and state machine
+2. Cascade failure mechanics
+3. State transitions (CLOSED/OPEN/HALF-OPEN)
+4. Timeout, retry, backoff, jitter interactions
+5. Fallback and Bulkhead patterns
+6. Observability metrics
+7. Failure modes and anti-patterns
+8. Case studies: CMMS WhatsApp and PPOB flows
 
 ## Research Questions
-1. How do unconstrained timeouts lead to resource exhaustion (thread/connection starvation) and cascading failure?
-2. What are the formal states and transition triggers of a Circuit Breaker (CLOSED, OPEN, HALF_OPEN)?
-3. How does Circuit Breaker differ fundamentally from Timeout, Retry, Bulkhead, and Load Shedding?
-4. What failure modes exist (thundering herd on probe, premature opening, 4xx false positives, stuck open)?
-5. What observable metrics and alerting signals define production circuit breaker health?
-6. What async decoupling patterns (queue-based load leveling) enable safe fallback for non-critical flows?
+1. What are the canonical state transitions for Circuit Breaker?
+2. What failure threshold and timeout configurations are recommended?
+3. How does Circuit Breaker differ from Retry and Timeout?
+4. What are proper fallback strategies (safe vs unsafe)?
+5. How does Bulkhead isolate resources differently from Circuit Breaker?
+6. What observability metrics are standard?
+7. What are common failure modes (threshold too low, probe flood, error type confusion)?
+8. How to apply to CMMS (Create Invoice → PDF → WhatsApp)?
+9. How to apply to PPOB (User → Order → Provider Pulsa → Payment Gateway → WhatsApp)?
 
 ## Search Strategy
-1. Primary docs: Microsoft Azure Architecture Center (Cloud Design Patterns), Martin Fowler canonical Bliki, Google SRE Book/Workbook.
-2. Production impls: Netflix Hystrix Wiki (How it Works), Sony gobreaker, cep21/circuit.
-3. Retry/backoff: AWS Architecture Blog (Exponential Backoff and Jitter), AWS Builder's Library (attempted fetch; fallback to AWS Blog + Azure Retry).
-4. Cross-check every major claim against ≥2 independent sources; record verbatim evidence with URL + published date.
+- Primary: Martin Fowler bliki (original pattern author)
+- Primary: Microsoft Azure Architecture Center patterns
+- Primary: Resilience4j reference implementation
+- Secondary: Google SRE Book (cascading failures, load shedding)
+- Secondary: AWS Builders Library (timeouts, retries, jitter)
 
 ## Expected Primary Sources
-- Martin Fowler, Circuit Breaker — https://martinfowler.com/bliki/CircuitBreaker.html (2014-03-06)
-- Microsoft Azure, Circuit Breaker pattern — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker (2025-02-05)
-- Netflix Hystrix, How it Works — https://github.com/Netflix/Hystrix/wiki/How-it-Works (2017-07-03)
-- Sony gobreaker — https://github.com/sony/gobreaker; cep21/circuit — https://github.com/cep21/circuit
-- Google SRE, Handling Overload — https://sre.google/sre-book/handling-overload/; Managing Load — https://sre.google/workbook/managing-load/
-- AWS, Exponential Backoff And Jitter — https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/ (2015-03-04)
+| Source | URL | Tier |
+|--------|-----|------|
+| Martin Fowler Circuit Breaker | https://martinfowler.com/bliki/CircuitBreaker.html | 1 |
+| Azure Circuit Breaker Pattern | https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker | 1 |
+| Azure Retry Pattern | https://learn.microsoft.com/en-us/azure/architecture/patterns/retry | 1 |
+| Azure Bulkhead Pattern | https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead | 1 |
+| Resilience4j CircuitBreaker | https://resilience4j.readme.io/docs/circuitbreaker | 1 |
+| Google SRE: Handling Overload | https://sre.google/sre-book/handling-overload/ | 1 |
+| Google SRE: Cascading Failures | https://sre.google/sre-book/addressing-cascading-failures/ | 1 |
 
 ## Risks / Unknowns
-- State transition trigger variance: consecutive failure count vs rolling-window error % vs time-bounded count.
-- HALF_OPEN probe concurrency bounds across distributed fleet vs single-process breaker (no shared coordination).
-- Adaptive vs static thresholds (Azure mentions AI/ML adaptive; not verified as production standard).
-- Builder's Library direct fetch returned placeholder; cross-checked via AWS Blog + Azure Retry instead (marked NOT VERIFIED standalone).
+- AWS Builders Library page may be JS-rendered (inaccessible)
+- Need to distinguish generic pattern from library-specific behavior
+- Must not invent threshold recommendations or benchmarks
+- Financial fallback behavior (PPOB) must not make unsafe assumptions

@@ -1,58 +1,103 @@
-# 09 Failure Modes
+# Failure Modes
 
-## 1. Premature Opening
-**Definition**: Threshold too low or evaluation window too short; transient blips flip circuit OPEN unnecessarily.
-**Effect**: False rejection of healthy traffic; reduced availability.
-**Mitigation**: tune threshold to observed baseline error rate; use rolling-window error % rather than consecutive count if traffic spiky; min sample volume (Hystrix `requestVolumeThreshold`).
-**Sources**: Azure Circuit Breaker Problems — "If the circuit breaker remains in the Open state for a long period, it can raise exceptions even if the reason for the failure is resolved" is *late* opening; early opening is inverse.
+## Anti-Patterns and Failure Modes in Circuit Breaker Design
 
-## 2. Thundering Herd on HALF_OPEN Probe
-**Definition**: Too many concurrent probes overwhelm recovering dependency, causing probe failures → immediate re-trip.
-**Effect**: prolongs outage; delays recovery.
-**Mitigation**: limit `HalfOpenMaxCalls` (gobreaker default 1; Hystrix 1; Azure "limited number"); stagger probe start across instances (not implemented in-memory breaker; requires external coordination via external store or sidecar).
+### 1. Threshold Too Low (Over-sensitive Breaker)
 
-**Sources**: Azure Circuit Breaker — "The Half-Open state helps prevent a recovering service from suddenly being flooded with requests"; Google SRE Workbook Managing Load — Dressy case study where load shedding + load balancing misconfigured isolated caused imbalance; "add error handling to load balancer logic" principle.
+**Claim**: Setting failure threshold too low causes the breaker to trip on momentary blips, dropping valid traffic.
 
-## 3. Infinite Open (Stuck Open)
-**Definition**: cooldown too long or dependency never passes health check; circuit never leaves OPEN.
-**Effect**: permanent fail-fast until manual override; increased MTTR.
-**Mitigation**: reasonable `OpenTimeout` (seconds-minutes not hours); manual override button; health-check endpoint (separate from circuit breaker) to trigger reset; adaptive timeout increase only after repeated failures.
+**Evidence**:
+- Included in README.md Failure Modes section (spec): "Threshold too low: Breaker trips on momentary blips, dropping valid traffic."
+- Corroborated by Resilience4j: `minimumNumberOfCalls` parameter exists specifically to prevent premature tripping — "If only 9 calls have been evaluated the CircuitBreaker will not transition to open even if all 9 calls have failed." — https://resilience4j.readme.io/docs/circuitbreaker
 
-**Sources**: Hystrix Wiki — `circuitBreakerSleepWindowInMilliseconds()`; Azure Circuit Breaker Problems — "provide a manual reset option... force a circuit breaker into the Open state".
+**Mitigation**: Use a minimum call count (minimumNumberOfCalls) before evaluating failure rate. Ensure threshold aligns with expected transient failure rate of the dependency.
 
-## 4. 4xx False Positives (Client Errors Tripping Breaker)
-**Definition**: Counting HTTP 4xx (e.g. 400 Bad Request, 404 Not Found, 422 Unprocessable Entity) as circuit-breaker failures.
-**Effect**: breaker opens on user-input validation errors; legitimate retries of same input always fail; reduces availability incorrectly.
-**Mitigation**: configure `IsSuccessful` / `IsExcluded` to exclude 4xx unless service validates that specific 4xx indicates systemic fault (rare). Standard practice: trip on 5xx, timeout, connection error; not on 4xx.
+**Confidence**: HIGH — Resilience4j explicitly designed its API to prevent this anti-pattern.
 
-**Evidence**: Azure Circuit Breaker Problems — "4xx False Positives: Tripping the breaker on user-input validation errors (400, 404, 422) instead of system faults (500, 502, 503, 504, timeouts)" — exact match from research/04-contradictions.md.
+---
 
-## 5. Metric Skew (Roll-over / Window Misalignment)
-**Definition**: sliding window or interval misalignment causes sudden jumps in reported error rate.
-**Effect**: spurious trips or delayed trips.
-**Mitigation**: use sufficiently large window; align sampling with traffic periodicity if known; accept small inaccuracy for stability.
+### 2. Probe Flood in HALF_OPEN
 
-**Source**: cep21/circuit rolling stats discussion — windowing strategy impacts metric smoothness.
+**Claim**: Too many parallel probe calls during HALF_OPEN can overwhelm a recovering service.
 
-## 6. Panic Propagation
-**Definition**: protected function panics; if circuit breaker does not recover panic, brings down caller.
-**Effect**: 100% failure rate for caller until breaker reset.
-**Mitigation**: circuit breaker must `recover()` panic and treat as error (not let it propagate). Go: `defer func() { if r:=recover(); r!=nil { /* handle */ } }()`.
+**Evidence**:
+- Included in README.md Failure Modes section (spec): "Probe flood: Too many parallel probe calls during HALF_OPEN overwhelm recovering service."
+- Azure: "The Half-Open state helps prevent a recovering service from suddenly being flooded with requests. As a service recovers, it might be able to support a limited volume of requests until the recovery is complete. But while recovery is in progress, a flood of work can cause the service to time out or fail again." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+- Resilience4j: `permittedNumberOfCallsInHalfOpenState` limits concurrent probes (default: 10).
 
-**Evidence**: cep21/circuit — "recoverable panic()" feature listed; gobreaker does not mention panic handling explicitly (assumed same pattern).
+**Mitigation**: Strictly cap `permittedNumberOfCallsInHalfOpenState`. Do not allow unlimited concurrent probes.
 
-## 7. Resource Leak in Half-Open
-**Definition**: probe allocates resource but fails to release it on error → leak over many cycles → eventual OOM.
-**Mitigation**: ensure probe execution path releases resources on any exit (success, error, panic, context cancellation).
+**Confidence**: HIGH — Azure and Resilience4j both explicitly address this.
 
-**Lab note**: Lab implementations use short-lived func() {} probes; no persistent allocations per probe.
+---
 
-## 8. Incorrect Concurrency Guard
-**Definition**: missing mutex on state/counters → race on concurrent Execute → lost updates, spurious state, double-trips.
-**Effect**: flapping state, incorrect counts, test flakiness under race detector.
-**Fix**: `sync.Mutex` guarding all state transitions and counters (lab and gobreaker use this).
+### 3. Ignoring Error Types (4xx vs 5xx)
 
-**Sources**: gobreaker source — `mux sync.Mutex` guards `state`, `counts`, `lastStateChangeTime`; cep21/circuit — internal locking not visible in surface API but stress-tested.
+**Claim**: Counting 4xx client errors (e.g., 400 Bad Request) as circuit-breaking faults, when only 5xx server errors or timeouts should trip the circuit.
 
-## Summary
-Failure modes cluster into: tuning (thresholds, timeouts), concurrency (races, leaks), semantics (error classification), and operational (manual overrides, monitoring). Lab avoids: infinite open (reasonable cooldown), 4xx FP (only counts timeouts/connection errors as failures), panic (uses `recover`), races (mutex).
+**Evidence**:
+- Included in README.md Failure Modes section (spec): "Ignoring error types: Counting 4xx (client errors) as circuit-breaking faults rather than restricting to 5xx/timeouts."
+- Resilience4j: `recordExceptions` and `ignoreExceptions` allow selective exception classification — "By default all exceptions count as a failure. You can define a list of exceptions which should count as a failure." — https://resilience4j.readme.io/docs/circuitbreaker
+- Azure: "The reasons for a request failure can vary in severity... A circuit breaker might be able to examine the types of exceptions that occur and adjust its strategy based on the nature of these exceptions." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+
+**Mitigation**: Classify exceptions explicitly: count 5xx, timeouts, and connection errors as circuit-breaking failures; ignore 4xx client errors as application-level issues.
+
+**Confidence**: HIGH — Azure and Resilience4j both address error-type classification.
+
+---
+
+### 4. Inappropriate Timeouts on External Services
+
+**Claim**: A circuit breaker configured with too-long timeouts still blocks threads, defeating the circuit breaker's purpose.
+
+**Evidence**:
+- Azure: "A circuit breaker might not fully protect applications from failures in external services that have long time-out periods. If the time-out is too long, a thread that runs a circuit breaker might be blocked for an extended period before the circuit breaker indicates that the operation failed. During this time, many other application instances might also try to invoke the service through the circuit breaker and tie up numerous threads before they all fail." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+
+**Mitigation**: Pair explicit, tightly bounded timeouts with circuit breaker for full protection.
+
+**Confidence**: HIGH — Azure explicitly documents this failure mode.
+
+---
+
+### 5. Retry Storms (Amplification)
+
+**Claim**: Retry without a circuit breaker amplifies load on a failing dependency, accelerating cascade failure.
+
+**Evidence**:
+- Google SRE: retry budgets (max 3 attempts), per-client retry budget (10% ratio cap) — https://sre.google/sre-book/handling-overload/
+- Azure: "An aggressive retry policy with minimal delay between attempts, and a large number of retries, could further degrade a busy service that's running close to or at capacity." — https://learn.microsoft.com/en-us/azure/architecture/patterns/retry
+- Azure Circuit Breaker: "If a request still fails after a significant number of retries, it's better for the application to prevent further requests going to the same resource and report a failure immediately." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+
+**Mitigation**: Combine bounded retry with circuit breaker. When circuit is OPEN, retry logic must stop.
+
+**Confidence**: HIGH.
+
+---
+
+### 6. Circuit Breaker Fluctuation (Oscillation)
+
+**Claim**: If HALF_OPEN transitions back to OPEN too quickly (and then repeats), the breaker oscillates between OPEN and HALF_OPEN without stabilizing.
+
+**Evidence**:
+- Azure: "a circuit breaker can fluctuate and reduce the response times of applications if it switches from the Open state to the Half-Open state too quickly." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+
+**Mitigation**: Use cooldown that increases progressively, or require consecutive successful probes before CLOSED.
+
+**Confidence**: HIGH — Azure explicitly documents this.
+
+---
+
+## Summary Table
+
+| # | Failure Mode | Severity | Mitigation |
+|---|-------------|----------|-----------|
+| 1 | Threshold too low | Medium | minimumNumberOfCalls guard |
+| 2 | Probe flood | Medium | permittedNumberOfCallsInHalfOpenState cap |
+| 3 | Error type confusion | High | Classify 4xx vs 5xx explicitly |
+| 4 | Inappropriate timeout | High | Tight timeout paired with circuit breaker |
+| 5 | Retry storm | High | Bounded retry + circuit breaker combination |
+| 6 | Oscillation | Low | Progressive cooldown / consecutive success probes |
+
+## NOT VERIFIED
+- Exact threshold values that trigger oscillation (depends on traffic volume)
+- Whether oscillation occurs in all implementations or only specific algorithms

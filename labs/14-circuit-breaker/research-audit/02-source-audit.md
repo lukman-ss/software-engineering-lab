@@ -1,8 +1,9 @@
 # Source Audit
 
 ## Source 1
+
 Claimed Title: Circuit Breaker
-Claimed Publisher: Martin Fowler (martinfowler.com)
+Claimed Publisher: Martin Fowler
 URL: https://martinfowler.com/bliki/CircuitBreaker.html
 
 Reachable:
@@ -18,37 +19,17 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None
+- None. Canonical reference for Circuit Breaker pattern.
 
 Assessment:
 PASS
+
+---
 
 ## Source 2
-Claimed Title: How it Works — Hystrix Wiki
-Claimed Publisher: Netflix / Hystrix
-URL: https://github.com/Netflix/Hystrix/wiki/How-it-Works
 
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 3
-Claimed Title: Circuit Breaker pattern — Azure Architecture Center
-Claimed Publisher: Microsoft Learn
+Claimed Title: Circuit Breaker Pattern
+Claimed Publisher: Microsoft Azure Architecture Center
 URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
 
 Reachable:
@@ -64,152 +45,17 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None
+- None. Comprehensive industry pattern guide.
 
 Assessment:
 PASS
 
-## Source 4
-Claimed Title: CircuitBreaker — gobreaker
-Claimed Publisher: Sony (github.com/sony/gobreaker)
-URL: https://github.com/sony/gobreaker
+---
 
-Reachable:
-YES
+## Source 3
 
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 5
-Claimed Title: Handling Overload (SRE Book Ch. 21)
-Claimed Publisher: Google SRE
-URL: https://sre.google/sre-book/handling-overload/
-
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 6
-Claimed Title: Exponential Backoff And Jitter — AWS Architecture Blog
-Claimed Publisher: Amazon Web Services (Marc Brooker)
-URL: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
-
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 7
-Claimed Title: Circuit — cep21/circuit
-Claimed Publisher: cep21
-URL: https://github.com/cep21/circuit
-
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 8
-Claimed Title: Bulkhead pattern — Azure Architecture Center
-Claimed Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
-
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 9
-Claimed Title: Managing Load (SRE Workbook Ch. 11)
-Claimed Publisher: Google SRE
-URL: https://sre.google/workbook/managing-load/
-
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None
-
-Assessment:
-PASS
-
-## Source 10
-Claimed Title: Retry pattern — Azure Architecture Center
-Claimed Publisher: Microsoft Learn
+Claimed Title: Retry Pattern
+Claimed Publisher: Microsoft Azure Architecture Center
 URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/retry
 
 Reachable:
@@ -225,15 +71,18 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None
+- None.
 
 Assessment:
 PASS
 
-## Source 11
-Claimed Title: Queue-Based Load Leveling pattern — Azure Architecture Center
-Claimed Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling
+---
+
+## Source 4
+
+Claimed Title: Bulkhead Pattern
+Claimed Publisher: Microsoft Azure Architecture Center
+URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead
 
 Reachable:
 YES
@@ -248,15 +97,18 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None
+- None.
 
 Assessment:
 PASS
 
-## Source 12
-Claimed Title: Timeouts, retries, and backoff with jitter — AWS Builder's Library
-Claimed Publisher: Amazon Web Services
-URL: https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter/
+---
+
+## Source 5
+
+Claimed Title: CircuitBreaker
+Claimed Publisher: Resilience4j
+URL: https://resilience4j.readme.io/docs/circuitbreaker
 
 Reachable:
 YES
@@ -271,14 +123,43 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Original URL redirected; verified via AWS Architecture Blog and Azure Retry as documented in research.
+- None. Widely used production-grade circuit breaker reference implementation.
 
 Assessment:
 PASS
 
-## Source 13
-Claimed Title: Addressing Cascading Failures (SRE Book Ch. 22)
-Claimed Publisher: Google SRE
+---
+
+## Source 6
+
+Claimed Title: Handling Overload
+Claimed Publisher: Google (SRE Book)
+URL: https://sre.google/sre-book/handling-overload/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None.
+
+Assessment:
+PASS
+
+---
+
+## Source 7
+
+Claimed Title: Addressing Cascading Failures
+Claimed Publisher: Google (SRE Book)
 URL: https://sre.google/sre-book/addressing-cascading-failures/
 
 Reachable:
@@ -294,7 +175,85 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None
+- None.
+
+Assessment:
+PASS
+
+---
+
+## Source 8
+
+Claimed Title: Timeouts, Retries, and Backoff with Jitter
+Claimed Publisher: AWS Builders Library
+URL: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- URL permanently redirects (301) to AWS Builder Center (`https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter`).
+
+Assessment:
+WARNING
+
+---
+
+## Source 9
+
+Claimed Title: Circuit Breaker Pattern: When to Use and How It Works
+Claimed Publisher: Microsoft (Archived Content)
+URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- Duplicate of Source 2 pointing to the same document.
+
+Assessment:
+WARNING
+
+---
+
+## Source 10
+
+Claimed Title: Go HTTP Client Timeout Behavior
+Claimed Publisher: Go Standard Library
+URL: https://pkg.go.dev/net/http#Client
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None.
 
 Assessment:
 PASS

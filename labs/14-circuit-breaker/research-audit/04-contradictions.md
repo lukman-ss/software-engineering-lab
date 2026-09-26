@@ -1,5 +1,5 @@
-# Contradiction Audit
+# Contradictions
 
-No material contradictions found.
+No material contradictions found within the research files.
 
-The variance between consecutive-count threshold (Fowler, gobreaker default) and rolling-window error percentage (Hystrix, Azure) is an implementation trade-off explicitly documented and analyzed in `research/04-contradictions.md` and `research/05-circuit-states.md`, rather than an unaddressed conflict.
+The research consistently advocates for proper state machine handling, complementary timeout and retry strategies, explicit error filtering, and comprehensive metrics.

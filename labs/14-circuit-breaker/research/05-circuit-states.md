@@ -1,53 +1,66 @@
-# 05 Circuit States
+# Circuit States
 
-```
-       ┌───────────┐
-       │  CLOSED   │◄─────────────────────────┐
-       └─────┬─────┘                          │
-             │ failures >= FailureThreshold   │ probe success
-             ▼                                │
-       ┌───────────┐                          │
-       │   OPEN    │                          │
-       └─────┬─────┘                          │
-             │ cooldown elapsed               │
-             ▼                                │
-       ┌───────────┐                          │
-       │ HALF_OPEN ├──────────────────────────┘
-       └─────┬─────┘
-             │ probe fail
-             ▼
-          (to OPEN)
-```
+## CLOSED State
 
-## CLOSED — Normal Operation
-- Every request dispatched downstream.
-- Success → reset failure count (consecutive-count model) or decrement rolling window (Hystrix model).
-- Failure → increment count; if >= threshold → OPEN, record openTimestamp.
+**Claim**: In CLOSED state, all requests are forwarded to the downstream dependency. Successes reset the failure counter; failures increment it. When failures ≥ threshold, state transitions to OPEN.
 
-**Sources**: Martin Fowler (2014-03-06) — "Calling the circuit breaker will call the underlying block if the circuit is closed... I determine the state of the breaker comparing the failure count to the threshold"; Hystrix Wiki — request-volume + error-percentage tripping; Azure Circuit Breaker — "maintains a count of the number of recent failures... If the number of recent failures exceeds a specified threshold within a given time period, the proxy is placed into the Open state".
+**Evidence**:
+- Martin Fowler: "Should we get a timeout, we increment the failure counter, successful calls reset it back to zero." — https://martinfowler.com/bliki/CircuitBreaker.html
+- Azure: "CLOSED: The request from the application is routed to the operation. The proxy maintains a count of the number of recent failures." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+- Resilience4j: "The state of the CircuitBreaker changes from CLOSED to OPEN when the failure rate is equal or greater than a configurable threshold." — https://resilience4j.readme.io/docs/circuitbreaker
 
-## OPEN — Fail Fast
-- Reject immediately with sentinel error, e.g. `ErrCircuitOpen`.
-- Downstream function NOT invoked (verified by downstream call counter in tests).
-- After `OpenTimeout` since openTimestamp elapsed → allow transition to HALF_OPEN on next call.
-- Optional: manual override to force open/close (operator control).
+**Confidence**: HIGH — all three Tier 1 sources agree.
 
-**Sources**: Azure — "Open: The request from the application fails immediately and an exception is returned"; Fowler — "when :open then raise CircuitBreaker::Open"; Hystrix — "While it is open, it short-circuits all requests made against that circuit-breaker."
+**Key detail — failure window/reset behavior**:
+- Azure specifies: "The failure counter for the Closed state is time based. It automatically resets at periodic intervals."
+- Resilience4j supports both count-based and time-based sliding windows.
+- This lab: implements a simple consecutive-failure counter (reset on success). Documented as an educational simplification.
 
-## HALF_OPEN — Probe
-- Allow limited number of probe calls (`HalfOpenMaxCalls`, typically 1) through.
-- Success → CLOSED, reset counters.
-- Any failure → OPEN, restart cooldown timer.
-- Purpose: prevent flood onto recovering service.
+---
 
-**Sources**: Azure — "Half-Open: A limited number of requests... If these requests are successful, the circuit breaker assumes that the fault... is fixed, and the circuit breaker switches to the Closed state... If any request fails, the circuit breaker assumes that the fault is still present, so it reverts to the Open state"; Fowler — half-open trial call "will either reset the breaker if successful or restart the timeout if not"; Hystrix — single let-through request after sleep window.
+## OPEN State
 
-## Threshold Models (Disagreement — see 04-contradictions.md)
-- Consecutive-count (Fowler basic impl, gobreaker default 5): simple, deterministic, lab choice.
-- Rolling-window error % (Hystrix: volume threshold + error %; Azure: failures within time period; gobreaker Interval): robust under fluctuating traffic.
-- NOT VERIFIED as superior universally; depends on traffic pattern.
+**Claim**: When OPEN, all incoming calls fail immediately without executing the downstream call. A cooldown timer (waitDurationInOpenState) begins. When the timer expires, state transitions to HALF_OPEN.
 
-## Concurrency Requirements
-- State + counters guarded by mutex (gobreaker uses sync.Mutex; this lab same).
-- Azure: "implementation shouldn't block concurrent requests or add excessive overhead".
-- Verify with `go test -race ./...`.
+**Evidence**:
+- Martin Fowler: "raise CircuitBreaker::Open" — "calling the circuit breaker will call the underlying block if the circuit is closed, but return an error if it's open" — https://martinfowler.com/bliki/CircuitBreaker.html
+- Azure: "OPEN: The request from the application fails immediately and an exception is returned to the application." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+- Resilience4j: "The CircuitBreaker rejects calls with a CallNotPermittedException when it is OPEN. After a wait time duration has elapsed, the CircuitBreaker state changes from OPEN to HALF_OPEN" — https://resilience4j.readme.io/docs/circuitbreaker
+
+**Confidence**: HIGH — unanimous across Tier 1 sources.
+
+**Key detail — what triggers HALF_OPEN transition**:
+- Martin Fowler (simpler model): state is computed on each call — if enough time has passed since last failure → HALF_OPEN.
+- Azure: a timeout timer starts when entering OPEN; when it expires → HALF_OPEN.
+- Resilience4j: `automaticTransitionFromOpenToHalfOpenEnabled` controls whether a background thread triggers the transition, or only the next incoming call triggers it.
+
+---
+
+## HALF-OPEN State
+
+**Claim**: In HALF_OPEN, a limited number of probe calls are permitted. If all probe calls succeed → CLOSED. If any probe call fails → OPEN (restarts cooldown).
+
+**Evidence**:
+- Martin Fowler: "there is now a third state present - half open - meaning the circuit is ready to make a real call as trial to see if the problem is fixed." — https://martinfowler.com/bliki/CircuitBreaker.html
+- Azure: "HALF-OPEN: A limited number of requests from the application are allowed to pass through and invoke the operation. If these requests are successful, the circuit breaker assumes that the fault that caused the failure is fixed, and the circuit breaker switches to the Closed state. The failure counter is reset. If any request fails, the circuit breaker assumes that the fault is still present, so it reverts to the Open state." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+- Resilience4j: "permits a configurable number of calls to see if the backend is still unavailable or has become available again. Further calls are rejected... If the failure rate... is then equal or greater than the configured threshold, the state changes back to OPEN." — https://resilience4j.readme.io/docs/circuitbreaker
+
+**Confidence**: HIGH — unanimous across Tier 1 sources.
+
+**Key detail — preventing probe flood**:
+- Azure: "The Half-Open state helps prevent a recovering service from suddenly being flooded with requests. As a service recovers, it might be able to support a limited volume of requests until the recovery is complete."
+- Resilience4j: `permittedNumberOfCallsInHalfOpenState` (default: 10) caps the number of simultaneous probe calls.
+
+---
+
+## State Transition Summary
+
+| From | To | Trigger | Source |
+|------|----|---------|--------|
+| CLOSED → OPEN | failures ≥ threshold | Martin Fowler, Azure, Resilience4j | HIGH |
+| OPEN → HALF_OPEN | cooldown timer elapsed | Martin Fowler, Azure, Resilience4j | HIGH |
+| HALF_OPEN → CLOSED | all probe calls succeed | Martin Fowler, Azure, Resilience4j | HIGH |
+| HALF_OPEN → OPEN | any probe call fails | Azure, Resilience4j (Martin Fowler implies but less explicit) | HIGH |
+
+## NOT VERIFIED
+- Whether there should be a time-based auto-transition from OPEN to HALF_OPEN vs call-triggered only. Resilience4j supports both (`automaticTransitionFromOpenToHalfOpenEnabled`); Martin Fowler's original implementation is call-triggered. This lab uses call-triggered for simplicity.

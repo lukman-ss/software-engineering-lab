@@ -1,47 +1,62 @@
 package checkout
 
 import (
-	"context"
-	"fmt"
-
 	"circuitbreaker/internal/circuitbreaker"
 	"circuitbreaker/internal/payment"
+	"context"
+	"fmt"
+	"time"
 )
 
+type Result struct {
+	Err          error
+	Duration     time.Duration
+	DownstreamOK bool
+	State        circuitbreaker.State
+}
+
 type Service struct {
-	paymentClient *payment.Client
-	cb            *circuitbreaker.CircuitBreaker
+	payment *payment.Client
+	breaker *circuitbreaker.Breaker
 }
 
-func NewService(paymentClient *payment.Client, cb *circuitbreaker.CircuitBreaker) *Service {
-	return &Service{
-		paymentClient: paymentClient,
-		cb:            cb,
+func New(payClient *payment.Client, breaker *circuitbreaker.Breaker) *Service {
+	return &Service{payment: payClient, breaker: breaker}
+}
+
+// NewService is the integration test constructor (alias for New).
+func NewService(payClient *payment.Client, breaker *circuitbreaker.Breaker) *Service {
+	return New(payClient, breaker)
+}
+
+// CheckoutWithBreaker executes a payment call through the circuit breaker.
+func (s *Service) CheckoutWithBreaker() Result {
+	start := time.Now()
+	if err := s.breaker.Execute(func() error {
+		return s.payment.ProcessPayment(context.Background())
+	}); err != nil {
+		return Result{Err: err, Duration: time.Since(start), State: s.breaker.State()}
 	}
+	return Result{Duration: time.Since(start), State: s.breaker.State(), DownstreamOK: true}
 }
 
+// CheckoutWithoutBreaker executes a payment call directly (no circuit breaker).
+func (s *Service) CheckoutWithoutBreaker() Result {
+	start := time.Now()
+	err := s.payment.ProcessPayment(context.Background())
+	return Result{Err: err, Duration: time.Since(start)}
+}
+
+// Checkout is the integration test method - uses circuit breaker.
 func (s *Service) Checkout(ctx context.Context) error {
-	if s.cb != nil {
-		err := s.cb.Execute(func() error {
-			return s.paymentClient.ProcessPayment(ctx)
-		})
-		if err != nil {
-			return fmt.Errorf("checkout payment failed (with CB): %w", err)
-		}
-		return nil
-	}
-
-	// Without Circuit Breaker
-	err := s.paymentClient.ProcessPayment(ctx)
-	if err != nil {
-		return fmt.Errorf("checkout payment failed (no CB): %w", err)
-	}
-	return nil
+	return s.breaker.Execute(func() error {
+		return s.payment.ProcessPayment(ctx)
+	})
 }
 
-func (s *Service) CircuitState() string {
-	if s.cb == nil {
-		return "N/A"
+func (r Result) String() string {
+	if r.Err != nil {
+		return fmt.Sprintf("err=%s duration=%s state=%s", r.Err, r.Duration, r.State)
 	}
-	return string(s.cb.State())
+	return fmt.Sprintf("err=nil duration=%s state=%s", r.Duration, r.State)
 }

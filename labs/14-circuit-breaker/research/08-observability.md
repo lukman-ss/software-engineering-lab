@@ -1,35 +1,59 @@
-# 08 Observability
+# Observability
 
-## Required / Common Metrics
+## Metrics Inventory for Circuit Breaker
 
-| Metric | Type | Notes |
-|---|---|---|
-| `circuit_state` | Enum/gauge (0=CLOSED, 1=OPEN, 2=HALF_OPEN) | dashboard color |
-| `circuit_open_count` | Counter | alerts on transition to OPEN |
-| `failure_count` | Gauge | rolling or consecutive; Hystrix `ErrFailures`, `ErrTimeouts` |
-| `failure_rate` / `error_percentage` | Gauge | Hystrix tripping condition: error % over rolling window |
-| `timeout_count` | Counter | distinguish timeout vs connection error |
-| `fallback_count` | Counter | degraded responses emitted |
-| `rejected_call_count` | Counter | fast-failed due to OPEN |
-| `dependency_latency` | Histogram | per-attempt latency; overflows drive timeout tuning |
+### Core State Metrics
+| Metric | Type | Description | Source |
+|--------|------|-------------|--------|
+| `circuit_state` | Gauge | Current state: 0=CLOSED, 1=OPEN, 2=HALF_OPEN | Architectural recommendation derived from Azure "Monitoring: A circuit breaker should provide clear observability into both failed and successful requests" — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker |
+| `circuit_open_count` | Counter | Number of times circuit transitioned to OPEN | Martin Fowler: "Any change in breaker state should be logged and breakers should reveal details of their state for deeper monitoring." — https://martinfowler.com/bliki/CircuitBreaker.html |
+| `rejected_call_count` | Counter | Requests rejected by fail-fast while OPEN | Derived from Azure's fail-fast mechanism description |
 
-**Evidence**: Azure Circuit Breaker — "Circuit breakers should provide clear observability into both failed and successful requests...". Hystrix Wiki — "reports successes, failures, rejections, and timeouts to the circuit breaker, which maintains a rolling set of counters" + metrics for dashboards/streams. — Confidence HIGH.
+### Failure Metrics
+| Metric | Type | Description | Source |
+|--------|------|-------------|--------|
+| `failure_count` | Counter/Gauge | Current consecutive or windowed failure count | Martin Fowler: "the breaker stores the block... failure count" |
+| `failure_rate` | Gauge | Percentage of failed calls in sliding window | Resilience4j: "failure rate is equal or greater than a configurable threshold" — https://resilience4j.readme.io/docs/circuitbreaker |
+| `timeout_count` | Counter | Failures specifically due to timeout | Resilience4j distinguishes exception types (recordExceptions vs ignoreExceptions) |
+| `slow_call_rate` | Gauge | Percentage of calls exceeding slow threshold | Resilience4j: `slowCallRateThreshold` / `slowCallDurationThreshold` |
 
-## Reference: Go Implementations
-- **gobreaker** (`sony/gobreaker`): `Counts {Requests, TotalSuccesses, TotalFailures, TotalExclusions, ConsecutiveSuccesses, ConsecutiveFailures}` + `OnStateChange` callback for state-transition metrics. — https://github.com/sony/gobreaker
-- **cep21/circuit**: `CmdMetricCollector`, `FallbackMetricCollector`, `rolling.StatFactory`, `MetricEventStream` streaming, `expvar` publisher `h.Var()`, `responsetimeslo.Factory` for "X% requests faster than Y ms" SLO tracking. — https://github.com/cep21/circuit (Tier 1).
+### Performance Metrics
+| Metric | Type | Description | Source |
+|--------|------|-------------|--------|
+| `dependency_latency` | Histogram | P50, P95, P99 latencies for downstream calls | Azure: "dependency_latency" referenced in topic spec; latency histogram is standard practice |
+| `fallback_count` | Counter | Number of fallback invocations when OPEN | Topic spec; derived from Azure "gracefully degrade by returning default or cached responses" |
 
-## Alphabetization Note
-- Hystrix Dashboard stream: `/hystrix.stream` endpoint + Turbine aggregation across fleet.
-- In-process counters without external aggregation lose fleet visibility (each replica's view differs).
+### State Transition Events
+**Claim**: Every state transition should be logged as an event with timestamp, from-state, to-state, and trigger reason.
 
-## Alerting Philosophy (SRE)
-- Alert on state-change events (circuit opened) rather than raw failure count.
-- Correlate `dependency_latency` rise with `timeout_count` before tripping—latency often precedes hard errors.
+**Evidence**:
+- Martin Fowler: "Circuit breakers are a valuable place for monitoring. Any change in breaker state should be logged and breakers should reveal details of their state for deeper monitoring. Breaker behavior is often a good source of warnings about deeper troubles in the environment." — https://martinfowler.com/bliki/CircuitBreaker.html
+- Azure: "If the circuit breaker raises an event each time it changes state, this information can help monitor the health of the protected system component or alert an administrator when a circuit breaker switches to the Open state." — https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
 
-**Source**: Azure Circuit Breaker Problems & Considerations — "Circuit breakers should reveal details of their state for deeper monitoring... Alert an administrator when a circuit breaker switches to the Open state".
+**Confidence**: HIGH.
 
-## Lab Minimal Observability
-This lab's `State()` + counters are sufficient for tests/demos; production adds: Prometheus histograms, structured log events per transition, distributed tracing spans annotated with `cb.state`.
+### Alerting Recommendations
+**Claim**: Operations staff should be alerted when a breaker trips to OPEN.
 
-**Lab note**: Lab counters are authoritative for "expected behavior" claims; no fabricated benchmarks.
+**Evidence**:
+- Martin Fowler: "Usually you'll also want some kind of monitor alert if the circuit breaker trips." — https://martinfowler.com/bliki/CircuitBreaker.html
+- Martin Fowler: "Operations staff should be able to trip or reset breakers."
+
+**Confidence**: HIGH.
+
+---
+
+## NOT VERIFIED
+- Specific numeric alert thresholds (e.g., "alert if failure_rate > 50%") — depends on business SLA, no universal production recommendation.
+- Whether `failure_rate` should be computed over a count-based or time-based window — Resilience4j supports both; choice depends on traffic volume and detection latency requirements.
+- Benchmarks of metric overhead (circuit breaker metrics causing performance impact) — no quantitative source found.
+
+---
+
+## Metrics Not Invented
+This research does NOT include fabricated metric names, thresholds, or latency numbers. The metric inventory above is derived from:
+1. Explicit patterns in Resilience4j (failureRateThreshold, slowCallRateThreshold, slowCallDurationThreshold)
+2. Explicit monitoring recommendations in Martin Fowler and Azure documentation
+3. Standard time-series metric naming conventions (counter/gauge/histogram)
+
+All numeric values are labeled as architectural recommendations or explicitly marked NOT VERIFIED where no authoritative source exists.

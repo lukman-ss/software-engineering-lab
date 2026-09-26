@@ -14,7 +14,7 @@
 ## Core Design Decisions
 - `CircuitBreaker` manages states via internal `sync.Mutex` protection.
 - State checks automatically calculate elapsed time on demand when checked or executed (`checkStateTransitionLocked`).
-- Testability achieved via clock injection (`cb.now`).
+- Testability achieved via short configuration timeouts and `time.Sleep` instead of complex clock mocks.
 
 ## Implementation-Specific Choices
 - Kept configuration minimal: `FailureThreshold`, `OpenTimeout`, `HalfOpenMaxCalls`.

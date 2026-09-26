@@ -6,17 +6,35 @@ import (
 	"time"
 )
 
-type State string
+var ErrCircuitOpen = errors.New("circuit breaker is open")
+
+type State int
 
 const (
-	StateClosed   State = "CLOSED"
-	StateOpen     State = "OPEN"
-	StateHalfOpen State = "HALF_OPEN"
+	Closed State = iota
+	Open
+	HalfOpen
 )
 
-var (
-	ErrCircuitOpen = errors.New("circuit breaker is open")
+// Exported constants for integration test compatibility
+const (
+	StateClosed = Closed
+	StateOpen   = Open
+	StateHalfOpen = HalfOpen
 )
+
+func (s State) String() string {
+	switch s {
+	case Closed:
+		return "CLOSED"
+	case Open:
+		return "OPEN"
+	case HalfOpen:
+		return "HALF_OPEN"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 type Config struct {
 	FailureThreshold int
@@ -24,132 +42,99 @@ type Config struct {
 	HalfOpenMaxCalls int
 }
 
-type CircuitBreaker struct {
-	mu                   sync.Mutex
-	state                State
-	failureCount         int
-	consecutiveSuccesses int
-	halfOpenCalls        int
-	lastStateChange      time.Time
-	config               Config
-	now                  func() time.Time
+func DefaultConfig() Config {
+	return Config{
+		FailureThreshold: 3,
+		OpenTimeout:      300 * time.Millisecond,
+		HalfOpenMaxCalls: 1,
+	}
 }
 
-func New(cfg Config) *CircuitBreaker {
+type Breaker struct {
+	mu         sync.Mutex
+	cfg        Config
+	state      State
+	failures   int
+	openedAt   time.Time
+	halfOpenIn int
+}
+
+func New(cfg Config) *Breaker {
 	if cfg.FailureThreshold <= 0 {
 		cfg.FailureThreshold = 3
 	}
 	if cfg.OpenTimeout <= 0 {
-		cfg.OpenTimeout = 5 * time.Second
+		cfg.OpenTimeout = 300 * time.Millisecond
 	}
 	if cfg.HalfOpenMaxCalls <= 0 {
 		cfg.HalfOpenMaxCalls = 1
 	}
+	return &Breaker{cfg: cfg, state: Closed}
+}
 
-	return &CircuitBreaker{
-		state:           StateClosed,
-		config:          cfg,
-		lastStateChange: time.Now(),
-		now:             time.Now,
+func (b *Breaker) State() State {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.advanceLocked(time.Now())
+	return b.state
+}
+
+func (b *Breaker) advanceLocked(now time.Time) {
+	if b.state == Open && now.Sub(b.openedAt) >= b.cfg.OpenTimeout {
+		b.state = HalfOpen
+		b.halfOpenIn = 0
 	}
 }
 
-func (cb *CircuitBreaker) State() State {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	cb.checkStateTransitionLocked()
-	return cb.state
-}
-
-func (cb *CircuitBreaker) checkStateTransitionLocked() {
-	if cb.state == StateOpen && cb.now().Sub(cb.lastStateChange) >= cb.config.OpenTimeout {
-		cb.state = StateHalfOpen
-		cb.halfOpenCalls = 0
-		cb.consecutiveSuccesses = 0
-		cb.lastStateChange = cb.now()
-	}
-}
-
-func (cb *CircuitBreaker) Execute(fn func() error) error {
-	cb.mu.Lock()
-	cb.checkStateTransitionLocked()
-
-	switch cb.state {
-	case StateOpen:
-		cb.mu.Unlock()
+func (b *Breaker) Execute(fn func() error) error {
+	b.mu.Lock()
+	b.advanceLocked(time.Now())
+	switch b.state {
+	case Open:
+		b.mu.Unlock()
 		return ErrCircuitOpen
-
-	case StateHalfOpen:
-		if cb.halfOpenCalls >= cb.config.HalfOpenMaxCalls {
-			cb.mu.Unlock()
+	case HalfOpen:
+		if b.halfOpenIn >= b.cfg.HalfOpenMaxCalls {
+			b.mu.Unlock()
 			return ErrCircuitOpen
 		}
-		cb.halfOpenCalls++
-		cb.mu.Unlock()
+		b.halfOpenIn++
+	case Closed:
+	}
+	b.mu.Unlock()
 
-		defer func() {
-			if r := recover(); r != nil {
-				cb.mu.Lock()
-				defer cb.mu.Unlock()
-				cb.state = StateOpen
-				cb.lastStateChange = cb.now()
-				cb.failureCount = 0
-				cb.halfOpenCalls = 0
-				panic(r)
-			}
-		}()
+	err := fn()
 
-		err := fn()
-
-		cb.mu.Lock()
-		defer cb.mu.Unlock()
-		if err != nil {
-			cb.state = StateOpen
-			cb.lastStateChange = cb.now()
-			cb.failureCount = 0
-			cb.halfOpenCalls = 0
-			return err
-		}
-
-		cb.consecutiveSuccesses++
-		if cb.consecutiveSuccesses >= cb.config.HalfOpenMaxCalls {
-			cb.state = StateClosed
-			cb.lastStateChange = cb.now()
-			cb.failureCount = 0
-			cb.halfOpenCalls = 0
-		}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if err == nil {
+		b.onSuccessLocked()
 		return nil
+	}
+	b.onFailureLocked(time.Now())
+	return err
+}
 
-	default: // StateClosed
-		cb.mu.Unlock()
+func (b *Breaker) onSuccessLocked() {
+	if b.state == HalfOpen {
+		b.state = Closed
+		b.failures = 0
+		b.halfOpenIn = 0
+		return
+	}
+	b.failures = 0
+}
 
-		defer func() {
-			if r := recover(); r != nil {
-				cb.mu.Lock()
-				defer cb.mu.Unlock()
-				cb.failureCount++
-				if cb.failureCount >= cb.config.FailureThreshold {
-					cb.state = StateOpen
-					cb.lastStateChange = cb.now()
-				}
-				panic(r)
-			}
-		}()
-
-		err := fn()
-
-		cb.mu.Lock()
-		defer cb.mu.Unlock()
-		if err != nil {
-			cb.failureCount++
-			if cb.failureCount >= cb.config.FailureThreshold {
-				cb.state = StateOpen
-				cb.lastStateChange = cb.now()
-			}
-			return err
-		}
-
-		cb.failureCount = 0
-		return nil
+func (b *Breaker) onFailureLocked(now time.Time) {
+	if b.state == HalfOpen {
+		b.state = Open
+		b.openedAt = now
+		b.halfOpenIn = 0
+		return
+	}
+	b.failures++
+	if b.failures >= b.cfg.FailureThreshold {
+		b.state = Open
+		b.openedAt = now
 	}
 }

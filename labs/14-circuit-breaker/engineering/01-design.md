@@ -45,4 +45,4 @@ Downstream service slows down or goes completely down. In the absence of a circu
 
 ## Implementation Decisions
 - Synchronized with `sync.Mutex` rather than complex lock-free data structures for simplicity and readability.
-- Injected `now` function for fast, deterministic unit testing without sleeps.
+- Short configuration timeouts enable deterministic unit testing without complex clock injection.
