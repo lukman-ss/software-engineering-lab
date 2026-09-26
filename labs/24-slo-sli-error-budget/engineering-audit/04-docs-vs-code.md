@@ -1,21 +1,11 @@
 # Docs vs Code Audit
 
-## Comparisons Evaluated
+## Consistency Review
 
-1. `README.md` vs Code:
-   - Claims: Sliding window event tracker, SLI evaluator with error budget freeze policy, multi-window burn rate alerts.
-   - Code: Matches structures in `internal/metrics`, `internal/slo`, and `internal/alerting`.
-   - Result: MATCH
+1. **Package Paths & Commands**: `README.md` specifies `go test ./...`, `go test -race ./...`, and `go run ./cmd/demo`. All commands execute without error.
+2. **Architecture Description**: `README.md` describes `internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, and `tests/`. All paths exist and match description.
+3. **Behavioral Claims**: README claims Google SRE SLI/SLO/Error Budget/Multi-Window Burn-Rate alerting implementation. The underlying codebase strictly implements these exact domain models.
 
-2. `engineering/01-design.md` vs Code & Execution:
-   - Claims: Standard library only, thread-safe metrics recording, multi-window alerting, test execution with race detector.
-   - Code & Execution: Fully aligned.
-   - Result: MATCH
+## Discrepancies
 
-3. `engineering/03-execution-result.md` vs Actual Command Execution:
-   - Claims: `go test ./...` PASS, `go test -race ./...` PASS, `go run ./cmd/demo` output matches.
-   - Actual Execution: All outputs match identically.
-   - Result: MATCH
-
-## Discrepancies Found
-- None.
+None found. Documentation accurately reflects code implementation and behavior.

@@ -1,29 +1,35 @@
 # Engineering Audit Plan
 
-Target Lab: `labs/24-slo-sli-error-budget`
+Target Lab: labs/24-slo-sli-error-budget
 Implementation Files:
-- `internal/metrics/tracker.go`
-- `internal/slo/evaluator.go`
-- `internal/alerting/engine.go`
-- `go.mod`
+- internal/metrics/tracker.go
+- internal/slo/evaluator.go
+- internal/alerting/engine.go
+- cmd/demo/main.go
+
 Tests:
-- `tests/slo_test.go`
+- tests/slo_test.go
+
 Executable/Demo:
-- `cmd/demo/main.go`
+- cmd/demo/main.go
+
 Approved Research Inputs:
-- `research/runs/2026-09-26-slo-sli-error-budget/05-report.md`
-- `research-audit/07-verdict.md` (APPROVED)
+- research/05-report.md
+- research/03-evidence.md
+
 Main Claims To Verify:
-1. Ratio-based SLI calculation (`good_events / total_events`).
-2. Error budget management (`(1.0 - SLO) * total_events - bad_events`) and release policy gating.
-3. Multi-window multi-burn-rate alerting logic evaluation.
-4. Concurrency thread safety under parallel request ingestion.
-5. Exact matching of real execution output with recorded execution docs and README.
+1. Sliding-window time-bucketed event tracker handles event recording and stale bucket eviction accurately.
+2. SLO Evaluator calculates SLI ratios, error budgets, and enforces release freeze (`CanDeploy=false`) when budget is exhausted.
+3. Multi-window multi-burn-rate alerting engine correctly detects fast and slow burn rate threshold breaches.
+4. Implementation is concurrency safe across concurrent metric recording.
+5. README instructions compile and run cleanly (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo`).
+
 Commands To Run:
 - `go test ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
+
 Primary Risks:
-- Race conditions in metrics bucket window eviction or slice resizing.
-- Inconsistencies in floating-point calculations or rounding for budget/SLI.
-- Divergence between claims in README/design vs implementation code.
+- Race conditions during concurrent `Record()` and `Summary()` calls on `WindowTracker`.
+- Incorrect burn rate math or SLI calculation rounding logic.
+- Misalignment between README documentation and actual Go package structure/outputs.
