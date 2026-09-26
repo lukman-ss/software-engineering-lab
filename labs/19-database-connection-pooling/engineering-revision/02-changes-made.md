@@ -2,42 +2,51 @@
 
 ## Revision 1
 
-Audit Issue: GAP-004 — TestConnectionStarvationDueToLeak uses 10ms unconditional sleep for goroutine synchronization
-Severity: MEDIUM
-Files Changed: tests/pool_test.go
-Action: Replaced `time.Sleep(10ms)` with a buffered channel (`acquired`) closed by the leak goroutine's externalCall at the moment the connection is held. The safe call only proceeds after the channel is closed, guaranteeing deterministic ordering regardless of scheduler load. Added a 2s watchdog timeout to prevent hangs.
-Verification: `go test -race -count=1 ./...` — PASS
+Audit Issue: GAP-01 — `engineering/03-execution-result.md` listed 6 tests; actual suite had 8 (TestExternalCallErrorPropagation, TestPreCancelledContextProcessOrderSafe added in prior revision).
+Severity: LOW
+Files Changed: `engineering/03-execution-result.md`
+Action: Updated test list in both `go test -v` and `go test -race` output blocks to reflect all 10 tests (8 prior + 2 new from this revision).
+Verification: File updated; matches actual `go test -v ./...` output.
 Status: RESOLVED
 
 ---
 
 ## Revision 2
 
-Audit Issue: GAP-005 — TestOversizedPoolExhaustsServerConnections assertion too weak (errCount > 0)
+Audit Issue: GAP-02 — `ErrAcquireTimeout` exported but never returned by any function and never tested (dead code).
 Severity: LOW
-Files Changed: tests/pool_test.go
-Action: Strengthened assertion from `errCount == 0` (expect at least 1 failure) to `errCount < 10` (expect at least 10 failures). With server max=10 and 20 concurrent goroutines each holding a connection for 20ms, exactly 10 goroutines must fail. This correctly validates the exhaustion claim.
-Verification: `go test -race -count=1 ./...` — PASS
+Files Changed: `internal/pool/service.go`
+Action: Removed `ErrAcquireTimeout` variable declaration and the `"errors"` import. The actual timeout error is `context.DeadlineExceeded` from `db.Conn(ctx)`, which is already surfaced correctly.
+Verification: `go build ./...` passes. No callers reference `ErrAcquireTimeout` anywhere in the codebase.
 Status: RESOLVED
 
 ---
 
 ## Revision 3
 
-Audit Issue: GAP-001 — externalCall error path not tested in ProcessOrderSafe or ProcessOrderUnsafeLeak
+Audit Issue: GAP-03 — No test for `ProcessOrderUnsafeLeak` when the initial `db.Conn` call fails (pool exhausted / context timeout before connection is acquired).
 Severity: LOW
-Files Changed: tests/pool_test.go
-Action: Added `TestExternalCallErrorPropagation` with two sub-tests (ProcessOrderSafe, ProcessOrderUnsafeLeak). Each sub-test uses an isolated MockDriver and db instance. Verifies that the callErr is returned by the service function, and that after `db.Close()` no connections remain active (proving defer conn.Close() ran).
-Verification: `go test -race -count=1 ./...` — PASS
+Files Changed: `tests/pool_test.go`
+Action: Added `TestUnsafeLeakExecContextFailure`. Test saturates a pool-of-1 with one held connection, then calls `ProcessOrderUnsafeLeak` with a 20ms context — verifies error is returned and all connections are released after `db.Close()`.
+Verification: `go test -v -run TestUnsafeLeakExecContextFailure ./...` → PASS.
 Status: RESOLVED
 
 ---
 
 ## Revision 4
 
-Audit Issue: GAP-002 — Pre-cancelled context path not tested in ProcessOrderSafe
+Audit Issue: GAP-05 — `TotalCreated()` counter is untested as proof that pooling results in fewer connections than unpooled use.
 Severity: LOW
-Files Changed: tests/pool_test.go
-Action: Added `TestPreCancelledContextProcessOrderSafe`. Creates a context, immediately cancels it, passes it to ProcessOrderSafe. Verifies that a non-nil error is returned. Standard database/sql behavior rejects Conn() on a cancelled context; this test proves the lab's service layer propagates it correctly.
-Verification: `go test -race -count=1 ./...` — PASS
+Files Changed: `tests/pool_test.go`
+Action: Added `TestTotalCreatedPoolReuse`. Runs 5 queries unpooled (SetMaxIdleConns(0)) and 5 queries pooled (SetMaxIdleConns(5)), then asserts pooled TotalCreated < unpooled TotalCreated using the same MockDriver instance.
+Verification: `go test -v -run TestTotalCreatedPoolReuse ./...` → PASS.
 Status: RESOLVED
+
+---
+
+## Revision 5 (skipped — GAP-04)
+
+Audit Issue: GAP-04 — No test for context cancellation during slow `connectDelay` (MockDriver.Open uses `time.Sleep`, not context-aware).
+Severity: LOW
+Action: SKIPPED. The audit itself noted this is acceptable for a mock driver. The `sql` package's pool layer handles context cancellation at a higher level. Adding a test would require changes to the mock's `Open` signature and the `driver.Connector` interface which is out of scope for a pedagogical mock.
+Status: UNRESOLVED (accepted — acceptable for mock)

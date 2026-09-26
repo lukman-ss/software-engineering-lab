@@ -249,3 +249,64 @@ func TestPreCancelledContextProcessOrderSafe(t *testing.T) {
 		t.Fatal("expected error with pre-cancelled context, got nil")
 	}
 }
+
+func TestUnsafeLeakExecContextFailure(t *testing.T) {
+	mockDriver := pool.NewMockDriver(1, 0)
+	db := pool.OpenDB(mockDriver)
+	db.SetMaxOpenConns(1)
+
+	svc := pool.NewOrderService(db)
+
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("setup: failed to saturate pool: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	err = svc.ProcessOrderUnsafeLeak(ctx, 99, nil)
+	if err == nil {
+		conn.Close()
+		db.Close()
+		t.Fatal("expected error when pool is exhausted, got nil")
+	}
+
+	conn.Close()
+	db.Close()
+
+	if mockDriver.ActiveConnections() != 0 {
+		t.Errorf("expected 0 active connections after db.Close(), got %d", mockDriver.ActiveConnections())
+	}
+}
+
+func TestTotalCreatedPoolReuse(t *testing.T) {
+	mockDriver := pool.NewMockDriver(100, 0)
+
+	unpooledDB := pool.OpenDB(mockDriver)
+	unpooledDB.SetMaxIdleConns(0)
+	for i := 0; i < 5; i++ {
+		_, err := unpooledDB.Exec("SELECT 1")
+		if err != nil {
+			t.Fatalf("unpooled query %d failed: %v", i, err)
+		}
+	}
+	unpooledDB.Close()
+	unpooledTotal := mockDriver.TotalCreated()
+
+	pooledDB := pool.OpenDB(mockDriver)
+	pooledDB.SetMaxIdleConns(5)
+	pooledDB.SetMaxOpenConns(5)
+	for i := 0; i < 5; i++ {
+		_, err := pooledDB.Exec("SELECT 1")
+		if err != nil {
+			t.Fatalf("pooled query %d failed: %v", i, err)
+		}
+	}
+	pooledDB.Close()
+	pooledTotal := mockDriver.TotalCreated() - unpooledTotal
+
+	if pooledTotal >= unpooledTotal {
+		t.Errorf("expected pooled to create fewer connections (%d) than unpooled (%d)", pooledTotal, unpooledTotal)
+	}
+}

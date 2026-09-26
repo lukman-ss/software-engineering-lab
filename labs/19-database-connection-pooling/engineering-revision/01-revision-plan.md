@@ -1,39 +1,37 @@
 # Engineering Revision Plan
 
 Target Lab: labs/19-database-connection-pooling
-Previous Verdict: APPROVED_WITH_WARNINGS
+Previous Verdict: APPROVED (no blocking issues; 5 non-blocking LOW-severity findings)
 
 ## Blocking Issues
 
-None. No CRITICAL or HIGH issues found in audit.
+None.
 
 ## Non-Blocking Issues
 
-| ID | Severity | Description |
-|---|---|---|
-| GAP-004 | MEDIUM | TestConnectionStarvationDueToLeak uses 10ms sleep for goroutine sync — fragile under load |
-| GAP-001 | LOW | externalCall error path not tested in ProcessOrderSafe or ProcessOrderUnsafeLeak |
-| GAP-002 | LOW | Pre-cancelled context path not tested in ProcessOrderSafe |
-| GAP-003 | LOW | No test for connection release when ProcessOrderUnsafeLeak externalCall fails (by inspection, defer conn.Close() handles it) |
-| GAP-005 | LOW | TestOversizedPoolExhaustsServerConnections asserts errCount > 0 instead of >= 10 |
-| GAP-006 | LOW | connectDelay tested only indirectly (TestDirectConnectionOverhead covers this adequately) |
+1. **GAP-01** (DOC_CODE_MISMATCH, LOW): `engineering/03-execution-result.md` lists 6 tests; actual suite has 8.
+2. **GAP-02** (MISSING_TEST, LOW): `ErrAcquireTimeout` exported but never returned and never tested — dead code.
+3. **GAP-03** (MISSING_TEST, LOW): No test for `ProcessOrderUnsafeLeak` when initial `ExecContext` fails.
+4. **GAP-04** (MISSING_EDGE_CASE, LOW): No test for context-cancelled during slow `connectDelay`. Acceptable for mock driver — skip.
+5. **GAP-05** (MISSING_TEST, LOW): `TotalCreated()` untested as proof of pool reuse.
 
 ## Files To Change
 
-- `tests/pool_test.go` — fix GAP-004, GAP-005, add tests for GAP-001, GAP-002
+- `internal/pool/service.go` — remove dead `ErrAcquireTimeout`
+- `tests/pool_test.go` — add tests for GAP-03 and GAP-05
+- `engineering/03-execution-result.md` — update test list from 6 to 8 (+ new tests)
 
 ## Tests To Add/Modify
 
-1. **Modify** `TestConnectionStarvationDueToLeak`: replace `time.Sleep(10ms)` with channel signal confirming goroutine acquired connection
-2. **Modify** `TestOversizedPoolExhaustsServerConnections`: strengthen assertion from `errCount > 0` to `errCount >= 10`
-3. **Add** `TestExternalCallErrorPropagation`: covers externalCall returning error in both ProcessOrderSafe and ProcessOrderUnsafeLeak
-4. **Add** `TestPreCancelledContextProcessOrderSafe`: covers already-cancelled context passed to ProcessOrderSafe
+- `TestUnsafeLeakExecContextFailure`: verifies that when MockDriver rejects the ExecContext query (via server overload), `ProcessOrderUnsafeLeak` returns the error and releases the connection.
+- `TestTotalCreatedPoolReuse`: verifies pooled reuse results in fewer `TotalCreated` than unpooled.
 
 ## Validation Commands
 
 ```bash
 cd labs/19-database-connection-pooling
-go test ./...
-go test -race -count=1 ./...
+go build ./...
+go test -v ./...
+go test -race ./...
 go run ./cmd/demo
 ```

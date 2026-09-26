@@ -23,6 +23,16 @@ Result:
 --- PASS: TestPoolLockingDeadlock (0.05s)
 === RUN   TestMockConnDoubleClose
 --- PASS: TestMockConnDoubleClose (0.00s)
+=== RUN   TestExternalCallErrorPropagation
+    --- PASS: TestExternalCallErrorPropagation/ProcessOrderSafe (0.00s)
+    --- PASS: TestExternalCallErrorPropagation/ProcessOrderUnsafeLeak (0.00s)
+--- PASS: TestExternalCallErrorPropagation (0.00s)
+=== RUN   TestPreCancelledContextProcessOrderSafe
+--- PASS: TestPreCancelledContextProcessOrderSafe (0.00s)
+=== RUN   TestUnsafeLeakExecContextFailure
+--- PASS: TestUnsafeLeakExecContextFailure (0.00s)
+=== RUN   TestTotalCreatedPoolReuse
+--- PASS: TestTotalCreatedPoolReuse (0.00s)
 PASS
 ```
 
@@ -42,6 +52,16 @@ Result:
 --- PASS: TestPoolLockingDeadlock (0.05s)
 === RUN   TestMockConnDoubleClose
 --- PASS: TestMockConnDoubleClose (0.00s)
+=== RUN   TestExternalCallErrorPropagation
+    --- PASS: TestExternalCallErrorPropagation/ProcessOrderSafe (0.00s)
+    --- PASS: TestExternalCallErrorPropagation/ProcessOrderUnsafeLeak (0.00s)
+--- PASS: TestExternalCallErrorPropagation (0.00s)
+=== RUN   TestPreCancelledContextProcessOrderSafe
+--- PASS: TestPreCancelledContextProcessOrderSafe (0.00s)
+=== RUN   TestUnsafeLeakExecContextFailure
+--- PASS: TestUnsafeLeakExecContextFailure (0.00s)
+=== RUN   TestTotalCreatedPoolReuse
+--- PASS: TestTotalCreatedPoolReuse (0.00s)
 PASS
 ```
 

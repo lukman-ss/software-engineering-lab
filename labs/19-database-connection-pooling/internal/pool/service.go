@@ -3,11 +3,6 @@ package pool
 import (
 	"context"
 	"database/sql"
-	"errors"
-)
-
-var (
-	ErrAcquireTimeout = errors.New("timeout acquiring connection from pool")
 )
 
 type OrderService struct {
