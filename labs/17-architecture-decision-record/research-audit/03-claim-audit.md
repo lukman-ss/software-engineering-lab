@@ -2,77 +2,278 @@
 
 ## Claim 1
 
-Claim: An ADR must record the context, forces, a single decision, and full consequences (positive, negative, and neutral) rather than just implementation specs.
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 1); `05-report.md` (Finding 1)
-Evidence Provided: Quotes from Michael Nygard (2011), corroborated by AWS Prescriptive Guidance, Microsoft Azure Well-Architected, and MADR.
-Source: Cognitect Blog (https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Core invariant across all canonical ADR literature.
+Claim:
+ADRs must contain Title, Context, Decision, Status, and Consequences sections to be effective.
+
+Location:
+`research/03-evidence.md` (Evidence 1) and `research/05-report.md` (Finding 1)
+
+Evidence Provided:
+Direct quote from Michael Nygard (2011) defining the five core sections. Corroborated by MADR and AWS Prescriptive Guidance.
+
+Source:
+Source 1 (Nygard 2011), Source 3 (MADR), Source 5 (AWS)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+While "must" could sound overly prescriptive, multiple independent sources converge on these exact section semantics as the canonical ADR structure.
+
+---
 
 ## Claim 2
 
-Claim: ADRs must be immutable once accepted; changes require a new ADR that supersedes or deprecates the predecessor.
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 2); `05-report.md` (Finding 2)
-Evidence Provided: AWS Prescriptive Guidance: "When the team accepts an ADR, it becomes immutable...", Nygard: "mark it as superseded", Azure Well-Architected: "The ADR serves as an append-only log."
-Source: AWS Prescriptive Guidance / Cognitect Blog / Microsoft Learn
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fully supported by all Tier 1 primary sources. The research agent appropriately documented community divergence (living document pattern) in contradictions without compromising canonical guidance.
+Claim:
+ADRs prevent teams from repeatedly re-discussing the same architecture decisions by preserving decision rationale.
+
+Location:
+`research/03-evidence.md` (Evidence 2) and `research/05-report.md` (Finding 2)
+
+Evidence Provided:
+Quotation from AWS Prescriptive Guidance citing "the same topic being discussed multiple times" as an anti-pattern caused by missing justification, and Nygard on future team members understanding past decisions.
+
+Source:
+Source 5 (AWS), Source 1 (Nygard)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Accurately reflects the core rationale and observed benefit highlighted by practitioners and official guidance.
+
+---
 
 ## Claim 3
 
-Claim: ADRs belong inside version control alongside source code.
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 3); `05-report.md` (Executive Summary & Finding 2)
-Evidence Provided: Nygard: "We will keep ADRs in the project repository under doc/arch/adr-NNN.md", Azure Well-Architected: "stored openly with the workload's documentation."
-Source: Cognitect Blog / Microsoft Learn
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Strongly supported. Ensures architectural evolution is versioned alongside the code it governs.
+Claim:
+ADRs should document only architecturally significant decisions, not all technical choices.
+
+Location:
+`research/03-evidence.md` (Evidence 3) and `research/05-report.md` (Finding 6)
+
+Evidence Provided:
+Direct quotation from Nygard on decisions that affect structure, non-functional characteristics, dependencies, interfaces, or construction techniques, corroborated by Zimmermann's guidance to avoid ADR logs >100 entries.
+
+Source:
+Source 1 (Nygard 2011), Source 4 (Zimmermann 2020)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Clear boundary preventing ADR bloat; well-supported by primary and secondary sources.
+
+---
 
 ## Claim 4
 
-Claim: Architectural significance applies to structure, NFRs, dependencies, interfaces, and construction techniques, not low-level refactoring.
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 4); `05-report.md` (Finding 3)
-Evidence Provided: AWS Prescriptive Guidance categorizing significance into structure, NFRs, dependencies, interfaces, and construction techniques; echoed by Nygard and Richards & Ford (2020).
-Source: AWS Prescriptive Guidance (https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/adr-process.html)
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Essential scoping definition that prevents ADR logs from becoming bloated with routine refactoring notes.
+Claim:
+ADRs have lifecycle states (Proposed, Accepted, Deprecated, Superseded) and old ADRs are preserved even when superseded.
+
+Location:
+`research/03-evidence.md` (Evidence 4) and `research/05-report.md` (Finding 5)
+
+Evidence Provided:
+Nygard quotation on marking old ADRs as superseded and keeping them around; corroborated by MADR specifications.
+
+Source:
+Source 1 (Nygard 2011), Source 3 (MADR)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Accurately preserves the append-only/immutable history nature of ADR logs.
+
+---
 
 ## Claim 5
 
-Claim: ADR status transitions follow: Proposed -> Accepted -> Superseded / Deprecated (or Rejected).
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 5); `05-report.md` (Finding 4)
-Evidence Provided: Nygard / AWS / MADR lifecycle definitions. AWS explicitly formalizes Rejected status.
-Source: Cognitect Blog / AWS Prescriptive Guidance / MADR
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Correctly accounts for differences between Nygard (4 statuses) and AWS/MADR (5 statuses) via a clean superset union.
+Claim:
+Microservices architecture introduces significant operational complexity premium compared to monoliths.
+
+Location:
+`research/03-evidence.md` (Evidence 5) and `research/05-report.md` (Finding 4)
+
+Evidence Provided:
+Quotation from Martin Fowler detailing automated deployment, monitoring, dealing with failure, and eventual consistency costs.
+
+Source:
+Source 7 (Fowler 2015 "Microservice Premium")
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Well-known architectural principle clearly documented and supported by cited source.
+
+---
 
 ## Claim 6
 
-Claim: Modular monoliths reduce operational complexity while preserving domain boundaries for early-stage systems compared to microservices.
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 6); `05-report.md` (Finding 5)
-Evidence Provided: Martin Fowler "Monolith First": MicroservicePremium explanation and premature boundary risks.
-Source: Martin Fowler (https://martinfowler.com/bliki/MonolithFirst.html)
-Source Actually Supports Claim: YES
-Classification: INTERPRETATION
-Severity: MEDIUM
-Notes: Supported by Fowler's analysis. The research agent accurately presents this as context-sensitive engineering trade-off rather than an absolute rule, and notes the counter-argument for teams with preexisting microservice capabilities and stable boundaries.
+Claim:
+Most successful microservice implementations started as monoliths that later decomposed, not greenfield microservices.
+
+Location:
+`research/03-evidence.md` (Evidence 6) and `research/05-report.md` (Finding 3)
+
+Evidence Provided:
+Quotation from Martin Fowler stating that almost all successful stories started with a monolith.
+
+Source:
+Source 6 (Fowler 2015 "Monolith First")
+
+Source Actually Supports Claim:
+PARTIAL
+
+Classification:
+INTERPRETATION
+
+Severity:
+MEDIUM
+
+Notes:
+Fowler explicitly states this is based on anecdotal observations from his network and that dissenting opinions exist. The research report accurately notes this nuance ("Confidence: MEDIUM", acknowledging anecdotal evidence).
+
+---
 
 ## Claim 7
 
-Claim: Measurable criteria such as deployment cadence divergence, resource contention, or team ownership shifts constitute valid "Review Triggers" to re-evaluate architectural decisions.
-Location: `research/runs/2026-09-26-architecture-decision-record/03-evidence.md` (Evidence 7); `05-report.md` (Finding 6 / Open Questions)
-Evidence Provided: Implicit in Azure Well-Architected confidence logging and consequence tracking; explicit in community templates (Joel Parker Henderson).
-Source: Microsoft Learn / Community Practice
-Source Actually Supports Claim: PARTIAL
-Classification: HYPOTHESIS
-Severity: MEDIUM
-Notes: The principle of review triggers is widely acknowledged, but specific numeric threshold calibrations (e.g. exactly how much cadence divergence warrants service extraction) lack authoritative empirical constants in the sources. The research agent correctly classified this under "Open Questions" as a medium-priority gap rather than presenting arbitrary numbers.
+Claim:
+Early-stage projects with uncertain requirements should prioritize development speed over architectural sophistication.
+
+Location:
+`research/03-evidence.md` (Evidence 7) and `research/05-report.md` (Finding 3)
+
+Evidence Provided:
+Fowler quote regarding prioritizing speed/cycle time during the initial phase and avoiding microservice overhead.
+
+Source:
+Source 6 (Fowler 2015)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+INTERPRETATION
+
+Severity:
+LOW
+
+Notes:
+Consistent with agile principles and well-grounded in cited source text.
+
+---
+
+## Claim 8
+
+Claim:
+Multiple ADR templates exist with varying sections, but core elements remain consistent across templates.
+
+Location:
+`research/03-evidence.md` (Evidence 8)
+
+Evidence Provided:
+WICSA 2015 paper comparing 7 ADR templates and Zimmermann (2020) detailing Y-statements vs Nygard vs arc42.
+
+Source:
+Source 4 (Zimmermann 2020), Source 10 (WICSA 2015)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Accurately captures structural diversity while identifying underlying consensus.
+
+---
+
+## Claim 9
+
+Claim:
+ADRs serve as "architecture git history" - recording why architecture changed, complementing source control that records how code changed.
+
+Location:
+`research/03-evidence.md` (Evidence 9) and `research/05-report.md` (Executive Summary)
+
+Evidence Provided:
+Nygard quotation on motivation behind decisions being visible to everyone so nobody wonders "What were they thinking?".
+
+Source:
+Source 1 (Nygard 2011), Source 5 (AWS)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+INTERPRETATION
+
+Severity:
+LOW
+
+Notes:
+The phrase "architecture git history" is an apt metaphor synthesising the concepts from Nygard and AWS. The research notes explicitly label this as an interpretation/analogy.
+
+---
+
+## Claim 10
+
+Claim:
+Common ADR anti-patterns include: no context, fake alternatives, documentation dumps, missing consequences, no review conditions.
+
+Location:
+`research/03-evidence.md` (Evidence 10)
+
+Evidence Provided:
+Citations from AWS Prescriptive Guidance and Zimmermann's analysis of bad justifications and anti-patterns.
+
+Source:
+Source 5 (AWS), Source 4 (Zimmermann)
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Directly derived from the referenced sources.

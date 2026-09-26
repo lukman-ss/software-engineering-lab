@@ -2,7 +2,7 @@
 
 ## Build
 Command: `go build ./...`
-Result: `PASS` (zero output, compiled successfully)
+Result: `PASS`
 
 ## Tests
 Command: `go test -v ./...`
