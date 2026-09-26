@@ -38,5 +38,50 @@ engineering-audit-opensource/05-gaps.md — G5 (MEDIUM): Latency not recorded fo
 - Content reviewed against code audit findings from engineering-audit-opensource/
 - Content brief updated to include the new limitation warning
 
+## New Changes (Addressing Content Audit Gaps)
+
+### Audit Source
+content-audit/09-verdict.md — Non-blocking warnings from engineering-audit-opensource/05-gaps.md G2 and G3.
+
+### Issues Addressed
+
+1. **G3: P90 Metric Omission in Demo Output**
+   - **Severity**: LOW
+   - **Finding**: `Result` struct computes P90 but demo's `printResults` only prints P50/P95/P99, creating inconsistency with content documenting P50/P90/P95/P99 as standard output.
+   - **Action**: Clarify in content that demo prints subset while P90 remains computed.
+
+2. **G2: Missing Clarification on 10% Slowdown vs Queuing**
+   - **Severity**: LOW
+   - **Finding**: Content describes 10% slowdown as additive but doesn't explicitly contrast with primary queuing mechanism.
+   - **Action**: Add sentence clarifying it's an amplifier on top of queuing delays.
+
+### Files Modified
+
+#### 02-master-draft.md
+- **Line 70 (Implementation section)**: Added note that `printResults` in demo prints subset (P50/P95/P99) while `Result` computes all seven metrics including P90.
+- **Line 120 (Code Walkthrough)**: Added clarifying sentence that 10% slowdown is an amplifier on top of queuing delays; stress test would still show P95 degradation from queue buildup alone.
+
+#### 03-code-snippets.md
+- **Line 100 (Snippet 2 Explanation)**: Added note about demo printing subset of metrics.
+- **Line 48 (Snippet 1 Explanation)**: Added clarifying sentence about 10% slowdown being additive amplifier to queuing delays.
+
+#### 04-diagrams.md
+- **Line 41 (Tail latency causes)**: Updated wording to clarify 10% probability is an amplifier on top of queue wait.
+
+#### 05-key-takeaways.md
+- **Line 8 (existing takeaway)**: Added note about P90 being computed but not printed in demo output.
+
+## Files Not Modified (Confirmed)
+- `engineering/` files — out of scope per pipeline override
+- `cmd/demo/main.go` — code file, not content
+- `internal/` — code files, not content
+- `research/` — research files, not content
+
+## Verification of New Changes
+- Content now accurately reflects that demo prints P50/P95/P99 subset while P90 is computed
+- Content clarifies 10% slowdown as amplifier on top of queuing mechanism
+- All changes maintain consistency with existing content style and technical accuracy
+- No code or research files modified
+
 ## Status
 READY_FOR_CONTENT_ADAPTER

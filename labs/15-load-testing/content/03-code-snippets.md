@@ -45,7 +45,7 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Explanation: Semafor memblokir pemrosesan masuk jika batas `MaxDBConnections` telah terisi, meniru antrean sumber daya. Context cancellation ditangani dengan `select` untuk menghindari goroutine terjebak. Penundaan query disimulasikan menggunakan `time.Timer` (bukan `time.Sleep` langsung) untuk mendukung context cancellation. Saat request terakumulasi di atas kapasitas pool, server menambahkan 10% probabililitas menunda query 25x lebih lama (simulasi latency variasi real-world).
+Explanation: Semafor memblokir pemrosesan masuk jika batas `MaxDBConnections` telah terisi, meniru antrean sumber daya. Context cancellation ditangani dengan `select` untuk menghindari goroutine terjebak. Penundaan query disimulasikan menggunakan `time.Timer` (bukan `time.Sleep` langsung) untuk mendukung context cancellation. Saat request terakumulasi di atas kapasitas pool, server menambahkan 10% probabililitas menunda query 25x lebih lama (simulasi latency variasi real-world). Slowdown 10% ini adalah *penambah (amplifier)* di atas mekanisme antrean utama; bahkan tanpanya, stress test tetap menunjukkan degradasi P95 murni dari penumpukan antrean semafor.
 
 ## Snippet 2 — Lock-Free Concurrent Load Runner
 
@@ -129,14 +129,8 @@ func CalculateMetrics(latencies []time.Duration, errors int, totalDuration time.
 
 	return res
 }
-
-func percentile(sorted []time.Duration, pct float64) time.Duration {
-	if len(sorted) == 0 {
-		return 0
-	}
-	idx := int(float64(len(sorted)-1) * (pct / 100.0))
-	return sorted[idx]
-}
 ```
 
 Explanation: Data durasi respon direplikasi dan disortir (*O(N log N)*). Pengambilan persentil dilakukan secara deterministik dari index kalkulasi proporsional. Metode ini disengaja untuk skenario lab ringan dan dapat ditukar dengan histogram streaming (HdrHistogram) jika perlu menangani beban produksi yang berat memori.
+
+**Catatan implementasi**: Fungsi `CalculateMetrics` mengembalikan `Result` dengan tujuh metrik persentil (P50/P90/P95/P99 dan min/avg/max). Namun, `cmd/demo/main.go` memilih mencetak hanya subset P50/P95/P99 pada `printResults`; P90 tetap dihitung dan tersedia di `Result.P90Latency` jika dibutuhkan.

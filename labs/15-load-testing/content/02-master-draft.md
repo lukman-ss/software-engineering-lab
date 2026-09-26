@@ -66,8 +66,8 @@ Komponen lab dirancang tanpa dependensi eksternal:
 Struktur modul lab terdiri dari:
 - `internal/server/server.go`: Mengimplementasikan server HTTP dengan semafor kanal Go.
 - `internal/loadtest/runner.go`: Mengimplementasikan runner beban konkuren dengan transport HTTP kustom (`MaxIdleConns: 1000`) untuk mencegah limitasi pooling sisi klien menyamarkan bottleneck server.
-- `internal/loadtest/metrics.go`: Mengimplementasikan fungsi penghitungan min, max, avg, P50, P90, P95, dan P99 dari slice latensi terurut.
-- `cmd/demo/main.go`: Menjalankan perbandingan Smoke Test (2 VU) dan Stress Test (50 VU) melawan server berkapasitas 5 koneksi.
+- `internal/loadtest/metrics.go`: Mengimplementasikan fungsi penghitungan min, max, avg, P50, P90, P95, dan P99 dari slice latensi terurut (7 metrik total pada `Result`).
+- `cmd/demo/main.go`: Menjalankan perbandingan Smoke Test (2 VU) dan Stress Test (50 VU) melawan server berkapasitas 5 koneksi; `printResults` menampilkan subset ringkas P50/P95/P99 (P90 tetap dihitung di `Result.P90Latency` namun tidak dicetak di demo).
 
 ## Code Walkthrough
 
@@ -117,7 +117,7 @@ Ketika 5 goroutine mengisi `s.semaphore`, goroutine berikutnya akan memblokir (*
 
 Context cancellation ditangani non-blocking menggunakan `select` agar request dibatalkan saat client timeout atau context dibatalkan.
 
-Saat request terakumulasi di atas kapasitas pool (`s.activeReq > MaxDBConnections`), server menambahkan 10% kemungkinan penundaan query 25x lebih lama (20ms → 500ms) untuk mensimulasikan varian latency real-world.
+Saat request terakumulasi di atas kapasitas pool (`s.activeReq > MaxDBConnections`), server menambahkan 10% kemungkinan penundaan query 25x lebih lama (20ms → 500ms) untuk mensimulasikan varian latency real-world. Penundaan acak ini adalah *amplifier tambahan* di atas penundaan antrean (queuing delay) yang disebabkan semafor; bahkan tanpanya, stress test tetap menunjukkan degradasi P95 akibat penumpukan antrean murni.
 
 ### 2. Eksekusi Beban Tanpa Kontensi Mutex (`internal/loadtest/runner.go`)
 ```go

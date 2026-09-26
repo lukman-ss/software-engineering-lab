@@ -37,6 +37,6 @@ Stress Test (50 VUs, 5 DB connections)
 P95 ≈ 982ms, P99 ≈ 1.2s
 Queue buildup — 45 VUs wait while 5 process.
 Tail latency spikes due to:
-  1. Cumulative wait time in queue
-  2. 10% probability of 25x query duration spike
+  1. Cumulative wait time in queue (primary mechanism)
+  2. 10% probability of 25x query duration spike (additional amplifier on top of queuing)
 ```
