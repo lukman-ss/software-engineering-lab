@@ -1,31 +1,44 @@
+# Audit Plan
+
 Target Lab: labs/14-circuit-breaker
+
 Files Reviewed:
-- labs/14-circuit-breaker/README.md
-- labs/14-circuit-breaker/research/02-sources.md
-- labs/14-circuit-breaker/research/03-core-concepts.md
-- labs/14-circuit-breaker/research/04-cascade-failure.md
-- labs/14-circuit-breaker/research/05-circuit-states.md
-- labs/14-circuit-breaker/research/06-timeout-retry-backoff.md
-- labs/14-circuit-breaker/research/07-fallback-bulkhead.md
-- labs/14-circuit-breaker/research/08-observability.md
-- labs/14-circuit-breaker/research/09-failure-modes.md
-- labs/14-circuit-breaker/research/10-final-research.md
+- research/01-plan.md
+- research/01-research-plan.md
+- research/02-sources.md
+- research/03-core-concepts.md
+- research/03-evidence.md
+- research/04-cascade-failure.md
+- research/04-contradictions.md
+- research/05-circuit-states.md
+- research/05-report.md
+- research/06-open-questions.md
+- research/06-timeout-retry-backoff.md
+- research/07-fallback-bulkhead.md
+- research/08-observability.md
+- research/09-failure-modes.md
+- research/10-final-research.md
 
 Claims To Verify:
-1. Circuit Breakers isolate network blast radius and prevent cascading failures.
-2. The caller fails in microseconds instead of blocking.
-3. Asynchronous non-critical flows must be decoupled.
-4. Silent fallbacks must never be used for critical mutations.
-5. Circuit states (CLOSED, OPEN, HALF_OPEN) behave as described.
+1. Timeouts block concurrent requests exhausting critical resources causing cascade failures.
+2. Circuit Breakers transition deterministically between CLOSED, OPEN, HALF_OPEN.
+3. Retries without bounding/jitter cause amplified failures (Retry Storms).
+4. Circuit breakers actively prevent operation instead of blindly repeating.
+5. In-memory circuit breakers track state per-instance.
+6. Asynchronous non-critical flows can be decoupled using queues (Queue-Based Load Leveling).
 
 Code To Execute:
-None (PIPELINE OVERRIDE: Do not audit implementation/code).
+None. Pipeline override dictates skipping implementation/code audit.
 
 Primary Risks:
-- Overgeneralized claims using "never" or "must" (e.g., fallbacks, decoupling).
-- Uncited architectural patterns (PPOB/CMMS examples).
+- Unsupported universal claims ("must", "always").
+- Dead URLs in source inventory.
+- Mismatched evidence vs source content.
+- State implementation specifics generalized across all libraries.
 
 Audit Strategy:
-- Validate URLs.
-- Cross-reference major claims against sources.
-- Identify missing sources for architectural claims.
+1. Verify source URLs.
+2. Verify source relevance and content against claims.
+3. Extract claims from research files and evaluate support.
+4. Identify internal contradictions in research.
+5. Formulate final evidence-based verdict.

@@ -43,6 +43,10 @@ func TestCircuitBreakerIntegration(t *testing.T) {
 		if !errors.Is(err, circuitbreaker.ErrCircuitOpen) {
 			t.Fatalf("expected ErrCircuitOpen, got %v", err)
 		}
+
+		if got := fakeServer.RequestCount(); got != 2 {
+			t.Fatalf("expected 2 downstream requests, got %d", got)
+		}
 	})
 
 	t.Run("cooldown and recovery", func(t *testing.T) {

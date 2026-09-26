@@ -1,13 +1,8 @@
-# Code Snippets
-
-Dokumentasi potongan kode nyata yang disarikan langsung dari implementasi repositori Lab 14 Circuit Breaker.
-
----
-
-## Snippet 1 — Struktur Definisi dan Konstruktor Circuit Breaker
+## Snippet 1 — Circuit Breaker State Constants
 
 Source File: `internal/circuitbreaker/circuit_breaker.go`
-Purpose: Mendefinisikan struktur data Circuit Breaker, jenis status (State), parameter konfigurasi (Config), dan inisialisasi default yang aman.
+
+Purpose: Defines the three operational states of the circuit breaker state machine.
 
 ```go
 type State string
@@ -17,26 +12,19 @@ const (
 	StateOpen     State = "OPEN"
 	StateHalfOpen State = "HALF_OPEN"
 )
+```
 
-var (
-	ErrCircuitOpen = errors.New("circuit breaker is open")
-)
+## Snippet 2 — Circuit Breaker Configuration
 
+Source File: `internal/circuitbreaker/circuit_breaker.go`
+
+Purpose: Configuration struct and default values for the circuit breaker.
+
+```go
 type Config struct {
 	FailureThreshold int
 	OpenTimeout      time.Duration
 	HalfOpenMaxCalls int
-}
-
-type CircuitBreaker struct {
-	mu                   sync.Mutex
-	state                State
-	failureCount         int
-	consecutiveSuccesses int
-	halfOpenCalls        int
-	lastStateChange      time.Time
-	config               Config
-	now                  func() time.Time
 }
 
 func New(cfg Config) *CircuitBreaker {
@@ -59,15 +47,11 @@ func New(cfg Config) *CircuitBreaker {
 }
 ```
 
-Explanation:
-Kode di atas mendefinisikan tiga status inti (`CLOSED`, `OPEN`, `HALF_OPEN`) dan variabel *error* sentral `ErrCircuitOpen`. Struktur dilindungi oleh `sync.Mutex` untuk menjamin keamanan konkurensi antar *goroutine*. Field `now` diinisialisasi secara fleksibel untuk mempermudah injeksi waktu tiruan (*mock clock*) saat pengujian deterministik.
-
----
-
-## Snippet 2 — Transisi State Menggunakan Evaluasi Waktu Lazy
+## Snippet 3 — State Transition Check
 
 Source File: `internal/circuitbreaker/circuit_breaker.go`
-Purpose: Mengkalkulasi perpindahan status dari `OPEN` ke `HALF_OPEN` secara instan (*on-demand*) tanpa membebani memori dengan *goroutine timer background*.
+
+Purpose: Checks if OPEN circuit should transition to HALF_OPEN based on elapsed time.
 
 ```go
 func (cb *CircuitBreaker) checkStateTransitionLocked() {
@@ -80,15 +64,11 @@ func (cb *CircuitBreaker) checkStateTransitionLocked() {
 }
 ```
 
-Explanation:
-Fungsi internal ini dipanggil saat kunci mutex telah dipegang (`Locked`). Jika sirkuit sedang berstatus `OPEN` dan waktu jeda istirahat (`OpenTimeout`) telah berlalu, status secara otomatis bertransisi ke `HALF_OPEN` serta mereset penghitung panggilan *probe* (`halfOpenCalls`).
-
----
-
-## Snippet 3 — Mekanisme Eksekusi dengan Proteksi Mesin Status
+## Snippet 4 — Execute Method (Full State Machine)
 
 Source File: `internal/circuitbreaker/circuit_breaker.go`
-Purpose: Mengelola aliran eksekusi fungsi pemanggilan downstream berdasarkan status terkini dari Circuit Breaker.
+
+Purpose: Core execution method implementing the three-state machine with fail-fast, probe limiting, and panic handling.
 
 ```go
 func (cb *CircuitBreaker) Execute(fn func() error) error {
@@ -107,6 +87,18 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 		}
 		cb.halfOpenCalls++
 		cb.mu.Unlock()
+
+		defer func() {
+			if r := recover(); r != nil {
+				cb.mu.Lock()
+				defer cb.mu.Unlock()
+				cb.state = StateOpen
+				cb.lastStateChange = cb.now()
+				cb.failureCount = 0
+				cb.halfOpenCalls = 0
+				panic(r)
+			}
+		}()
 
 		err := fn()
 
@@ -132,6 +124,19 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 	default: // StateClosed
 		cb.mu.Unlock()
 
+		defer func() {
+			if r := recover(); r != nil {
+				cb.mu.Lock()
+				defer cb.mu.Unlock()
+				cb.failureCount++
+				if cb.failureCount >= cb.config.FailureThreshold {
+					cb.state = StateOpen
+					cb.lastStateChange = cb.now()
+				}
+				panic(r)
+			}
+		}()
+
 		err := fn()
 
 		cb.mu.Lock()
@@ -151,18 +156,11 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 }
 ```
 
-Explanation:
-Logika utama proteksi eksekusi:
-- Saat `StateOpen`: Menolak panggilan seketika (*fail-fast*) tanpa membuka blok kode fungsi `fn()`.
-- Saat `StateHalfOpen`: Mengizinkan pemanggilan pengujian (*probe*) dalam jumlah terbatas (`HalfOpenMaxCalls`). Kegagalan satu kali akan mengembalikan status ke `StateOpen`, sedangkan keberhasilan akan menormalisasi status kembali ke `StateClosed`.
-- Saat `StateClosed`: Mengeksekusi fungsi secara normal. Jika terjadi error berulang kali melampaui `FailureThreshold`, status sirkuit langsung diputus menjadi `StateOpen`.
-
----
-
-## Snippet 4 — Pembungkusan Pemanggilan Klien dengan Circuit Breaker
+## Snippet 5 — Checkout Service with Circuit Breaker
 
 Source File: `internal/checkout/service.go`
-Purpose: Mengintegrasikan Circuit Breaker ke dalam logika domain bisnis layanan checkout saat mengeksekusi pembayaran.
+
+Purpose: Application-level consumer that routes payment calls through the circuit breaker.
 
 ```go
 func (s *Service) Checkout(ctx context.Context) error {
@@ -185,73 +183,52 @@ func (s *Service) Checkout(ctx context.Context) error {
 }
 ```
 
-Explanation:
-Metode `Checkout` membungkus pemanggilan jaringan `paymentClient.ProcessPayment(ctx)` di dalam closure `cb.Execute(...)`. Apabila sirkuit terbuka atau downstream bermasalah, error akan diteruskan secara rapi dengan konteks penanganan kegagalan yang tepat.
+## Snippet 6 — Demo Circuit Breaker Configuration
 
----
+Source File: `cmd/demo/main.go`
 
-## Snippet 5 — Pengujian Integrasi: Deteksi Gagal dan Pemulihan
-
-Source File: `tests/integration_test.go`
-Purpose: Melakukan verifikasi alur pemutusan sirkuit saat dependensi mengalami kegagalan dan transisi pemulihannya ke status semula.
+Purpose: Shows the configuration used in the demo scenarios.
 
 ```go
-func TestCircuitBreakerIntegration(t *testing.T) {
-	fakeServer := payment.NewFakeServer(250 * time.Millisecond)
-	defer fakeServer.Close()
-
-	clientTimeout := 50 * time.Millisecond
-	paymentClient := payment.NewClient(fakeServer.URL(), clientTimeout)
-
-	cb := circuitbreaker.New(circuitbreaker.Config{
-		FailureThreshold: 2,
-		OpenTimeout:      100 * time.Millisecond,
-		HalfOpenMaxCalls: 1,
-	})
-
-	svc := checkout.NewService(paymentClient, cb)
-
-	t.Run("downstream fails, CB trips open", func(t *testing.T) {
-		fakeServer.SetMode(payment.ModeDown)
-
-		// 1st failure
-		_ = svc.Checkout(context.Background())
-		// 2nd failure trips CB
-		_ = svc.Checkout(context.Background())
-
-		if cb.State() != circuitbreaker.StateOpen {
-			t.Fatalf("expected OPEN state, got %s", cb.State())
-		}
-
-		// 3rd request fails fast
-		err := svc.Checkout(context.Background())
-		if !errors.Is(err, circuitbreaker.ErrCircuitOpen) {
-			t.Fatalf("expected ErrCircuitOpen, got %v", err)
-		}
-	})
-
-	t.Run("cooldown and recovery", func(t *testing.T) {
-		time.Sleep(150 * time.Millisecond)
-		fakeServer.SetMode(payment.ModeHealthy)
-
-		if cb.State() != circuitbreaker.StateHalfOpen {
-			t.Fatalf("expected HALF_OPEN state, got %s", cb.State())
-		}
-
-		err := svc.Checkout(context.Background())
-		if err != nil {
-			t.Fatalf("probe failed unexpectedly: %v", err)
-		}
-
-		if cb.State() != circuitbreaker.StateClosed {
-			t.Fatalf("expected CLOSED state after probe, got %s", cb.State())
-		}
-	})
-}
+cb := circuitbreaker.New(circuitbreaker.Config{
+	FailureThreshold: 3,
+	OpenTimeout:      300 * time.Millisecond,
+	HalfOpenMaxCalls: 1,
+})
 ```
 
-Explanation:
-Pengujian integrasi ini membuktikan secara empiris:
-1. Dua panggilan berturut-turut yang gagal menyebabkan pemutus beralih ke `StateOpen`.
-2. Panggilan ketiga seketika menghasilkan error `ErrCircuitOpen` (*fail-fast*).
-3. Setelah periode *cooldown* 100ms berlalu dan server dipulihkan ke status `ModeHealthy`, panggilan probe dalam fase `HALF_OPEN` berhasil mengembalikan status ke `StateClosed`.
+## Snippet 7 — Fake Server Mode Switching
+
+Source File: `internal/payment/fake_server.go`
+
+Purpose: Simulates a controllable downstream dependency for testing.
+
+```go
+func NewFakeServer(slowDelay time.Duration) *FakeServer {
+	fs := &FakeServer{
+		slowDelay: slowDelay,
+	}
+	fs.mode.Store(ModeHealthy)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/pay", func(w http.ResponseWriter, r *http.Request) {
+		fs.requestCount.Add(1)
+		mode := fs.mode.Load().(ServerMode)
+
+		switch mode {
+		case ModeSlow:
+			time.Sleep(fs.slowDelay)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok_slow"}`))
+		case ModeDown:
+			http.Error(w, "internal payment server failure", http.StatusInternalServerError)
+		default: // ModeHealthy
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		}
+	})
+
+	fs.server = httptest.NewServer(mux)
+	return fs
+}
+```

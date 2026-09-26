@@ -35,7 +35,7 @@ Corroborated By: Martin Fowler
 ## Evidence 5
 Claim: Retries without bounding/jitter cause amplified failures (Retry Storms) against struggling downstream systems.
 Evidence: Retries increase total request volume onto a downstream dependency. If a dependency is overloaded, sudden retry spikes further exacerbate the outage. (AWS Builder's Library context)
-Source: AWS Builder's Library - Timeouts, retries, and backoff with jitter
+Source: AWS Builder's Library - Timeouts, retries, and backoff with jitter (Source 12)
 URL: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
 Confidence: HIGH
-Corroborated By: General Software Engineering consensus.
+Corroborated By: AWS Architecture Blog (Source 6), General Software Engineering consensus.

@@ -75,7 +75,7 @@ Isolates resources (thread pools, connection limits, CPU slices) per dependency.
 - Bulkhead ensures failure of dependency A does not exhaust threads needed for dependency B.
 
 ## Observability
-Key production metrics:
+Key production metrics (architectural recommendation; omitted in this minimal lab implementation):
 - `circuit_state`: Metric gauge (0=CLOSED, 1=OPEN, 2=HALF_OPEN).
 - `circuit_open_count`: Counter incremented on state trip.
 - `rejected_call_count`: Requests dropped via fail-fast.
@@ -104,30 +104,37 @@ go test -race ./...
 ## Expected Behavior
 ```text
 === SCENARIO 1: WITHOUT CIRCUIT BREAKER (SLOW DEPENDENCY) ===
-request=1 result=timeout/error duration=100ms
-request=2 result=timeout/error duration=101ms
-request=3 result=timeout/error duration=101ms
+request=1 result=timeout/error duration=103ms
+request=2 result=timeout/error duration=102ms
+request=3 result=timeout/error duration=102ms
 downstream_calls=3 (all requests blocked and hit downstream)
 
 === SCENARIO 2: WITH CIRCUIT BREAKER (FAIL-FAST ON DOWN DEPENDENCY) ===
-request=1 result=payment_error   state=CLOSED duration=~1ms
-request=2 result=payment_error   state=CLOSED duration=~200µs
-request=3 result=payment_error   state=OPEN   duration=~150µs
-request=4 result=circuit_open    state=OPEN   duration=<1µs
-request=5 result=circuit_open    state=OPEN   duration=<1µs
+request=1 result=payment_error              state=CLOSED    duration=499.25µs
+request=2 result=payment_error              state=CLOSED    duration=100.208µs
+request=3 result=payment_error              state=OPEN      duration=82.083µs
+request=4 result=circuit_open (fail-fast)   state=OPEN      duration=375ns
+request=5 result=circuit_open (fail-fast)   state=OPEN      duration=208ns
+request=6 result=circuit_open (fail-fast)   state=OPEN      duration=208ns
 downstream_calls=3 (downstream calls stopped once OPEN)
 
 === SCENARIO 3: RECOVERY (HALF_OPEN -> CLOSED) ===
-waiting for cooldown...
+initial state=OPEN
+waiting for cooldown (300ms)...
 payment server recovered to HEALTHY. Current CB state=HALF_OPEN
 sending probe request...
 probe result: err=<nil>, state after probe=CLOSED
-subsequent regular request: state=CLOSED
+sending subsequent regular request...
+subsequent result: err=<nil>, state=CLOSED
 
 === SCENARIO 4: FAILED RECOVERY (HALF_OPEN -> OPEN AGAIN) ===
+circuit forced back to: OPEN
+waiting for cooldown (300ms)...
 dependency still DOWN. Current CB state=HALF_OPEN
+sending probe request...
 probe result: err=true, state after failed probe=OPEN
-next request: circuit_open, state=OPEN
+sending next request while re-opened...
+next request result: err=checkout payment failed (with CB): circuit breaker is open, state=OPEN
 ```
 
 ## Failure Modes

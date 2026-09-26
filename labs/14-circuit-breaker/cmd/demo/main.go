@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"circuitbreaker/internal/circuitbreaker"
 	"circuitbreaker/internal/checkout"
+	"circuitbreaker/internal/circuitbreaker"
 	"circuitbreaker/internal/payment"
 )
 

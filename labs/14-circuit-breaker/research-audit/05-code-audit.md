@@ -1,5 +1,5 @@
 # Code Audit
 
-PIPELINE OVERRIDE:
-- Implementation and code execution are bypassed during this research-only audit phase.
-- Code correctness and tests marked NOT_APPLICABLE.
+Status: NOT_APPLICABLE
+
+Reason: Skipped per pipeline override (Research Audit Stage only). Code implementation and tests are not audited in this stage.

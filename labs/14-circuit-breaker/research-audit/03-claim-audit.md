@@ -1,133 +1,81 @@
+# Claim Audit
+
 ## Claim 1
-
-Claim:
-Circuit Breakers isolate network blast radius and prevent cascading failures.
-
-Location:
-labs/14-circuit-breaker/research/10-final-research.md (item 1), README.md (Cascade Failure)
-
-Evidence Provided:
-Azure Architecture Center documentation, Martin Fowler blog post.
-
-Source:
-Martin Fowler; Microsoft Learn
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Core justification for Circuit Breaker pattern.
-
+Claim: Timeouts block concurrent requests, exhausting critical resources (memory, threads, DB connections) resulting in cascading failures.
+Location: research/03-evidence.md:4, research/05-report.md:11
+Evidence Provided: Excerpt from Azure Architecture Center citing resource exhaustion mechanisms.
+Source: Microsoft Azure Architecture Center (Source 3), Martin Fowler (Source 1)
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Well-documented distributed systems behavior.
 
 ## Claim 2
-
-Claim:
-Caller fails in microseconds instead of multi-second HTTP timeout hangs.
-
-Location:
-labs/14-circuit-breaker/research/10-final-research.md (item 2), README.md (With Circuit Breaker)
-
-Evidence Provided:
-Circuit breaker blocks the call locally without network dispatch.
-
-Source:
-Martin Fowler; Microsoft Learn
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Directly derived from the fail-fast mechanism of the OPEN state.
-
+Claim: Circuit Breakers implement a three-state machine: CLOSED, OPEN, HALF_OPEN.
+Location: research/03-evidence.md:12, research/03-core-concepts.md:16, research/05-report.md:17
+Evidence Provided: Explicit state machine model definitions from Azure and Martin Fowler.
+Source: Martin Fowler (Source 1), Netflix Hystrix (Source 2), Microsoft Azure (Source 3)
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Standard pattern definition.
 
 ## Claim 3
-
-Claim:
-Asynchronous non-critical flows (e.g. notifications) must be decoupled using queues + idempotency so third-party downtime never aborts core transaction persistence.
-
-Location:
-labs/14-circuit-breaker/research/10-final-research.md (item 3)
-
-Evidence Provided:
-None cited in 02-sources.md.
-
-Source:
-Uncited.
-
-Source Actually Supports Claim:
-NO
-
-Classification:
-IMPLEMENTATION-SPECIFIC
-
-Severity:
-MEDIUM
-
-Notes:
-While an industry best practice, it is an overgeneralized assertion with no direct reference in the cited sources.
-
+Claim: Circuit Breakers differentiate from Retry Patterns by actively preventing operations from occurring instead of blindly repeating.
+Location: research/03-evidence.md:20, research/06-timeout-retry-backoff.md:14
+Evidence Provided: Azure Architecture Center documentation contrasting Retry and Circuit Breaker patterns.
+Source: Microsoft Azure Architecture Center (Source 3), Martin Fowler (Source 1)
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurate contrast supported by sources.
 
 ## Claim 4
-
-Claim:
-Never use silent fallback for critical state-altering mutations (e.g., balance debit).
-
-Location:
-labs/14-circuit-breaker/README.md (Fallback)
-
-Evidence Provided:
-None cited.
-
-Source:
-Uncited.
-
-Source Actually Supports Claim:
-NO
-
-Classification:
-IMPLEMENTATION-SPECIFIC
-
-Severity:
-MEDIUM
-
-Notes:
-Strong universal rule ("Never") not explicitly mentioned or justified by the primary sources.
-
+Claim: Half-Open state limits traffic to probe downstream service recovery.
+Location: research/03-evidence.md:28, research/03-core-concepts.md:29
+Evidence Provided: Canary probe mechanics described in Azure Architecture Center.
+Source: Microsoft Azure Architecture Center (Source 3), Martin Fowler (Source 1)
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Standard canary mechanism across references.
 
 ## Claim 5
+Claim: Retries without bounding/jitter cause amplified failures (Retry Storms) against struggling downstream systems.
+Location: research/03-evidence.md:36, research/05-report.md:23, research/06-timeout-retry-backoff.md:8
+Evidence Provided: AWS Builder's Library and AWS Architecture blog documentation on retry amplification.
+Source: AWS Builder's Library (Source 12), AWS Architecture Blog (Source 6)
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Well-established retry storm phenomenon.
 
-Claim:
-Circuit states (CLOSED, OPEN, HALF_OPEN) transition automatically with probes and cooldowns.
+## Claim 6
+Claim: In-memory circuit breakers track state on a per-instance basis without shared coordination across a scaled-out fleet.
+Location: research/05-report.md:36
+Evidence Provided: State isolation in local memory process architectures.
+Source: cep21/circuit (Source 8), Microsoft Azure Architecture Center (Source 3)
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Correctly scoped limitation.
 
-Location:
-labs/14-circuit-breaker/research/05-circuit-states.md, README.md
+## Claim 7
+Claim: Asynchronous non-critical flows can be decoupled using queues to enable degraded/fallback behavior.
+Location: research/10-final-research.md:6, research/07-fallback-bulkhead.md:4
+Evidence Provided: Azure Queue-Based Load Leveling architecture pattern.
+Source: Microsoft Azure Architecture Center (Source 13)
+Source Actually Supports Claim: YES
+Classification: INTERPRETATION
+Severity: LOW
+Notes: Accurately framed as an optional design strategy.
 
-Evidence Provided:
-Finite State Machine definitions in Martin Fowler and Azure Architecture Center.
-
-Source:
-Martin Fowler; Microsoft Learn
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Standard three-state model matches authoritative texts.
+## Claim 8
+Claim: Configuration parameter ranges (e.g. FailureThreshold 5-20, OpenTimeout 10-60s).
+Location: research/03-core-concepts.md:39
+Evidence Provided: Parameter ranges from production libraries (Hystrix, gobreaker, cep21).
+Source: Netflix Hystrix (Source 2), gobreaker (Source 7), cep21/circuit (Source 8)
+Source Actually Supports Claim: YES
+Classification: EXAMPLE
+Severity: LOW
+Notes: Explicitly marked as illustrative examples, not prescriptive universal thresholds.

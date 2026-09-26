@@ -25,14 +25,14 @@ type Config struct {
 }
 
 type CircuitBreaker struct {
-	mu               sync.Mutex
-	state            State
-	failureCount     int
+	mu                   sync.Mutex
+	state                State
+	failureCount         int
 	consecutiveSuccesses int
-	halfOpenCalls    int
-	lastStateChange  time.Time
-	config           Config
-	now              func() time.Time
+	halfOpenCalls        int
+	lastStateChange      time.Time
+	config               Config
+	now                  func() time.Time
 }
 
 func New(cfg Config) *CircuitBreaker {
@@ -87,6 +87,18 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 		cb.halfOpenCalls++
 		cb.mu.Unlock()
 
+		defer func() {
+			if r := recover(); r != nil {
+				cb.mu.Lock()
+				defer cb.mu.Unlock()
+				cb.state = StateOpen
+				cb.lastStateChange = cb.now()
+				cb.failureCount = 0
+				cb.halfOpenCalls = 0
+				panic(r)
+			}
+		}()
+
 		err := fn()
 
 		cb.mu.Lock()
@@ -110,6 +122,19 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 
 	default: // StateClosed
 		cb.mu.Unlock()
+
+		defer func() {
+			if r := recover(); r != nil {
+				cb.mu.Lock()
+				defer cb.mu.Unlock()
+				cb.failureCount++
+				if cb.failureCount >= cb.config.FailureThreshold {
+					cb.state = StateOpen
+					cb.lastStateChange = cb.now()
+				}
+				panic(r)
+			}
+		}()
 
 		err := fn()
 

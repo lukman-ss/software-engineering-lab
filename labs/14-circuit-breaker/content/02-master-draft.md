@@ -1,123 +1,173 @@
-# Pola Circuit Breaker: Mencegah Kegagalan Beruntun pada Sistem Terdistribusi
+# Circuit Breaker Pattern Implementation in Go
 
-## Masalah (Problem)
+## Problem
+Remote calls across networks fail or hang. Without protection, callers block waiting for timeouts, holding threads, sockets, and memory until system resources deplete. A single downstream failure can cascade into a total platform outage.
 
-Dalam arsitektur sistem terdistribusi dan layanan mikro (*microservices*), setiap komponen bergantung pada pemanggilan jaringan jarak jauh (*remote calls*). Panggilan jaringan melekat dengan ketidakpastian. Layanan *downstream* (tujuan) bisa menjadi lambat secara mendadak atau mati (*hang*) sama sekali akibat lonjakan lalu lintas data, kegagalan *database*, atau pemadaman sebagian infrastruktur jaringan.
-
-Tanpa adanya mekanisme perlindungan yang ketat, *caller threads* (utas dari layanan yang memanggil) akan terblokir karena harus menunggu proses *timeout*. Proses penahanan *thread* ini secara bersamaan menahan soket jaringan dan alokasi memori lokal. Seiring berjalannya waktu dan bertambahnya jumlah panggilan yang masuk, seluruh sumber daya sistem pada layanan pemanggil akan terkuras hingga habis (*exhausted*).
-
-## Mengapa Ini Penting (Why This Matters)
-
-Ketidakmampuan sistem untuk menangani kelambatan *downstream* akan berujung pada fenomena yang dikenal sebagai **Cascade Failure** (Kegagalan Beruntun). 
-Dalam infrastruktur kritikal, dampak dari satu layanan kecil yang mengalami degradasi dapat menyebar bagaikan efek domino. Jika layanan A (pemanggil) lumpuh karena menunggu layanan B (*downstream*), maka layanan di atas A (seperti API Gateway) juga akan kehabisan koneksi. Pada titik puncaknya, *health-check endpoints* akan berhenti merespons, memicu pemadaman total (*total outage*) pada platform yang tadinya sehat hanya karena satu kegagalan yang tidak terisolasi. Membatasi *blast radius* (radius dampak) dari sebuah insiden adalah kewajiban mutlak dalam rekayasa keandalan sistem (*site reliability engineering*).
+## Why This Matters
+Unprotected remote calls exhaust critical system resources (memory, threads, DB connections) leading to cascading failures. Circuit Breaker prevents caller self-destruction by failing fast, preserving system resources, and allowing downstream services time to recover.
 
 ## Mental Model
+A circuit breaker acts as a state machine proxy that monitors downstream failures. When failures exceed a threshold, it trips OPEN to block all calls immediately (fail-fast). After a cooldown period, it enters HALF_OPEN to allow limited probe calls. Successful probes restore normal operation (CLOSED); failed probes return to OPEN.
 
-Pola *Circuit Breaker* (Pemutus Sirkuit) terinspirasi dari sistem kelistrikan di dunia nyata. Pemutus sirkuit dipasang untuk memonitor beban kelistrikan dan seketika "terputus" (*trips open*) ketika beban melebih kapasitas, guna mencegah rumah terbakar. 
+## Core Concept
+The Circuit Breaker pattern implements three states:
+- **CLOSED**: Normal operation — requests flow to downstream
+- **OPEN**: Failing fast — requests rejected immediately with zero network calls
+- **HALF_OPEN**: Probe state — limited test calls to check recovery
 
-Dalam perangkat lunak, sebuah *Circuit Breaker* berwujud sebagai objek proksi (*state machine*) yang diletakkan di antara *caller* dan layanan *downstream*. Proksi ini memonitor jumlah kegagalan berturut-turut. Saat jumlah kegagalan melampaui ambang batas yang dikonfigurasi, proksi akan bergeser statusnya dan memutuskan koneksi sementara. Setiap panggilan baru yang masuk tidak akan diteruskan melalui jaringan, melainkan langsung ditolak atau digagalkan secepat mungkin (*fail-fast*) dalam hitungan nanodetik. Circuit Breaker memberikan ruang bernapas yang aman bagi *downstream* untuk pulih dan secara bertahap melakukan pengujian acak (*canary probe*) sebelum mengembalikan lalu lintas jaringan secara penuh.
+## Implementation
+### State Machine
+The implementation uses a synchronized struct with mutex protection:
 
-## Skenario Kegagalan Beruntun (Failure Scenario)
-
-Sebagai ilustrasi verifikasi dari eksperimen lab ini, perhatikan alur di bawah ini saat *Circuit Breaker* **tidak** diimplementasikan:
-1. Layanan *Payment* mengalami *down* atau berhenti memproses permintaan.
-2. *Worker threads* di Layanan *Checkout* tertahan (*blocked*) pada proses respons HTTP yang tidak kunjung datang.
-3. Seluruh *thread pools* dan *connection pools* di Layanan *Checkout* terisi penuh oleh permintaan yang menggantung.
-4. Karena Layanan *Checkout* macet total, antrean HTTP di *API Gateway* yang meneruskan lalu lintas eksternal ikut penuh.
-5. Skenario fatal ini membuktikan bahwa latensi akibat permintaan macet secara komulatif berbanding lurus dengan persamaan `N * timeout`. 
-
-## Konsep Inti dan Status Sirkuit (Core Concept)
-
-Mesin status (*state machine*) pada implementasi *Circuit Breaker* lab ini dipecah ke dalam tiga kondisi (status) definitif:
-
-### 1. Status CLOSED (Tertutup)
-Ini merupakan kondisi operasional normal sistem. Sirkuit tertutup rapat sehingga semua panggilan jaringan (*requests*) diizinkan untuk dikirim secara langsung ke layanan *downstream*. 
-- Jika panggilan sukses: Penghitung kegagalan (*failure count*) akan dikembalikan menjadi nol.
-- Jika panggilan gagal (berupa error jaringan/server): Penghitung kegagalan ditambah satu (di-*increment*).
-- Ketika jumlah kegagalan mencapai batas `FailureThreshold`, status sirkuit seketika berubah menjadi **OPEN**.
-
-### 2. Status OPEN (Terbuka)
-Status darurat di mana sirkuit diputus. Pada fase ini:
-- Sama sekali **tidak ada** lalu lintas pemanggilan jaringan (*network calls*) yang dikirimkan.
-- Semua permintaan masuk akan seketika digagalkan dengan membuang instansiasi objek `ErrCircuitOpen`. Operasi penolakan ini diselesaikan hanya dalam pecahan hitungan mikrodetik tanpa beban jaringan I/O.
-- Layanan *downstream* benar-benar diistirahatkan agar proses pemulihannya (*recovery*) tidak dibanjiri oleh re-transmisi otomatis dari pemanggil.
-- Timer jeda istirahat atau *cooldown* (`OpenTimeout`) mulai berjalan mundur.
-
-### 3. Status HALF-OPEN (Setengah Terbuka)
-Status uji coba paska-kegagalan yang terpicu secara otomatis begitu masa *cooldown* `OpenTimeout` habis berlalu.
-- Circuit breaker akan melewatkan sejumlah panggilan spesifik dengan limit kecil (diatur oleh parameter `HalfOpenMaxCalls`) sebagai *canary probe* (pemeriksaan kondisi).
-- Jika *probe* berhasil dan mengembalikan respons yang diharapkan, sistem meyakini bahwa *downstream* telah pulih. Status akan langsung dialihkan kembali ke **CLOSED** dan operasional kembali normal secara penuh.
-- Jika *probe* kembali gagal, *Circuit Breaker* menyimpulkan gangguan masih persisten. Status segera ditarik lagi ke **OPEN**, dan siklus *cooldown* kembali diulang dari awal.
-
-## Arsitektur dan Implementasi Internal
-
-Di dalam repositori lab `14-circuit-breaker`, implementasi arsitektur divalidasi ke dalam tiga komponen sentral:
-```text
-Layanan Checkout (Service)
-       │
-       ▼
-Proksi Circuit Breaker (State Machine)
-  ├── [CLOSED]   ──► Memanggil Payment Client ──► Fake Payment Server HTTP
-  ├── [OPEN]     ──► Penolakan Fail Fast (ErrCircuitOpen)
-  └── [HALF-OPEN]──► Pengujian Ulang/Probe 
+```go
+type CircuitBreaker struct {
+	mu                   sync.Mutex
+	state                State
+	failureCount         int
+	consecutiveSuccesses int
+	halfOpenCalls        int
+	lastStateChange      time.Time
+	config               Config
+	now                  func() time.Time
+}
 ```
 
-Struktur *Circuit Breaker* merangkum implementasi rekayasa konkurensi bawaan dari bahasa Go. Alih-alih merancang struktur bebas-kunci (*lock-free structures*) yang rumit dengan penyangga cincin (*ring buffer*) bertenaga atomik, implementasi lab ini disederhanakan menggunakan pelindung standar `sync.Mutex`. Pilihan ini memberikan keseimbangan terbaik antara kebenaran status (ketiadaan *data race*) dan kode yang mudah dirawat.
+### State Transitions
+Transitions occur based on failure counts and timeouts:
+- CLOSED → OPEN: When `failureCount >= FailureThreshold`
+- OPEN → HALF_OPEN: When `now().Sub(lastStateChange) >= OpenTimeout`
+- HALF_OPEN → CLOSED: After `HalfOpenMaxCalls` consecutive successes
+- HALF_OPEN → OPEN: On any failure during HALF_OPEN
 
-Perpindahan masa berlaku *cooldown* diselesaikan secara lekas (tanpa perlunya perulangan *goroutine* asinkron di belakang layar) melalui metodologi *lazy evaluation*. Pada fungsi perantara `checkStateTransitionLocked()`, sistem memeriksa selisih waktu secara matematis (`now - lastStateChange`) ketika objek metode tereksekusi. Pendekatan kalkulasi *on-demand* ini mencegah *memory leak* dari proses pekerja tak terbatas. 
+### Execution Flow
+```go
+func (cb *CircuitBreaker) Execute(fn func() error) error {
+	cb.mu.Lock()
+	cb.checkStateTransitionLocked()
 
-## Timeout vs Retry vs Circuit Breaker
+	switch cb.state {
+	case StateOpen:
+		cb.mu.Unlock()
+		return ErrCircuitOpen
 
-Ketiga mekanisme ini sering disalahartikan padahal fungsinya sangat berbeda di tingkat infrastruktur ketahanan (*resiliency*).
-- **Timeout**: Sekadar batas waktu tenggang maksimal bagi satu permintaan individu untuk menyerah guna mencegah *hang* abadi. Tidak melindungi sistem dari banjir sirkulasi kegagalan.
-- **Retry**: Upaya agresif memicu ulang transmisi secara otomatis yang mengasumsikan kegagalan bersifat cacat minor (*transient*). Saat sebuah server benar-benar kelebihan kapasitas (*overload*), tindakan *retry* membabi buta dari ratusan *client* akan memicu kondisi ekstrem yang disebut *retry storm*.
-- **Circuit Breaker**: Mekanisme defensif menyeluruh. Menghentikan total laju request pada ambang keandalan tertentu. Memberikan perlindungan ganda (mencegah *caller* bunuh diri membuang koneksi memori, sambil memulihkan *downstream*). Pada praktiknya, Circuit Breaker bekerja sama dengan Timeout, dan sering meredam (silence) *retry storm*.
+	case StateHalfOpen:
+		// Allow limited probe calls
+		if cb.halfOpenCalls >= cb.config.HalfOpenMaxCalls {
+			cb.mu.Unlock()
+			return ErrCircuitOpen
+		}
+		cb.halfOpenCalls++
+		cb.mu.Unlock()
+		// Execute function and handle result
+		// ...
 
-## Pertimbangan Produksi (Production Considerations)
+	default: // StateClosed
+		cb.mu.Unlock()
+		// Execute function and handle failures
+		// ...
+	}
+}
+```
 
-Hasil reviu arsitektural (audit) menyepakati berbagai catatan penting sebelum menerapkan kode simulasi ini pada skala beban berat di tahap produksi:
+## Code Walkthrough
+### Creating a Circuit Breaker
+```go
+cb := circuitbreaker.New(circuitbreaker.Config{
+	FailureThreshold: 3,
+	OpenTimeout:      300 * time.Millisecond,
+	HalfOpenMaxCalls: 1,
+})
+```
 
-1. **Konfigurasi Ambang Batas Waktu**: 
-Waktu putus (timeout HTTP 100ms) dan jeda pemulihan (cooldown 300ms) pada kode simulasi ini hanyalah *ilustrasi semata* demi pengujian eksekusi unit yang responsif dan berjalan cepat (kurang dari sedetik). Di skenario dunia nyata, nilai *timeout* harus selalu ditelusuri dari kesepakatan *Service Level Agreement* (SLA) dan diukur berdasarkan metrik penyebaran latensi P99 dari layanan tersebut (contoh: *cooldown* 30 sampai 60 detik atau *backoff* terukur).
-2. **Algoritma Penghitungan Error**: 
-Lab membuktikan konsep proteksi sirkuit dengan mengandalkan sistem "penghitungan kegagalan berturut-turut" yang sederhana (*consecutive failures count*). Aplikasi skala *enterprise* biasanya mengadopsi penghitungan dengan berbasis persentase rasio kegagalan atau kerangka pemetaan waktu bergerak (*sliding time-window / leaky bucket*) agar lebih tahan terhadap gangguan sesaat.
-3. **Isolasi Node Mutex**:
-Variabel status mesin (`state`) diamankan dengan Mutex sehingga berjalan stabil khusus pada memori tunggal (*single instance*). Untuk menjaga presisi pemutusan sirkuit pada topologi dengan puluhan node mikro, pertimbangkan penggunaan penyimpanan sinkronisasi terdistribusi seperti Redis, terlepas sistem memori lokal sering kali sudah cukup memberikan perlindungan batas alokasi *thread*.
+### Using in Checkout Service
+```go
+svc := checkout.NewService(paymentClient, cb)
+err := svc.Checkout(ctx)
+// Returns ErrCircuitOpen when OPEN, otherwise payment errors or success
+```
 
-## Bukti Pengujian Terverifikasi (What the Tests Prove)
+## What the Tests Prove
+### Unit Tests
+16 unit tests verify:
+- Initial state is CLOSED
+- Successful calls remain CLOSED
+- Failures below threshold stay CLOSED
+- Threshold reached triggers OPEN state
+- OPEN calls fail fast without downstream execution
+- Cooldown moves breaker to HALF_OPEN
+- Successful HALF_OPEN probe closes circuit
+- Failed HALF_OPEN probe re-opens circuit
+- Recovery after dependency heals
+- Concurrency safety under race detector
+- Panic safety during HALF_OPEN and CLOSED states
+- Default configuration values
+- HalfOpenMaxCalls > 1 requires consecutive successes
 
-Kode lab (`circuit_breaker_test.go` dan `integration_test.go`) melewati fase pengujian teknik komprehensif, mengonfirmasi behavior valid:
-1. Validasi Transisi: Skema `CLOSED -> OPEN -> HALF_OPEN -> CLOSED` berhasil melewati seluruh kriteria pengujian unit (*asserting* status dengan tepat). 
-2. Proteksi Pemanggilan Turunan: Selama pengujian integrasi di status `OPEN`, terbukti *secara empiris* bahwa metode downstream *tidak* dieksekusi secara fisikal ke jaringan (`downstream calls = 0`).
-3. Perlindungan *Fail-Fast*: Waktu respons HTTP untuk status kegagalan `OPEN` pada eksekusi pelaporan demo (`cmd/demo`) turun sangat drastis, bergeser dari tingkat waktu tunggu ratusan milidetik (karena latensi layanan lambat) menjadi *fail-fast* rata-rata dalam ukuran hitungan < 1µs (mikrodetik). 
-4. Aman secara Konkurensi: Seluruh eksekusi multi-goroutine lulus *Go Race Detector* (`go test -race`). Tidak ada pembacaan status tumpang tindih meskipun diserbu secara paralel oleh ratusan *worker*.
+### Integration Tests
+Two integration tests verify:
+- Downstream failures trip circuit OPEN
+- Cooldown and recovery transition HALF_OPEN → CLOSED
 
-## Fallback dan Pencegahan (Recovery / Rollback)
+### Demo Verification
+The executable demo shows four scenarios:
+1. **Without CB (Slow Dependency)**: 3 requests block for ~100ms each, all hit downstream
+2. **With CB (Fail-Fast)**: After 3 failures, subsequent requests fail in nanoseconds with zero downstream calls
+3. **Recovery**: After cooldown, probe succeeds → CLOSED → normal traffic resumes
+4. **Failed Recovery**: Probe fails → returns to OPEN → fail-fast resumes
 
-Salah satu langkah mitigasi tingkat lanjut paska terjadinya gagal sirkuit adalah melakukan *Fallback* (Mekanisme Penanganan Darurat). 
-*Fallback* yang valid termasuk mengekstrak hasil penyimpanan sementara (data *cache*) pada sistem pembacaan (*read cache*), mengembalikan nilai pengaturan standar (pengganti statis), atau mengarahkan pesan tertunda (pesan asinkronus ke struktur *queue*).
+## Recovery / Rollback
+Automatic recovery occurs after OpenTimeout elapses:
+1. Breaker transitions from OPEN to HALF_OPEN
+2. Limited probe calls allowed (HalfOpenMaxCalls)
+3. Success: Transitions to CLOSED, resets counters
+4. Failure: Returns to OPEN, restarts cooldown timer
 
-**Peringatan Penting (Verified Audit Constraint)**: *Jangan pernah menggunakan Fallback tersembunyi (silent fallback) yang memaksa kesuksesan semu pada permintaan mutasi kritikal berstatus esensial.* Contoh mutasi esensial mencakup deduksi nilai e-money, pembukuan ledger debit akun saldo bank, atau pengajuan pesanan inventaris fisik akhir. Pada skenario tersebut, laporkan secara tegas respons error terbuka dari *Circuit Breaker* kembali ke sistem hulu atau antar-muka pengguna.
+## Production Considerations
+- Timeouts used in lab (100ms HTTP, 300ms cooldown) are illustrative for testing
+- Production values must be tuned to actual service SLA, P99 latency, and recovery profiles
+- Implementation uses consecutive failure counting; production may require sliding window or error rate
+- Consider externalizing circuit state for microservice fleets (Redis/Consul) vs per-instance
+- Classify errors carefully — typically only 5xx and timeouts should trip breaker, not 4xx client errors
 
-## Studi Kasus Infrastruktur Asli (Case Study)
+## Common Mistakes
+- Setting FailureThreshold too low causing premature opening on transient blips
+- Allowing too many concurrent probes during HALF_OPEN (thundering herd)
+- Counting 4xx errors as circuit-breaking faults instead of restricting to 5xx/timeouts
+- Ignoring that circuit breaker does not heal dependencies — it only prevents caller exhaustion
 
-### Decoupling Non-Kritikal (Kasus CMMS)
-Skenario CMMS (sistem faktur order):
-Alur: `Buat Invoice` -> `Render PDF` -> `Kirim Pesan WhatsApp`
-Gangguan asinkron tidak boleh membahayakan basis transaksi utama. Jika aplikasi API *WhatsApp* mati, tidak masuk akal membatalkan pembuatan transaksi utama *Invoice*. Solusi disetujui: Modul pencatat pesanan dieksekusi secara sikron ke Basis Data Master. Selanjutnya, pekerja di balik layar (*background worker*) meluncurkan panggilan *WhatsApp* di dalam perlindungan *Circuit Breaker*. Apabila pemutus terpicu *OPEN*, retensi pengiriman diamankan secara otomatis dengan menahannya sementara (*leveling load*) dalam *message queue* seperti RabbitMQ.
+## Case Study
+**CMMS Example**: `Create Invoice` → `Generate PDF` → `Send WhatsApp`
+- Design rule: WhatsApp down ≠ Invoice creation down
+- Pattern:
+  1. Save invoice synchronously in primary DB
+  2. Push notification job to background queue (RabbitMQ/Kafka)
+  3. Worker calls WhatsApp API wrapped in Circuit Breaker + exponential backoff retry
+  4. Breaker trips OPEN if WhatsApp API fails; queue retains message; retries pause
 
-### Skenario Batasan (Kasus PPOB)
-Alur transaksi produk digital (Pulsa/Tagihan):
-Alur Utama: `Pembeli` -> `Server Operator Utama` -> `Integrasi Payment Gateway` -> `Provider (Pihak 3) Pulsa`
-Layanan sinkron kritis seperti *Payment Gateway* harus berjalan tepat waktu. Jika bergantung dengan server transaksi pembayaran secara mutlak dan server mati total, proksi berstatus *OPEN* harus memaksa penggagalan sekuens secepat mungkin (*fail-fast*) tanpa penanganan asinkronis atau pengurangan saldo. Sebaliknya, proses *Provider Pulsa* hulu bersifat bisa dicoba ulang secara asinkron (*retryable async dependency*) yang berpadanan kuat dengan *Idempotency Key* yang terkunci aman. 
+## Key Takeaways
+- Circuit Breaker does not heal a broken dependency
+- Circuit Breaker stops caller self-destruction by failing fast and preserving system threads/memory
+- Downstream service gets idle recovery time without request flooding
+- Three-state machine prevents cascading failures while enabling automated recovery
+- Thread-safe implementation verified under race detector with zero data races
+- Fail-fast behavior executes in nanoseconds/microseconds vs millisecond timeouts
+- Probe mechanism prevents overwhelming recovering services during HALF_OPEN
+- Default configuration provides sensible out-of-the-box behavior
+- Implementation demonstrates core pattern without external dependencies
 
-## Kesalahan Umum Praktisi (Common Mistakes)
-
-1. **Threshold Terlalu Rendah**: Merancang pemutus dengan jumlah 1-2 metrik gagal sehingga berujung pemutusan prematur karena blip sementara dari *network jitter*. Traffic valid sering direkayasa tertolak. 
-2. **Kelebihan Probe Banjir (Probe Flood)**: Mengonfigurasi `HalfOpenMaxCalls` terlalu masif. Ini menyebabkan ketika layanan hilir yang baru sembuh masih tertatih perlahan (*slow ramp up*), proksi justru menembak ulang ratusan *canary* probe secara bersamaan sehingga layanan hilir terkapar hancur kembali. 
-3. **Mengabaikan Pemisahan Tipe Error**: Menyamaratakan validasi masukan error. Menghitung kode HTTP seri *4xx* (*Client Errors/Bad Request*) secara bodoh sebagai komponen kerusakan server internal, ketimbang membatasi deteksi sirkuit pada kesalahan murni koneksi, *timeouts*, atau status galat server infrastruktur *5xx*.
-
-## Sumber Utama (Sources)
-- **Martin Fowler**: *Circuit Breaker* (martinfowler.com)
-- **Microsoft Learn**: *Circuit Breaker Pattern - Azure Architecture* 
-- **AWS Builders Library**: *Timeouts, retries, and backoff with jitter*
+## Sources
+- Research: labs/14-circuit-breaker/research/
+  - Core concepts: research/03-core-concepts.md
+  - Circuit states: research/05-circuit-states.md
+  - Timeout/retry/backoff: research/06-timeout-retry-backoff.md
+  - Failure modes: research/09-failure-modes.md
+  - Final synthesis: research/10-final-research.md
+  - Evidence: research/03-evidence.md
+  - Sources: research/02-sources.md
+- Implementation: labs/14-circuit-breaker/internal/
+  - Circuit breaker: internal/circuitbreaker/circuit_breaker.go
+  - Tests: internal/circuitbreaker/circuit_breaker_test.go
+  - Payment client/server: internal/payment/
+  - Checkout service: internal/checkout/service.go
+- Demo: cmd/demo/main.go
+- Integration tests: tests/integration_test.go

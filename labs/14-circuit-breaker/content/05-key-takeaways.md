@@ -1,25 +1,23 @@
-# Poin Kunci Pembelajaran (Key Takeaways)
+# Key Takeaways
 
-1. **Circuit Breaker Bukan Obat Penyembuh Downstream**  
-   Circuit Breaker tidak memperbaiki kegagalan pada layanan downstream yang rusak, melainkan menghentikan kehancuran diri pemanggil (*caller self-destruction*) dengan mencegah penumpukan alokasi thread, soket, dan memori.
+1. **Circuit Breaker does not heal a broken dependency** — it prevents the caller from self-destruction by failing fast and preserving system resources (threads, memory, connections).
 
-2. **Efisiensi Mekanisme Fail-Fast**  
-   Ketika sirkuit beralih ke status `OPEN`, penolakan permintaan dilakukan secara instan dalam skala nanodetik/mikrodetik tanpa melakukan transmisi I/O jaringan, berbeda jauh dengan latensi pemblokiran timeout yang memakan waktu ratusan milidetik.
+2. **Three-state machine** — CLOSED (normal), OPEN (fail-fast), HALF_OPEN (probe) — enables automated recovery without manual intervention.
 
-3. **Uji Coba Pemulihan Terukur via Canary Probe (HALF-OPEN)**  
-   Fase `HALF-OPEN` memungkinkan verifikasi pemulihan downstream secara terukur melalui sejumlah kecil permintaan uji coba (*probe*), mencegah lonjakan trafik seketika yang dapat merusak kembali server yang baru bangkit.
+3. **Fail-fast executes in nanoseconds** — once OPEN, requests return `ErrCircuitOpen` in microseconds vs millisecond HTTP timeouts, demonstrated in demo Scenario 2.
 
-4. **Waktu Tenggang Lab Bersifat Ilustratif**  
-   Konfigurasi waktu lab (100ms HTTP timeout dan 300ms cooldown) dirancang khusus agar pengujian otomatis berjalan cepat. Konfigurasi produksi nyata wajib dikalibrasi mengikuti SLA, metrik latensi P99, dan waktu pemulihan downstream yang realistis.
+4. **Downstream calls stop when OPEN** — demo verified: only 3 downstream calls made before circuit tripped, subsequent requests never reach network.
 
-5. **Batasan Penghitungan Kegagalan Berurutan**  
-   Implementasi lab mengandalkan penghitungan kegagalan berturut-turut (*consecutive failures*). Pada sistem skala enterprise, pertimbangkan penggunaan metrik berbasis rasio persentase kesalahan dengan jendela geser (*sliding time-window*).
+5. **Probe mechanism prevents thundering herd** — `HalfOpenMaxCalls` limits concurrent probes during recovery; excess requests fail fast.
 
-6. **Larangan Silent Fallback pada Mutasi Kritis**  
-   Jangan gunakan *silent fallback* (pengalihan semu tanpa error) untuk operasi mutasi state yang berisiko tinggi seperti pendebitan saldo, pembayaran, atau pengurangan stok inventaris. Laporkan error pemutus sirkuit secara transparan ke sistem hulu.
+6. **Consecutive successes required** — HALF_OPEN requires `HalfOpenMaxCalls` successful probes before transitioning to CLOSED.
 
-7. **Pemisahan Alur Sinkron dan Asinkron**  
-   Layanan kritis (seperti *Payment Gateway*) memerlukan proteksi kegagalan langsung (*fail-fast*), sedangkan layanan non-kritis (seperti notifikasi pesan/email) harus diisolasi ke dalam antrean latar belakang (*message queue*) dengan penanganan coba-ulang berbasis *backoff*.
+6. **Thread-safe by design** — all state mutations protected by `sync.Mutex`; zero data races verified under `go test -race ./...`.
 
-8. **Integritas Konkurensi**  
-   Operasi transisi status dan penghitungan metrik sirkuit harus dilindungi mekanisme konkurensi (seperti `sync.Mutex`) untuk menjamin tidak terjadinya kondisi perlombaan data (*data race*) di bawah beban tinggi multi-goroutine.
+7. **Panic safety** — panics during execution don't corrupt internal state; failure counters updated before re-panicking.
+
+8. **Default configuration is sensible** — FailureThreshold=3, OpenTimeout=5s, HalfOpenMaxCalls=1 work out of the box.
+
+9. **Lab timeouts are illustrative** — 100ms HTTP timeout and 300ms cooldown are for fast testing; production must tune to actual SLA and recovery profiles.
+
+10. **Implementation uses consecutive failure counting only** — not sliding window or error rate; production may need more sophisticated metrics.
