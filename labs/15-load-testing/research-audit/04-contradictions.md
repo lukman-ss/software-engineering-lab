@@ -1,27 +1,40 @@
-# 04 Contradictions Audit
+# Contradictions Audit
 
-## Overview
-Inspection conducted across `01-plan.md`, `02-sources.md`, `03-evidence.md`, `04-contradictions.md`, `05-report.md`, and `06-open-questions.md`.
-
----
-
-## Contradiction Analysis 1: Real Calls vs. Mocks for External Dependencies
-- **Statement A:** External third-party API dependencies must be tested with real calls to expose real-world latency (Azure Well-Architected / `03-evidence.md` Evidence 17).
-- **Statement B:** High-volume stress testing with real calls to external third parties risks rate limits, throttling, cost, and terms of service violations (`04-contradictions.md` Item 2).
-- **Type:** SOURCE_CONFLICT / METHODOLOGICAL_TRADEOFF
-- **Impact:** LOW
-- **Assessment:** Resolved. The research explicitly synthesizes a phased approach: use real sandbox endpoints for baseline average-load tests and latency validation; use high-fidelity stubs/mocks with simulated latency for extreme stress and spike testing.
+Target Lab: `labs/15-load-testing`  
+Audit Scope: Conflict Analysis in `labs/15-load-testing/research/04-contradictions.md` and related research files.  
 
 ---
 
-## Contradiction Analysis 2: Staging Testing vs Production Testing
-- **Statement A:** Test environments must mirror production as closely as practical (`03-evidence.md` Evidence 11).
-- **Statement B:** Testing in staging can never fully replicate production traffic dynamics; production testing exposes problems that only surface under actual usage (`05-report.md` Finding 10, Azure docs).
-- **Type:** METHODOLOGICAL_TRADEOFF
-- **Impact:** LOW
-- **Assessment:** Resolved. The research demonstrates a tiered strategy: staging tests validate baseline capacity safely; synthetic monitoring and controlled progressive canary tests in production validate actual live conditions.
+## Evaluation of Research Contradiction Analysis
+
+The Research Agent identified and reconciled 6 potential contradictions:
+
+### 1. k6 Tooling Capabilities vs Azure Load Testing Engine Support
+- **Issue:** k6 is widely recommended for modern load testing, yet Azure Load Testing natively supports only JMeter and Locust.
+- **Auditor Verification:** Valid distinction. k6 is a standalone CLI/Go engine; Azure Load Testing is a proprietary managed PaaS harness. No conflict exists.
+
+### 2. Mocking vs Real External API Invocations Under Load
+- **Issue:** Industry best practice advises mocking external systems to prevent flaky tests and isolate units, whereas Azure Well-Architected recommends real calls to reveal latency.
+- **Auditor Verification:** Resolved soundly. Context matters: baseline staging/sandbox validation requires real integration calls to discover real upstream latency; high-volume extreme stress testing requires deterministic stubs with injected delays to avoid financial billing and ToS blacklisting.
+
+### 3. Staging Mirroring vs Direct Production Testing
+- **Issue:** Guidance insists staging must mirror production, but elsewhere asserts that only production testing reveals true user behavior.
+- **Auditor Verification:** Resolved correctly as a progressive testing ladder: staging catches major architectural and regression bugs; canary/off-peak production testing validates multi-tenant network and real-world traffic quirks.
+
+### 4. Stress Test Load Sizing Guidelines
+- **Issue:** Rule-of-thumb specifies 50-100% above average load, but documentation states there is no fixed percentage.
+- **Auditor Verification:** k6 documentation acknowledges 50-100% as a common initial heuristic while explicitly stressing that stress thresholds must be tailored to specific spike/overload risk models.
+
+### 5. Multi-Tool Ecosystem Programming Languages
+- **Issue:** Divergent tool implementations (JS in k6, Python in Locust, Java/XML in JMeter).
+- **Auditor Verification:** Natural ecosystem variance. Tradeoffs accurately mapped to developer personas.
+
+### 6. Test Plateau Durations (Average-Load vs Soak Testing)
+- **Issue:** Average-load testing suggests a plateau of 5x ramp-up (minutes), whereas Soak testing demands hours or days.
+- **Auditor Verification:** Distinct test objectives. Soak testing explicitly isolates gradual memory leaks and connection leaks over time.
 
 ---
 
-## Summary
-No material unresolved contradictions found. All apparent conflicts are documented and reconciled with technical context.
+## Auditor Finding on Contradictions
+
+No unresolved internal contradictions, source conflicts, or documentation mismatches remain in the research corpus. All investigated tensions have been properly contextualized.
