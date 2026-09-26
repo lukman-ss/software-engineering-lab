@@ -1,12 +1,40 @@
 # Test Audit
 
-## Coverage & Execution
+Target Lab: `labs/24-slo-sli-error-budget`
 
-- `TestMetricsWindowTracker`: Verifies happy path recording, good/bad categorization logic, and stale bucket eviction. (PASS)
-- `TestSLOEvaluator`: Verifies SLI computation, error budget consumption, and `CanDeploy` flag transition from `true` to `false` upon budget depletion. (PASS)
-- `TestAlertEngineBurnRate`: Verifies burn rate computation and multi-window alert triggering for severe error spikes. (PASS)
-- `TestConcurrencyMetrics`: Spawns 20 goroutines submitting 100 requests each concurrently to `WindowTracker` and validates aggregate counters against data races. (PASS with `-race`)
+## Test Execution Results
+
+```text
+=== RUN   TestMetricsWindowTracker
+--- PASS: TestMetricsWindowTracker (0.00s)
+=== RUN   TestSLOEvaluator
+--- PASS: TestSLOEvaluator (0.00s)
+=== RUN   TestAlertEngineBurnRate
+--- PASS: TestAlertEngineBurnRate (0.00s)
+=== RUN   TestConcurrencyMetrics
+--- PASS: TestConcurrencyMetrics (0.00s)
+PASS
+ok  	labs/24-slo-sli-error-budget/tests	0.339s
+```
+
+Race detector:
+```text
+ok  	labs/24-slo-sli-error-budget/tests	1.107s
+```
+
+## Test Coverage Analysis
+
+| Test Name | Target Unit | Path Covered | Verification Quality |
+|---|---|---|---|
+| `TestMetricsWindowTracker` | `internal/metrics` | Ingestion, good/bad separation, window eviction | Strong: tests counts and complete window eviction in future time. |
+| `TestSLOEvaluator` | `internal/slo` | Exact threshold (99%), budget exhaustion, `CanDeploy` state change | Strong: tests transition from `CanDeploy=true` to `CanDeploy=false`. |
+| `TestAlertEngineBurnRate` | `internal/alerting` | Burn rate threshold trigger, alert severity output | Strong: tests multi-window firing when burn rate > 14.4x. |
+| `TestConcurrencyMetrics` | `internal/metrics` | Parallel recording (20 goroutines, 2,000 requests total) | Strong: validates total, good, bad sums and race detector pass. |
 
 ## Assessment
 
-The test suite covers happy paths, failure paths, transitions (`CanDeploy` state change), and concurrency safety. All tests execute in < 0.01 seconds and pass clean under the Go race detector.
+- Happy path covered: YES
+- Failure path / error budget breach covered: YES
+- Concurrency covered: YES
+- Race detector passed: YES
+- Flaky tests detected: NO

@@ -2,44 +2,39 @@
 
 Target Lab: labs/24-slo-sli-error-budget
 Audit Date: 2026-09-26
-Audit Output: labs/24-slo-sli-error-budget/engineering-audit-opensource/
-Scope: Implementation + tests only. Research/content excluded per override. No code modified.
 
 ## Summary
 
-Code Files Reviewed: 4 (internal/metrics/tracker.go, internal/slo/evaluator.go, internal/alerting/engine.go, cmd/demo/main.go)
-Tests Reviewed: 1 file, 4 tests (tests/slo_test.go)
-Commands Executed: go build ./...; go vet ./...; gofmt -l .; go test -count=1 -v ./...; go test -race -count=1 ./...; go test -coverpkg=./internal/... ./tests/; go run ./cmd/demo
-Failures: 0
-Warnings: 7 (1 MEDIUM test overclaim + coverage deltas; rest LOW: gofmt whitespace, dead rule fields, design wording, weak concurrency assert, nil/out-of-order preconditions)
+Code Files Reviewed: 4 (cmd/demo/main.go, internal/metrics/tracker.go, internal/slo/evaluator.go, internal/alerting/engine.go)
+Tests Reviewed: 1 (tests/slo_test.go — 4 test funcs)
+Commands Executed: go build ./..., go vet ./..., go test -count=1 -v ./..., go test -count=1 -race -v ./tests/, go test -coverpkg, go run ./cmd/demo
+Failures: 0 (build, vet, tests, race, demo all PASS; demo output matches recorded execution-result)
+Warnings: 8 gaps (1 HIGH, 3 MEDIUM, 4 LOW)
 
 ## Quality Gates
 
-Compilation: PASS (`go build ./...` clean)
-Tests: PASS (4/4, incl. TestConcurrencyMetrics)
-Race Detector: PASS (`go test -race` clean)
-Demo: PASS (live output identical to engineering/03-execution-result.md; math verified: 1100 total → SLI 99.09%, budget -8.90, TICKET 9.09x fires, PAGE 14.4x silent)
-Research Alignment: NOT_APPLICABLE (excluded per override)
-Documentation Accuracy: WARNING (README accurate; design overclaims coverage 100%, histogram/ring/criticality-bucketing/recovery wording)
+Compilation: PASS
+Tests: PASS
+Race Detector: PASS
+Demo: PASS
+Research Alignment: NOT_APPLICABLE (per pipeline override — implementation+tests only)
+Documentation Accuracy: FAIL (design claims endpoint-bucketing + 100% coverage; neither holds)
 
 ## Blocking Issues
-
-None. No HIGH/CRITICAL gaps. Core behavior proven: SLI ratio, error-budget depletion → CanDeploy=false, multi-window burn-rate alert, concurrency safety.
+1. [HIGH — RESEARCH_MISMATCH] engineering/01-design.md Concept #4 claims per-endpoint criticality bucketing (Payment 99.9% vs Reports 95%). Code has Event.Endpoint field but no per-endpoint SLO logic; demo uses single fixed SLO 0.999. Core SLI/budget/burn-rate proven, but one designed concept unimplemented.
 
 ## Non-Blocking Issues
-
-1. Negative alert + empty/all-error evaluator tests missing (GAP-1, GAP-2).
-2. Guard-branch coverage missing: burn-rate zero/div-zero, tracker defaults (GAP-3, GAP-4).
-3. No recovery-by-eviction test (GAP-5).
-4. "100% coverage" wording overclaims (GAP-6).
-5. Design wording exceeds code: histogram/ring/criticality/recovery (GAP-7).
-6. Nil isGood + out-of-order ingest preconditions undocumented (GAP-8).
-7. gofmt whitespace drift in 3 files; `BurnRateRule` Long/ShortWindow + BudgetConsumedPct unread.
+1. [MEDIUM] BurnRateRule.LongWindow/ShortWindow/BudgetConsumedPct dead fields — Check() uses fixed trackers, not per-rule windows.
+2. [MEDIUM] slo.Config.LatencyThreshold stored but never read by Evaluator; latency enforced only via caller isGood closure.
+3. [MEDIUM] Design claims "100% test coverage" — measured CalculateBurnRate 71.4%, NewWindowTracker 66.7%.
+4. [MEDIUM] Concurrency test calls Summary only after wg.Wait(); no concurrent Record+Summary coverage.
+5. [LOW] Zero-traffic, 100%-error, CalculateBurnRate edge branches untested; Summary write-lock side effect undocumented; BudgetConsumed unrounded vs rounded sibling fields.
 
 ## Required Revisions
-
-None required for approval. Recommended before publication: add negative-alert, empty-window, and recovery tests; fix coverage/design wording; run gofmt.
+1. Either implement per-endpoint SLO bucketing or remove the claim from engineering/01-design.md (docs-only fix acceptable; README already omits it).
+2. Either wire BurnRateRule window fields into Check() or delete dead fields to match implementation.
+3. Correct 100%-coverage claim to measured values or add missing edge-case tests.
 
 ## Final Status
 
-APPROVED_WITH_WARNINGS
+NEEDS_REVISION

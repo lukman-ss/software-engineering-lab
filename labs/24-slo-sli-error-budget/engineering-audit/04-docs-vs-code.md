@@ -1,11 +1,18 @@
 # Docs vs Code Audit
 
-## Consistency Review
+Target Lab: `labs/24-slo-sli-error-budget`
 
-1. **Package Paths & Commands**: `README.md` specifies `go test ./...`, `go test -race ./...`, and `go run ./cmd/demo`. All commands execute without error.
-2. **Architecture Description**: `README.md` describes `internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, and `tests/`. All paths exist and match description.
-3. **Behavioral Claims**: README claims Google SRE SLI/SLO/Error Budget/Multi-Window Burn-Rate alerting implementation. The underlying codebase strictly implements these exact domain models.
+## Comparison Matrix
 
-## Discrepancies
+| Aspect | Documentation / Research Claim | Code / Demo Implementation | Status |
+|---|---|---|---|
+| Project Structure | `internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, `tests/` | Identical packages and layout exist in repo | MATCH |
+| SLI Metric Model | Good events / Total events ratio using sliding window | Implemented in `tracker.go` and `evaluator.go` | MATCH |
+| Error Budget Tracking | Budget = `(1 - SLO) * total - bad`; freeze when budget <= 0 | Implemented in `evaluator.go:49-57` | MATCH |
+| Multi-Window Multi-Burn-Rate Alerting | Both short and long window burn rates must breach threshold factor | Implemented in `engine.go:73` | MATCH |
+| Demo Execution | 3 Phases (Baseline -> Severe Incident -> Alerting) | Implemented in `cmd/demo/main.go`, output is 100% reproducible | MATCH |
+| Execution Output in Engineering Notes | Claims passing test suite and specific demo logs | Verified identical output when running `go test` and `go run ./cmd/demo` | MATCH |
 
-None found. Documentation accurately reflects code implementation and behavior.
+## Observed Mismatches
+
+None. Documentation accurately describes implementation and demo output.

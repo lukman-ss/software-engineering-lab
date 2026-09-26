@@ -1,35 +1,34 @@
 # Engineering Audit Plan
 
-Target Lab: labs/24-slo-sli-error-budget
+Target Lab: `labs/24-slo-sli-error-budget`
 Implementation Files:
-- internal/metrics/tracker.go
-- internal/slo/evaluator.go
-- internal/alerting/engine.go
-- cmd/demo/main.go
+- `internal/metrics/tracker.go`
+- `internal/slo/evaluator.go`
+- `internal/alerting/engine.go`
 
 Tests:
-- tests/slo_test.go
+- `tests/slo_test.go`
 
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
 
 Approved Research Inputs:
-- research/05-report.md
-- research/03-evidence.md
+- `research/05-report.md`
+- `research/03-evidence.md`
 
 Main Claims To Verify:
-1. Sliding-window time-bucketed event tracker handles event recording and stale bucket eviction accurately.
-2. SLO Evaluator calculates SLI ratios, error budgets, and enforces release freeze (`CanDeploy=false`) when budget is exhausted.
-3. Multi-window multi-burn-rate alerting engine correctly detects fast and slow burn rate threshold breaches.
-4. Implementation is concurrency safe across concurrent metric recording.
-5. README instructions compile and run cleanly (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo`).
+1. SLI Calculation as Good/Total ratio with sliding-window time-bucketed event tracking.
+2. Error Budget calculation (`1 - SLO`) and remaining budget tracking with deployment freeze enforcement when budget <= 0.
+3. Multi-window multi-burn-rate alerting logic detecting threshold breaches (fast burn vs slow burn).
+4. Thread-safety under concurrent metric recording.
+5. README accuracy against implemented code and execution output.
 
 Commands To Run:
-- `go test ./...`
-- `go test -race ./...`
+- `go test -count=1 -v ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions during concurrent `Record()` and `Summary()` calls on `WindowTracker`.
-- Incorrect burn rate math or SLI calculation rounding logic.
-- Misalignment between README documentation and actual Go package structure/outputs.
+- Mathematical rounding or window calculation errors in SLI / Error budget evaluation.
+- Multi-window burn-rate calculation mismatch (e.g. short vs long window tracker inputs).
+- Discrepancies between demo output / design claims and code implementation.

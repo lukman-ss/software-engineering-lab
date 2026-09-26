@@ -1,6 +1,6 @@
 # Engineering Revision Result
 
-Target Lab: labs/24-slo-sli-error-budget
+Target Lab: `labs/24-slo-sli-error-budget`
 Previous Verdict: APPROVED
 
 ## Issue Summary

@@ -1,29 +1,16 @@
-# Docs vs Code — labs/24-slo-sli-error-budget
+## Findings
 
-Compared: README.md, engineering/01-design.md, engineering/02-implementation-notes.md, engineering/03-execution-result.md vs code, tests, live demo output.
+| Document | Claim | Verified Against Code | Status |
+|----------|-------|----------------------|--------|
+| README.md | Multi-window multi-burn-rate alerting | internal/alerting/engine.go:73 — uses both short+long tracker via fixed Check() signature | PASS |
+| README.md | Release freeze policy (CanDeploy) | internal/slo/evaluator.go:55-57 — CanDeploy set when budgetRemaining<=0 | PASS |
+| README.md | Thread-safe metrics (sync) | internal/metrics/tracker.go:23 — sync.RWMutex | PASS |
+| engineering/01-design.md | Endpoint criticality bucketing (Payment 99.9%, Reports 95%) | NO per-endpoint bucketing; Event.Endpoint stored but unused; single SLO with fixed TargetSLO=0.999 | RESEARCH_MISMATCH |
+| engineering/01-design.md | Per-rule LongWindow/ShortWindow in BurnRateRule | BurnRateRule.LongWindow/ShortWindow/BudgetConsumedPct defined but never read in Check() | DOC_CODE_MISMATCH |
+| engineering/01-design.md | 100% test coverage on core math/sliding window | go tool cover shows CalculateBurnRate 71.4%, NewWindowTracker 66.7% (external test coverage measured); default package coverage reports 0.0% | TEST_CLAIM_MISMATCH |
+| engineering/01-design.md | In-memory ring/time-bucketed window tracking | WindowTracker uses []Bucket slice with eviction | PASS |
+| engineering/02-implementation-notes.md | Standard library only | confirmed imports (time/sync/math/fmt/testing only) | PASS |
 
-## Check 1
-
-README structure list vs code: PASS. metrics/slo/alerting/cmd-demo/tests roles match files on disk. Test/demo commands verbatim correct (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo` all reproduced).
-
-## Check 2
-
-Execution-result vs live run: PASS. Re-ran demo; output identical to engineering/03-execution-result.md (Phase1/2/3 numbers, TICKET 9.09x line, DEMO COMPLETE). Test/race transcripts match live runs (4 PASS, no-test-files notices for cmd+internal packages). No FAKE_DEMO, no FAKE_BENCHMARK (no benchmarks claimed).
-
-## Check 3
-
-Design "100% test coverage on core math" vs measured: DOC_CODE_MISMATCH (MEDIUM). CalculateBurnRate 71.4%, NewWindowTracker 66.7% on default/guard branches. Core happy paths are 100%; claim overshoots on edge branches.
-
-## Check 4
-
-Design "histogram latency buckets & success counts" / "ring buffer" vs code: DOC_CODE_MISMATCH (LOW). Tracker is time-bucketed good/bad counters, no latency histogram; storage is append+evict slice, not ring. Behavior as specified; terminology overshoots.
-
-## Check 5
-
-Design "Endpoint Criticality Bucketing (Payment 99.9% vs Reports 95%)" vs code: DOC_CODE_MISMATCH (LOW). `Event.Endpoint` recorded but never used for per-endpoint SLO routing; demo/tests use single SLO. Feature described in design, absent in code; README does not claim it — scoped to design doc only.
-
-## Check 6
-
-Design "demonstration ... and recovery" vs demo: DOC_CODE_MISMATCH (LOW). Demo shows baseline→incident→alert+freeze; no recovery phase (traffic recovering, budget replenishing). Notes correctly list TSDB/PagerDuty as not demonstrated.
-
-No RESEARCH_IMPLEMENTATION_MISMATCH in scope (research excluded per override). No TEST_CLAIM_MISMATCH beyond coverage-percentage wording (tests assert what they claim).
+## Notes
+- slo.Config.LatencyThreshold is stored but not consulted by Evaluator.Evaluate; the latency predicate is implemented inside the metrics package's isGood closure. Design says SLO enforces latency threshold; code defers it to caller via closure. Not fatal, but inconsistent with stated architecture.
+- Event.Endpoint and BurnRateRule.LongWindow/ShortWindow/BudgetConsumedPct are dead fields that suggest intended but unimplemented features (per-endpoint SLOs, per-rule windows).

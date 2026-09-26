@@ -1,28 +1,41 @@
-# Gaps — labs/24-slo-sli-error-budget
+# Gap Analysis
 
-## GAP-1: MISSING_TEST (MEDIUM)
-Negative burn-rate case untested. No test asserts `Check` returns zero alerts when burn < threshold, or that 14.4x PAGE stays silent at 9.09x. Add: below-threshold scenario expecting `len(alerts)==0`.
+## MISSING_EDGE_CASE
+Location: internal/slo/evaluator.go:41-71
+Description: SLOEvaluator.Evaluate has no test branch for `total == 0`. While the guard `if total > 0` exists, no test verifies behavior with zero traffic. Division-by-zero avoidance is guarded but unverified under test.
+Severity: LOW
 
-## GAP-2: MISSING_TEST (MEDIUM)
-Empty-window and all-error evaluator paths untested. SLI==1.0/CanDeploy==true on zero events and SLI==0.0 freeze on 100% errors are implemented but unproven. Add both.
+## MISSING_EDGE_CASE
+Location: internal/alerting/engine.go:51-61
+Description: CalculateBurnRate branches `total==0` and `allowedErrorRate<=0` are not exercised by tests.
+Severity: LOW
 
-## GAP-3: MISSING_EDGE_CASE (LOW)
-`CalculateBurnRate` total==0 and targetSLO>=1.0 guards implemented, uncovered (71.4%). Add two asserts.
+## MISSING_EDGE_CASE
+Location: internal/metrics/tracker.go:30-37
+Description: NewWindowTracker default branch (bucketSize<=0, numBuckets<1) not covered.
+Severity: LOW
 
-## GAP-4: MISSING_EDGE_CASE (LOW)
-`NewWindowTracker` defaults (`bucketSize<=0`, `window<bucket`) uncovered (66.7%). Add constructor asserts.
+## TEST_CLAIM_MISMATCH
+Location: engineering/01-design.md:21
+Description: Design documents state "100% test coverage on core math and sliding window calculations." Measured coverage: CalculateBurnRate 71.4%, NewWindowTracker 66.7%, other functions 100%. Statement is inaccurate.
+Severity: MEDIUM
 
-## GAP-5: MISSING_TEST (LOW)
-No recovery test: events aging out should restore budget and CanDeploy=true. Implemented via eviction, never exercised end-to-end through Evaluator. Add: exhaust then advance past window, re-evaluate.
+## DOC_CODE_MISMATCH
+Location: internal/alerting/engine.go:17-24
+Description: BurnRateRule defines LongWindow, ShortWindow, BudgetConsumedPct fields intended to parameterize per-rule alert windows. These are NOT used in Check(); the engine uses the fixed shortTracker/longTracker passed to NewAlertEngine. Design implies per-rule windows; code does not implement them.
+Severity: MEDIUM
 
-## GAP-6: DOC_CODE_MISMATCH (MEDIUM)
-"100% test coverage on core math" overclaims; measured <100% on two functions. Fix wording or add GAP-1–4 tests.
+## RESEARCH_MISMATCH
+Location: engineering/01-design.md:10
+Description: Design claims endpoint criticality bucketing with distinct SLOs per endpoint (Payment 99.9%, Reports 95.0%). Code has Event.Endpoint field but no per-endpoint SLO logic; demo uses a single fixed SLO. Feature missing.
+Severity: HIGH
 
-## GAP-7: DOC_CODE_MISMATCH (LOW)
-Design terms "histogram", "ring buffer", "endpoint criticality bucketing", "recovery demo" exceed implementation. Narrow design wording to bucketed counters, append+evict window, single-SLO demo without recovery phase — or implement the missing bits.
+## IMPLEMENTATION_OVERCLAIM
+Location: slo.Config.LatencyThreshold (internal/slo/evaluator.go:13)
+Description: LatencyThreshold stored on SLO Config but never consulted by Evaluator.Evaluate; latency enforcement lives in the metrics isGood closure. The SLO component claims latency awareness it does not exercise.
+Severity: MEDIUM
 
-## GAP-8: UNHANDLED_ERROR (LOW)
-`NewWindowTracker` nil `isGood` panics on Record; out-of-order timestamps silently misbucket (see 02-code-audit Findings 1–2). Guard or document ordering + non-nil precondition. No production impact in lab scope.
-
-## Explicit non-gaps
-No BROKEN_IMPLEMENTATION, RACE_CONDITION, FAKE_DEMO, FAKE_BENCHMARK, UNVERIFIED_RESULT. Build/vet/tests/race/demo all reproduced PASS. No HIGH/CRITICAL gaps.
+## CONCURRENCY_GAP
+Location: tests/slo_test.go:131-166
+Description: TestConcurrencyMetrics calls Record concurrently but invokes Summary only AFTER `wg.Wait()`. No test exercises concurrent Record + Summary, which is the unsafe path the race detector would flag.
+Severity: MEDIUM

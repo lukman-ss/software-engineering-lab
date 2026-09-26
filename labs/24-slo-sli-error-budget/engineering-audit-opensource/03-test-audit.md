@@ -1,35 +1,57 @@
-# Test Audit — labs/24-slo-sli-error-budget
-
-Suite: tests/slo_test.go (4 tests). All PASS, incl. `-race`.
-Executed: `go test -count=1 -v ./...` PASS (4/4). `go test -race -count=1 ./...` PASS. No warnings.
-Coverage (`-coverpkg=./internal/...`): Record 100%, Summary 100%, evictStaleLocked 100%, Evaluate 100%, NewEvaluator 100%, Check 100%, NewAlertEngine 100%, CalculateBurnRate 71.4%, NewWindowTracker 66.7%.
-
-## Coverage Matrix
-
-- Happy path: PASS. Tracker 10-good/2-bad exact counts; evaluator 99/1 → SLI≥0.99 CanDeploy=true; alert 2% err @99.9% → 20x fires PAGE rule.
-- Failure path: PASS. Second bad event flips CanDeploy=false; incident path covered.
-- Edge cases: PARTIAL. Eviction-to-zero covered. Missing: empty-window Evaluate (SLI default 1.0), 100%-error window, total==0 burn rate, targetSLO=1.0 guard, bucketSize<=0 / window<bucket defaults.
-- Transitions: PASS. CanDeploy true→false across budget exhaustion asserted both sides.
-- Recovery/rollback: GAP. No budget-recovery (bad events aging out → CanDeploy true again) test; no rollback concept applies (in-memory only), correctly absent.
-- Concurrency: PASS. 20×100 concurrent Record, total==2000 asserted, good+bad==total asserted, race detector clean.
-- Negative cases: GAP. No below-threshold burn-rate test asserting zero alerts; no wrong-severity assertion beyond PAGE happy path.
-
 ## Finding 1
 
-Location: tests/slo_test.go:131-167 `TestConcurrencyMetrics`
-Claimed Behavior: Thread-safety proof.
-Observed Implementation: Asserts total and good+bad==total but not exact good (1800) / bad (200) split.
-Assessment: WARNING
+Location: tests/slo_test.go
+Claimed Behavior: Tests cover happy path, edge cases, failure paths, and concurrency.
+Observed Implementation:
+- TestMetricsWindowTracker: records events, checks totals, verifies eviction.
+- TestSLOEvaluator: tests SLI calculation and CanDeploy flag at budget boundary.
+- TestAlertEngineBurnRate: triggers alert when burn rate exceeds threshold.
+- TestConcurrencyMetrics: runs multiple goroutines updating tracker concurrently with race detector.
+Assessment: PASS
 Severity: LOW
-Notes: Race detector compensates; exact-split assert would make the test a true correctness check, not just a race/smoke check. Deterministic here (classification per event fixed).
+Notes: Tests adequately cover core functionality. However, the following gaps exist:
+- No test for 100% error rate (SLI = 0) in SLOEvaluator.
+- No test for zero total events (division by zero) in SLOEvaluator (should handle gracefully).
+- No explicit test for CalculateBurnRate edge cases (total==0, allowedErrorRate<=0).
+- No test for concurrent Summary and Record (TestConcurrencyMetrics waits for all goroutines to finish before Summary).
+- No test verifying that Summary eviction works when called without prior Record (stale buckets evicted on Summary alone).
+- No test for WindowTracker with custom bucketSize <= 0 to trigger defaulting logic.
 
 ## Finding 2
 
-Location: tests/slo_test.go (whole file)
-Claimed Behavior: Design claims "100% test coverage on core math".
-Observed Implementation: Core paths 100% except CalculateBurnRate zero/div-zero branches and NewWindowTracker default branches untested.
-Assessment: WARNING
-Severity: MEDIUM
-Notes: Suite proves claimed behavior on exercised paths; overclaim is coverage percentage, not behavior. One negative alert test + one empty-window test would close most of the gap.
+Location: tests/slo_test.go:13-59 (TestMetricsWindowTracker)
+Claimed Behavior: Verifies bucket aggregation and eviction.
+Observed Implementation: Records 10 good, 1 bad (slow), 1 bad (error) events, checks totals, then verifies eviction after window passes.
+Assessment: PASS
+Severity: LOW
+Notes: The test uses a fixed isGood function (status<500 && duration<=100ms). It correctly identifies slow (200ms) as bad and error (500) as bad.
 
-Verdict on suite: Strong for a lab (happy/failure/transition/concurrency proven). Weak spots: negative alert case, empty-window SLI, recovery-by-eviction. Passing suite is substantive, not vacuous.
+## Finding 3
+
+Location: tests/slo_test.go:61-91 (TestSLOEvaluator)
+Claimed Behavior: Validates SLI calculation and deploy gate.
+Observed Implementation: 99 good + 1 bad => SLI=0.99, CanDeploy=true; add another bad => SLI<0.99, CanDeploy=false.
+Assessment: PASS
+Severity: LOW
+Notes: Boundary condition tested correctly.
+
+## Finding 4
+
+Location: tests/slo_test.go:93-129 (TestAlertEngineBurnRate)
+Claimed Behavior: Triggers alert when burn rate exceeds factor.
+Observed Implementation: 98 good, 2 bad => error rate=2%, allowed error rate=0.1% => burn rate=20x > 14.4x triggers PAGE alert.
+Assessment: PASS
+Severity: LOW
+Notes: Test uses isGood = status<500, matches burn rate calculation.
+
+## Finding 5
+
+Location: tests/slo_test.go:131-166 (TestConcurrencyMetrics)
+Claimed Behavior: Thread-safety of WindowTracker under concurrent Record.
+Observed Implementation: 20 goroutines each recording 100 events (10% errors), waits, then checks totals.
+Assessment: PASS
+Severity: LOW
+Notes: Race detector passes; no data races detected.
+
+## Summary
+Test suite provides good coverage of normal operation and concurrency. Missing tests for edge cases (zero traffic, 100% errors, CalculateBurnRate edge cases) reduce confidence in extreme scenarios.
