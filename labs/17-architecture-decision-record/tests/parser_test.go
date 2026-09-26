@@ -19,6 +19,9 @@ Small team of 5 engineers.
 
 ## Decision
 Modular Monolith.
+
+## Consequences
+Faster iteration.
 `
 	record, err := adr.Parse(content)
 	if err != nil {
@@ -42,6 +45,12 @@ Status: Superseded by 2
 
 ## Context
 Small team of 5 engineers.
+
+## Decision
+Monolith
+
+## Consequences
+Iterate faster.
 `
 	record, err := adr.Parse(content)
 	if err != nil {
@@ -69,6 +78,12 @@ Supersedes: 1
 
 ## Context
 Team scale exceeded 20 engineers.
+
+## Decision
+Microservice.
+
+## Consequences
+More scalable.
 `
 	record, err := adr.Parse(content)
 	if err != nil {
@@ -113,6 +128,81 @@ Status: Accepted
 Status: Draft
 `,
 			wantErr: "invalid status: Draft",
+		},
+		{
+			name: "missing context",
+			content: `
+# 1. Title
+Status: Accepted
+## Decision
+A
+## Consequences
+B
+`,
+			wantErr: "context section missing",
+		},
+		{
+			name: "missing decision",
+			content: `
+# 1. Title
+Status: Accepted
+## Context
+A
+## Consequences
+B
+`,
+			wantErr: "decision section missing",
+		},
+		{
+			name: "missing consequences",
+			content: `
+# 1. Title
+Status: Accepted
+## Context
+A
+## Decision
+B
+`,
+			wantErr: "consequences section missing",
+		},
+		{
+			name: "empty context",
+			content: `
+# 1. Title
+Status: Accepted
+## Context
+## Decision
+B
+## Consequences
+C
+`,
+			wantErr: "context section missing or empty",
+		},
+		{
+			name: "empty decision",
+			content: `
+# 1. Title
+Status: Accepted
+## Context
+A
+## Decision
+## Consequences
+C
+`,
+			wantErr: "decision section missing or empty",
+		},
+		{
+			name: "empty consequences",
+			content: `
+# 1. Title
+Status: Accepted
+## Context
+A
+## Decision
+B
+## Consequences
+`,
+			wantErr: "consequences section missing or empty",
 		},
 	}
 

@@ -38,6 +38,29 @@ func (l *Linter) Validate(records []*Record) []error {
 		}
 	}
 
+	// Detect cyclical supersession chains
+	state := make(map[int]int) // 0: unvisited, 1: visiting, 2: visited
+	var detectCycle func(id int)
+	detectCycle = func(id int) {
+		state[id] = 1
+		rec, exists := recordMap[id]
+		if exists && rec.SupersededBy != 0 && rec.SupersededBy != rec.ID {
+			nextID := rec.SupersededBy
+			if state[nextID] == 1 {
+				errs = append(errs, fmt.Errorf("cyclical supersession detected involving ADR %d", nextID))
+			} else if state[nextID] == 0 {
+				detectCycle(nextID)
+			}
+		}
+		state[id] = 2
+	}
+
+	for _, r := range records {
+		if state[r.ID] == 0 {
+			detectCycle(r.ID)
+		}
+	}
+
 	// Validate graph in parallel
 	var wg sync.WaitGroup
 	for _, r := range records {

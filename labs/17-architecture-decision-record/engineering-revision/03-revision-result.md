@@ -8,11 +8,11 @@ Previous Verdict: APPROVED
 Critical: 0
 High: 0
 Medium: 0
-Low: 1
+Low: 2
 
 ## Resolution
 
-Resolved: 1
+Resolved: 2
 Partially Resolved: 0
 Unresolved: 0
 

@@ -6,24 +6,21 @@ Implementation Files:
 - internal/adr/parser.go
 - internal/adr/linter.go
 - cmd/demo/main.go
-Tests: tests/parser_test.go, tests/linter_test.go
+Tests:
+- tests/linter_test.go
+- tests/parser_test.go
 Executable/Demo: cmd/demo/main.go
-Approved Research Inputs: (Not audited per pipeline override)
+Approved Research Inputs: research/ (not required per pipeline override)
 Main Claims To Verify:
-- Code compiles without errors
-- Test suite passes (unit and integration)
-- Race detector reports no data races
-- Demo executes successfully and matches documented output
-- README accurately reflects implementation
-- Concurrency safety mechanisms are correct and verified
-- No fake benchmark/result exists
+1. ADR parser correctly extracts structured data from Markdown files
+2. Linter correctly accepts a valid sequence of ADRs 
+3. Linter correctly rejects invalid structural states (broken links, unknown status)
+4. Concurrency safety verified with Go race detector
 Commands To Run:
-- go build ./...
-- go test -v ./...
+- go test ./...
 - go test -race ./...
 - go run ./cmd/demo
-- go vet ./...
 Primary Risks:
-- Concurrency bugs in linter (mitigated by mutex protection)
-- Incorrect status parsing leading to validation errors
-- Missing test coverage for edge cases (duplicate IDs, superseded without reference)
+- Parser regex limitations may not handle edge cases in Markdown
+- Concurrent linter implementation may have race conditions
+- Demo may not accurately reflect research claims

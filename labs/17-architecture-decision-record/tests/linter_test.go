@@ -125,6 +125,32 @@ func TestLinter_BrokenReferences(t *testing.T) {
 			},
 			wantErr: "duplicate ADR ID: 1",
 		},
+		{
+			name: "cyclical supersession",
+			records: []*adr.Record{
+				{
+					ID:           1,
+					Title:        "One",
+					Status:       adr.StatusSuperseded,
+					SupersededBy: 2,
+				},
+				{
+					ID:           2,
+					Title:        "Two",
+					Status:       adr.StatusSuperseded,
+					Supersedes:   1,
+					SupersededBy: 3,
+				},
+				{
+					ID:           3,
+					Title:        "Three",
+					Status:       adr.StatusSuperseded,
+					Supersedes:   2,
+					SupersededBy: 1,
+				},
+			},
+			wantErr: "cyclical supersession detected",
+		},
 	}
 
 	for _, tt := range tests {

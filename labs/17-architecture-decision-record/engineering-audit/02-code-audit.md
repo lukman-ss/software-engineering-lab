@@ -2,45 +2,45 @@
 
 ## Finding 1
 
-Location: `internal/adr/models.go:5-20`
-Claimed Behavior: Define valid ADR statuses (`Proposed`, `Accepted`, `Superseded`, `Deprecated`, `Rejected`) and verification logic.
-Observed Implementation: Types and constants defined strictly with an `IsValid()` method validating against the exhaustive list.
+Location: `internal/adr/parser.go`
+Claimed Behavior: Extracts structured data from Markdown files (Context, Decision, Consequences, Status).
+Observed Implementation: Uses regex to ensure required section headers exist. Correctly parses Status and IDs.
 Assessment: PASS
 Severity: LOW
-Notes: Covers all AWS Prescriptive Guidance ADR statuses referenced in the research.
+Notes: Parser logic is simplistic (regex instead of AST) but fulfills the strict format requirements of the lab. However, it only checks if headers exist, not if they contain content.
 
 ## Finding 2
 
-Location: `internal/adr/parser.go:11-15, 26-68`
-Claimed Behavior: Parse ADR markdown to extract ID, Title, Status, and supersession links.
-Observed Implementation: Uses line-by-line regex scanning. Handles case-insensitivity on headers (`(?i)`), extracts integer IDs, captures title and references.
+Location: `internal/adr/linter.go` (Monotonic Numbering)
+Claimed Behavior: Enforces monotonic numbering starting from 1.
+Observed Implementation: Sorts IDs and validates `ids[i] == i+1`.
 Assessment: PASS
 Severity: LOW
-Notes: Requires strict format (`# 1. Title`). Documented as intentional limitation to avoid heavyweight Markdown AST parsers.
+Notes: Correctly rejects skipped numbers or IDs starting from values other than 1.
 
 ## Finding 3
 
-Location: `internal/adr/linter.go:27-39`
-Claimed Behavior: Enforce monotonic sequence of ADR IDs (1, 2, 3...).
-Observed Implementation: Collects all IDs, sorts them, and verifies that `ids[i] == i + 1`. Fails if IDs are skipped or do not begin at 1.
+Location: `internal/adr/linter.go` (Supersession Validation)
+Claimed Behavior: Validates bidirectional supersession references and prevents broken links.
+Observed Implementation: Concurrently iterates over all records. Checks `Supersedes` and `SupersededBy` against the full map of records, validating bidirectional constraints.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly enforces continuous numbering invariant.
+Notes: Properly protected shared error slice using mutex `mu.Lock()`. Thread safe.
 
 ## Finding 4
 
-Location: `internal/adr/linter.go:41-80`
-Claimed Behavior: Validate supersession DAG and referential integrity concurrently.
-Observed Implementation: Validates mutual references using goroutines. Mutex protects the shared error list. Reads against `recordMap` are read-only and safe across goroutines.
-Assessment: PASS
+Location: `internal/adr/linter.go` (Graph Cycles)
+Claimed Behavior: Validates DAG lineage (no cycles).
+Observed Implementation: Validates immediate 1:1 bidirectional supersession links, but does not do a full cycle detection (e.g., A -> B -> C -> A). 
+Assessment: WARNING
 Severity: LOW
-Notes: Properly enforces bidirectional consistency (A superseded by B <=> B supersedes A).
+Notes: Deep cyclic dependencies could technically bypass validation, though self-supersession is explicitly checked.
 
 ## Finding 5
 
-Location: `internal/adr/linter.go:19-25`
-Claimed Behavior: Disallow duplicate ADR IDs.
-Observed Implementation: Appends error when `recordMap` collision occurs during population.
+Location: `cmd/demo/main.go`
+Claimed Behavior: Demonstrates parsing and validating an ADR sequence representing the architectural progression from a Modular Monolith to Microservices.
+Observed Implementation: Validates strings containing the exact examples from the research.
 Assessment: PASS
 Severity: LOW
-Notes: Logic is sound. Missing explicit unit test for this branch in `linter_test.go` (covered in test audit).
+Notes: Demo successfully represents the architectural lifecycle.

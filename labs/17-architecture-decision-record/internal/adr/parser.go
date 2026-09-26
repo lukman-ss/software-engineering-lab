@@ -9,9 +9,12 @@ import (
 )
 
 var (
-	titleRegex      = regexp.MustCompile(`^#\s+(\d+)\.\s+(.+)$`)
-	statusRegex     = regexp.MustCompile(`(?i)^Status:\s*([A-Za-z]+)(?:\s+by\s+(\d+))?`)
-	supersedesRegex = regexp.MustCompile(`(?i)^Supersedes:\s*(\d+)`)
+	titleRegex        = regexp.MustCompile(`^#\s+(\d+)\.\s+(.+)$`)
+	statusRegex       = regexp.MustCompile(`(?i)^Status:\s*([A-Za-z]+)(?:\s+by\s+(\d+))?`)
+	supersedesRegex   = regexp.MustCompile(`(?i)^Supersedes:\s*(\d+)`)
+	contextRegex      = regexp.MustCompile(`(?i)^##\s+Context`)
+	decisionRegex     = regexp.MustCompile(`(?i)^##\s+Decision`)
+	consequencesRegex = regexp.MustCompile(`(?i)^##\s+Consequences`)
 )
 
 func Parse(content string) (*Record, error) {
@@ -22,6 +25,15 @@ func Parse(content string) (*Record, error) {
 
 	foundTitle := false
 	foundStatus := false
+	foundContext := false
+	foundDecision := false
+	foundConsequences := false
+	
+	contextHasContent := false
+	decisionHasContent := false
+	consequencesHasContent := false
+	
+	var activeSection *bool
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -54,6 +66,7 @@ func Parse(content string) (*Record, error) {
 					}
 				}
 			}
+			continue
 		}
 
 		if strings.HasPrefix(strings.ToLower(line), "supersedes:") {
@@ -64,6 +77,29 @@ func Parse(content string) (*Record, error) {
 					record.Supersedes = supersedes
 				}
 			}
+			continue
+		}
+
+		if contextRegex.MatchString(line) {
+			foundContext = true
+			activeSection = &contextHasContent
+			continue
+		}
+		if decisionRegex.MatchString(line) {
+			foundDecision = true
+			activeSection = &decisionHasContent
+			continue
+		}
+		if consequencesRegex.MatchString(line) {
+			foundConsequences = true
+			activeSection = &consequencesHasContent
+			continue
+		}
+		
+		if strings.HasPrefix(line, "#") {
+			activeSection = nil
+		} else if activeSection != nil && len(line) > 0 {
+			*activeSection = true
 		}
 	}
 
@@ -77,6 +113,18 @@ func Parse(content string) (*Record, error) {
 
 	if !record.Status.IsValid() {
 		return nil, fmt.Errorf("invalid status: %s", record.Status)
+	}
+
+	if !foundContext || !contextHasContent {
+		return nil, fmt.Errorf("context section missing or empty")
+	}
+
+	if !foundDecision || !decisionHasContent {
+		return nil, fmt.Errorf("decision section missing or empty")
+	}
+
+	if !foundConsequences || !consequencesHasContent {
+		return nil, fmt.Errorf("consequences section missing or empty")
 	}
 
 	return record, nil
