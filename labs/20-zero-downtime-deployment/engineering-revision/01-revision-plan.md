@@ -1,7 +1,7 @@
 # Engineering Revision Plan
 
 Target Lab: `labs/20-zero-downtime-deployment`
-Previous Verdict: APPROVED (0 failures, 0 warnings)
+Previous Verdict: `APPROVED`
 
 ## Blocking Issues
 None.
@@ -10,12 +10,15 @@ None.
 None.
 
 ## Files To Change
-None (implementation, tests, and documentation are fully aligned and passing all quality gates).
+- `internal/server/server.go`
+- `tests/server_test.go`
 
 ## Tests To Add/Modify
-None. Existing test coverage thoroughly verifies probe transitions, graceful drains, preStop delays, context cancellations, worker concurrency/timeout fallbacks, and expand-contract migrations.
+- Modify `tests/server_test.go` (`TestServerMultiRequestDrain`) to track unhandled write errors cleanly without false negative assertion failures.
 
 ## Validation Commands
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+```bash
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo
+```

@@ -55,7 +55,7 @@ func NewServer(addr string, preStopDelay time.Duration) *Server {
 		select {
 		case <-time.After(d):
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("WORK COMPLETED"))
+			_, _ = w.Write([]byte("WORK COMPLETED"))
 		case <-r.Context().Done():
 			// Client disconnected early
 			return

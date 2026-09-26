@@ -222,7 +222,7 @@ func TestServerMultiRequestDrain(t *testing.T) {
 	}
 
 	const n = 3
-	results := make([]bool, n)
+	results := make([]string, n)
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -230,11 +230,12 @@ func TestServerMultiRequestDrain(t *testing.T) {
 			defer wg.Done()
 			resp, err := http.Get("http://127.0.0.1:8088/work?d=100ms")
 			if err != nil {
+				results[idx] = err.Error()
 				return
 			}
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
-			results[idx] = string(body) == "WORK COMPLETED"
+			results[idx] = string(body)
 		}(i)
 	}
 
@@ -249,9 +250,9 @@ func TestServerMultiRequestDrain(t *testing.T) {
 
 	wg.Wait()
 
-	for i, ok := range results {
-		if !ok {
-			t.Errorf("request %d did not complete successfully during drain", i)
+	for i, res := range results {
+		if res != "WORK COMPLETED" {
+			t.Errorf("request %d did not complete successfully during drain, got %q", i, res)
 		}
 	}
 }
