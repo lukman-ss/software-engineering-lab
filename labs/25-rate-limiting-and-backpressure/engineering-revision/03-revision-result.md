@@ -1,6 +1,6 @@
 # Engineering Revision Result
 
-Target Lab: labs/25-rate-limiting-and-backpressure
+Target Lab: `labs/25-rate-limiting-and-backpressure`
 Previous Verdict: APPROVED
 
 ## Issue Summary
@@ -8,11 +8,11 @@ Previous Verdict: APPROVED
 Critical: 0
 High: 0
 Medium: 0
-Low: 1
+Low: 0
 
 ## Resolution
 
-Resolved: 1
+Resolved: 0
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None.
+- None identified.
 
 ## Re-Audit Status
 

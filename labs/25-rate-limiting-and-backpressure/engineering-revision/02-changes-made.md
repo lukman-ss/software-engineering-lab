@@ -1,16 +1,16 @@
-# Engineering Revision Changes Made
+# Changes Made
 
-## Revision 1
+Target Lab: `labs/25-rate-limiting-and-backpressure`
 
-Audit Issue: GAP-01 / Non-blocking stale refill calculation in `TokenBucket.RetryAfterSeconds`
-Severity: LOW
-Files Changed:
-- `internal/ratelimit/bucket.go`
-- `internal/ratelimit/bucket_test.go`
-Action:
-- Updated `TokenBucket.RetryAfterSeconds` to calculate dynamic tokens accounting for elapsed time delta since `lastRefill`.
-- Added unit test `TestTokenBucket_RetryAfterSeconds` to test Retry-After calculation pre and post elapsed sleep.
-Verification:
-- `go test -v -count=1 ./...` PASS
-- `go test -race ./...` PASS
+## Revision Summary
+
+No code modifications were required. Audit passed with 0 blocking and 0 non-blocking issues.
+
+### Log
+
+Audit Issue: None
+Severity: N/A
+Files Changed: None
+Action: Verified existing implementation, tests, race detector, and demo execution.
+Verification: Passed `go test ./...`, `go test -race ./...`, `go run ./cmd/demo`.
 Status: RESOLVED
