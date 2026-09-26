@@ -1,8 +1,17 @@
 ## Revision 1
 
-Audit Issue: None
+Audit Issue: Unreleased Go version `go 1.26.7` declared in `go.mod`.
 Severity: LOW
-Files Changed: None
-Action: None required. Implementation and tests fully satisfy the requirements and the audit is APPROVED.
-Verification: Ran `go test ./...`, `go test -race ./...`, `go run ./cmd/demo`.
+Files Changed: `go.mod`
+Action: Updated version directive to `go 1.22`.
+Verification: `go test -count=1 ./...` and `go test -count=1 -race ./...` compile and pass cleanly.
+Status: RESOLVED
+
+## Revision 2
+
+Audit Issue: Exact numbers in `engineering/03-execution-result.md` demo output implied exact reproducibility.
+Severity: LOW
+Files Changed: `engineering/03-execution-result.md`
+Action: Added documentation note clarifying that load test latency and throughput metrics vary across runs based on environment scheduling and GC pauses while maintaining relative invariants.
+Verification: Documentation accurately describes dynamic test behavior.
 Status: RESOLVED

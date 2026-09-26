@@ -59,7 +59,7 @@ Command:
 ```bash
 go run ./cmd/demo
 ```
-Result:
+Result (sample run; actual values vary dynamically by environment):
 ```text
 Starting Load Test Demo (Booking Bengkel)
 Server simulated DB connections: 5
@@ -85,6 +85,7 @@ P50:             669.568542ms
 P95:             1.35666975s
 P99:             1.587917041s
 ```
+Note: Output metrics vary per run depending on host hardware performance, CPU scheduling, and GC pauses. The key invariant maintained across all runs is that Stress Test P95 and P99 latencies significantly exceed Smoke Test latencies due to queue saturation on the constrained connection pool (5 connections).
 
 ## Final Engineering Status
 READY_FOR_ENGINEERING_AUDIT
