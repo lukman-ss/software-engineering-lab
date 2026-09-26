@@ -1,35 +1,29 @@
 # Engineering Audit Plan
 
-Target Lab: labs/24-slo-sli-error-budget
+Target Lab: `labs/24-slo-sli-error-budget`
 Implementation Files:
-- internal/metrics/tracker.go
-- internal/slo/evaluator.go
-- internal/alerting/engine.go
-
+- `internal/metrics/tracker.go`
+- `internal/slo/evaluator.go`
+- `internal/alerting/engine.go`
+- `go.mod`
 Tests:
-- tests/slo_test.go
-
+- `tests/slo_test.go`
 Executable/Demo:
-- cmd/demo/main.go
-
+- `cmd/demo/main.go`
 Approved Research Inputs:
-- research/runs/2026-09-26-slo-sli-error-budget/05-report.md
-- engineering/01-design.md
-- engineering/02-implementation-notes.md
-
+- `research/runs/2026-09-26-slo-sli-error-budget/05-report.md`
+- `research-audit/07-verdict.md` (APPROVED)
 Main Claims To Verify:
-1. Sliding-window time-bucketed event tracker metrics implementation.
-2. Math calculations for SLI, Error Budget, and Burn Rates.
-3. Multi-window multi-burn-rate alerting engine logic.
-4. Release freeze check policy when error budget is exhausted.
-5. Concurrency thread-safety of WindowTracker.
-
+1. Ratio-based SLI calculation (`good_events / total_events`).
+2. Error budget management (`(1.0 - SLO) * total_events - bad_events`) and release policy gating.
+3. Multi-window multi-burn-rate alerting logic evaluation.
+4. Concurrency thread safety under parallel request ingestion.
+5. Exact matching of real execution output with recorded execution docs and README.
 Commands To Run:
-- go test ./...
-- go test -race ./...
-- go run ./cmd/demo
-
+- `go test ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-- Race conditions during concurrent events recording/eviction.
-- Rounding inaccuracies causing incorrect status decisions.
-- Multi-window burn rate alert false positives/negatives due to single window evaluation logic in demo setup.
+- Race conditions in metrics bucket window eviction or slice resizing.
+- Inconsistencies in floating-point calculations or rounding for budget/SLI.
+- Divergence between claims in README/design vs implementation code.

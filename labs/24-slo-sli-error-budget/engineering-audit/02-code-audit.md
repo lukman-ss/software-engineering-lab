@@ -2,36 +2,36 @@
 
 ## Finding 1
 
-Location: internal/metrics/tracker.go:78-87
-Claimed Behavior: Sliding window eviction of stale buckets.
-Observed Implementation: `evictStaleLocked` slice re-slicing (`w.buckets = w.buckets[idx:]`) leaves stale underlying array elements without explicit GC clearing, but given struct value slice elements in Go stdlib memory model this is safe and memory usage remains bound by window size.
+Location: `internal/metrics/tracker.go:46-76`
+Claimed Behavior: Thread-safe recording of HTTP request events into sliding-window time buckets.
+Observed Implementation: `Record` acquires a write lock (`w.mu.Lock()`), calls `evictStaleLocked`, truncates timestamp to bucket size, and appends or increments bucket counts.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles window trimming synchronously on write/read ops under mutex.
+Notes: `evictStaleLocked` correctly uses `w.buckets[idx:]` slice reslicing. Memory growth is capped by `evictStaleLocked`.
 
 ## Finding 2
 
-Location: internal/slo/evaluator.go:62
-Claimed Behavior: Rounding SLI ratio to 4 decimal places.
-Observed Implementation: `math.Round(sli*10000) / 10000` is used for SLI computation.
+Location: `internal/slo/evaluator.go:41-70`
+Claimed Behavior: SLI calculation as `good / total` ratio, error budget tracking as allowed failure minus bad events, and release deployment restriction when budget <= 0.
+Observed Implementation: Evaluates total, good, bad from tracker. Defaults SLI to 1.0 when total == 0. Calculates `allowedFailureRate * total`, subtracts `bad`, and sets `CanDeploy = false` when `total > 0 && budgetRemaining <= 0`.
 Assessment: PASS
 Severity: LOW
-Notes: SLI calculation accurately reflects `GoodEvents / TotalEvents`.
+Notes: Rounding logic (`math.Round`) is applied consistently for status presentation.
 
 ## Finding 3
 
-Location: internal/slo/evaluator.go:55
-Claimed Behavior: Deployment freeze policy when error budget is exhausted.
-Observed Implementation: `canDeploy` is false when `budgetRemaining <= 0` and `total > 0`.
+Location: `internal/alerting/engine.go:63-88`
+Claimed Behavior: Multi-window burn rate alert triggering when both short and long burn rates exceed specified thresholds.
+Observed Implementation: Calculates `shortBurn` and `longBurn` via `CalculateBurnRate`. Compares both against `rule.BurnRateFactor`. Triggers alert only when `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
 Assessment: PASS
 Severity: LOW
-Notes: Successfully enforces freeze threshold on budget exhaustion.
+Notes: Implementation matches Google SRE multi-window multi-burn-rate alerting logic.
 
 ## Finding 4
 
-Location: internal/alerting/engine.go:73-75
-Claimed Behavior: Multi-window burn rate alert triggering logic.
-Observed Implementation: Compares `shortBurn` and `longBurn` against `rule.BurnRateFactor`. Both short and long burn rates must exceed or equal the threshold.
+Location: `internal/metrics/tracker.go:89-100`
+Claimed Behavior: Thread-safe summary retrieval of active sliding window metrics.
+Observed Implementation: `Summary` acquires write lock (`w.mu.Lock()`) to evict stale buckets before aggregating totals.
 Assessment: PASS
 Severity: LOW
-Notes: Follows Google SRE multi-window burn rate evaluation logic correctly.
+Notes: Uses write lock instead of read lock because stale bucket eviction mutates the internal slice.
