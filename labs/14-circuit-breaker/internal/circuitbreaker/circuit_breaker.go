@@ -18,8 +18,8 @@ const (
 
 // Exported constants for integration test compatibility
 const (
-	StateClosed = Closed
-	StateOpen   = Open
+	StateClosed   = Closed
+	StateOpen     = Open
 	StateHalfOpen = HalfOpen
 )
 
@@ -57,6 +57,7 @@ type Breaker struct {
 	failures   int
 	openedAt   time.Time
 	halfOpenIn int
+	generation uint64
 }
 
 func New(cfg Config) *Breaker {
@@ -83,12 +84,14 @@ func (b *Breaker) advanceLocked(now time.Time) {
 	if b.state == Open && now.Sub(b.openedAt) >= b.cfg.OpenTimeout {
 		b.state = HalfOpen
 		b.halfOpenIn = 0
+		b.generation++
 	}
 }
 
-func (b *Breaker) Execute(fn func() error) error {
+func (b *Breaker) Execute(fn func() error) (err error) {
 	b.mu.Lock()
 	b.advanceLocked(time.Now())
+	gen := b.generation
 	switch b.state {
 	case Open:
 		b.mu.Unlock()
@@ -103,38 +106,53 @@ func (b *Breaker) Execute(fn func() error) error {
 	}
 	b.mu.Unlock()
 
-	err := fn()
+	panicked := true
+	defer func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if panicked {
+			b.onFailureLocked(gen, time.Now())
+		} else if err == nil {
+			b.onSuccessLocked(gen)
+		} else {
+			b.onFailureLocked(gen, time.Now())
+		}
+	}()
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if err == nil {
-		b.onSuccessLocked()
-		return nil
-	}
-	b.onFailureLocked(time.Now())
+	err = fn()
+	panicked = false
 	return err
 }
 
-func (b *Breaker) onSuccessLocked() {
+func (b *Breaker) onSuccessLocked(gen uint64) {
+	if b.generation != gen {
+		return
+	}
 	if b.state == HalfOpen {
 		b.state = Closed
 		b.failures = 0
 		b.halfOpenIn = 0
+		b.generation++
 		return
 	}
 	b.failures = 0
 }
 
-func (b *Breaker) onFailureLocked(now time.Time) {
+func (b *Breaker) onFailureLocked(gen uint64, now time.Time) {
+	if b.generation != gen {
+		return
+	}
 	if b.state == HalfOpen {
 		b.state = Open
 		b.openedAt = now
 		b.halfOpenIn = 0
+		b.generation++
 		return
 	}
 	b.failures++
 	if b.failures >= b.cfg.FailureThreshold {
 		b.state = Open
 		b.openedAt = now
+		b.generation++
 	}
 }

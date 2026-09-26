@@ -13,6 +13,7 @@ type Result struct {
 	Duration     time.Duration
 	DownstreamOK bool
 	State        circuitbreaker.State
+	HasBreaker   bool
 }
 
 type Service struct {
@@ -35,16 +36,16 @@ func (s *Service) CheckoutWithBreaker() Result {
 	if err := s.breaker.Execute(func() error {
 		return s.payment.ProcessPayment(context.Background())
 	}); err != nil {
-		return Result{Err: err, Duration: time.Since(start), State: s.breaker.State()}
+		return Result{Err: err, Duration: time.Since(start), State: s.breaker.State(), HasBreaker: true}
 	}
-	return Result{Duration: time.Since(start), State: s.breaker.State(), DownstreamOK: true}
+	return Result{Duration: time.Since(start), State: s.breaker.State(), DownstreamOK: true, HasBreaker: true}
 }
 
 // CheckoutWithoutBreaker executes a payment call directly (no circuit breaker).
 func (s *Service) CheckoutWithoutBreaker() Result {
 	start := time.Now()
 	err := s.payment.ProcessPayment(context.Background())
-	return Result{Err: err, Duration: time.Since(start)}
+	return Result{Err: err, Duration: time.Since(start), HasBreaker: false}
 }
 
 // Checkout is the integration test method - uses circuit breaker.
@@ -55,8 +56,12 @@ func (s *Service) Checkout(ctx context.Context) error {
 }
 
 func (r Result) String() string {
-	if r.Err != nil {
-		return fmt.Sprintf("err=%s duration=%s state=%s", r.Err, r.Duration, r.State)
+	stateStr := ""
+	if r.HasBreaker {
+		stateStr = fmt.Sprintf(" state=%s", r.State)
 	}
-	return fmt.Sprintf("err=nil duration=%s state=%s", r.Duration, r.State)
+	if r.Err != nil {
+		return fmt.Sprintf("err=%s duration=%s%s", r.Err, r.Duration, stateStr)
+	}
+	return fmt.Sprintf("err=nil duration=%s%s", r.Duration, stateStr)
 }

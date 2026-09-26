@@ -104,19 +104,19 @@ go test -race ./...
 ## Expected Behavior
 ```text
 === SCENARIO 1: WITHOUT CIRCUIT BREAKER (SLOW DEPENDENCY) ===
-request=1 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=101.25ms state=CLOSED
-request=2 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=101.17ms state=CLOSED
-request=3 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=100.30ms state=CLOSED
+request=1 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=100.32ms
+request=2 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=100.27ms
+request=3 result=err=payment request error: Post "...": context deadline exceeded (Client.Timeout exceeded while awaiting headers) duration=101.13ms
 
 downstream_calls=3
 
 === SCENARIO 2: WITH CIRCUIT BREAKER (FAIL-FAST ON DOWN DEPENDENCY) ===
-request=1 result=err=payment failed: status 500 duration=366.75µs state=CLOSED
-request=2 result=err=payment failed: status 500 duration=96.08µs state=CLOSED
-request=3 result=err=payment failed: status 500 duration=76.38µs state=OPEN
-request=4 result=err=circuit breaker is open duration=125ns state=OPEN
-request=5 result=err=circuit breaker is open duration=41ns state=OPEN
-request=6 result=err=circuit breaker is open duration=42ns state=OPEN
+request=1 result=err=payment failed: status 500 body internal payment server failure duration=508.66µs state=CLOSED
+request=2 result=err=payment failed: status 500 body internal payment server failure duration=291.16µs state=CLOSED
+request=3 result=err=payment failed: status 500 body internal payment server failure duration=198.62µs state=OPEN
+request=4 result=err=circuit breaker is open duration=166ns state=OPEN
+request=5 result=err=circuit breaker is open duration=125ns state=OPEN
+request=6 result=err=circuit breaker is open duration=167ns state=OPEN
 
 downstream_calls=3
 
@@ -134,7 +134,7 @@ circuit forced back to: OPEN
 waiting for cooldown (300ms)...
 dependency still DOWN. Current CB state=HALF_OPEN
 sending probe request...
-probe result: err=payment failed: status 500, state after failed probe=OPEN
+probe result: err=payment failed: status 500 body internal payment server failure, state after failed probe=OPEN
 sending next request while re-opened...
 next request result: err=circuit breaker is open, state=OPEN
 ```

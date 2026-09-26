@@ -67,3 +67,48 @@ func TestCircuitBreakerIntegration(t *testing.T) {
 		}
 	})
 }
+
+func TestCircuitBreakerSlowDependencyTimeoutTrips(t *testing.T) {
+	fakeServer := payment.NewFakeServer(100 * time.Millisecond)
+	defer fakeServer.Close()
+	fakeServer.SetMode(payment.ModeSlow)
+
+	clientTimeout := 20 * time.Millisecond
+	paymentClient := payment.NewClient(fakeServer.URL(), clientTimeout)
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		FailureThreshold: 2,
+		OpenTimeout:      100 * time.Millisecond,
+		HalfOpenMaxCalls: 1,
+	})
+
+	svc := checkout.NewService(paymentClient, cb)
+
+	// 1st slow request times out and fails
+	err1 := svc.Checkout(context.Background())
+	if err1 == nil {
+		t.Fatalf("expected timeout error, got nil")
+	}
+
+	// 2nd slow request times out and trips the breaker
+	err2 := svc.Checkout(context.Background())
+	if err2 == nil {
+		t.Fatalf("expected timeout error, got nil")
+	}
+
+	if cb.State() != circuitbreaker.StateOpen {
+		t.Fatalf("expected OPEN state after 2 timeouts, got %s", cb.State())
+	}
+
+	// 3rd request should fail fast immediately without waiting for server
+	start := time.Now()
+	err3 := svc.Checkout(context.Background())
+	duration := time.Since(start)
+
+	if !errors.Is(err3, circuitbreaker.ErrCircuitOpen) {
+		t.Fatalf("expected ErrCircuitOpen, got %v", err3)
+	}
+	if duration > 10*time.Millisecond {
+		t.Fatalf("expected fail-fast in <10ms, took %s", duration)
+	}
+}

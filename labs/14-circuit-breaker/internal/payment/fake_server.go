@@ -39,7 +39,8 @@ func NewFakeServer(slowDelay time.Duration) *FakeServer {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status":"ok_slow"}`))
 		case ModeDown:
-			http.Error(w, "internal payment server failure", http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("internal payment server failure"))
 		default: // ModeHealthy
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status":"ok"}`))

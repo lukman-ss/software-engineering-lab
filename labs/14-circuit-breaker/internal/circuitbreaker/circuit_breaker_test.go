@@ -228,3 +228,105 @@ func TestHalfOpenThrottlesExcessCalls(t *testing.T) {
 	}
 	close(probeRelease)
 }
+
+func TestPanicInHalfOpenCleansUpState(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, OpenTimeout: 30 * time.Millisecond, HalfOpenMaxCalls: 1})
+	_ = b.Execute(func() error { return errors.New("fail") })
+	time.Sleep(40 * time.Millisecond)
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic to propagate")
+		}
+
+		// Verify that breaker is not stuck in HalfOpen with exhausted calls
+		if b.State() != Open {
+			t.Fatalf("expected breaker to return to OPEN on panic, got %s", b.State())
+		}
+
+		time.Sleep(40 * time.Millisecond)
+		// Should now be HalfOpen again and allow a new probe call
+		err := b.Execute(func() error { return nil })
+		if err != nil {
+			t.Fatalf("expected probe to succeed after recovery, got %v", err)
+		}
+		if b.State() != Closed {
+			t.Fatalf("expected breaker CLOSED, got %s", b.State())
+		}
+	}()
+
+	_ = b.Execute(func() error {
+		panic("boom downstream")
+	})
+}
+
+func TestTrailingInFlightRequestDoesNotCorruptNewState(t *testing.T) {
+	b := New(Config{FailureThreshold: 1, OpenTimeout: 50 * time.Millisecond, HalfOpenMaxCalls: 1})
+
+	started := make(chan struct{})
+	finish := make(chan struct{})
+
+	// Goroutine 1: Initiated during Closed (generation 0), but takes a long time
+	go func() {
+		_ = b.Execute(func() error {
+			close(started)
+			<-finish
+			return errors.New("slow failure from past")
+		})
+	}()
+
+	<-started
+
+	// Trigger trip to OPEN via another request
+	_ = b.Execute(func() error { return errors.New("immediate fail") })
+	if b.State() != Open {
+		t.Fatalf("expected OPEN state, got %s", b.State())
+	}
+
+	// Advance time until HalfOpen
+	time.Sleep(60 * time.Millisecond)
+	if b.State() != HalfOpen {
+		t.Fatalf("expected HALF_OPEN state, got %s", b.State())
+	}
+
+	// Release the trailing slow request from generation 0
+	close(finish)
+	time.Sleep(10 * time.Millisecond)
+
+	// Trailing request should NOT have flipped HalfOpen to Open
+	if b.State() != HalfOpen {
+		t.Fatalf("expected state to remain HALF_OPEN despite trailing failure, got %s", b.State())
+	}
+
+	// New probe succeeds, closing the breaker
+	err := b.Execute(func() error { return nil })
+	if err != nil {
+		t.Fatalf("expected probe to succeed, got %v", err)
+	}
+	if b.State() != Closed {
+		t.Fatalf("expected CLOSED state, got %s", b.State())
+	}
+}
+
+func TestInterleavedConcurrentTransitions(t *testing.T) {
+	b := New(Config{FailureThreshold: 2, OpenTimeout: 20 * time.Millisecond, HalfOpenMaxCalls: 2})
+	var wg sync.WaitGroup
+
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			_ = b.Execute(func() error {
+				if id%2 == 0 {
+					time.Sleep(15 * time.Millisecond)
+					return errors.New("err")
+				}
+				time.Sleep(5 * time.Millisecond)
+				return nil
+			})
+		}(i)
+	}
+
+	wg.Wait()
+}
