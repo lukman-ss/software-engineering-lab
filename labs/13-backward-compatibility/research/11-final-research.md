@@ -55,9 +55,10 @@ Gunakan instrumentasi observabilitas:
 - Metric hit pada legacy endpoints atau legacy field access.
 - Structured logging yang mencatat `client_version` atau field access.
 - Sunset warning headers (e.g., `Deprecation: true`, `Sunset: <date>`) pada response HTTP.
-
 ### 11. Kapan field, column, atau endpoint lama boleh dihapus?
-Field, kolom, atau endpoint lama hanya boleh dihapus saat metric penggunaan legacy menunjukkan angka **nol secara konsisten** selama periode waktu tertentu (misal: 30 hari berturut-turut).
+
+Field, kolom, atau endpoint lama hanya boleh dihapus saat metric penggunaan legacy menunjukkan angka **nol secara konsisten** selama periode waktu tertentu.
+> [!NOTE] Industry heuristic — `NOT VERIFIED`: Periode 30 hari belum didukung data Tier 1 untuk semua kasus; terapkan berdasarkan metrik legacy usage = 0 secara nyata.
 
 ### 12. Bagaimana observability membantu migration?
 Observability menyediakan data real-time mengenai:

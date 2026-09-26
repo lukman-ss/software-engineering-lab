@@ -21,4 +21,4 @@
 - **Incident**: The engineering team migrates reads and writes, but forgets to clean up the legacy tables and dual-write logic. Technical debt piles up, wasting disk space and CPU cycles.
 - **Mitigation**:
   - Set explicit deprecation deadlines.
-  - Track metrics on legacy code usage; trigger automated alerts when zero legacy hits are logged for 30 consecutive days to prompt code removal.
+  - Track metrics on legacy code usage; trigger automated alerts when zero legacy hits are logged for a sustained observation window (e.g. 30 days as operational heuristic, NOT VERIFIED as universal standard) to prompt code removal.

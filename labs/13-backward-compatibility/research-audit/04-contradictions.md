@@ -1,8 +1,16 @@
-# Contradictions Audit
+# 04 - Contradictions
+
+## Material Contradictions Analysis
+
+### Analysis 1: Column Default Constraints
+- **Statement A**: "Avoid default constraints on new columns on large tables (in older database versions, this forces full table rewrite). Use nullable columns, backfill, and then set defaults." (`research/04-database-migration.md:13`)
+- **Statement B**: "Buat kolom baru sebagai nullable atau sediakan default value." (`research/11-final-research.md:33`)
+- **Type**: INTERNAL (Nuance / Scoping difference)
+- **Impact**: LOW. Modern databases (PostgreSQL >= 11, MySQL >= 8.0.12) support instant `ADD COLUMN ... DEFAULT` without table rewrites, while older systems rewrite tables. Statement A qualifies the constraint to older versions, while Statement B presents the general options.
+- **Assessment**: Non-material nuance difference. No contradiction.
+
+---
+
+## Conclusion
 
 No material contradictions found.
-
-### Minor Nuance Observation
-- **Statement A**: `research/04-database-migration.md` advises avoiding default constraints when adding columns to large tables due to full table rewrite risks in older database engines.
-- **Statement B**: `research/07-deployment-and-rollback.md` mentions adding columns as "nullable, or with defaults".
-- **Assessment**: Non-conflicting. Modern relational engines (PostgreSQL 11+, MySQL 8.0.12+) perform instant `ADD COLUMN ... DEFAULT` without table rewrites, whereas older systems require care. Both statements reflect valid context-dependent practices.

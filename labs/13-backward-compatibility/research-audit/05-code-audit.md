@@ -1,8 +1,13 @@
-# Code Audit
+# 05 - Code Audit
 
-PIPELINE OVERRIDE ACTIVE:
+## Status
+
+**NOT APPLICABLE**
+
+## Reason
+
+A pipeline override was explicitly specified for this stage:
 - Audit research only.
 - Do not audit implementation/code in this stage.
 
-Code Correctness: NOT_APPLICABLE
-Tests: NOT_APPLICABLE
+Code compilation, automated test execution, and demo verification will be evaluated during the engineering and implementation audit phase.

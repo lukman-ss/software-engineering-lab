@@ -1,21 +1,28 @@
 # Docs vs Code Audit
 
-## Comparisons
+Target Lab: labs/13-backward-compatibility
 
-### 1. README vs Implementation
-- **Claim**: README describes Expand -> Migrate -> Contract pattern, Dual-Write, Resumable/Idempotent Backfill, Data Drift Reconciliation, Safe Rollback, and Observability/Deprecation headers.
-- **Reality**: Code in `internal/compat/` implements all listed features.
-- **Assessment**: PASS.
+## Comparisons Evaluated
 
-### 2. Engineering Notes vs Execution Output
-- **Claim**: `engineering/03-execution-result.md` claims tests, race detector, and demo pass without issues.
-- **Reality**: Re-execution of commands confirms identical passing output.
-- **Assessment**: PASS.
+1. **README vs Code**
+   - The README describes an architecture demonstrating Expand -> Migrate -> Contract with dual-writes, backfill, fallback reading, data reconciliation, and safe rollback.
+   - The codebase includes explicit packages and methods for every claimed feature (e.g., `compat.WriteDual`, `BackfillWorker`, `s.store.ApplyContractDropLegacyColumn()`, `TestRollbackScenarios`).
+   - Mismatch: None. Alignment is exact.
 
-### 3. Research Claims vs Implementation
-- **Claim**: Research defines Expand-Migrate-Contract, dual-write risks, fallback read, batch backfilling, and contract triggers.
-- **Reality**: Implementation and demo directly reflect these architectural patterns.
-- **Assessment**: PASS.
+2. **Research Claims vs Implementation**
+   - Research claims: Schema migration split into non-destructive phases, idempotency in backfill, safe rollbacks, and deprecation headers.
+   - Implementation: Simulated table structure (`users`, `user_phones`) adheres exactly to the relational pattern described in `schema.sql`. The backfiller checks `last_processed_id` and existing entries (idempotent). Rollbacks are tested explicitly. HTTP handler injects `Deprecation: true` and `Sunset`.
+   - Mismatch: None. The implementation is a perfect simulated translation of the abstract research.
 
-## Mismatch Inventory
-None. All documentation aligns with code implementation and test suites.
+3. **Engineering Notes vs Reality**
+   - Notes clearly bound the scope: "In-Memory Store... ponytail: in-memory mock storage; replace with database/sql for persistent store." and explicitly states what is NOT demonstrated (distributed coordination, lock timeouts).
+   - This clear scoping prevents implementation overclaiming.
+   - Mismatch: None.
+
+4. **Demo Output vs Promises**
+   - Demo executable step-by-step output directly mirrors the required phase transitions.
+   - Mismatch: None.
+
+## Assessment
+
+**PASS**. The documentation correctly boundaries the lab as an in-memory proof of concept for the relational migration pattern without overclaiming distributed system state capabilities.

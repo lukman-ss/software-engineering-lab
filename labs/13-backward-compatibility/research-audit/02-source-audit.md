@@ -1,7 +1,9 @@
+# 02 - Source Audit
+
 ## Source 1
 
 Claimed Title: Parallel Change
-Claimed Publisher: martinfowler.com
+Claimed Publisher: Danilo Sato / Martin Fowler (martinfowler.com)
 URL: https://martinfowler.com/bliki/ParallelChange.html
 
 Reachable:
@@ -17,10 +19,12 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Accurately describes Expand and Contract pattern, backward-incompatible changes, and BranchByAbstraction.
+- None. This is the foundational literature establishing the expand, migrate, and contract phases of the Parallel Change pattern.
 
 Assessment:
 PASS
+
+---
 
 ## Source 2
 
@@ -41,15 +45,17 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Describes API resource abstractions, version change modules, and backward-compatible routing correctly.
+- None. Authored by Brandur Leach, published by Stripe Engineering in August 2017. Provides exact evidence for internal API transformation pipelines (backwards-walking middleware modules) and rolling versioning.
 
 Assessment:
 PASS
 
+---
+
 ## Source 3
 
 Claimed Title: Using the expand and contract pattern for schema changes
-Claimed Publisher: Prisma Data Guide
+Claimed Publisher: Prisma Team (Prisma Data Guide)
 URL: https://www.prisma.io/dataguide/types/relational/expand-and-contract-pattern
 
 Reachable:
@@ -65,7 +71,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Accurately details steps 1-7 of schema expansion, dual write, backfill, dual read, and contraction.
+- None. Provides practical walkthroughs and examples of applying the expand and contract pattern to relational database schema refactorings, dual writing/reading via feature flags, and data migrations.
 
 Assessment:
 PASS
