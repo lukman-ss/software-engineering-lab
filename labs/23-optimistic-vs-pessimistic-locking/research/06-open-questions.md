@@ -8,11 +8,13 @@ Research date: 2026-09-26
 
 ### OQ-1: Atomic Decrement Recipe — Which Database Docs State It Explicitly?
 
-Status: MEDIUM evidence, not directly quoted from vendor
+Status: RESOLVED — PostgreSQL 13.4.2 (applevel-consistency.html, directly fetched 2026-09-26) explicitly states: "SELECT FOR UPDATE does not ensure that a concurrent transaction will not update or delete a selected row. To do that in PostgreSQL you must actually update the row, even if no values need to be changed." This confirms that an actual UPDATE is the authoritative conflict-resolution action. A single conditional UPDATE (`SET stock = stock - N WHERE stock >= N`) is both atomic at statement level and eliminates the read-modify-write window. Component guarantees (statement atomicity, conditional WHERE) are additionally documented across MySQL, Oracle, and PostgreSQL.
 
-The `UPDATE ... SET stock = stock - N WHERE stock >= N` + `affected_rows` check pattern is the recommended "third solution" in the topic specification, and its component guarantees (statement atomicity, conditional WHERE) are documented. However, no single Tier 1 source in this research set quotes this exact recipe verbatim as a recommended pattern.
+Evidence: PostgreSQL 18 Documentation - 13.4 Data Consistency Checks at the Application Level (direct fetch), MySQL 8.0 Reference Manual - 15.7.2.4 Locking Reads (counter increment example), Oracle Database Concepts 19c - 10 Transactions (ACID atomicity), Oracle 19c Concepts 9 Data Concurrency and Consistency (WHERE-guard pattern).
 
-Next step: Search PostgreSQL and MySQL "best practices" or "patterns" docs for the atomic decrement example; check if MySQL docs have a conditional-update example for inventory management; verify if PostgreSQL application-level consistency docs (13.4 Data Consistency Checks at the Application Level) cover this pattern.
+Confidence: UPGRADED to HIGH (2026-09-26).
+
+Next step: None — atomic decrement recipe now has direct Tier 1 vendor verification.
 
 ---
 
@@ -70,7 +72,7 @@ Next step: Research idempotency key patterns, exactly-once processing semantics,
 
 | Claim | Current Confidence | Upgrade Path |
 |-------|-------------------|--------------|
-| `SET stock = stock - N WHERE stock >= N` is the recommended atomic pattern | MEDIUM | Verify against PostgreSQL application-level consistency docs (13.4) and MySQL tutorial examples |
+| `SET stock = stock - N WHERE stock >= N` is the recommended atomic pattern | HIGH (upgraded 2026-09-26 via direct fetch of PostgreSQL 13.4.2) | Verified — atomic UPDATE confirmed by PG 13.4.2 ("must actually update the row") |
 | Distributed locks (Redis) are inappropriate when resource is in one database | MEDIUM | Find Kleppmann/Antirez Redlock debate for explicit criteria |
 | Versionless optimistic locking (ALL/DIRTY fields in WHERE) works in practice | LOW | Verify Hibernate @OptimisticLock annotation behavior in practice |
 

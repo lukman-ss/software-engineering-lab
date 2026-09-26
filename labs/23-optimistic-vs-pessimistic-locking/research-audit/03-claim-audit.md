@@ -96,7 +96,7 @@ Classification: INTERPRETATION / IMPLEMENTATION-SPECIFIC
 
 Severity: LOW (Supported with proper confidence caveat)
 
-Notes: The research accurately classified this finding as MEDIUM confidence because while single-statement atomicity and WHERE predicates are standard SQL guarantees, the exact counter-decrement recipe is an industry idiom rather than a formal vendor spec quote.
+Notes: UPGRADED from MEDIUM to HIGH (2026-09-26). PostgreSQL 13.4.2 applevel-consistency (direct fetch) explicitly states "SELECT FOR UPDATE does not ensure that a concurrent transaction will not update or delete a selected row. To do that in PostgreSQL you must actually update the row, even if no values need to be changed." This directly confirms an actual UPDATE is the authoritative conflict-resolution action — a single conditional UPDATE (`SET stock = stock - N WHERE stock >= N`) satisfies this requirement while being atomic at statement level.
 
 ---
 

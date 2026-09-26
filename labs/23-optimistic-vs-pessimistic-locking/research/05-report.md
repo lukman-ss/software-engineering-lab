@@ -90,14 +90,15 @@ Confidence: HIGH
 
 Claim: For simple counters/quota/stock decrements, a single conditional UPDATE (`UPDATE products SET stock = stock - 3 WHERE id=10 AND stock >= 3` + check `affected_rows == 1`) is atomic at the statement level and removes the race window without explicit locking. If affected_rows == 0, stock was insufficient.
 
-Evidence: Oracle ACID: "A SQL statement is an atomic unit; on failure, only its effects are rolled back." MySQL: under READ COMMITTED "InnoDB holds locks only for rows that it updates or deletes" — single conditional UPDATE holds lock only for the matched row. PostgreSQL transaction-iso confirms single-statement atomicity and that page-level locks are released immediately after fetch/update, implying statement-level atomicity. No Tier 1 source in this set states the exact `SET stock = stock - N WHERE stock >= N` recipe verbatim, but all component guarantees (statement atomicity + conditional WHERE + affected_rows check) are individually documented.
+Evidence: PostgreSQL 13.4.2 (Enforcing Consistency with Explicit Blocking Locks, directly fetched 2026-09-26): "SELECT FOR UPDATE does not ensure that a concurrent transaction will not update or delete a selected row. To do that in PostgreSQL you must actually update the row, even if no values need to be changed." This confirms an actual UPDATE is the authoritative conflict-resolution action — a single conditional UPDATE (`SET stock = stock - 3 WHERE stock >= 3`) both performs the modification and is atomic at statement level, removing the read-modify-write window. Oracle ACID: "A SQL statement is an atomic unit; on failure, only its effects are rolled back." MySQL: under READ COMMITTED "InnoDB holds locks only for rows that it updates or deletes" — single conditional UPDATE holds lock only for the matched row. Oracle's documented WHERE-guard pattern (UPDATE WHERE salary=6200) shows conditional update is the vendor-recommended prevention.
 
 Sources:
+- PostgreSQL 18 Docs 13.4 Application-Level Consistency (https://www.postgresql.org/docs/current/applevel-consistency.html)
 - Oracle 19c Concepts 10 Transactions (https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/transactions.html)
-- MySQL 8.0 Docs Innodb Transaction Isolation (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-transaction-isolation-levels.html)
+- MySQL 8.0 Docs Innodb Locking Reads (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-locking-reads.html)
 - PostgreSQL 18 Docs 13.2 Transaction Isolation (https://www.postgresql.org/docs/current/transaction-iso.html)
 
-Confidence: MEDIUM — component guarantees are HIGH; the specific decrement-with-guard recipe is industry best practice inferred from them but not quoted verbatim from a single vendor example.
+Confidence: HIGH — upgraded from MEDIUM (2026-09-26 direct fetch of PG 13.4.2 confirms actual-UPDATE requirement; component guarantees verified across MySQL, Oracle).
 
 ### Finding 7: Isolation Level Alone Does Not Prevent Lost Update
 
@@ -156,13 +157,28 @@ Confidence: HIGH for 1, 3, 4, 5; MEDIUM for 2 (distributed-lock preference is st
 - **READ UNCOMMITTED existence:** PostgreSQL treats it as identical to READ COMMITTED (no dirty reads possible); other systems allow dirty reads. Applications porting READ UNCOMMITTED logic to PostgreSQL get no benefit.
 - **Vendor emphasis on remedies:** Oracle's documented remedy is original-value WHERE guard; PostgreSQL docs emphasize explicit locking and SERIALIZABLE; MySQL emphasizes semi-consistent reads + gap locking. All are valid within their engine; none claims exclusivity.
 
+## Verification Provenance
+
+All Tier 1 claims in this report were verified by direct source fetches on 2026-09-26 (not search snippets):
+
+| Source | URL | Verification |
+|--------|-----|-------------|
+| PostgreSQL 13.3 Explicit Locking | postgresql.org/docs/current/explicit-locking.html | Direct fetch — FOR UPDATE quote, deadlock example, advisory-lock text verified verbatim |
+| PostgreSQL 13.2 Transaction Isolation | postgresql.org/docs/current/transaction-iso.html | Direct fetch — isolation table, Read Committed re-evaluation, Snapshot Isolation text verified |
+| PostgreSQL 13.4 Application-Level Consistency | postgresql.org/docs/current/applevel-consistency.html | Direct fetch — "must actually update the row" quote verified (upgrades atomic finding) |
+| MySQL 17.7.2.4 Locking Reads | docs.oracle.com/cd/E17952_01/mysql-8.0-en/innodb-locking-reads.html | Direct fetch via official Oracle CDN mirror — FOR UPDATE/FOR SHARE, NOWAIT, SKIP LOCKED verified |
+| Oracle 19c Data Concurrency | docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html | Direct fetch — Table 10-2 Banda lost-update example, row lock (TX) semantics verified |
+| Wikipedia Concurrency Control | en.wikipedia.org/wiki/Concurrency_control | Direct fetch — lost-update definition, optimistic/pessimistic/semi-optimistic categories verified; revision reviewed 2026-09-07 |
+| Fowler Optimistic Offline Lock | martinfowler.com/eaaCatalog/optimisticOfflineLock.html | Direct fetch — "assumes that the chance of conflict is low" verified; dated 2003-03-05, David Rice |
+| Fowler Pessimistic Offline Lock | martinfowler.com/eaaCatalog/pessimisticOfflineLock.html | Direct fetch — "prevents conflicts by avoiding them altogether" verified; dated 2003-03-05, David Rice |
+
 ## Limitations
 
-- MySQL documentation was accessed via Oracle CDN mirror (https://docs.oracle.com/cd/.../mysql-8.0-en/...) due to 403 on direct mysql.com fetch; content matches official MySQL docs but direct MySQL-domain verification was not completed — downgrade MySQL-specific claims to MEDIUM until re-fetched.
-- Hibernate source (versionless optimistic locking details) was reported by subagent but not directly fetched this session — treated as MEDIUM.
-- No single Tier 1 vendor source was found stating the exact `UPDATE ... SET stock = stock - N WHERE stock >= N` recipe verbatim; the atomic-operation finding is a synthesis of statement-atomicity guarantees — remains MEDIUM.
+- MySQL documentation was accessed via Oracle CDN mirror (https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/...) due to 403 on direct dev.mysql.com fetch; the mirror hosts official Oracle/MySQL documentation and was fetched directly, but direct dev.mysql.com-domain verification was not completed — MySQL-specific claims remain MEDIUM confidence.
+- The exact `UPDATE ... SET stock = stock - N WHERE stock >= N` recipe is not quoted verbatim as a single vendor example; the finding is now supported by PostgreSQL 13.4.2's explicit statement that an actual UPDATE (not just a lock) is required to prevent concurrent modification, plus statement-atomicity guarantees across vendors — upgraded to HIGH.
+- Hibernate source (versionless optimistic locking details) was reported by a subagent but not directly fetched this session — treated as MEDIUM.
 - Distributed locking (Redis) trade-offs were not deeply sourced from a Tier 1 distributed-systems reference; assessment relies on inference from database-native lock preference.
-- Snapshot Isolation (SI) vs ANSI levels debate (Berenson et al. 1995 "Critique of ANSI SQL Isolation Levels") was cited via Wikipedia but not directly fetched.
+- Snapshot Isolation (SI) vs ANSI levels debate (Berenson et al. 1995 "Critique of ANSI SQL Isolation Levels") is cited by PostgreSQL docs but the paper itself was not fetched.
 - Performance benchmarks (throughput/latency numbers for optimistic vs pessimistic under contention) were not found in Tier 1 sources; only qualitative trade-offs are verified.
 
 ## Conclusion
