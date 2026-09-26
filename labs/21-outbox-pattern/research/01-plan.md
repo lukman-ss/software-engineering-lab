@@ -1,46 +1,41 @@
 # Research Plan
 
 ## Research Topic
-Transactional Outbox Pattern — Database Sudah Commit, Tapi Event/Queue Gagal Dikirim
+
+The Outbox Pattern - Transactional Outbox for Event-Driven Architecture
 
 ## Objective
-Produce structured research covering:
-1. Dual-write problem and why distributed transactions fail
-2. Transactional Outbox pattern core concepts
-3. Message relay implementations (polling, transaction log tailing)
-4. Idempotent consumer requirements
-5. Event payload design and outbox table structure
-6. Monitoring and operational concerns
-7. Anti-patterns and common mistakes
+
+Investigate the Outbox Pattern as a solution to the dual-write problem in distributed systems where database updates and event/queue publishing must be atomic. This research focuses on practical implementation, benefits, pitfalls, and monitoring strategies.
 
 ## Research Questions
-1. What is the dual-write problem and why does it occur?
-2. Why can't database transactions span database and message broker?
-3. How does the Outbox pattern guarantee atomic updates?
-4. What are the two message relay implementations and their tradeoffs?
-5. Why must consumers be idempotent? What causes duplicate events?
-6. What outbox table structure is recommended? What fields are essential?
-7. What monitoring metrics indicate Outbox system health?
-8. What are common anti-patterns and how to avoid them?
+
+1. What is the dual-write problem and why do standard database transactions not solve it?
+2. How does the Outbox Pattern ensure atomicity between database updates and event publishing?
+3. What are the implementation patterns for the outbox table and worker processes?
+4. What are common pitfalls and anti-patterns with Outbox implementations?
+5. How to handle duplicate event delivery (at-least-once vs exactly-once)?
+6. What monitoring metrics are critical for Outbox systems?
+7. What are the trade-offs and when should Outbox be used?
 
 ## Search Strategy
-- Primary: microservices.io Transactional Outbox (original pattern definition)
-- Primary: Debezium Outbox Event Router documentation (reference implementation)
-- Primary: Debezium blog on Outbox pattern (implementation details)
-- Primary: microservices.io Saga and Transactional messaging patterns
-- Secondary: Microsoft Azure Architecture patterns
+
+1. Search for official documentation on outbox pattern from message queue vendors
+2. Search for academic papers or technical whitepapers on transactional outbox
+3. Search for industry implementation guides from reputable technical publications
+4. Search for common pitfalls and anti-patterns in practitioner discussions
+5. Search for monitoring best practices for outbox systems
 
 ## Expected Primary Sources
-| Source | URL | Tier |
-|--------|-----|------|
-| microservices.io Transactional Outbox | https://microservices.io/patterns/data/transactional-outbox.html | 1 |
-| Debezium Outbox Event Router | https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html | 1 |
-| Debezium Blog: Reliable Microservices Data Exchange | https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/ | 1 |
-| microservices.io Polling Publisher | https://microservices.io/patterns/data/polling-publisher.html | 1 |
-| microservices.io Transaction Log Tailing | https://microservices.io/patterns/data/transaction-log-tailing.html | 1 |
+
+- Martin Fowler's writings on Outbox Pattern
+- Microsoft documentation on transactional outbox
+- RabbitMQ/Kafka documentation on at-least-once delivery
+- Database transaction documentation (PostgreSQL/MySQL)
+- Papers on distributed systems consistency
 
 ## Risks / Unknowns
-- No Microsoft Azure Architecture Center page found for Transactional Outbox
-- Some external blog URLs may be inaccessible or redirected
-- Must distinguish between generic pattern and Debezium-specific implementation
-- No universal numeric recommendations — all config values are environment-specific
+
+- Some sources may conflate Outbox with CDC (Change Data Capture)
+- Implementation details may be framework-specific (e.g., .NET, Java Spring)
+- Some claims about "exactly-once" semantics may be marketing rather than technical reality
