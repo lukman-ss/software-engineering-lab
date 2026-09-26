@@ -1,6 +1,6 @@
 # Engineering Revision Result
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
 Previous Verdict: APPROVED
 
 ## Issue Summary
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-None.
+- None.
 
 ## Re-Audit Status
 

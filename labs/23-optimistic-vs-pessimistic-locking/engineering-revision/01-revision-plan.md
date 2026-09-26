@@ -1,21 +1,23 @@
 # Engineering Revision Plan
 
-Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
 Previous Verdict: APPROVED
 
 ## Blocking Issues
-None (Auditor verdict: APPROVED, zero failures or warnings).
+None.
 
 ## Non-Blocking Issues
 None.
 
 ## Files To Change
-None required (codebase, tests, and documentation are already fully aligned and passing).
+None (all existing implementations and tests verified clean).
 
 ## Tests To Add/Modify
 None.
 
 ## Validation Commands
-- `go test -v ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+```bash
+go test -v ./...
+go test -race -v ./...
+go run ./cmd/demo
+```
