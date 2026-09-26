@@ -1,9 +1,36 @@
-# Code Snippets
+## Snippet 1 — Interface dan Value Object
 
-## Snippet 1 — Constructor Injection
+Source File: `internal/di/gateway.go`
+Purpose: Mendefinisikan kontrak abstraksi dan value object yang diinstansiasi langsung.
+
+```go
+// Money is a value object instantiated directly. (Finding 5)
+type Money struct {
+	Amount   int
+	Currency string
+}
+
+// PaymentGateway abstracts the concrete implementation. (Finding 1)
+type PaymentGateway interface {
+	Charge(m Money) error
+}
+
+// RealGateway is the production implementation simulating a network call.
+type RealGateway struct{}
+
+func (g *RealGateway) Charge(m Money) error {
+	fmt.Printf("RealGateway charging %d %s\n", m.Amount, m.Currency)
+	return nil
+}
+```
+
+Explanation:
+`PaymentGateway` adalah kontrak tunggal yang memungkinkan swap implementasi tanpa mengubah consumer. `Money` adalah value object tanpa dependensi infrastruktur — dibuat langsung dengan struct literal. `RealGateway` mensimulasikan panggilan jaringan dengan print dan return nil.
+
+## Snippet 2 — Constructor Injection
 
 Source File: `internal/di/processor.go`
-Purpose: Demonstrates explicit dependency injection through a constructor.
+Purpose: Menunjukkan dependensi eksplisit melalui constructor.
 
 ```go
 // Processor uses Constructor Injection (Finding 3)
@@ -26,12 +53,12 @@ func (p *Processor) ProcessPayment(amount int) error {
 ```
 
 Explanation:
-The `Processor` requires `PaymentGateway` at instantiation time, guaranteeing valid initialization and explicitly communicating dependencies. The `Money` struct is instantiated directly without DI.
+`Processor` menerima `PaymentGateway` saat konstruksi, menjamin objek selalu valid dan dependensi bersifat eksplisit di signature. Validasi `amount <= 0` berjalan sebelum delegasi ke gateway. `Money` dibuat langsung tanpa DI.
 
-## Snippet 2 — Service Locator Anti-Pattern
+## Snippet 3 — Service Locator Anti-Pattern
 
 Source File: `internal/di/locator.go`
-Purpose: Demonstrates the hidden dependencies and coupling introduced by the Service Locator pattern.
+Purpose: Menunjukkan dependensi tersembunyi akibat injeksi container.
 
 ```go
 // Container acts as a Service Locator.
@@ -58,12 +85,49 @@ func (p *BadProcessor) ProcessPayment(amount int) error {
 ```
 
 Explanation:
-`BadProcessor` injects `Container` instead of `PaymentGateway`. This obscures what the class actually depends on and couples the class directly to the container interface.
+`BadProcessor` menerima `Container` bukan `PaymentGateway` — dependensi sebenarnya tersembunyi dan kelas terikat pada API container. Panggilan `p.container.GetPaymentGateway()` adalah indirection yang tidak ada pada Constructor Injection.
 
-## Snippet 3 — Isolated Unit Testing with Mocks
+## Snippet 4 — Composition Root
+
+Source File: `cmd/demo/main.go`
+Purpose: Menunjukkan separation of configuration from use.
+
+```go
+type SimpleContainer struct {
+	gateway di.PaymentGateway
+}
+
+func (c *SimpleContainer) GetPaymentGateway() di.PaymentGateway {
+	return c.gateway
+}
+
+func main() {
+	realGateway := &di.RealGateway{}
+
+	processor := di.NewProcessor(realGateway)
+	fmt.Println("--- Running Constructor Injection ---")
+	err := processor.ProcessPayment(100)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+	}
+
+	container := &SimpleContainer{gateway: realGateway}
+	badProcessor := di.NewBadProcessor(container)
+	fmt.Println("--- Running Service Locator ---")
+	err = badProcessor.ProcessPayment(200)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+	}
+}
+```
+
+Explanation:
+`main.go` adalah satu-satunya tempat yang membuat `RealGateway`. Constructor Injection menyuntikkannya langsung; Service Locator membungkusnya dulu ke `SimpleContainer`. Output demo terverifikasi: `RealGateway charging 100 USD` lalu `RealGateway charging 200 USD`.
+
+## Snippet 5 — Isolated Testing dengan Mock
 
 Source File: `tests/processor_test.go`
-Purpose: Demonstrates using a mock implementation to verify behavior in isolation without external network calls.
+Purpose: Menunjukkan pengujian terisolasi tanpa infrastruktur nyata.
 
 ```go
 type MockGateway struct {
@@ -92,7 +156,21 @@ func TestProcessor_Success(t *testing.T) {
 		t.Errorf("expected 50 USD, got %+v", mock.ChargedMoney)
 	}
 }
+
+func TestProcessor_InvalidAmount(t *testing.T) {
+	mock := &MockGateway{}
+	proc := di.NewProcessor(mock)
+
+	err := proc.ProcessPayment(-10)
+	if err == nil {
+		t.Fatalf("expected error for negative amount, got nil")
+	}
+
+	if mock.ChargedMoney.Amount != 0 {
+		t.Errorf("gateway should not have been called, but got amount %d", mock.ChargedMoney.Amount)
+	}
+}
 ```
 
 Explanation:
-Because `Processor` relies on an interface injected via constructor, the test harness can easily substitute `RealGateway` with `MockGateway` to verify interaction and state without hitting external systems.
+`MockGateway` mengimplementasikan `PaymentGateway` tanpa jaringan. Karena `Processor` bergantung pada interface, mock disuntikkan langsung via `NewProcessor(mock)`. `TestProcessor_Success` memverifikasi happy path; `TestProcessor_InvalidAmount` memverifikasi validasi mencegah pemanggilan gateway (`ChargedMoney.Amount` tetap 0).

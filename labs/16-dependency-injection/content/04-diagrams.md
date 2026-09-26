@@ -3,53 +3,116 @@
 ## 1. Constructor Injection Pattern
 
 ```text
-+-------------+         constructs         +---------------+
-|   main.go   | -------------------------> |  RealGateway  |
-+-------------+                            +---------------+
-       |                                           |
-       | injects via NewProcessor                  | implements PaymentGateway
-       v                                           v
-+-------------+       calls Charge()       +----------------+
-|  Processor  | -------------------------> | PaymentGateway |
-+-------------+                            +----------------+
+main.go (composition root)
+       |
+       | constructs
+       v
+  +-------------+         implements        +----------------+
+  | RealGateway | <----------------------- | PaymentGateway |
+  +-------------+                          +----------------+
+        |                                           |
+        | injects via NewProcessor                  | used by
+        v                                           v
+  +-------------+        ProcessPayment()      +----------------+
+  |  Processor  | --------------------------> | PaymentGateway |
+  +-------------+        (delegates)          +----------------+
+        |
+        | creates
+        v
+    Money{...}
 ```
 
 ## 2. Service Locator Anti-Pattern
 
 ```text
-+----------------+        constructs         +---------------+
-|    main.go     | ------------------------> |  RealGateway  |
-+----------------+                           +---------------+
+main.go (composition root)
+       |
+       | constructs
+       v
+  +-------------+         implements        +----------------+
+  | RealGateway | <----------------------- | PaymentGateway |
+  +-------------+                          +----------------+
+        |                                           |
+        | wraps into                                |
+        v                                           v
+  +----------------+    GetPaymentGateway()    +----------------+
+  | SimpleContainer| ------------------------> | Container      |
+  +----------------+    (interface)            +----------------+
         |                                            |
-        | wraps into                                 |
+        | injects via NewBadProcessor                | queries
         v                                            v
-+----------------+     injects via           +---------------+
-| SimpleContainer| ------------------------> | BadProcessor  |
-+----------------+    NewBadProcessor        +---------------+
-                                                     |
-                                                     | queries GetPaymentGateway()
-                                                     v
-                                             +----------------+
-                                             | PaymentGateway |
-                                             +----------------+
+  +----------------+      ProcessPayment()      +----------------+
+  | BadProcessor   | ------------------------> | Container      |
+  +----------------+      (delegates)          +----------------+
+                                                       |
+                                                       | gets
+                                                       v
+                                                  +----------------+
+                                                  | PaymentGateway |
+                                                  +----------------+
 ```
 
 ## 3. Test Isolation via Mock Injection
 
 ```text
-+---------------------+        constructs         +---------------+
-| tests/processor_test| ------------------------> |  MockGateway  |
-+---------------------+                           +---------------+
-           |                                              |
-           | injects via NewProcessor                     | implements PaymentGateway
-           v                                              v
-+---------------------+       calls Charge()      +----------------+
-|      Processor      | ------------------------> | PaymentGateway |
-+---------------------+                           +----------------+
-           |
-           | verifies ChargedMoney state
-           v
-+---------------------+
-| Assertions Pass/Fail|
-+---------------------+
+tests/processor_test.go
+       |
+       | constructs
+       v
+  +-------------+         implements        +----------------+
+  |  MockGateway | <---------------------- | PaymentGateway |
+  +-------------+                          +----------------+
+        |                                           |
+        | injects via NewProcessor                  | used by
+        v                                           v
+  +-------------+        ProcessPayment()      +----------------+
+  |  Processor  | --------------------------> | PaymentGateway |
+  +-------------+        (delegates)          +----------------+
+        |
+        | verifies state
+        v
+  Assertions (PASS/FAIL)
+```
+
+## 4. Dependency Flow Summary
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ Composition Root (main.go)                                          │
+│  - instantiate concrete implementations (RealGateway)               │
+│  - wire dependencies (NewProcessor(realGateway))                    │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              │ injects
+                              v
+┌─────────────────────────────────────────────────────────────────────┐
+│ Consumer (Processor / BadProcessor)                                 │
+│  - depends only on interface (PaymentGateway)                       │
+│  - no knowledge of concrete implementation                          │
+│  - validates input BEFORE calling gateway                           │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              │ calls
+                              v
+┌─────────────────────────────────────────────────────────────────────┐
+│ Infrastructure (RealGateway / MockGateway)                          │
+│  - implements concrete behavior (HTTP, mock, etc.)                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## 5. Test Coverage Map
+
+```text
+Test Cases                              | Constructor Injection | Service Locator
+----------------------------------------|----------------------|------------------
+TestProcessor_Success /                 | ✅ PASS               | ✅ PASS
+TestBadProcessor_Success                | (amount=50/75)        | (amount=50/75)
+                                        |                       |
+TestProcessor_GatewayError /            | ✅ PASS               | ✅ PASS
+TestBadProcessor_GatewayError           | (ShouldFail=true)     | (ShouldFail=true)
+                                        |                       |
+TestProcessor_InvalidAmount /           | ✅ PASS               | ✅ PASS
+TestBadProcessor_InvalidAmount          | (amount<0)            | (amount<0)
+                                        | gateway NOT called    | gateway NOT called
+                                        | (ChargedMoney=0)      | (ChargedMoney=0)
 ```

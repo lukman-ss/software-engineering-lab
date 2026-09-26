@@ -1,34 +1,49 @@
 # Test Audit
 
-Suite: tests/processor_test.go (package tests, 6 tests)
-Mock: MockGateway (ShouldFail flag, records ChargedMoney), MockContainer
+## Test Coverage Summary
 
-## Coverage
+Tests are located in `tests/processor_test.go`. The suite consists of six test functions covering both `Processor` (constructor injection) and `BadProcessor` (service locator) for three scenarios: success, gateway error, and invalid amount.
 
-- Happy path: PASS — TestProcessor_Success (50 USD), TestBadProcessor_Success (75 USD) assert ChargedMoney propagated.
-- Failure path: PASS — TestProcessor_GatewayError, TestBadProcessor_GatewayError assert error propagates when gateway fails.
-- Edge/negative: PASS — TestProcessor_InvalidAmount (-10), TestBadProcessor_InvalidAmount (-5) assert error + gateway not called (ChargedMoney.Amount==0).
-- Transitions/recovery/rollback: NOT_APPLICABLE — lab has no state machine, retry, or rollback semantics.
-- Concurrency: NOT_APPLICABLE (claimed) — verified via `go test -race ./...` PASS; no shared mutable state, no goroutines.
+### Happy Path
+- Covered by `TestProcessor_Success` and `TestBadProcessor_Success`.
+- Both verify that a valid amount (50 and 75 respectively) results in a successful call to the mocked gateway with correct Money value.
+- Assessment: PASS
 
-## Execution (actual, -count=1)
+### Failure Path - Gateway Error
+- Covered by `TestProcessor_GatewayError` and `TestBadProcessor_GatewayError`.
+- Both inject a mock gateway configured to return an error; verify that the error propagates to the caller.
+- Assessment: PASS
 
-- `go test -v -count=1 ./...` → PASS, 6/6, EXIT 0
-- `go test -race -v -count=1 ./...` → PASS, 6/6, EXIT 0
-- `go run ./cmd/demo` → EXIT 0, output:
-  `--- Running Constructor Injection ---` / `RealGateway charging 100 USD` / `--- Running Service Locator ---` / `RealGateway charging 200 USD`
+### Edge Cases - Invalid Amount (Negative)
+- Covered by `TestProcessor_InvalidAmount` and `TestBadProcessor_InvalidAmount`.
+- Both test that a negative amount returns an error without invoking the gateway (mock gateway's ChargedMoney remains zero).
+- Assessment: PASS
 
-## Strengths
+### Missing Edge Case: Zero Amount
+- The validation logic `if amount <= 0` treats zero as invalid.
+- No test exists for amount == 0.
+- Assessment: WARNING (missing test for zero amount)
 
-- Both DI styles tested symmetrically (3 tests each).
-- Negative tests assert no gateway side effect on invalid input.
-- No network in tests; isolated via MockGateway.
+### Concurrency Safety
+- No explicit concurrency tests; however, the implementation is stateless after construction (immutable dependencies).
+- The race detector passed with no issues.
+- Assessment: PASS (structural safety, no concurrent state mutation)
 
-## Weaknesses
+### Recovery/Rollback
+- Not applicable; no stateful resources or transactions to roll back.
+- N/A
 
-- Zero amount not tested explicitly (same `<=0` branch as negatives, so low value).
-- Nil dependency not tested: `NewProcessor(nil)` / `NewBadProcessor(nil)` / container returning nil gateway → nil-dereference panic, no guard. Constructor also accepts nil without validation despite README claim "ensures fully initialized". See 05-gaps.md.
+### Negative Cases (invalid inputs beyond amount)
+- No other inputs (e.g., invalid currency) are validated; Money struct accepts any string.
+- No claims made about currency validation; thus, not a gap.
+- Assessment: PASS
 
-## Verdict
+### Test Quality
+- Tests use table-driven? No, but each scenario is duplicated for both processor types; acceptable.
+- Mocks are simple and focused.
+- Tests do not leak state; each test creates its own mocks.
+- Overall, tests correctly assert behavior and error propagation.
 
-Suite passes, proves claimed behavior. Weak only on nil-injection edge (LOW). No inflated/weak-pass concern for core claims.
+### Test Execution Results
+- `go test ./...` passed (cached).
+- `go test -race ./...` passed with no race conditions detected.

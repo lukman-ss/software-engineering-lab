@@ -1,15 +1,22 @@
-# Documentation vs Code
+# Docs vs Code
 
-Source of truth: README.md "Core Concepts Proven"
+## Comparison: README vs Code
+- README Finding 1 ("Separation of Configuration from Use ... externalized in main.go"): Verified — `cmd/demo/main.go` constructs `RealGateway` and injects it into both processors.
+- README Finding 2 ("Fast, Isolated Unit Testing ... mocked without real network calls"): Verified — `tests/processor_test.go` uses `MockGateway` with no network.
+- README Finding 3 ("Constructor Injection: NewProcessor ensures components are fully initialized with explicit dependencies"): Verified — `NewProcessor(g)` sets immutable dependency.
+- README Finding 4 ("Service Locator Anti-Pattern: NewBadProcessor injects a Container"): Verified — `NewBadProcessor(c)` stores a Container.
+- README Finding 5 ("Value Objects Bypass DI: Money is directly instantiated"): Verified — `Money{...}` created inline.
+- README Usage commands (`go test -race ./...`, `go run ./cmd/demo`): Verified — both executed successfully.
 
-- DOC 1 "Separation of Configuration from Use": Verified; main.go (composition root) wires gateway -> Processor/BadProcessor. PASS (no mismatch)
-- DOC 2 "Fast, Isolated Unit Testing": Verified; tests use MockGateway (no network). PASS
-- DOC 3 "Constructor Injection": Verified; NewProcessor(g PaymentGateway). PASS
-- DOC 4 "Service Locator Anti-Pattern": Verified; NewBadProcessor(c Container) resolving GetPaymentGateway(). PASS
-- DOC 5 "Value Objects Bypass DI": Verified; Money struct literal inline. PASS
+## Comparison: Engineering Design vs Code
+- Design claims map 1:1 to implementation (PaymentGateway interface, RealGateway, Processor, BadProcessor, Money).
+- Design "Failure Scenario" (negative amount rejects without calling gateway; mock gateway error propagates) — both confirmed in code and tests.
+- Implementation notes state manual DI over framework (YAGNI) — consistent with code (no framework imports).
+- Execution result doc matches audit rerun exactly (same demo output).
+- Decision scoping correct: design explicitly defers DI containers (dig/wire) and lifecycle management as out-of-scope; README/disclaimers consistent.
 
-Doc accuracy: README matches code 1:1, no overclaim.
+## Discrepancies
+- None found. No DOC_CODE_MISMATCH, TEST_CLAIM_MISMATCH, or RESEARCH_IMPLEMENTATION_MISMATCH detected.
 
-Minor tension: README Finding 3 states NewProcessor "ensures components are fully initialized with explicit dependencies" (constructor comment "ensures valid state"). Code does not validate nil gateway → a nil gateway would still be "fully initialized" syntactically but panic at runtime. This is a claim nuance, not a code/docs mismatch on the 5 documented findings. See 05-gaps.md (IMPLEMENTATION_OVERCLAIM / UNHANDLED_ERROR).
-
-No DOC_CODE_MISMATCH detected for documented findings.
+## Concern Worth Noting (not a mismatch)
+- Zero-amount input: code treats `0` as invalid (`amount <= 0`), but no test covers `0`. Docs/design do not distinguish `0` from negative; behavior is reasonable but untested. Filed as MISSING_EDGE_CASE / MISSING_TEST with LOW severity in gaps.

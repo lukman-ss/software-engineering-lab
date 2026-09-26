@@ -1,45 +1,48 @@
-# Engineering Test Audit
+# Test Audit
 
-## Test Suite Overview
+## Test Suite Analysis
 
-- Location: `tests/processor_test.go`
-- Target: `Processor` and `BadProcessor` behavior, mock-based isolation, validation handling.
+Target: `tests/processor_test.go`
 
-## Coverage Checklist
+### Test Cases Covered
 
-- Happy Path: PASS (`TestProcessor_Success`, `TestBadProcessor_Success`)
-- Gateway Error Handling: PASS (`TestProcessor_GatewayError`, `TestBadProcessor_GatewayError`)
-- Input Validation: PASS (`TestProcessor_InvalidAmount`, `TestBadProcessor_InvalidAmount`)
-- Mock Isolation: PASS (Verified using in-memory `MockGateway`, no external dependencies/network)
-- Concurrency Safety: NOT_APPLICABLE (Processors are stateless beyond their read-only dependency pointer)
+1. `TestProcessor_Success`: Verifies constructor-injected `Processor` executes a payment via `MockGateway`, recording proper amount and currency.
+2. `TestProcessor_GatewayError`: Verifies error propagation when the injected gateway returns an error.
+3. `TestProcessor_InvalidAmount`: Verifies validation rejects non-positive amount before delegating to the gateway.
+4. `TestBadProcessor_Success`: Verifies `BadProcessor` functions with a `MockContainer`.
+5. `TestBadProcessor_GatewayError`: Verifies error propagation when using the Service Locator pattern.
+6. `TestBadProcessor_InvalidAmount`: Verifies validation prevents gateway calls under the Service Locator pattern.
 
-## Execution Results
+## Test Execution
 
-Command:
-```bash
-go test -v -race ./...
+### go test ./...
 ```
-
-Output:
-```text
 ?   	lab16/cmd/demo	[no test files]
 ?   	lab16/internal/di	[no test files]
-=== RUN   TestProcessor_Success
---- PASS: TestProcessor_Success (0.00s)
-=== RUN   TestProcessor_GatewayError
---- PASS: TestProcessor_GatewayError (0.00s)
-=== RUN   TestProcessor_InvalidAmount
---- PASS: TestProcessor_InvalidAmount (0.00s)
-=== RUN   TestBadProcessor_Success
---- PASS: TestBadProcessor_Success (0.00s)
-=== RUN   TestBadProcessor_GatewayError
---- PASS: TestBadProcessor_GatewayError (0.00s)
-=== RUN   TestBadProcessor_InvalidAmount
---- PASS: TestBadProcessor_InvalidAmount (0.00s)
-PASS
-ok  	lab16/tests	0.069s
+ok  	lab16/tests	0.088s
 ```
+Status: PASS
+
+### go test -race ./...
+```
+?   	lab16/cmd/demo	[no test files]
+?   	lab16/internal/di	[no test files]
+ok  	lab16/tests	0.210s
+```
+Status: PASS
+
+### go run ./cmd/demo
+```
+--- Running Constructor Injection ---
+RealGateway charging 100 USD
+--- Running Service Locator ---
+RealGateway charging 200 USD
+```
+Status: PASS
 
 ## Assessment
-
-PASS. Tests are fast, isolated, and cover both success and error branches.
+The tests prove the claimed behavior:
+- Unit tests run fast and isolated with no external infrastructure.
+- Both happy and error paths are covered.
+- Race detector passes without warnings.
+- Output matches demo run.

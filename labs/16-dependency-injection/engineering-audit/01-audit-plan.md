@@ -1,30 +1,23 @@
 # Engineering Audit Plan
 
 Target Lab: labs/16-dependency-injection
-Implementation Files:
-- internal/di/gateway.go
-- internal/di/processor.go
-- internal/di/locator.go
-- cmd/demo/main.go
-Tests:
-- tests/processor_test.go
-Executable/Demo:
-- cmd/demo/main.go
-Approved Research Inputs:
-- research/05-report.md
-- engineering/01-design.md
-- README.md
+Implementation Files: cmd/demo/main.go, internal/di/gateway.go, internal/di/locator.go, internal/di/processor.go
+Tests: tests/processor_test.go
+Executable/Demo: cmd/demo/main.go
+Approved Research Inputs: Not audited in this step.
 Main Claims To Verify:
-1. Separation of Configuration from Use: dependencies injected via entrypoint/composition root.
-2. Fast, Isolated Unit Testing: testable with mock dependencies without network calls.
-3. Constructor Injection: components explicitly declare required dependencies.
-4. Service Locator Anti-Pattern: demonstrated via container injection hiding dependencies.
-5. Value Objects Bypass DI: value objects (e.g. `Money`) created directly without injection.
+1. Object instantiation is externalized (main.go).
+2. Dependencies can be mocked in unit tests without network calls.
+3. Constructor injection is used for Processor.
+4. Service Locator anti-pattern is used in BadProcessor.
+5. Value Object (Money) bypasses DI and is instantiated directly.
 Commands To Run:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+```bash
+go test ./...
+go test -race ./...
+go run ./cmd/demo
+```
 Primary Risks:
-- Trivial/toy implementation not proving structural trade-offs.
-- Insufficient test cases covering error propagation or invalid states.
-- Lack of concurrency tests where thread-safety is claimed or expected.
+- Constructor injection and Service Locator patterns not clearly differentiated.
+- Missing mock tests.
+- Value Object pattern not cleanly decoupled.

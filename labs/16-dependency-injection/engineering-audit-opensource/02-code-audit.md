@@ -1,91 +1,82 @@
-# Code Audit (Manual Review)
+# Code Audit
 
-## Finding 1: Compilation and Build
+## Finding 1: Constructor Injection with Interface-Based Dependency
 
-Location: go.mod, internal/di, cmd/demo
-Claimed Behavior: The Go module builds and runs successfully.
-Observed Implementation: Go source files in internal/di and cmd/demo use the lab16 module. go.mod declares go 1.26.7. `go build ./...` succeeds (see execution results). No external dependencies. The demo uses `fmt` and imports are correct.
-Assessment: PASS
-Severity: NA
-Notes: Go version 1.26.7 matches toolchain installed; no version mismatch. Module is self-contained.
-
-## Finding 2: Constructor Injection (Processor)
-
-Location: internal/di/processor.go:5
-Claimed Behavior: `Processor` uses constructor injection for its `PaymentGateway` dependency (Finding 3).
-Observed Implementation: `Processor` struct holds a `gateway PaymentGateway` field set via `NewProcessor(g PaymentGateway)`. `ProcessPayment` calls `p.gateway.Charge(m)`. Dependency is fully externalized and the struct field is set at construction; no internal lookup.
+Location: internal/di/processor.go:5-21
+Claimed Behavior: Processor receives PaymentGateway via constructor injection, ensuring explicit, validated dependencies.
+Observed Implementation: Processor struct holds a PaymentGateway (interface). NewProcessor takes a PaymentGateway and stores it. ProcessPayment validates amount before delegating to gateway.
 Assessment: PASS
 Severity: LOW
-Notes: Field is not exported (lowercase), which is idiomatic for encapsulation. No factory/fake needed since single implementation via mock is used in tests.
+Notes: Dependency is explicit via interface, fully initialized at construction. Matches the "Constructor Injection" claim in README Finding 3.
 
-## Finding 3: Service Locator Anti-Pattern (BadProcessor)
+## Finding 2: PaymentGateway Interface Abstraction
 
-Location: internal/di/locator.go:5
-Claimed Behavior: `BadProcessor` injects a `Container` (locator), hiding real dependencies (Finding 4).
-Observed Implementation: `Container` is an interface abstracting `GetPaymentGateway()`. `BadProcessor` holds a `container Container` and resolves gateway via `p.container.GetPaymentGateway().Charge(m)`. This matches the documented anti-pattern.
+Location: internal/di/gateway.go:12-14
+Claimed Behavior: PaymentGateway interface decouples processor from concrete infrastructure.
+Observed Implementation: PaymentGateway interface defined with Charge(m Money) error. RealGateway implements it for demo/production.
 Assessment: PASS
 Severity: LOW
-Notes: The anti-pattern is intentionally demonstrated as the "Bad" path; both patterns co-exist for contrast, which aligns with the lab objective.
+Notes: Interface lives near consumer, correct for DI. Demo wires RealGateway explicitly in main.go.
 
-## Finding 4: Value Object Direct Instantiation (Money)
+## Finding 3: Service Locator Anti-Pattern Demonstrated
 
-Location: internal/di/gateway.go:5
-Claimed Behavior: `Money` is a value object instantiated directly, bypassing DI (Finding 5).
-Observed Implementation: `Money` is a plain struct (Amount int, Currency string) created inline in processor methods. It has no external dependencies and no behavior requiring inversion; direct struct literal is acceptable.
+Location: internal/di/locator.go:5-24
+Claimed Behavior: BadProcessor injects a Container instead of the gateway directly, hiding real dependency.
+Observed Implementation: Container interface exposes GetPaymentGateway(). BadProcessor stores a Container and calls GetPaymentGateway().Charge at call time.
 Assessment: PASS
 Severity: LOW
-Notes: No factory or DI for value object is appropriate here per the claim.
+Notes: Correctly shows the anti-pattern — the real dependency is hidden behind an abstraction accessed through a container. README Finding 4 confirmed.
 
-## Finding 5: Error Handling - Invalid Amount
+## Finding 4: Value Object Direct Instantiation
 
-Location: internal/di/processor.go:16-17, locator.go:20-21
-Claimed Behavior: Non-positive amounts return "invalid amount" error.
-Observed Implementation: Both `ProcessPayment` methods guard `amount <= 0` and return `errors.New("invalid amount")`. They return before calling the gateway, so the gateway has no side effects on invalid input.
+Location: internal/di/gateway.go:6-9, internal/di/processor.go:19, internal/di/locator.go:23
+Claimed Behavior: Money is instantiated directly as it lacks infrastructure behavior.
+Observed Implementation: Money struct (plain data holder) is instantiated as Money{Amount: amount, Currency: "USD"} in both Processor and BadProcessor.
 Assessment: PASS
 Severity: LOW
-Notes: The check precedes any gateway call; this is the correct behavior for invalid input.
+Notes: README Finding 5 confirmed; no DI applied to value object as intended.
+
+## Finding 5: Input Validation / Invalid Amount Handling
+
+Location: internal/di/processor.go:16-18, internal/di/locator.go:20-22
+Claimed Behavior: Passing invalid amount (negative) rejects payment without calling external services.
+Observed Implementation: Both ProcessPayment methods check `amount <= 0` and return an error before constructing Money or invoking the gateway.
+Assessment: PASS
+Severity: LOW
+Notes: Design doc failure scenario confirmed. The check happens before gateway interaction, satisfying the isolation requirement.
 
 ## Finding 6: Gateway Error Propagation
 
-Location: internal/di/processor.go:20, locator.go:24
-Claimed Behavior: Errors from the gateway propagate to the caller.
-Observed Implementation: Both methods return the result of `Charge` directly. The `RealGateway.Charge` currently always returns nil after printing; however, the interface allows gateway failures, and tests cover the failure path using `MockGateway`. The error from `Charge(m)` is propagated unchanged.
+Location: internal/di/processor.go:20, internal/di/locator.go:24
+Claimed Behavior: A gateway error propagates back cleanly to the caller.
+Observed Implementation: ProcessPayment returns the error returned by p.gateway.Charge(m) / p.container.GetPaymentGateway().Charge(m). No swallowing or wrapping.
 Assessment: PASS
 Severity: LOW
-Notes: `RealGateway.Charge` does not simulate failure in demo, but it is only a network-simulating stub. Tests provide real failure coverage.
+Notes: Error propagation is direct and unobscured.
 
-## Finding 7: RealGateway Demo Behavior
+## Finding 7: Concurrency Safety
 
-Location: internal/di/gateway.go:17, cmd/demo/main.go:16
-Claimed Behavior: Demo exercises real gateway charging 100 USD (constructor injection) and 200 USD (service locator).
-Observed Implementation: `main` instantiates `&di.RealGateway{}`, wires it into `Processor` and `SimpleContainer`, and calls `ProcessPayment(100)` and `ProcessPayment(200)`. Output is printed via `fmt.Printf`. This is a real (non-mocked) execution.
+Location: internal/di/processor.go, internal/di/locator.go, internal/di/gateway.go
+Claimed Behavior: No concurrency claims in docs.
+Observed Implementation: All structs hold only interface/struct values set at construction and not mutated after. State is immutable (Processor/BadProcessor/gateway set once in constructor). No shared mutable state.
 Assessment: PASS
 Severity: LOW
-Notes: Demo is genuine; no faked/bogus output. No persistence that could be lost; purely stdout.
+Notes: Race detector passed with no failures. Structure is inherently safe.
 
-## Finding 8: Separation of Configuration from Use
+## Finding 8: Cleanup / Resource Management
 
-Location: cmd/demo/main.go:17
-Claimed Behavior: Object instantiation is externalized in `main.go` (Finding 1).
-Observed Implementation: `main` creates the `RealGateway` and injects it into processors; `Processor` and `BadProcessor` never construct their own gateway or container. Configuration is external.
+Location: internal/di/RealGateway (gateway.go:17-22)
+Claimed Behavior: None claimed.
+Observed Implementation: RealGateway performs no resource acquisition; it simply prints. No cleanup needed.
 Assessment: PASS
 Severity: LOW
-Notes: Clean DI wiring at composition root in `main`.
+Notes: No resources to clean up — acceptable for a simulated gateway.
 
-## Finding 9: Concurrency / Shared State
+## Finding 9: Demo Wiring
 
-Location: internal/di/processor.go, locator.go
-Claimed Behavior: N/A (single-threaded use)
-Observed Implementation: Structs hold pointers to gateways; `Processor` is safe to use from multiple goroutines only if the `PaymentGateway` itself is thread-safe. `MockGateway` (in tests) is not thread-safe but tests don't exercise concurrency. No global mutable state. The `-race` detector passes.
+Location: cmd/demo/main.go
+Claimed Behavior: Demo wires real gateway into both injection styles and prints expected messages.
+Observed Implementation: main.go constructs RealGateway, wraps it in NewProcessor and NewBadProcessor via SimpleContainer, calls ProcessPayment(100) and ProcessPayment(200). Output matches documented result.
 Assessment: PASS
 Severity: LOW
-Notes: Lab is inherently synchronous and does not claim concurrent behavior. No shared mutable state in production code beyond the injected gateway.
-
-## Finding 10: Cleanup and Resource Management
-
-Location: internal/di, cmd/demo
-Claimed Behavior: N/A (no external resources)
-Observed Implementation: No network connections, files, or goroutines are opened. `RealGateway` only prints. No cleanup required.
-Assessment: PASS
-Severity: LOW
-Notes: Nothing to clean up; no resource leaks possible.
+Notes: Demo output reproduced verbatim during audit: "RealGateway charging 100 USD" and "RealGateway charging 200 USD".

@@ -1,17 +1,17 @@
-# Documentation vs Code Analysis
+# Docs vs Code Audit
 
-## Claims Checked
+## Comparisons
 
-1. **"Object instantiation is externalized (`main.go`)"**
-   - Verified. `main.go` wires `RealGateway` to components.
-2. **"Dependencies are mocked without real network calls (`tests/processor_test.go`)"**
-   - Verified. `MockGateway` struct implements `PaymentGateway` and asserts values locally without HTTP or IO.
-3. **"Constructor Injection: `NewProcessor` ensures components are fully initialized with explicit dependencies."**
-   - Verified. Signature is `NewProcessor(g PaymentGateway)`.
-4. **"Service Locator Anti-Pattern: `NewBadProcessor` injects a `Container`..."**
-   - Verified. Signature is `NewBadProcessor(c Container)`. Usage inside class delegates to `c.GetPaymentGateway()`.
-5. **"Value Objects Bypass DI: `Money` is directly instantiated..."**
-   - Verified. Processors directly instantiate `Money{Amount: amount, Currency: "USD"}`.
+### README vs Implementation
+- Claim 1: "Separation of Configuration from Use: Object instantiation is externalized (`main.go`)" -> Matches `cmd/demo/main.go`.
+- Claim 2: "Fast, Isolated Unit Testing: Dependencies are mocked without real network calls (`tests/processor_test.go`)" -> Matches `tests/processor_test.go`.
+- Claim 3: "Constructor Injection: `NewProcessor` ensures components are fully initialized with explicit dependencies" -> Matches `internal/di/processor.go`.
+- Claim 4: "Service Locator Anti-Pattern: `NewBadProcessor` injects a `Container`, hiding real dependencies and coupling the object to framework APIs" -> Matches `internal/di/locator.go`.
+- Claim 5: "Value Objects Bypass DI: `Money` is directly instantiated as it lacks behavior tied to external infrastructure" -> Matches `internal/di/gateway.go`.
 
-## Mismatch Check
-- No mismatches found between the README.md claims, the engineering design notes, and the codebase. Code accurately reflects the documented claims and behaviors.
+### Execution Instructions vs Actual Behavior
+- `go test -race ./...` executes properly and passes.
+- `go run ./cmd/demo` executes properly with accurate stdout output.
+
+## Discrepancies
+None identified.

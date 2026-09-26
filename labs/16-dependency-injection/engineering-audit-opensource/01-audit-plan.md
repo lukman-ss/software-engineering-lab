@@ -1,34 +1,22 @@
 # Engineering Audit Plan
 
 Target Lab: labs/16-dependency-injection
-Implementation Files:
-- internal/di/processor.go
-- internal/di/locator.go
-- internal/di/gateway.go
-- cmd/demo/main.go
-Tests:
-- tests/processor_test.go
-Executable/Demo:
-- ./cmd/demo/main.go (go run ./cmd/demo)
-Approved Research Inputs: (Based on README claims)
-- Separation of Configuration from Use
-- Fast, Isolated Unit Testing
-- Constructor Injection
-- Service Locator Anti-Pattern
-- Value Objects Bypass DI
+Implementation Files: 
+  - internal/di/gateway.go
+  - internal/di/processor.go
+  - internal/di/locator.go
+  - cmd/demo/main.go
+Tests: tests/processor_test.go
+Executable/Demo: cmd/demo/main.go
+Approved Research Inputs: engineering/01-design.md (Research Status: APPROVED)
 Main Claims To Verify:
-1. Code compiles and runs without errors.
-2. Tests validate proper DI (constructor injection) and Service Locator behavior.
-3. Demo shows real gateway execution (no mocking).
-4. Tests correctly validate error conditions and invalid inputs.
-5. README accurately reflects implementation (no overclaim).
+  1. Separation of Configuration from Use (constructor injection vs service locator)
+  2. Fast, Isolated Unit Testing via mock injection
+  3. Constructor Injection ensures explicit dependencies
+  4. Service Locator anti-pattern demonstrated
+  5. Value Objects (Money) instantiated directly without DI
 Commands To Run:
-- go build ./...
-- go test ./...
-- go test -race ./...
-- go run ./cmd/demo
-Primary Risks:
-- Misalignment between README findings and actual code.
-- Missing edge case tests (e.g., zero amount, large amount).
-- Potential race conditions (though minimal shared state).
-- Demo may not reflect actual behavior if hardcoded.
+  - go test ./...
+  - go test -race ./...
+  - go run ./cmd/demo
+Primary Risks: Low; implementation is straightforward with clear interfaces and minimal state.

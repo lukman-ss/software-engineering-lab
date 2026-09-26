@@ -1,37 +1,37 @@
-# Engineering Code Audit
+# Code Audit
 
 ## Finding 1
 
-Location: internal/di/processor.go:10-13
-Claimed Behavior: Constructor injection guarantees explicit dependency declaration and initialization.
-Observed Implementation: `NewProcessor(g PaymentGateway) *Processor` explicitly takes `PaymentGateway`. Immutability/encapsulation respected via unexported field `gateway`.
+Location: internal/di/processor.go:6-21
+Claimed Behavior: Constructor injection provides PaymentGateway to Processor, enforcing explicit dependencies.
+Observed Implementation: `NewProcessor(g PaymentGateway) *Processor` explicitly requires the interface dependency and assigns it to an unexported struct field.
 Assessment: PASS
 Severity: LOW
-Notes: No nil-check on `g` in `NewProcessor`. If nil is passed, panics at runtime during method call. Standard for simple Go code, but worth noting.
+Notes: Clean, idiomatic constructor injection.
 
 ## Finding 2
 
-Location: internal/di/locator.go:15-17
-Claimed Behavior: Service Locator anti-pattern couples class to container interface rather than explicit dependency.
-Observed Implementation: `NewBadProcessor(c Container) *Processor` relies on `Container` to fetch `PaymentGateway` on demand inside `ProcessPayment`.
+Location: internal/di/locator.go:5-25
+Claimed Behavior: Service Locator anti-pattern couples BadProcessor to a generic Container interface.
+Observed Implementation: `BadProcessor` holds a `Container` interface and queries it inside `ProcessPayment` via `p.container.GetPaymentGateway()`.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately showcases Service Locator indirection and anti-pattern mechanics.
+Notes: Clearly illustrates how Service Locator hides dependencies at the call site.
 
 ## Finding 3
 
-Location: internal/di/gateway.go:5-9, internal/di/processor.go:19
-Claimed Behavior: Value objects (`Money`) bypass dependency injection and are instantiated directly.
-Observed Implementation: `Money` struct holds plain data (`Amount`, `Currency`) with zero infrastructure logic. Directly instantiated inside `ProcessPayment`.
+Location: internal/di/gateway.go:6-9
+Claimed Behavior: Money is a value object instantiated directly without DI.
+Observed Implementation: `Money` struct is instantiated inline in `processor.go:19` and `locator.go:23` as `Money{Amount: amount, Currency: "USD"}`.
 Assessment: PASS
 Severity: LOW
-Notes: Conforms to domain-driven design principles for value objects.
+Notes: Confirms value objects do not require dependency injection.
 
 ## Finding 4
 
-Location: cmd/demo/main.go:16-36
-Claimed Behavior: Object graph constructed outside consumption site (Composition Root).
-Observed Implementation: `main()` initializes concrete `RealGateway`, wires dependencies into `Processor` and `BadProcessor`, and executes.
+Location: internal/di/processor.go:15-18 & internal/di/locator.go:19-22
+Claimed Behavior: Validation for invalid payment amounts prevents downstream gateway calls.
+Observed Implementation: Checks `if amount <= 0` and returns `errors.New("invalid amount")` before invoking the gateway.
 Assessment: PASS
 Severity: LOW
-Notes: Clean composition root demonstration.
+Notes: Validated by unit tests.
