@@ -83,9 +83,27 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 	defer atomic.AddInt64(&s.activeReq, -1)
 
 	// Acquire DB connection slot (simulates DB connection pool limit)
-	s.semaphore <- struct{}{}
-	time.Sleep(s.cfg.DBQueryDuration)
-	<-s.semaphore
+	select {
+	case s.semaphore <- struct{}{}:
+	case <-r.Context().Done():
+		return
+	}
+	defer func() { <-s.semaphore }()
+
+	dur := s.cfg.DBQueryDuration
+	if atomic.LoadInt64(&s.activeReq) > int64(s.cfg.MaxDBConnections) {
+		if rand.Float32() < 0.10 {
+			dur = s.cfg.DBQueryDuration * 25
+		}
+	}
+	t := time.NewTimer(dur)
+	defer t.Stop()
+
+	select {
+	case <-t.C:
+	case <-r.Context().Done():
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -96,6 +114,10 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 }
 ```
 Ketika 5 goroutine mengisi `s.semaphore`, goroutine berikutnya akan memblokir (*block*) pada baris `s.semaphore <- struct{}{}` sampai ada request sebelumnya yang membaca kanal pada baris `<-s.semaphore`.
+
+Context cancellation ditangani non-blocking menggunakan `select` agar request dibatalkan saat client timeout atau context dibatalkan.
+
+Saat request terakumulasi di atas kapasitas pool (`s.activeReq > MaxDBConnections`), server menambahkan 10% kemungkinan penundaan query 25x lebih lama (20ms → 500ms) untuk mensimulasikan varian latency real-world.
 
 ### 2. Eksekusi Beban Tanpa Kontensi Mutex (`internal/loadtest/runner.go`)
 ```go
@@ -112,7 +134,38 @@ for i := 0; i < r.cfg.VUs; i++ {
 				results[vuID] = vuResult{latencies: lats, errors: errs}
 				return
 			default:
-				// HTTP request execution and latency tracking
+				req, err := http.NewRequestWithContext(ctx, r.cfg.Method, r.cfg.URL, bytes.NewReader(r.cfg.Body))
+				if err != nil {
+					if ctx.Err() == nil {
+						errs++
+					}
+					continue
+				}
+				if r.cfg.ContentType != "" {
+					req.Header.Set("Content-Type", r.cfg.ContentType)
+				}
+
+				reqStart := time.Now()
+				resp, err := r.client.Do(req)
+				if err != nil {
+					// Only count as error if not a context cancellation
+					if ctx.Err() == nil {
+						errs++
+					}
+					continue
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				
+				if resp.StatusCode >= 400 {
+					errs++
+				} else {
+					lats = append(lats, time.Since(reqStart))
+				}
+			}
+		}
+	}(i)
+}
 ```
 Setiap virtual user menulis data ke slice miliknya sendiri (`lats`). Agregasi metrik hanya dilakukan satu kali di thread utama setelah `wg.Wait()` selesai, memastikan eksekusi bebas dari kontensi kunci sinkronisasi.
 
@@ -138,19 +191,19 @@ Pengujian otomatis pada `tests/loadtest_test.go` dan `internal/loadtest/metrics_
 
 Hasil eksekusi riil dari `cmd/demo`:
 - **Smoke Test (2 VUs, kapasitas 5)**:
-  - Average: ~21.7ms
-  - P50: ~21.5ms
-  - P95: ~22.6ms
-  - P99: ~23.3ms
+  - Average: ~21.2ms
+  - P50: ~21.2ms
+  - P95: ~21.4ms
+  - P99: ~22.2ms
   - Error: 0
 - **Stress Test (50 VUs, kapasitas 5)**:
-  - Average: ~201.2ms
-  - P50: ~200.7ms
-  - P95: ~213.9ms
-  - P99: ~216.2ms
+  - Average: ~504.8ms
+  - P50: ~609.0ms
+  - P95: ~981.6ms
+  - P99: ~1.175s
   - Error: 0
 
-Angka ini membuktikan bahwa saat beban melampaui kapasitas pool sebesar 10 kali lipat, waktu antrean melonjak tajam (naik ~10x lipat dari ~21ms ke >210ms).
+Angka ini membuktikan bahwa saat beban melampaui kapasitas pool sebesar 10 kali lipat, waktu antrean melonjak tajam (naik ~46x lipat dari ~21ms ke ~982ms pada P95).
 
 ## Recovery / Rollback
 Ketika hasil uji beban mengidentifikasi bottleneck connection pool:

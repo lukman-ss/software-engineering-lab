@@ -19,5 +19,5 @@ Available Case Studies:
 - Sistem "Booking Bengkel" (`POST /booking`) dengan simulasi saturasi pool koneksi database 5 koneksi dan durasi kueri 20ms.
 Warnings:
 - Penghitungan persentil menggunakan sorting slice (`sort.Slice`), cocok untuk dataset lab (<10.000 sampel), namun butuh histogram streaming (misal HdrHistogram) untuk beban jutaan sampel jangka panjang.
-- Penundaan kueri disimulasikan menggunakan `time.Sleep` dan semafor in-memory, bukan engine database nyata dengan lock contention sebenarnya.
-- Belum ada automated unit test khusus untuk akumulasi status HTTP 4xx/5xx pada runner, meski fungsi terverifikasi bekerja via review manual.
+- Penundaan kueri disimulasikan menggunakan `time.Timer` dan semafor in-memory, bukan engine database nyata dengan lock contention sebenarnya.
+- Server menambahkan 10% kemungkinan penundaan query 25x lebih lama saat request terakumulasi di atas kapasitas pool.

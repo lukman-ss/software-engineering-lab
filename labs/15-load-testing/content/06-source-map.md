@@ -8,6 +8,8 @@ Research:
 
 Source List:
 - https://k6.io/docs/test-types/
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+- https://sre.google/sre-book/testing-reliability/
 
 ## Mental Model & Core Concepts
 Research:
@@ -16,7 +18,7 @@ Research:
 
 Source List:
 - https://k6.io/docs/test-types/
-- https://learn.microsoft.com/en-us/azure/load-testing/overview-what-is-azure-load-testing
+- https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
 
 ## Architecture & Implementation
 Implementation:
@@ -39,5 +41,5 @@ Execution Results:
 
 ## Case Study (Booking Bengkel Plan Analysis)
 Research:
-- research/05-report.md (Finding 4)
+- research/05-report.md (Finding 4, 5, 6)
 - research/06-open-questions.md

@@ -14,9 +14,27 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 	defer atomic.AddInt64(&s.activeReq, -1)
 
 	// Acquire DB connection slot (simulates DB connection pool limit)
-	s.semaphore <- struct{}{}
-	time.Sleep(s.cfg.DBQueryDuration)
-	<-s.semaphore
+	select {
+	case s.semaphore <- struct{}{}:
+	case <-r.Context().Done():
+		return
+	}
+	defer func() { <-s.semaphore }()
+
+	dur := s.cfg.DBQueryDuration
+	if atomic.LoadInt64(&s.activeReq) > int64(s.cfg.MaxDBConnections) {
+		if rand.Float32() < 0.10 {
+			dur = s.cfg.DBQueryDuration * 25
+		}
+	}
+	t := time.NewTimer(dur)
+	defer t.Stop()
+
+	select {
+	case <-t.C:
+	case <-r.Context().Done():
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -27,7 +45,7 @@ func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Explanation: Semafor memblokir pemrosesan masuk jika batas `MaxDBConnections` telah terisi, meniru antrean sumber daya. Waktu tidur tambahan (`time.Sleep`) menyimulasikan durasi eksekusi kueri yang menghalangi slot koneksi dari pembebasan instan.
+Explanation: Semafor memblokir pemrosesan masuk jika batas `MaxDBConnections` telah terisi, meniru antrean sumber daya. Context cancellation ditangani dengan `select` untuk menghindari goroutine terjebak. Penundaan query disimulasikan menggunakan `time.Timer` (bukan `time.Sleep` langsung) untuk mendukung context cancellation. Saat request terakumulasi di atas kapasitas pool, server menambahkan 10% probabililitas menunda query 25x lebih lama (simulasi latency variasi real-world).
 
 ## Snippet 2 — Lock-Free Concurrent Load Runner
 
