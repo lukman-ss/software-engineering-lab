@@ -11,6 +11,7 @@ Code Files Reviewed:
 - `internal/backpressure/queue.go`
 - `internal/retry/backoff.go`
 - `internal/httputil/middleware.go`
+- `cmd/demo/main.go`
 
 Tests Reviewed:
 - `internal/ratelimit/bucket_test.go`
@@ -19,7 +20,7 @@ Tests Reviewed:
 - `internal/httputil/middleware_test.go`
 
 Commands Executed:
-- `go test ./...`
+- `go test -v -count=1 ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
 

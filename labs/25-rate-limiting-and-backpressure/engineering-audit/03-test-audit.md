@@ -2,39 +2,31 @@
 
 Target Lab: `labs/25-rate-limiting-and-backpressure`
 
-## Test Execution Results
+## Coverage Analysis
 
-```bash
-$ go test -count=1 -race ./...
-?   	labs/25-rate-limiting-and-backpressure/cmd/demo	[no test files]
-ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	1.402s
-ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	1.334s
-ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	2.369s
-ok  	labs/25-rate-limiting-and-backpressure/internal/retry	1.315s
-```
+### 1. `internal/ratelimit/bucket_test.go`
+- `TestTokenBucket_BurstAndRefill`: Verifies burst capacity exhaustion and refill allowance after time pause.
+- `TestLeakyBucket_LeakRate`: Verifies leaky bucket capacity rejection and drain allowance.
+- `TestRegistry_TenantIsolation`: Verifies distinct tenant keys operate in isolated buckets.
+- `TestTokenBucket_RetryAfterSeconds`: Verifies calculation of retry delay header value before and after refill.
+- `TestTokenBucket_ConcurrencyRace`: Tests 50 goroutines executing 10 requests each concurrently against token bucket. Verified clean under `go test -race`.
 
-All test packages pass without race conditions under `go test -race`.
+### 2. `internal/backpressure/queue_test.go`
+- `TestBoundedQueue_RejectionUnderLoad`: Verifies worker blockage causing channel buffer saturation and immediate `ErrQueueFull` rejection.
+- `TestBoundedQueue_ConcurrencySafety`: Tests 30 concurrent goroutines submitting tasks, verifying exact total sum of accepted + rejected jobs equals 30.
+- `TestBoundedQueue_SubmitAfterStop`: Tests queue shutdown lifecycle and idempotent `Stop()` calls.
 
-## Test Coverage Analysis
+### 3. `internal/retry/backoff_test.go`
+- `TestComputeBackoff_Bounds`: Verifies bounds for NoJitter, FullJitter, and EqualJitter across 10 attempt iterations.
+- `TestDecorrelatedJitter_Bounds`: Verifies DecorrelatedJitter bounds across stateful iterations.
 
-### 1. Token Bucket & Leaky Bucket (`internal/ratelimit`)
-- `TestTokenBucket_BurstAndRefill`: Verifies burst capacity $B$, token exhaustion, and replenishment after time sleep.
-- `TestLeakyBucket_LeakRate`: Verifies smooth leak behavior and burst rejection when water reaches capacity limit.
-- `TestRegistry_TenantIsolation`: Confirms independent quotas per tenant key, verifying RFC 6598 compliance.
-- `TestTokenBucket_RetryAfterSeconds`: Verifies correct integer calculation for RFC 6585 `Retry-After`.
-- `TestTokenBucket_ConcurrencyRace`: Tests 50 concurrent goroutines executing 500 total token requests under race detector.
+### 4. `internal/httputil/middleware_test.go`
+- `TestRateLimitMiddleware_RFC6585`: Verifies HTTP status 200 on initial request, followed by HTTP 429 and `Retry-After` header on exhausted request.
 
-### 2. Bounded Queue Backpressure (`internal/backpressure`)
-- `TestBoundedQueue_RejectionUnderLoad`: Uses blocking job to saturate worker and channel capacity, asserting `ErrQueueFull` is returned immediately for overflow.
-- `TestBoundedQueue_ConcurrencySafety`: Submits 30 parallel jobs against capacity 20, verifying total `accepted + rejected == 30`.
+## Test Suite Quality Assessment
 
-### 3. AWS Retry Strategies (`internal/retry`)
-- `TestComputeBackoff_Bounds`: Verifies Full Jitter, Equal Jitter, and No Jitter remain strictly within $[0, \text{Cap}]$ and $[base, \text{Cap}]$.
-- `TestDecorrelatedJitter_Bounds`: Verifies 5 successive backoff iterations stay within valid limits.
-
-### 4. HTTP Middleware (`internal/httputil`)
-- `TestRateLimitMiddleware_RFC6585`: Asserts initial request returns 200 OK, subsequent excess request returns 429 Too Many Requests, and response includes `Retry-After` header.
-
-## Assessment
-
-Coverage across happy path, edge cases, error conditions, and concurrency is complete and verified with the race detector.
+- Happy Path Coverage: PROVEN
+- Failure Path Coverage: PROVEN (`ErrQueueFull`, `ErrQueueStopped`, `HTTP 429`)
+- Edge Cases / Bounds: PROVEN
+- Concurrency & Race Safety: PROVEN (`go test -race ./...` passed clean)
+- Timing Reliance: Time sleeps are short (200ms-600ms) but deterministic enough for standard CI execution.

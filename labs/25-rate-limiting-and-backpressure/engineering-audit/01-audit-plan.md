@@ -18,26 +18,28 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- Token Bucket vs Leaky Bucket rate limiting mechanisms
-- RFC 6585 (`429 Too Many Requests` + `Retry-After`) & RFC 6598 (Tenant isolation over CGNAT IP limits)
-- Bounded Queue Load Shedding under arrival rate exceeding service capacity
-- AWS Retry Jitter strategies (Marc Brooker)
+- `research/05-report.md`
+- `research-audit/07-verdict.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. Token bucket allows burst capacity $B$ and continuously refills at rate $R$.
-2. Leaky bucket smooths flow to leak rate $R$, rejecting bursts exceeding capacity.
-3. Bounded queue backpressure rejects excess jobs immediately (`TrySubmit`) with fast drop error when full.
-4. AWS Jitter retry strategies satisfy mathematical interval bounds.
-5. HTTP middleware returns RFC 6585 compliant HTTP 429 status code and `Retry-After` header when rate-limited.
-6. Code compiles cleanly, `go test ./...` and `go test -race ./...` pass with 0 race warnings.
-7. Interactive demo output (`go run ./cmd/demo`) matches claimed execution results.
+1. Token Bucket allows burst up to capacity $B$ and continuously refills at rate $R$.
+2. Leaky Bucket smooths traffic to leak rate $R$, rejecting immediate bursts exceeding capacity.
+3. Multi-tenant key registry isolates quotas per tenant to avoid CGNAT IP collisions (RFC 6598).
+4. Bounded Queue provides immediate backpressure rejection (`ErrQueueFull`) when capacity is full without blocking or memory leaks.
+5. AWS retry backoff strategies (NoJitter, FullJitter, EqualJitter, DecorrelatedJitter) accurately adhere to Marc Brooker / AWS Architecture formulas.
+6. HTTP middleware implements RFC 6585 compliance (`429 Too Many Requests` status, `Retry-After` header, structured JSON response).
+7. Thread safety across all concurrent operations with Go race detector verification.
 
 Commands To Run:
 - `go test ./...`
+- `go test -v -count=1 ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions or state mutation anomalies under heavy multi-goroutine access.
-- Non-deterministic flakiness in bucket refill or retry jitter test assertions.
-- Mismatches between README claims and actual internal struct/method behavior.
+- Floating point inaccuracies or negative tokens/water levels in bucket algorithms.
+- Deadlocks, goroutine leaks, or race conditions during bounded queue teardown (`Stop()`).
+- Flaky unit tests relying on real wall-clock sleeps.
+- Discrepancy between README claims, design notes, and actual code implementation.
