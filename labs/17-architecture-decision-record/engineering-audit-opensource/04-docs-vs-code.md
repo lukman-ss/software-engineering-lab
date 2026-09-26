@@ -1,51 +1,22 @@
-## Finding 1
+# Docs vs Code
 
-Location: README.md (Implementation Details) vs internal/adr/*
-Claimed Behavior: Models with valid statuses
-Observed Implementation: models.go defines exactly Proposed, Accepted, Superseded, Deprecated, Rejected
-Assessment: PASS
-Severity: LOW
+## Sources Compared
+- README.md
+- engineering/01-design.md, 02-implementation-notes.md, 03-execution-result.md
+- internal/adr/*.go, cmd/demo/main.go, tests/*.go
+- Actual command output (build, test, race, vet, demo)
 
-## Finding 2
+## README Accuracy: PASS
+- File map (models/parser/linter/demo/tests) matches repo.
+- `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` all verified working.
 
-Location: README.md (parser.go) vs internal/adr/parser.go
-Claimed Behavior: Parses markdown ADR text into structured data
-Observed Implementation: Parse() extracts ID, Title, Status, SupersededBy, Supersedes
-Assessment: PASS
-Severity: LOW
+## Engineering Notes Accuracy: PASS
+- 02-implementation-notes limitations (strict `# N. Title` format, no git hooks, no boilerplate gen) match parser.go.
+- Stdlib-only, regex-over-AST, concurrent in-memory validation claims match linter.go.
+- 03-execution-result.md test/demo output verified verbatim against fresh runs.
 
-## Finding 3
-
-Location: README.md (linter.go) vs internal/adr/linter.go
-Claimed Behavior: Validates monotonic numbering and referential integrity concurrently
-Observed Implementation: Validate() uses goroutines + mutex, checks monotonic + supersession links
-Assessment: PASS
-Severity: LOW
-
-## Finding 4
-
-Location: README.md vs engineering/03-execution-result.md
-Claimed Behavior: Demo output and test results shown
-Observed Implementation: Matches actual execution
-Assessment: PASS
-Severity: LOW
-
-## Finding 5
-
-Location: README.md (what the repo contains)
-Claimed Behavior: Mentions `research/`, `research-audit/`, `engineering/`, `content/`
-Observed Implementation: These exist but are pre-implementation notes; README only describes runtime files
-Assessment: PASS (documentation scope appropriate)
-Severity: LOW
-
-## Finding 6
-
-Location: README.md commands vs code
-Claimed Behavior: Commands documented: go test -v ./..., go test -race ./..., go run ./cmd/demo
-Observed Implementation: All three commands execute successfully
-Assessment: PASS
-Severity: LOW
-
-## Conclusion
-
-README matches code. No DOC_CODE_MISMATCH detected.
+## Findings
+- No DOC_CODE_MISMATCH.
+- No TEST_CLAIM_MISMATCH.
+- No FAKE_DEMO / FAKE_BENCHMARK (no benchmarks claimed).
+- RESEARCH_IMPLEMENTATION_MISMATCH: not audited per pipeline override.

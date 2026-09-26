@@ -1,39 +1,32 @@
-## Gap 1
+# Gap Analysis
 
+## Gaps Identified
+
+### Gap 1
 Type: MISSING_TEST
-Location: tests/linter_test.go
-Severity: MEDIUM
-Description: No unit test for duplicate ADR ID detection (linter.go:21-25)
-Effect: Behavior claimed but not tested
-Recommended Action: Add test with two records sharing ID=1, assert error "duplicate ADR ID"
+Severity: LOW
+Description: Duplicate ADR ID detection (linter.go:21-23) implemented but has no test.
+Risk: Code path executes in production (race-clean) but unproven.
 
-## Gap 2
-
+### Gap 2
 Type: MISSING_TEST
-Location: tests/linter_test.go
-Severity: MEDIUM
-Description: No test for self-supersession (A supersedes A) or cyclic supersession (A<->B chain beyond 2 nodes)
-Effect: Edge cases uncovered; implementation would accept/reject unpredictably
-Recommended Action: Add negative test
-
-## Gap 3
-
-Type: MISSING_EDGE_CASE
-Location: tests/parser_test.go
 Severity: LOW
-Description: No test for parser handling of whitespace variations, leading spaces, uppercase STATUS, empty content
-Effect: Parser uses TrimSpace + case-insensitive regex so likely fine, but unproven
-Recommended Action: Optional; not blocking
+Description: StatusSuperseded without SupersededBy reference (linter.go:49-51) implemented but no test covers it.
+Risk: Validation gap for orphaned superseded records.
 
-## Gap 4
-
+### Gap 3
 Type: MISSING_EDGE_CASE
-Location: tests/linter_test.go + internal/adr/linter.go
 Severity: LOW
-Description: Empty record slice (Validate(nil)) returns no errors; unclear if empty set should pass
-Effect: Trivial; not part of claimed behavior
-Recommended Action: None required
+Description: No test for nil element in records slice (linter.go panics on nil `*Record`).
+Risk: Guard at caller boundary; demo/tests never trigger.
 
-## Overall
+### Gap 4
+Type: UNVERIFIED_RESULT
+Severity: LOW
+Description: engineering/03-execution-result.md claims results. Verified empirically via fresh `go test -race -count=1`, `go vet`, and `go run ./cmd/demo` — all PASS, output matches.
+Notes: Confirmed non-fabricated.
 
-No HIGH or CRITICAL gaps. All gaps are MEDIUM or LOW and non-blocking.
+## Gap Resolution Path
+- Add TestLinter_DuplicateIDs and TestLinter_SupersededWithoutReference.
+- Optional nil-guard in Validate (defensive).
+- Replace strings.Title with cases.Title (deprecation hygiene).

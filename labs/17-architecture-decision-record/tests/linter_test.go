@@ -97,6 +97,22 @@ func TestLinter_BrokenReferences(t *testing.T) {
 			},
 			wantErr: "non-monotonic numbering, expected 2 but got 3",
 		},
+		{
+			name: "duplicate ADR ID",
+			records: []*adr.Record{
+				{
+					ID:     1,
+					Title:  "First",
+					Status: adr.StatusAccepted,
+				},
+				{
+					ID:     1,
+					Title:  "Duplicate First",
+					Status: adr.StatusAccepted,
+				},
+			},
+			wantErr: "duplicate ADR ID: 1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,3 +136,30 @@ func TestLinter_BrokenReferences(t *testing.T) {
 		})
 	}
 }
+
+func TestLinter_ConcurrencyStress(t *testing.T) {
+	const count = 100
+	records := make([]*adr.Record, count)
+
+	for i := 1; i <= count; i += 2 {
+		records[i-1] = &adr.Record{
+			ID:           i,
+			Title:        "Decision Old",
+			Status:       adr.StatusSuperseded,
+			SupersededBy: i + 1,
+		}
+		records[i] = &adr.Record{
+			ID:         i + 1,
+			Title:      "Decision New",
+			Status:     adr.StatusAccepted,
+			Supersedes: i,
+		}
+	}
+
+	linter := adr.NewLinter()
+	errs := linter.Validate(records)
+	if len(errs) > 0 {
+		t.Fatalf("expected 0 errors for stress batch, got %d: %v", len(errs), errs)
+	}
+}
+

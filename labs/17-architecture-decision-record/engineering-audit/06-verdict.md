@@ -5,14 +5,23 @@ Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed: 3 (`internal/adr/models.go`, `internal/adr/parser.go`, `internal/adr/linter.go`, plus `cmd/demo/main.go`)
-Tests Reviewed: 2 (`tests/parser_test.go`, `tests/linter_test.go`)
+Code Files Reviewed:
+- internal/adr/models.go
+- internal/adr/parser.go
+- internal/adr/linter.go
+- cmd/demo/main.go
+
+Tests Reviewed:
+- tests/parser_test.go
+- tests/linter_test.go
+
 Commands Executed:
-- `go test -count=1 -v ./...`
-- `go test -count=1 -race ./...`
+- `go test -v ./...`
+- `go test -race ./...`
 - `go run ./cmd/demo`
+
 Failures: 0
-Warnings: 0
+Warnings: 1
 
 ## Quality Gates
 
@@ -27,11 +36,11 @@ Documentation Accuracy: PASS
 None.
 
 ## Non-Blocking Issues
-None.
+1. `tests/linter_test.go` lacks a test case asserting rejection of duplicate ADR IDs, despite the logic being present in `internal/adr/linter.go:21-23`.
 
 ## Required Revisions
-None.
+1. Add a unit test verifying duplicate ADR ID detection.
 
 ## Final Status
 
-APPROVED
+APPROVED_WITH_WARNINGS

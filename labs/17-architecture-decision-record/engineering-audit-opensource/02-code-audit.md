@@ -1,107 +1,91 @@
+# Code Audit
+
 ## Finding 1
 
-Location: internal/adr/parser.go:46
-Claimed Behavior: SupersededBy field populated from "Status: Superseded by N" line (regex group 2)
-Observed Implementation: Regex `(?i)^Status:\s*([A-Za-z]+)(?:\s+by\s+(\d+))?` captures status in group1 and optional numeric in group2
+Location: internal/adr/parser.go:12-17
+Claimed Behavior: Extract ID, title, status, supersession refs from Markdown.
+Observed Implementation: Line scan + title/status/supersedes regex. Case-insensitive status/supersedes prefixes.
 Assessment: PASS
 Severity: LOW
-Notes: Parser correctly handles "Status: Superseded by 2" to set SupersededBy=2.
+Notes: Strict `# N. Title` format; documented as limitation in 02-implementation-notes.md.
 
 ## Finding 2
 
-Location: internal/adr/parser.go:12,13
-Claimed Behavior: Title regex `^#\s+(\d+)\.\s+(.+)$` matches "1. Title" with space after dot
-Observed Implementation: Allows any whitespace after #, digits, dot, then spaces
-Assessment: PASS
+Location: internal/adr/parser.go:46
+Claimed Behavior: Status parsing.
+Observed Implementation: `strings.Title(strings.ToLower(...))` normalizes case.
+Assessment: WARNING
 Severity: LOW
-Notes: Accepts "# 1. Title" and "#1.Title" (no spaces). Research expects space after dot; implementation is permissive but correct.
+Notes: `strings.Title` deprecated since Go 1.18; still compiles on go 1.22, vet clean. Prefer `cases.Title` if touched.
 
 ## Finding 3
 
-Location: internal/adr/parser.go:66
-ClaimedBehavior: Supersedes line parsing via `^Supersedes:\s*(\d+)`
-Observed Implementation: Regex `(?i)^Supersedes:\s*(\d+)` captures numeric only
-Assessment: PASS
+Location: internal/adr/parser.go:26-68
+Claimed Behavior: Error propagation on malformed input.
+Observed Implementation: Returns errors for missing title, missing status, invalid status. `scanner.Err()` never checked; oversized lines would surface as misleading title-not-found.
+Assessment: WARNING
 Severity: LOW
-Notes: Correct, case-insensitive, integer parsing.
+Notes: No timeout/recovery relevant; pure function.
 
 ## Finding 4
 
-Location: internal/adr/linter.go:34-39
-ClaimedBehavior: Validate monotonic numbering 1..n with no gaps
-Observed Implementation: Sorts IDs, expects ids[i] == i+1, breaks on first mismatch
+Location: internal/adr/linter.go:15-25
+Claimed Behavior: Duplicate ID detection.
+Observed Implementation: Map insert with duplicate check, error per duplicate.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly fails on duplicate or missing ID but only reports first error (break). Acceptable.
+Notes: Branch implemented but untested (see 03-test-audit.md).
 
 ## Finding 5
 
-Location: internal/adr/linter.go:51-58
-ClaimedBehavior: If A superseded by B, then B must supersede A
-Observed Implementation: Cross-checks supersededBy and Supersedes fields bidirectionally
+Location: internal/adr/linter.go:28-39
+Claimed Behavior: Monotonic numbering enforcement.
+Observed Implementation: Sort IDs, require exactly 1..N contiguous. Breaks after first report.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly validates both sides, including existence check.
+Notes: Matches README claim.
 
 ## Finding 6
 
-Location: internal/adr/linter.go:62-69
-ClaimedBehavior: If A supersedes B, then B must be superseded by A
-Observed Implementation: Symmetric to above; ensures B.Status == StatusSuperseded and B.SupersededBy == A.ID
+Location: internal/adr/linter.go:42-79
+Claimed Behavior: Concurrent referential-integrity validation.
+Observed Implementation: recordMap built before goroutines, read-only inside; errs append under mutex; wg + param capture correct.
 Assessment: PASS
 Severity: LOW
-Notes: Correct bidirectional validation.
+Notes: `go test -race -count=1 ./...` PASS. Concurrent reads of fully-built map safe.
 
 ## Finding 7
 
-Location: internal/adr/linter.go:42-79
-ClaimedBehavior: Graph validation runs in parallel with sync.WaitGroup and mutex
-Observed Implementation: Each record processed in goroutine; map access read-only (safe); error accumulation uses mutex
+Location: internal/adr/linter.go:49-69
+Claimed Behavior: Bidirectional supersession validation.
+Observed Implementation: Both directions checked: Superseded requires existing SupersededBy with back-link; Supersedes requires target Superseded with forward-link. Dangling refs rejected.
 Assessment: PASS
 Severity: LOW
-Notes: Correct use of concurrency primitives; no data race on recordMap.
+Notes: Core invariant proven by tests + demo.
 
 ## Finding 8
 
-Location: internal/adr/models.go:13-20
-ClaimedBehavior: Valid statuses: Proposed, Accepted, Superseded, Deprecated, Rejected
-Observed Implementation: Const list + IsValid() method checking equality
-Assessment: PASS
+Location: internal/adr/linter.go:15
+Claimed Behavior: Validate slice of records.
+Observed Implementation: No nil-element guard; nil `*Record` panics on `r.ID`.
+Assessment: WARNING
 Severity: LOW
-Notes: Matches engineering design and demo.
+Notes: Caller-controlled input; demo/tests never pass nil. No cleanup/rollback relevant.
 
 ## Finding 9
 
-Location: internal/adr/parser.go:78-80
-ClaimedBehavior: Invalid status returns error
-Observed Implementation: After parsing, checks record.Status.IsValid()
+Location: internal/adr/models.go
+Claimed Behavior: Statuses Proposed/Accepted/Superseded/Deprecated/Rejected via IsValid.
+Observed Implementation: Matches.
 Assessment: PASS
 Severity: LOW
-Notes: Correct.
+Notes: No unnecessary complexity; stdlib only.
 
 ## Finding 10
 
-Location: internal/adr/parser.go:22-21
-ClaimedBehavior: Record.Content stores full input
-Observed Implementation: Set on line 20
+Location: cmd/demo/main.go
+Claimed Behavior: Parse + lint 3-ADR progression (Monolith -> Microservice, Rejected Event Sourcing).
+Observed Implementation: Hardcoded strings parsed via adr.Parse, validated via NewLinter, exit 1 on failure.
 Assessment: PASS
 Severity: LOW
-Notes: Used nowhere but acceptable.
-
-## Finding 11
-
-Location: cmd/demo/main.go:10-64
-ClaimedBehavior: Demo runs three hardcoded ADRs: (1 Superseded by 2), (2 Supersedes 1 Accepted), (3 Rejected)
-Observed Implementation: Exactly matches; parser and linter called; output formatted
-Assessment: PASS
-Severity: LOW
-Notes: Demo output matches engineering execution result.
-
-## Finding 12
-
-Location: All files
-ClaimedBehavior: Zero external dependencies (stdlib only)
-Observed Implementation: Imports: fmt, os, regexp, strconv, strings, bufio, sync, sort
-Assessment: PASS
-Severity: LOW
-Notes: No third-party deps.
+Notes: Output verified real (see 03-test-audit.md). No benchmark claims.
