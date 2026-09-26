@@ -4,20 +4,21 @@ Target Lab: labs/15-load-testing
 Previous Verdict: APPROVED
 
 ## Blocking Issues
-None.
+None
 
 ## Non-Blocking Issues
-None.
+None
 
 ## Files To Change
-None.
+None
 
 ## Tests To Add/Modify
-None.
+None
 
 ## Validation Commands
 ```bash
-go test -count=1 ./...
-go test -race -count=1 ./...
+cd labs/15-load-testing
+go test ./...
+go test -race ./...
 go run ./cmd/demo
 ```
