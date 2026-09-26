@@ -1,41 +1,43 @@
-# Research Gap Analysis: Transactional Outbox Pattern
-
-Target Lab: `labs/21-outbox-pattern`
-Research Set Under Audit: `research/2026-09-26-outbox-pattern/`
-Date: 2026-09-26
-
----
+# Research Gap Analysis
 
 ## Gap 1
 
-Type: UNVERIFIED_CLAIM (Addressed via caveat)
+Type:
+SCOPE_ERROR
 
-Severity: LOW
+Severity:
+LOW
 
-Location: `05-report.md` (Finding 9, Limitations), `03-evidence.md` (Evidence 13)
+Location:
+`research/05-report.md` - Section "Operational Requirements: Cleanup and Monitoring"
 
 Problem:
-Specific numeric monitoring thresholds (e.g. "2s normal, 47m serious alert") originate from educational lab specifications rather than external empirical production benchmarks.
+Specific SLA alert thresholds (e.g., 2 seconds normal, 47 minutes error) are environment-specific operational examples rather than derived from primary literature standards.
 
 Required Revision:
-None needed for this phase. The research report explicitly flagged this distinction in Finding 9 and the Limitations section, noting that these thresholds are illustrative educational values rather than verified universal industry constants.
+None required for approval. The research report already includes explicit disclaimer: "These are illustrative examples, not universal constants, and must be tuned to specific service-level objectives."
 
-Can Be Approved Without Fix: YES
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 2
 
-Type: MISSING_CASE
+Type:
+MISSING_CASE
 
-Severity: LOW
+Severity:
+LOW
 
-Location: `06-open-questions.md` (Open Question 3 & 7)
+Location:
+`research/06-open-questions.md`
 
 Problem:
-Managed cloud-native outbox primitives (e.g., AWS DynamoDB Streams + EventBridge Pipes, Google Cloud Spanner Change Streams) and empirical transaction overhead benchmarks under high concurrency (e.g., >10,000 writes/sec) were not deeply benchmarked in the primary sources.
+Schema evolution strategies for outbox event payloads (e.g. backward compatibility in JSON/Avro schemas over time) and Dead Letter Queue (DLQ) retry policies for failed message relay attempts are listed as open questions without exhaustive secondary source synthesis.
 
 Required Revision:
-Documented as open questions in `06-open-questions.md`. This does not hinder the core foundational architecture of the Outbox pattern.
+Can be explored in future lab revisions or implementation notes.
 
-Can Be Approved Without Fix: YES
+Can Be Approved Without Fix:
+YES

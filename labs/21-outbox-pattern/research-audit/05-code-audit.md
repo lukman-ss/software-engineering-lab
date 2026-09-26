@@ -1,17 +1,12 @@
-# Code Audit: Transactional Outbox Pattern
+# Code Audit
 
-Target Lab: `labs/21-outbox-pattern`
-Research Set Under Audit: `research/2026-09-26-outbox-pattern/`
-Date: 2026-09-26
+## Status
+SKIPPED / NOT_APPLICABLE (per Pipeline Override)
 
----
+## Note
+Pipeline override explicitly specified:
+- Audit research only.
+- Do not audit implementation/code in this stage.
+- Do not execute code or tests in this stage.
 
-## Status: NOT_APPLICABLE (PIPELINE OVERRIDE)
-
-Per explicit pipeline instruction:
-- "Audit research only."
-- "Do not audit implementation/code in this stage."
-- "Do not modify research files."
-
-Code audit, test execution (`go test ./...`), and implementation alignment checks are deferred to the Engineering Audit phase.
-No code execution was conducted during this stage.
+Target lab Go implementation (`cmd/demo/main.go`, `internal/outbox/`, `tests/outbox_test.go`) is evaluated separately under engineering audit stages.

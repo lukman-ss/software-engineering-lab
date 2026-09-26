@@ -1,37 +1,35 @@
 # Revision Result
 
 Target Lab: labs/21-outbox-pattern
-
-Previous Audit Status: NO_AUDIT_FOUND — no audit directory or findings existed in the workspace.
+Previous Audit Status: APPROVED_WITH_WARNINGS
 
 ## Issues
 
-Critical: None (no audit findings)
-High: None (no audit findings)
-Medium: None (no audit findings)
-Low: None (no audit findings)
+Critical: 0
+High: 0
+Medium: 2 (Payload design overgeneralization, Operational metrics mislabeled as empirical)
+Low: 1 (Source 2 title metadata typo)
 
 ## Resolution
 
-Resolved: None
+Resolved:
+- Source 2 title corrected to "Pattern: Transaction log tailing"
+- Finding 5 expanded to present thin vs fat event trade-offs
+- Finding 6 and Evidence 10 updated to label metric thresholds as illustrative examples
+
 Partially Resolved: None
 Unresolved: None
 
 ## Validation
 
-Build: N/A (no implementation)
-Tests: N/A (no tests)
-Race Detector: N/A (no implementation)
-Demo: N/A (no demo)
+Build: N/A
+Tests: N/A
+Race Detector: N/A
+Demo: N/A
 
 ## Remaining Risks
+None.
 
-- Lab directory `labs/21-outbox-pattern/` contains no research content, no audit content, and no source code. The revision directory was created but there is nothing substantive to revise.
-- The task instructions reference audit files (audit/03-claim-audit.md, audit/04-contradictions.md, etc.) that do not exist in the workspace.
-- No README or source files exist to verify against.
-
-## Ready For Re-Audit
+## Ready For Research Re-Audit
 
 YES
-
-Note: This is a structural placeholder. The lab directory is empty — no research was produced, no audit was conducted, and no revision was possible beyond documenting the absence of content. The next step should be to either populate the lab with research and audit findings, or confirm that the target lab path is correct.

@@ -1,207 +1,167 @@
-# Claim Audit: Transactional Outbox Pattern
+# Claim Audit
 
-Target Lab: `labs/21-outbox-pattern`
-Research Set Under Audit: `research/2026-09-26-outbox-pattern/`
-Date: 2026-09-26
+## Claim 1
+
+Claim:
+Updating a database and publishing a message cannot be made atomic using traditional distributed transactions (2PC) easily or database transactions alone; DB transactions cannot rollback external brokers.
+
+Location:
+`research/03-evidence.md` (Evidence 1 & 2), `research/05-report.md` (Finding 1)
+
+Evidence Provided:
+Cites microservices.io Transactional Outbox stating 2PC is not viable due to broker/db lack of support or unwanted coupling. Cites architectural reality that database rollback does not undo external broker writes.
+
+Source:
+https://microservices.io/patterns/data/transactional-outbox.html
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Accurately reflects fundamental distributed systems transaction boundary limitation.
 
 ---
 
-## Claim 1: Dual-Write Problem & 2PC Infeasibility
+## Claim 2
 
 Claim:
-Service updating a database and publishing to a message broker cannot do both atomically without risk of half-success. Distributed 2PC transactions spanning DB + Kafka/RabbitMQ are unsupported or highly impractical.
+The Outbox pattern guarantees that messages are published if and only if the database transaction commits.
 
 Location:
-`05-report.md` (Finding 1), `03-evidence.md` (Evidence 1 & 2)
+`research/03-evidence.md` (Evidence 3), `research/05-report.md` (Finding 2)
 
 Evidence Provided:
-Microservices.io transactional-outbox pattern statement; Debezium 2019 blog explaining why Kafka cannot enlist in XA transactions.
+Cites microservices.io: service stores message in database as part of transaction that updates business entities; separate process relays messages.
 
 Source:
-- https://microservices.io/patterns/data/transactional-outbox.html
-- https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
+https://microservices.io/patterns/data/transactional-outbox.html
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: HIGH (Core architectural invariant)
+Severity:
+LOW
 
-Notes: Fully supported.
+Notes:
+Atomicity is guaranteed at persistence level; actual message delivery to consumers is asynchronous/eventual.
 
 ---
 
-## Claim 2: Database Transaction Boundaries Cannot Encompass External Side Effects
+## Claim 3
 
 Claim:
-Wrapping broker pushes inside a database transaction block (`DB::transaction(...)`) still causes inconsistencies if the DB rolls back or connection drops after broker publish.
+There are two canonical patterns for implementing the message relay: Transaction Log Tailing and Polling Publisher.
 
 Location:
-`05-report.md` (Finding 2), `03-evidence.md` (Evidence 2)
+`research/03-evidence.md` (Evidence 5), `research/05-report.md` (Finding 3)
 
 Evidence Provided:
-Microservices.io and standard ACID transactional scope definitions.
+Cites microservices.io Polling Publisher and Transaction Log Tailing pattern catalog entries.
 
 Source:
-- https://microservices.io/patterns/data/transactional-outbox.html
+https://microservices.io/patterns/data/transaction-log-tailing.html, https://microservices.io/patterns/data/polling-publisher.html
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: HIGH
+Severity:
+LOW
 
-Notes: Fully supported.
+Notes:
+Consensus architectural taxonomy.
 
 ---
 
-## Claim 3: Outbox Core Atomic Write & Async Relay
+## Claim 4
 
 Claim:
-Writing business aggregate change and an outbox event record within a single database transaction guarantees all-or-nothing persistence. An asynchronous relay process subsequently reads the outbox and publishes to the broker.
+Outbox pattern provides at-least-once delivery; consumers must be idempotent to handle duplicates caused by relay retries or crashes.
 
 Location:
-`05-report.md` (Finding 3), `03-evidence.md` (Evidence 3, 4, 5)
+`research/03-evidence.md` (Evidence 6), `research/05-report.md` (Finding 4)
 
 Evidence Provided:
-Microservices.io pattern definition, component taxonomy (Sender, Database, Message Outbox, Message Relay).
+Cites microservices.io: "The Message relay might publish a message more than once... consumer must be idempotent". Cites Debezium blog duplicate detection mechanism via UUID tracking.
 
 Source:
-- https://microservices.io/patterns/data/transactional-outbox.html
+https://microservices.io/patterns/data/transactional-outbox.html, https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: HIGH
+Severity:
+LOW
 
-Notes: Fully supported.
+Notes:
+Properly captures at-least-once delivery reality and explicit rejection of magical exactly-once assumptions.
 
 ---
 
-## Claim 4: Canonical Outbox Schema vs Universal Generalization
+## Claim 5
 
 Claim:
-Debezium's canonical outbox schema includes `id`, `aggregatetype`, `aggregateid`, `type`, and `payload`. This represents Debezium's implementation conventions (and default SMT mappings), not a mandatory universal standard across all possible outbox implementations.
+Canonical outbox table design uses `id` (UUID), `aggregatetype` (string), `aggregateid` (string), `type` (string), and `payload` (json/jsonb).
 
 Location:
-`05-report.md` (Finding 4), `03-evidence.md` (Evidence 6)
+`research/03-evidence.md` (Evidence 4 & 7), `research/05-report.md` (Finding 5)
 
 Evidence Provided:
-Debezium Outbox Event Router documentation and Debezium 2019 blog.
+Cites Debezium reference documentation and Debezium Outbox pattern blog post.
 
 Source:
-- https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html
-- https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
+https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: IMPLEMENTATION-SPECIFIC (Properly qualified in report)
+Classification:
+IMPLEMENTATION-SPECIFIC
 
-Severity: MEDIUM
+Severity:
+LOW
 
-Notes: The report explicitly disclaims that this is a universal standard, correctly identifying it as Debezium's default convention.
+Notes:
+While originating from Debezium's SMT convention, this has become the de-facto standard schema in relational outbox architectures. Correctly categorized in research as implementation standard rather than universal SQL requirement.
 
 ---
 
-## Claim 5: Relay Alternatives (Polling Publisher vs Log Tailing CDC)
+## Claim 6
 
 Claim:
-Message relay can be implemented via Polling Publisher (portable across SQL DBs, challenges in polling frequency and ordering) or Transaction Log Tailing / CDC (high performance, low latency, database-engine specific, requires deduplication handling).
+Numeric thresholds such as oldest unprocessed event age around 2 seconds (normal) vs 47 minutes (abnormal).
 
 Location:
-`05-report.md` (Finding 5), `03-evidence.md` (Evidence 8, 9)
+`research/03-evidence.md` (Evidence 10), `research/05-report.md` (Finding 6)
 
 Evidence Provided:
-Microservices.io polling-publisher and transaction-log-tailing definitions, Debezium Postgres WAL implementation.
+Labs specification operational guidelines.
 
 Source:
-- https://microservices.io/patterns/data/polling-publisher.html
-- https://microservices.io/patterns/data/transaction-log-tailing.html
-- https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
+Topic specification (`labs/21-outbox-pattern`)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+PARTIAL
 
-Classification: FACT / ARCHITECTURAL TRADEOFF
+Classification:
+EXAMPLE
 
-Severity: HIGH
+Severity:
+LOW
 
-Notes: Accurately reflects both patterns and trade-offs.
-
----
-
-## Claim 6: End-to-End Delivery Semantics (At-Least-Once & Idempotent Consumer)
-
-Claim:
-Transactional Outbox provides at-least-once delivery semantics due to possible relay crashes between publish and status update/deletion. Therefore, consumer idempotency (e.g. via `consumed_messages` / message log tracking) is mandatory.
-
-Location:
-`05-report.md` (Finding 6), `03-evidence.md` (Evidence 7, 10), `02-sources.md` (Source 9)
-
-Evidence Provided:
-Microservices.io results section, Debezium `ConsumedMessage` implementation, EIP Idempotent Receiver pattern.
-
-Source:
-- https://microservices.io/patterns/data/transactional-outbox.html
-- https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
-- https://www.enterpriseintegrationpatterns.com/patterns/messaging/IdempotentReceiver.html
-
-Source Actually Supports Claim: YES
-
-Classification: FACT
-
-Severity: CRITICAL
-
-Notes: Accurately rejects magical "end-to-end exactly-once" without consumer deduplication.
-
----
-
-## Claim 7: Kafka Transactions Scope Boundary
-
-Claim:
-Kafka Exactly-Once Semantics (EOS) coordinates multi-partition / multi-topic stream processing (Kafka-to-Kafka), but does not solve the upstream DB-to-Kafka dual-write problem.
-
-Location:
-`05-report.md` (Finding 7), `04-contradictions.md` (Nuance 1)
-
-Evidence Provided:
-Confluent blog on Kafka Transactions.
-
-Source:
-- https://www.confluent.io/blog/transactions-apache-kafka/
-
-Source Actually Supports Claim: YES
-
-Classification: FACT
-
-Severity: HIGH
-
-Notes: Essential boundary distinction properly articulated.
-
----
-
-## Claim 8: Operational Guidance (Payload Sizing, Table Retention, DLQ, Monitoring)
-
-Claim:
-- Keep payload minimal (reference keys + essential state).
-- Clean up processed records via retention purge or CDC ephemeral row technique.
-- Employ DLQ for unprocessable messages.
-- Monitor oldest unprocessed event age and queue lag. Note: Numeric thresholds (e.g., 2s vs 47m) are educational examples from lab specs, NOT industry benchmarks.
-
-Location:
-`05-report.md` (Findings 8, 9), `03-evidence.md` (Evidence 11, 12, 13, 16)
-
-Evidence Provided:
-Debezium blog (DLQ, ephemeral row, event evolution), Lab spec (practice guidance).
-
-Source:
-- https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
-- Lab specification
-
-Source Actually Supports Claim: YES (with explicit caveats on numeric examples)
-
-Classification: INTERPRETATION / PRACTICE GUIDANCE
-
-Severity: MEDIUM
-
-Notes: Report explicitly identifies arbitrary numeric threshold examples as lab-spec derived, adhering strictly to anti-hallucination rules.
+Notes:
+The research author explicitly qualified this in `03-evidence.md` and `05-report.md` with: "These values are illustrative SLO examples, not universal operational constants" and noted it as MEDIUM confidence. Handled appropriately without making false universal claims.

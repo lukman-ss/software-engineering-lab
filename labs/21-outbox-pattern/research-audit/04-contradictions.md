@@ -1,51 +1,21 @@
-# Contradiction Audit: Transactional Outbox Pattern
+# Contradiction Audit
 
-Target Lab: `labs/21-outbox-pattern`
-Research Set Under Audit: `research/2026-09-26-outbox-pattern/`
-Date: 2026-09-26
+## Audit Result
+No material contradictions found within the research artifacts or between cited authoritative sources.
 
----
+## Nuances & Framing Differences Analyzed
 
-## Contradiction 1: Exactly-Once Processing vs At-Least-Once Outbox Delivery
+### 1. CDC Log Tailing vs. Polling Publisher Framing
+- **microservices.io**: Categorizes Polling Publisher and Transaction Log Tailing as equal sibling choices for the Message Relay.
+- **Debezium**: Positions Log-based Change Data Capture (WAL/binlog) as the primary/superior outbox implementation to avoid DB polling overhead.
+- **Assessment**: Complementary design alternatives. The research report accurately notes both options, their respective trade-offs (polling: portable across any DB, higher latency; log-tailing: low latency, DB-specific), and presents them without contradiction.
 
-Statement A:
-"Transactional Outbox pattern guarantees at-least-once delivery; consumers MUST be idempotent to prevent duplicate processing."
-Location: `05-report.md` (Finding 6), `03-evidence.md` (Evidence 7)
+### 2. Table Deletion / Cleanup Mechanics
+- **Debezium CDC Pattern**: In Debezium's blog post, events are `persist()`ed and `remove()`d in the same application transaction so the physical table remains empty while WAL captures the `INSERT`. Alternatively, connectors process table rows and delete after publish.
+- **Generic Relational Outbox**: Application inserts to outbox table; async relay process publishes then sets `processed_at` timestamp or deletes rows.
+- **Assessment**: The research report (`05-report.md`, Finding 6 & `04-contradictions.md`) acknowledges both ephemeral outbox (CDC WAL-tailing) and persistent table cleanup (batch archival/deletion). No contradiction.
 
-Statement B:
-"Kafka supports Exactly-Once Semantics (EOS) with transactions across topics."
-Location: `05-report.md` (Finding 7), `02-sources.md` (Source 6)
-
-Type: SCOPE_BOUNDARIES (Resolved Nuance)
-
-Impact: LOW (Clarified in report)
-
-Assessment:
-No contradiction exists in the research files. The report explicitly clarifies that Kafka EOS applies exclusively to Kafka-to-Kafka read-process-write streams. Outbox spans relational DB to Kafka, where network partitions or relay restarts can produce duplicate publishes, maintaining the requirement for at-least-once + consumer idempotency.
-
----
-
-## Contradiction 2: Table Housekeeping & Cleanup Mechanics
-
-Statement A:
-"Outbox tables must be periodically pruned or archived to prevent unbounded table growth and database bloat."
-Location: `05-report.md` (Finding 8), `03-evidence.md` (Evidence 12)
-
-Statement B:
-"Debezium outbox implementation uses INSERT and DELETE within the same business transaction; CDC captures the WAL INSERT, leaving the outbox table permanently empty."
-Location: `05-report.md` (Finding 8), `04-contradictions.md` (Nuance 3)
-
-Type: IMPLEMENTATION_VARIANT (Resolved Nuance)
-
-Impact: LOW
-
-Assessment:
-No conflict. These represent two legitimate implementation strategies dependent on the message relay architecture:
-1. Persistent Outbox with Polling Relay -> requires retention purge daemon.
-2. Ephemeral Outbox with CDC Log Tailing -> table stays empty because delete is committed in the same transaction after WAL logging.
-
----
-
-## Summary of Findings
-
-No un-reconciled material contradictions found within the research document set or between cited sources.
+## Internal Consistency Check
+- `01-plan.md` vs `05-report.md`: All research questions in plan are systematically answered in findings.
+- `02-sources.md` vs `03-evidence.md`: All evidence items map directly to Tier 1 sources listed in source catalog.
+- `03-evidence.md` vs `06-open-questions.md`: Items with weak or illustrative evidence (e.g. alert threshold numbers) are properly recorded in open questions.
