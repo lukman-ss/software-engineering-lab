@@ -177,10 +177,10 @@ async function engineeringPipeline(lab) {
     while (true) {
         if (revisionCount === 0) {
             await runOpencode(lab, "04-engineering", path.join(PROMPTS, "engineer.md"),
-`Implement the approved technical lab:\n\n${lab}\n\nPIPELINE BOUNDARY:\n- Write and edit source code.\n- Write tests.\n- Do not generate publication content.`, MODEL_CRITICAL);
+`Implement the approved technical lab:\n\n${lab}\n\nPIPELINE BOUNDARY:\n- Write and edit source code.\n- Write tests.\n- Do not generate publication content.\n- MUST COMMIT CHANGES: Use the \`.opencode/skills/git-commit-auto/SKILL.md\` skill to commit your code changes before finishing.`, MODEL_CRITICAL);
         } else {
-            await runOpencode(lab, `05-engineering-revision-r${revisionCount}`, path.join(PROMPTS, "engineer-reviser.md"),
-`Address the audit findings for target lab:\n\n${lab}\n\nPIPELINE OVERRIDE:\n- Revise implementation and tests only.\n- Do not generate publication content.\n- Write revision records to:\n  ${lab}/engineering-revision/\n- Finish with READY_FOR_ENGINEERING_REAUDIT.`, MODEL_CRITICAL);
+            await runOpencode(lab, `05-engineering-revision-r${revisionCount}`, path.join(PROMPTS, "engineering-reviser.md"),
+`Address the audit findings for target lab:\n\n${lab}\n\nPIPELINE OVERRIDE:\n- Revise implementation and tests only.\n- Do not generate publication content.\n- Write revision records to:\n  ${lab}/engineering-revision/\n- MUST COMMIT CHANGES: Use the \`.opencode/skills/git-commit-auto/SKILL.md\` skill to commit your revisions before finishing.\n- Finish with READY_FOR_ENGINEERING_REAUDIT.`, MODEL_CRITICAL);
         }
 
         const auditRound = revisionCount + 1;
