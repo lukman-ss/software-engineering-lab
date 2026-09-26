@@ -1,39 +1,43 @@
 # Engineering Revision Plan
 
 Target Lab: labs/20-zero-downtime-deployment
-Previous Verdict: APPROVED (8 non-blocking gaps; no blocking issues)
+Previous Verdict: APPROVED_WITH_WARNINGS
 
 ## Blocking Issues
+
 None.
 
 ## Non-Blocking Issues
-1. GAP-01 (LOW): No test for GetUser with non-existent ID returning ErrNotFound.
-2. GAP-02 (LOW): No test for InsertLegacy with single-name (no space).
-3. GAP-03 (LOW): No test for SaveExpand with empty firstName or lastName.
-4. GAP-04 (MEDIUM): Enqueue after Stop panics; no runtime guard.
-5. GAP-05 (LOW): Worker tests use concurrency=1 only.
-6. GAP-06 (LOW): /work with invalid duration fallback untested.
-7. GAP-07 (LOW): engineering/01-design.md describes Shutdown signature incorrectly.
-8. GAP-08 (LOW): READY→UNREADY probe transition not tested as explicit probe assertion.
+
+1. **GAP-01 (MEDIUM)** — TOCTOU race in `Enqueue` + `Stop`: `stopped.Load()` check passes, then `Stop()` closes `jobChan` before the send executes → send-on-closed-channel panic. No test exercises this path.
+2. **GAP-02 (LOW)** — `engineering/03-execution-result.md` records 5 tests; actual suite has 14. Stale doc.
+3. **GAP-03 (LOW)** — No test asserts Enqueue-after-Stop is silently rejected.
+4. **GAP-04 (LOW)** — No test overwrites a legacy record with `SaveExpand` and re-reads it.
+5. **GAP-05 (LOW)** — No test with multiple concurrent in-flight requests during graceful shutdown.
 
 ## Files To Change
-- `tests/db_test.go` — add GAP-01, GAP-02, GAP-03 tests
-- `tests/server_test.go` — add GAP-06, GAP-08 tests
-- `tests/worker_test.go` — add GAP-05 test
-- `internal/worker/worker.go` — add Enqueue-after-Stop guard (GAP-04)
-- `engineering/01-design.md` — fix Shutdown signature description (GAP-07)
+
+- `internal/worker/worker.go` — fix TOCTOU: add mutex guard around stopped check + channel send
+- `tests/worker_test.go` — add TestWorkerEnqueueAfterStop, TestWorkerConcurrentEnqueueStop
+- `tests/db_test.go` — add TestDBLegacyOverwriteWithExpand
+- `tests/server_test.go` — add TestServerMultiRequestDrain
+- `engineering/03-execution-result.md` — update test count to actual
 
 ## Tests To Add/Modify
-- TestDBNotFound (GAP-01)
-- TestDBSingleNameLegacy (GAP-02)
-- TestDBSaveExpandEmptyFields (GAP-03)
-- TestWorkerConcurrency (GAP-05)
-- TestServerInvalidDurationFallback (GAP-06)
-- TestServerReadyUnreadyTransition (GAP-08)
+
+| Test | File | GAP |
+|------|------|-----|
+| TestWorkerEnqueueAfterStop | tests/worker_test.go | GAP-03 |
+| TestWorkerConcurrentEnqueueStop | tests/worker_test.go | GAP-01 |
+| TestDBLegacyOverwriteWithExpand | tests/db_test.go | GAP-04 |
+| TestServerMultiRequestDrain | tests/server_test.go | GAP-05 |
 
 ## Validation Commands
+
 ```bash
+cd labs/20-zero-downtime-deployment
+go build ./...
 go test -v ./...
-go test -race -count=1 ./...
+go test -race ./...
 go run ./cmd/demo
 ```

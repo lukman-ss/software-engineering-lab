@@ -7,43 +7,27 @@ Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed:
-- internal/db/db.go (72 lines)
-- internal/server/server.go (114 lines)
-- internal/worker/worker.go (96 lines)
-- cmd/demo/main.go (78 lines)
-
-Tests Reviewed:
-- tests/db_test.go (34 lines, 1 test)
-- tests/server_test.go (164 lines, 5 tests)
-- tests/worker_test.go (49 lines, 2 tests)
-- Total: 8 tests
-
+Code Files Reviewed: 4 (internal/db/db.go, internal/server/server.go, internal/worker/worker.go, cmd/demo/main.go)
+Tests Reviewed: 3 test files, 14 test functions
 Commands Executed:
-```
-go build ./...
-go test -v ./...
-go test -race -count=1 ./...
-go run ./cmd/demo
-```
+- `go build ./...` → EXIT 0
+- `go test -v ./...` → EXIT 0 (14/14 PASS)
+- `go test -race ./...` → EXIT 0 (no races)
+- `go run ./cmd/demo` → EXIT 0 (clean output, expected sequence)
 
 Failures: None
-
-Warnings:
-- Enqueue after Stop panics (no guard); safe in controlled lab usage
-- Redundant s.wg.Wait() after http.Server.Shutdown() (harmless no-op)
-- Design doc describes Shutdown signature incorrectly (minor drift)
+Warnings: 2 (TOCTOU Enqueue+Stop race — untested; stale execution result doc)
 
 ---
 
 ## Quality Gates
 
 Compilation: PASS
-Tests: PASS (8/8)
+Tests: PASS
 Race Detector: PASS
-Demo: PASS (output confirmed: client 200, "Demo finished cleanly.")
+Demo: PASS
 Research Alignment: PASS
-Documentation Accuracy: PASS (one minor design-doc signature drift, severity LOW)
+Documentation Accuracy: WARNING (engineering/03-execution-result.md test count is stale — 5 recorded, 14 actual)
 
 ---
 
@@ -55,23 +39,29 @@ None.
 
 ## Non-Blocking Issues
 
-1. GAP-01: No test for GetUser with missing ID (ErrNotFound). LOW.
-2. GAP-02: No test for single-name legacy user. LOW.
-3. GAP-03: No test for SaveExpand with empty first/last name. LOW.
-4. GAP-04: Enqueue after Stop panics; no runtime guard. MEDIUM.
-5. GAP-05: Worker tested at concurrency=1 only. LOW.
-6. GAP-06: /work invalid duration fallback untested. LOW.
-7. GAP-07: Design doc Shutdown signature description doesn't match implementation. LOW.
-8. GAP-08: READY→UNREADY probe transition not tested as an explicit probe assertion. LOW.
+1. **TOCTOU race in `Enqueue` + `Stop`** (GAP-01, MEDIUM): `Enqueue` checks `stopped.Load()` then sends on channel; concurrent `Stop` can close the channel between the check and the send, causing a send-on-closed-channel panic. No current test exercises this. Lab usage pattern (sequential enqueue then stop) avoids it in practice. Race detector did not fire because no test triggers the concurrent path.
+
+2. **Stale execution result doc** (GAP-02, LOW): `engineering/03-execution-result.md` records 5 tests; 14 exist and pass. Harmless but inaccurate.
+
+3. **Missing test: Enqueue-after-Stop rejection** (GAP-03, LOW): Drop behavior is implemented but not asserted by any test.
+
+4. **Missing test: legacy record overwrite to expanded schema** (GAP-04, LOW): In-place schema migration path not covered.
+
+5. **Missing test: multi-request concurrent drain** (GAP-05, LOW): Single in-flight request only. Stdlib behavior is trusted but not exercised.
 
 ---
 
 ## Required Revisions
 
-None required for approval.
+None required for Technical Writer handoff. The following are recommended for production hardening:
+
+1. Fix Enqueue TOCTOU: use a mutex or recover-from-panic pattern around the channel send, or use a dedicated `stopped` guard that also locks around `close(jobChan)` and the send.
+2. Update `engineering/03-execution-result.md` to reflect the revised test suite (14 tests).
 
 ---
 
 ## Final Status
 
-APPROVED
+APPROVED_WITH_WARNINGS
+
+All core behaviors are implemented correctly and proven by tests that pass under the race detector. The implementation is trustworthy for Technical Writer handoff. The one MEDIUM-severity gap (Enqueue TOCTOU) is an untested concurrent edge case that does not affect the lab's correctness within its demonstrated usage scope.

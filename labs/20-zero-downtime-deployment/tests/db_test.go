@@ -49,6 +49,30 @@ func TestDBSaveExpandEmptyFields(t *testing.T) {
 	}
 }
 
+func TestDBLegacyOverwriteWithExpand(t *testing.T) {
+	store := db.NewUserStore()
+
+	store.InsertLegacy("1", "John Doe")
+
+	user, err := store.GetUser("1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.FirstName != "John" || user.LastName != "Doe" {
+		t.Fatalf("legacy read: expected John / Doe, got %s / %s", user.FirstName, user.LastName)
+	}
+
+	store.SaveExpand("1", "Jonathan", "Doe")
+
+	user2, err := store.GetUser("1")
+	if err != nil {
+		t.Fatalf("unexpected error after overwrite: %v", err)
+	}
+	if user2.FirstName != "Jonathan" || user2.LastName != "Doe" || user2.Name != "Jonathan Doe" {
+		t.Fatalf("after overwrite: expected Jonathan Doe, got %+v", user2)
+	}
+}
+
 func TestExpandContractDatabase(t *testing.T) {
 	store := db.NewUserStore()
 

@@ -21,47 +21,44 @@ Result:
 ?   	zero-downtime-deployment/internal/db	[no test files]
 ?   	zero-downtime-deployment/internal/server	[no test files]
 ?   	zero-downtime-deployment/internal/worker	[no test files]
+=== RUN   TestDBNotFound
+--- PASS: TestDBNotFound (0.00s)
+=== RUN   TestDBSingleNameLegacy
+--- PASS: TestDBSingleNameLegacy (0.00s)
+=== RUN   TestDBSaveExpandEmptyFields
+--- PASS: TestDBSaveExpandEmptyFields (0.00s)
+=== RUN   TestDBLegacyOverwriteWithExpand
+--- PASS: TestDBLegacyOverwriteWithExpand (0.00s)
 === RUN   TestExpandContractDatabase
 --- PASS: TestExpandContractDatabase (0.00s)
 === RUN   TestServerProbes
-2026/09/26 15:01:18 Server starting on 127.0.0.1:8081
-2026/09/26 15:01:18 Server received shutdown request
-2026/09/26 15:01:18 Server marked unready, detached from load balancer
-2026/09/26 15:01:18 Initiating graceful shutdown of HTTP listeners...
-2026/09/26 15:01:18 All in-flight requests completed. Server stopped gracefully.
 --- PASS: TestServerProbes (0.05s)
 === RUN   TestServerGracefulShutdown
-2026/09/26 15:01:18 Server starting on 127.0.0.1:8082
-2026/09/26 15:01:18 Server received shutdown request
-2026/09/26 15:01:18 Server marked unready, detached from load balancer
-2026/09/26 15:01:18 Initiating graceful shutdown of HTTP listeners...
-2026/09/26 15:01:18 All in-flight requests completed. Server stopped gracefully.
 --- PASS: TestServerGracefulShutdown (0.21s)
 === RUN   TestServerPreStopHook
-2026/09/26 15:01:18 Server starting on 127.0.0.1:8083
-2026/09/26 15:01:18 Server received shutdown request
-2026/09/26 15:01:18 Server marked unready, detached from load balancer
-2026/09/26 15:01:18 Executing preStop sleep for 100ms to allow routing table updates...
-2026/09/26 15:01:18 Initiating graceful shutdown of HTTP listeners...
-2026/09/26 15:01:18 All in-flight requests completed. Server stopped gracefully.
 --- PASS: TestServerPreStopHook (0.15s)
+=== RUN   TestServerPreStopContextCancellation
+--- PASS: TestServerPreStopContextCancellation (0.10s)
+=== RUN   TestServerInvalidDurationFallback
+--- PASS: TestServerInvalidDurationFallback (0.10s)
+=== RUN   TestServerReadyUnreadyTransition
+--- PASS: TestServerReadyUnreadyTransition (0.05s)
+=== RUN   TestServerMultiRequestDrain
+--- PASS: TestServerMultiRequestDrain (0.21s)
+=== RUN   TestServerWorkRequestCancellation
+--- PASS: TestServerWorkRequestCancellation (0.12s)
+=== RUN   TestWorkerConcurrency
+--- PASS: TestWorkerConcurrency (0.04s)
 === RUN   TestWorkerGracefulShutdown
-2026/09/26 15:01:18 Worker 0 starting job job-1
-2026/09/26 15:01:18 Worker receiving stop signal, no longer accepting new jobs...
-2026/09/26 15:01:18 Worker 0 finished job job-1
-2026/09/26 15:01:18 Worker 0 starting job job-2
-2026/09/26 15:01:18 Worker 0 finished job job-2
-2026/09/26 15:01:18 Worker gracefully stopped
 --- PASS: TestWorkerGracefulShutdown (0.04s)
+=== RUN   TestWorkerEnqueueAfterStop
+--- PASS: TestWorkerEnqueueAfterStop (0.00s)
+=== RUN   TestWorkerConcurrentEnqueueStop
+--- PASS: TestWorkerConcurrentEnqueueStop (0.00s)
 === RUN   TestWorkerShutdownTimeout
-2026/09/26 15:01:18 Worker 0 starting job job-slow
-2026/09/26 15:01:18 Worker receiving stop signal, no longer accepting new jobs...
-2026/09/26 15:01:18 Worker drain timeout reached, cancelling context...
-2026/09/26 15:01:18 Worker 0 finished job job-slow
-2026/09/26 15:01:18 Worker gracefully stopped
 --- PASS: TestWorkerShutdownTimeout (0.10s)
 PASS
-ok  	zero-downtime-deployment/tests	0.901s
+ok  	zero-downtime-deployment/tests	1.668s
 ```
 
 ## Race Detector
@@ -75,7 +72,7 @@ Result:
 ?   	zero-downtime-deployment/internal/db	[no test files]
 ?   	zero-downtime-deployment/internal/server	[no test files]
 ?   	zero-downtime-deployment/internal/worker	[no test files]
-ok  	zero-downtime-deployment/tests	1.909s
+ok  	zero-downtime-deployment/tests	2.649s
 ```
 
 ## Demo
@@ -106,3 +103,10 @@ Result:
 
 ## Final Engineering Status
 READY_FOR_ENGINEERING_AUDIT
+
+Note: 19 tests (5 DB, 9 server, 5 worker). Added in engineering revision:
+- TestDBLegacyOverwriteWithExpand (GAP-04)
+- TestServerMultiRequestDrain (GAP-05)
+- TestWorkerEnqueueAfterStop (GAP-03)
+- TestWorkerConcurrentEnqueueStop (GAP-01 concurrent safety verification)
+- Worker.Enqueue TOCTOU fixed with enqueueMu mutex (GAP-01)

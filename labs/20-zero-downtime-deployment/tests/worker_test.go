@@ -2,6 +2,7 @@ package tests
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +42,38 @@ func TestWorkerGracefulShutdown(t *testing.T) {
 	}
 	if completed[0] != "job-1" || completed[1] != "job-2" {
 		t.Fatalf("unexpected completed jobs: %v", completed)
+	}
+}
+
+func TestWorkerEnqueueAfterStop(t *testing.T) {
+	w := worker.NewWorker(10)
+	w.Start(1)
+	w.Stop(100 * time.Millisecond)
+
+	w.Enqueue(worker.Job{ID: "post-stop-job", Duration: 0})
+
+	completed := w.GetCompletedJobs()
+	if len(completed) != 0 {
+		t.Fatalf("expected 0 completed jobs after Stop, got %d: %v", len(completed), completed)
+	}
+}
+
+func TestWorkerConcurrentEnqueueStop(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		w := worker.NewWorker(100)
+		w.Start(2)
+
+		var wg sync.WaitGroup
+		for j := 0; j < 10; j++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				w.Enqueue(worker.Job{ID: fmt.Sprintf("job-%d-%d", i, id), Duration: 0})
+			}(j)
+		}
+
+		w.Stop(200 * time.Millisecond)
+		wg.Wait()
 	}
 }
 

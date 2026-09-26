@@ -4,74 +4,66 @@ Target Lab: labs/20-zero-downtime-deployment
 
 ---
 
-## README vs Code
+## README vs Implementation
 
-### Claim: Database demonstrates Expand and Contract / Parallel Change pattern
+### Claim: Database demonstrates "Expand and Contract" pattern with dual-schema support
 
-Code: `internal/db/db.go` — `InsertLegacy` (Name only), `SaveExpand` (FirstName+LastName+combined Name), `GetUser` (backward-compatible read with dual-field fallback).
-Status: MATCH
+Code: `internal/db/db.go` implements `InsertLegacy` (Name-only), `SaveExpand` (FirstName+LastName+Name), and `GetUser` with fallback read logic.
+Assessment: **MATCH**
 
-### Claim: Server exposes Liveness (/healthz/live) and Readiness (/healthz/ready) probes
+### Claim: Server exposes /healthz/live and /healthz/ready
 
-Code: Both routes present in `server.go` lines 28-41.
-Status: MATCH
+Code: Both routes registered in `NewServer`. Live always 200. Ready depends on `atomic.Bool`.
+Assessment: **MATCH**
 
-### Claim: Server executes configurable preStop delay to simulate load balancer detachment
+### Claim: Server executes configurable preStop delay before shutdown
 
-Code: `preStop time.Duration` field, used in Shutdown at line 91-98.
-Status: MATCH
+Code: `preStop time.Duration` field, configured via `NewServer(addr, preStopDelay)`, `select` in `Shutdown`.
+Assessment: **MATCH**
 
-### Claim: Server allows in-flight requests to complete before termination
+### Claim: Worker stops pulling new jobs but completes current active job
 
-Code: `http.Server.Shutdown(ctx)` guarantees handler completion. Additionally tracked via `wg`.
-Status: MATCH
+Code: `Stop()` sets `stopped=true`, closes channel; goroutines exit between jobs via `ctx.Done()` or channel drain; `time.Sleep` within active job is not interrupted.
+Assessment: **MATCH** (with caveat: the claim "completes current active job" is accurate for the normal stop path; on timeout, the currently-running job's sleep is also not interrupted — it still completes. Channel-buffered queued jobs are dropped on timeout.)
 
-### Claim: Worker stops pulling new jobs but completes current active job on shutdown
+### Claim: Demo wires components together, sends SIGTERM, demonstrates zero-downtime draining
 
-Code: `close(w.jobChan)` stops new dequeues; `wg.Wait()` waits for running goroutines; timeout path cancels context after deadline.
-Status: MATCH (with noted caveat that `time.Sleep` inside handler is not preemptible — in-flight always completes)
+Code: `cmd/demo/main.go` starts worker, server, enqueues job, starts in-flight HTTP request, injects SIGTERM via channel, gracefully shuts down. Actual output verified.
+Assessment: **MATCH**
 
-### Claim: Demo wires all components, simulates startup, in-flight workloads, SIGTERM, graceful drain
+### README Running Instructions
 
-Code: `cmd/demo/main.go` does exactly this. Actual execution output confirmed correct behavior.
-Status: MATCH
-
-### Claim: `go test -race ./...` passes
-
-Verified by execution: PASS
-Status: MATCH
+README says: `go run ./cmd/demo` and `go test -v ./...` / `go test -race ./...`
+Code: Commands work, exit 0.
+Assessment: **MATCH**
 
 ---
 
-## Engineering Design vs Code
+## Engineering Design vs Implementation
 
-### Design claim: Shutdown(ctx, preStopDelay)
+### Design Claim: Worker.Stop() signals worker to finish current job and exit gracefully
 
-Design doc (01-design.md line 47) describes signature as `Shutdown(ctx, preStopDelay)`. Actual signature is `Shutdown(ctx context.Context) error` — preStopDelay is a constructor parameter (`NewServer(addr, preStopDelay)`), not a Shutdown argument.
-Status: DOC_CODE_MISMATCH (minor — design doc describes interface intent, not final signature; behavior is equivalent)
-Severity: LOW
+Implementation: Confirmed. Stop() closes channel (no new jobs fetched), context cancel only on timeout (forces exit between jobs, not within a job sleep).
+Assessment: **MATCH**
 
-### Design claim: Worker.Stop() signals worker to finish current job and exit gracefully
+### Design Claim: All unit and integration tests pass without race conditions
 
-Code: `Stop(timeout time.Duration)` — timeout parameter not mentioned in design. Actual implementation adds cooperative timeout/cancel behavior not specified in the original design call signature. This is an enhancement, not a contradiction.
-Status: MATCH (enhancement)
+Implementation: 14 tests pass, race detector clean.
+Assessment: **MATCH**
 
----
+### Design Claim: PreStop hook waits for configured delay before closing listeners
 
-## Research vs Implementation
-
-Research (both runs) identifies four core patterns: health probes, graceful shutdown with preStop, backward-compatible DB migrations (Expand/Contract), and background worker cooperative drain. All four are implemented and tested.
-
-No fabricated behavior found. No overclaim detected.
+Implementation: Confirmed. Shutdown method enforces this ordering.
+Assessment: **MATCH**
 
 ---
 
-## Summary
+## Mismatches Found
 
-| Area | Status |
-|---|---|
-| README vs code | MATCH |
-| Engineering design vs code | MINOR MISMATCH (Shutdown signature description only) |
-| Research claims vs implementation | MATCH |
-| Demo output vs claimed behavior | MATCH (verified by execution) |
-| Test claims vs actual test logic | MATCH |
+### DOC_CODE_MISMATCH: engineering/03-execution-result.md test count
+
+The execution result recorded by the engineer shows 5 tests passing. The actual test suite at audit time contains 14 tests. The engineering revision phase added 9 tests (`TestDBNotFound`, `TestDBSingleNameLegacy`, `TestDBSaveExpandEmptyFields`, `TestServerPreStopContextCancellation`, `TestServerInvalidDurationFallback`, `TestServerReadyUnreadyTransition`, `TestServerWorkRequestCancellation`, `TestWorkerConcurrency` — confirmed via engineering-revision/02-changes-made.md directory existence). The execution result doc was not updated to reflect the revision additions.
+
+Severity: LOW — the doc is stale, not incorrect in intent; all tests pass in the current state.
+
+### No other mismatches found.

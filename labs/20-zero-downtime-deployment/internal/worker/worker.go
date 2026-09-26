@@ -23,6 +23,7 @@ type Worker struct {
 	completed   []string
 	completedMu sync.Mutex
 	stopped     atomic.Bool
+	enqueueMu   sync.Mutex
 }
 
 func NewWorker(bufferSize int) *Worker {
@@ -66,6 +67,8 @@ func (w *Worker) Start(concurrency int) {
 }
 
 func (w *Worker) Enqueue(job Job) {
+	w.enqueueMu.Lock()
+	defer w.enqueueMu.Unlock()
 	if w.stopped.Load() {
 		log.Printf("Enqueue rejected: worker stopped, dropping job %s", job.ID)
 		return
@@ -75,8 +78,10 @@ func (w *Worker) Enqueue(job Job) {
 
 func (w *Worker) Stop(timeout time.Duration) {
 	log.Println("Worker receiving stop signal, no longer accepting new jobs...")
+	w.enqueueMu.Lock()
 	w.stopped.Store(true)
 	close(w.jobChan)
+	w.enqueueMu.Unlock()
 	
 	done := make(chan struct{})
 	go func() {

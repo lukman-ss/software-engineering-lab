@@ -6,84 +6,73 @@ Target Lab: labs/20-zero-downtime-deployment
 
 ## GAP-01
 
-Type: MISSING_TEST
-Location: internal/db/db.go — GetUser with ErrNotFound
-Description: No test verifies that requesting a non-existent ID returns ErrNotFound.
-Severity: LOW
-Blocking: No — error path is simple and unambiguous from code inspection.
+Type: MISSING_TEST  
+Severity: MEDIUM  
+Location: internal/worker/worker.go:68-73 + Stop()  
+Description: TOCTOU race between `Enqueue` and `Stop`. `Enqueue` checks `stopped.Load()`, passes the check, then `Stop()` calls `close(jobChan)` before the channel send in `Enqueue` executes. Result: send-on-closed-channel panic. No test exercises concurrent `Enqueue` + `Stop`. The race detector did not catch this because no test triggers it.  
+Impact: Potential panic in production concurrent usage. Lab-scope usage (sequential enqueue then stop) avoids it.
 
 ---
 
 ## GAP-02
 
-Type: MISSING_TEST
-Location: internal/db/db.go — single-name legacy user
-Description: No test for InsertLegacy with a name containing no space (e.g., "Madonna"). GetUser would return FirstName="Madonna", LastName="" — correct behavior, but untested.
-Severity: LOW
-Blocking: No.
+Type: DOC_CODE_MISMATCH  
+Severity: LOW  
+Location: engineering/03-execution-result.md  
+Description: Execution result records 5 passing tests. Actual test suite at audit time has 14 tests. The engineering revision phase added tests not reflected in the execution result document.  
+Impact: Stale documentation. Does not affect correctness.
 
 ---
 
 ## GAP-03
 
-Type: MISSING_TEST
-Location: internal/db/db.go — SaveExpand with empty fields
-Description: No test for SaveExpand("id", "", "Smith") or SaveExpand("id", "Jane", ""). TrimSpace logic handles these but is untested.
-Severity: LOW
-Blocking: No.
+Type: MISSING_TEST  
+Severity: LOW  
+Location: tests/worker_test.go  
+Description: No test explicitly asserts that `Enqueue` after `Stop` is silently rejected (dropped with log). The behavior exists and is correct, but the contract is unverified by test.  
+Impact: Regression risk if the drop behavior changes.
 
 ---
 
 ## GAP-04
 
-Type: MISSING_TEST
-Location: internal/worker/worker.go — Enqueue after Stop
-Description: Enqueue after Stop panics (send on closed channel). No guard exists, no test covers this. In the lab's controlled usage pattern this never occurs.
-Severity: MEDIUM
-Blocking: No — lab usage is controlled; caller responsibility is documented implicitly by the pattern.
+Type: MISSING_TEST  
+Severity: LOW  
+Location: tests/db_test.go  
+Description: No test overwrites a legacy record with `SaveExpand` and re-reads it to verify upgrade path. The expand-in-place migration path is untested.  
+Impact: Minor. The dual-write scenario (new version writes to existing legacy ID) is a real production pattern.
 
 ---
 
 ## GAP-05
 
-Type: MISSING_TEST
-Location: internal/worker/worker.go — concurrency > 1
-Description: All worker tests use concurrency=1. Multi-worker concurrent job completion order and shared completed slice access under concurrent writes are untested at concurrency > 1. Race detector passes for the single-worker case.
-Severity: LOW
-Blocking: No — completedMu correctly protects the shared slice; race detector passes.
+Type: MISSING_TEST  
+Severity: LOW  
+Location: tests/server_test.go  
+Description: No test with multiple concurrent in-flight requests during graceful shutdown. Only 1 in-flight request is tested. Multi-request drain correctness relies on `http.Server.Shutdown`'s built-in behavior, which is correct, but not exercised.  
+Impact: Low. Go stdlib's Shutdown is well-tested upstream.
 
 ---
 
 ## GAP-06
 
-Type: MISSING_TEST
-Location: internal/server/server.go — /work with invalid duration query parameter
-Description: No test verifies that an invalid `d` parameter falls back to 50ms default. The code path exists and is correct, but is untested.
-Severity: LOW
-Blocking: No.
+Type: MISSING_EDGE_CASE  
+Severity: LOW  
+Location: internal/worker/worker.go — zero-buffer or zero-concurrency  
+Description: No test for `NewWorker(0)` (zero buffer) or `Start(0)` (zero goroutines). Channel send to zero-buffer channel blocks indefinitely if no workers are running. Panic-free but deadlocks.  
+Impact: Lab-scope only. Not a real-world concern given explicit usage with buffer=100, concurrency=2.
 
 ---
 
-## GAP-07
+## Summary Table
 
-Type: DOC_CODE_MISMATCH
-Location: engineering/01-design.md line 47
-Description: Design describes Shutdown signature as `Shutdown(ctx, preStopDelay)`. Implementation uses `Shutdown(ctx context.Context)` with preStopDelay as a constructor argument. Minor documentation drift from design-to-implementation iteration.
-Severity: LOW
-Blocking: No — functional behavior matches intent.
+| ID | Type | Severity | Status |
+|----|------|----------|--------|
+| GAP-01 | MISSING_TEST (TOCTOU panic risk) | MEDIUM | Open |
+| GAP-02 | DOC_CODE_MISMATCH (stale exec result) | LOW | Open |
+| GAP-03 | MISSING_TEST (Enqueue rejection) | LOW | Open |
+| GAP-04 | MISSING_TEST (legacy overwrite) | LOW | Open |
+| GAP-05 | MISSING_TEST (multi-request drain) | LOW | Open |
+| GAP-06 | MISSING_EDGE_CASE (zero-buffer/concurrency) | LOW | Open |
 
----
-
-## GAP-08
-
-Type: MISSING_TEST
-Location: internal/server/server.go — /healthz/ready state transition READY→UNREADY
-Description: Tests cover NOT READY → READY via SetReady(true). The reverse transition (marking unready again, as happens during shutdown) is exercised indirectly inside Shutdown() but not as an explicit probe test.
-Severity: LOW
-Blocking: No — Shutdown test implicitly validates this by testing a server that starts ready and then shuts down.
-
----
-
-## No CRITICAL or HIGH gaps found.
-
-All primary claimed behaviors are implemented, proven by tests, and confirmed by execution.
+No CRITICAL or HIGH gaps. No fabricated results. No fake benchmarks.

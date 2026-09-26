@@ -6,159 +6,108 @@ Target Lab: labs/20-zero-downtime-deployment
 
 ## Finding 1
 
-Location: internal/server/server.go:43-63 (/work handler)
-Claimed Behavior: Track active in-flight requests; complete them during graceful shutdown.
-Observed Implementation:
-```go
-s.activeCount.Add(1)
-s.wg.Add(1)
-defer s.wg.Done()
-defer s.activeCount.Add(-1)
-```
-`wg.Add(1)` is called inside the handler body, meaning the WaitGroup count is incremented only after the goroutine is scheduled and the handler begins executing. `http.Server.Shutdown()` stops accepting new connections and waits for active handlers to return via its own internal tracking. The manual `s.wg.Wait()` after `srv.Shutdown()` is therefore redundant — but not harmful. However, between `s.srv.Shutdown(ctx)` returning and `s.wg.Wait()` being reached, there is no logical gap because `http.Server.Shutdown` already guarantees all handlers have returned before it returns. The `wg.Wait()` at line 107 is always a no-op by the time it is reached.
-
-The `activeCount` atomic is used only in tests (via `ActiveRequests()`); it is not used in shutdown logic, which is correct.
+Location: internal/server/server.go:43-63 (`/work` handler)
+Claimed Behavior: In-flight requests complete before server terminates; client disconnect is handled cleanly.
+Observed Implementation: Handler increments `activeCount` and `wg` atomically at entry. Uses `select` between `time.After(d)` and `r.Context().Done()` for cooperative cancellation. Decrements both on defer. `wg.Wait()` is called after `srv.Shutdown(ctx)`.
 Assessment: PASS
 Severity: LOW
-Notes: The redundant `wg.Wait()` is harmless but misleading. Actual shutdown correctness is provided by `http.Server.Shutdown`, not the manual WaitGroup.
+Notes: `s.wg.Wait()` after `s.srv.Shutdown(ctx)` is technically redundant because `http.Server.Shutdown` already waits for all active handlers to return before returning. The extra `wg.Wait()` provides a belt-and-suspenders guarantee and enables `ActiveRequests()` tracking, but it does not cause incorrectness. Harmless duplication.
 
 ---
 
 ## Finding 2
 
-Location: internal/server/server.go:85-109 (Shutdown method)
-Claimed Behavior: Mark unready → preStop delay → drain connections → wg.Wait.
-Observed Implementation: Sequence is correct. `SetReady(false)` first, then preStop select (context-cancellable), then `srv.Shutdown(ctx)`, then `wg.Wait()`.
-Context cancellation during preStop returns `ctx.Err()` immediately without proceeding to listener shutdown — correct fail-fast behavior.
+Location: internal/server/server.go:85-109 (Shutdown)
+Claimed Behavior: Shutdown marks server unready, waits preStop delay, then closes listeners. Context cancellation during preStop aborts early and returns error.
+Observed Implementation: `SetReady(false)` called first. Then `select` on `time.After(preStop)` vs `ctx.Done()`. On context cancellation: returns `ctx.Err()` immediately without calling `srv.Shutdown`. On normal path: calls `srv.Shutdown(ctx)`, then `wg.Wait()`.
 Assessment: PASS
 Severity: LOW
-Notes: None.
+Notes: Context cancellation during preStop short-circuits before `srv.Shutdown` is called, meaning active connections are not drained on hard timeout during preStop phase. This matches the ponytail comment intent and is semantically correct for a hard-abort scenario. Not a defect.
 
 ---
 
 ## Finding 3
 
-Location: internal/server/server.go:55-62 (/work handler — client disconnect handling)
-Claimed Behavior: If client disconnects early, handler exits without writing a response.
-Observed Implementation: `r.Context().Done()` is selected; the handler returns without writing. The WaitGroup and activeCount are still decremented via defer. This is correct. `ActiveRequests()` will return to 0 even on client cancellation.
-Assessment: PASS
-Severity: LOW
-Notes: None.
+Location: internal/worker/worker.go:68-73 (Enqueue)
+Claimed Behavior: Enqueue rejects jobs after Stop() is called.
+Observed Implementation: `stopped.Load()` check before channel send. However, `Stop()` calls `close(jobChan)` after setting `stopped=true`. If `Enqueue` passes the `stopped` check and then `Stop()` closes the channel before the send, a panic on send-to-closed-channel occurs.
+Assessment: WARNING
+Severity: MEDIUM
+Notes: There is a TOCTOU race between `Enqueue`'s `stopped.Load()` check and the `close(jobChan)` in `Stop()`. In practice, the demo and tests do not exercise concurrent Enqueue+Stop, so no panic occurs during testing. Under concurrent use (multiple goroutines calling Enqueue while Stop is called concurrently), a send-on-closed-channel panic is possible. The test suite does not cover this scenario.
 
 ---
 
 ## Finding 4
 
-Location: internal/worker/worker.go:35-63 (Start — goroutine loop)
-Claimed Behavior: Worker goroutines stop when context is cancelled or channel is closed.
-Observed Implementation: Double-select pattern: first checks ctx.Done with a default fallback, then blocks on either ctx.Done or jobChan receive. When `Stop()` closes `jobChan`, the `case job, ok := <-w.jobChan` branch triggers with `ok=false` and the goroutine returns. If context is cancelled (timeout path), `case <-w.ctx.Done()` in the second select fires. Correct in both paths.
-
-However: the first select (lines 41-45) is a non-blocking ctx check before the blocking select. This creates a double-checked pattern that is idiomatic but slightly redundant — the second select already handles ctx.Done. No correctness issue.
+Location: internal/worker/worker.go:37-66 (Start / goroutine loop)
+Claimed Behavior: Worker goroutines process jobs cooperatively and stop on context cancellation or channel close.
+Observed Implementation: Double-select pattern: first checks `ctx.Done()` non-blocking, then blocks on either `ctx.Done()` or `jobChan`. After `Stop()` closes the channel, goroutines drain remaining buffered jobs before exiting because channel-close does not cancel the context (unless drain timeout triggers `w.cancel()`). Jobs in the channel buffer are processed, not dropped, on normal Stop.
 Assessment: PASS
 Severity: LOW
-Notes: None.
+Notes: The drain behavior (process buffered jobs on graceful stop) is correct. Context cancellation only occurs on timeout path, which forces goroutines to exit the inner select via `ctx.Done()` — even mid-`time.Sleep` the goroutine will exit the select but the `time.Sleep` in the job body is NOT preemptible. The goroutine exits the select on ctx.Done() only between jobs, not during a running job's sleep. The currently running job will complete its `time.Sleep` regardless. This means drain timeout cancels future job pickup but cannot interrupt the currently-executing job's sleep. This is documented behavior (ponytail comment) and aligns with the claim "finishes active job".
 
 ---
 
 ## Finding 5
 
-Location: internal/worker/worker.go:70-88 (Stop method)
-Claimed Behavior: Close channel to stop new job intake; wait for drain; cancel context on timeout.
-Observed Implementation: `close(w.jobChan)` stops new enqueues. A goroutine waits on `wg.Wait()` and signals `done`. Main select picks `done` (drain complete) or `time.After(timeout)` (cancel context then wait for done). After `w.cancel()`, goroutines in the second select will pick up `ctx.Done()` and return. `<-done` after cancel ensures all goroutines have exited before `Stop` returns. Correct cooperative shutdown.
-
-Potential issue: after timeout triggers and `w.cancel()` is called, a goroutine currently inside `time.Sleep(job.Duration)` at line 55 will NOT be interrupted — `time.Sleep` is not context-aware. The goroutine will complete its sleep, append the job to completed, then check ctx.Done on next iteration. This means the "timeout" path may still complete the in-flight job before exiting, which is the observed behavior in `TestWorkerShutdownTimeout`.
+Location: internal/worker/worker.go:76-95 (Stop)
+Claimed Behavior: Stop blocks until drain completes or timeout elapses; on timeout, context is cancelled and Stop still waits for goroutines to exit.
+Observed Implementation: `close(jobChan)` → `wg.Wait()` in background goroutine → `done` channel. Select between `done` and `time.After(timeout)`. On timeout: `w.cancel()` then `<-done`. This correctly waits for goroutines to exit even after context cancel.
 Assessment: PASS
 Severity: LOW
-Notes: Behavior is documented in a ponytail comment. Test `TestWorkerShutdownTimeout` expects job-slow (in-flight, 100ms) completes despite 20ms timeout — this is consistent with the implementation since `time.Sleep` is not preemptible.
+Notes: Correct. Stop never returns while goroutines are still running.
 
 ---
 
 ## Finding 6
 
-Location: internal/worker/worker.go:66-68 (Enqueue)
-Claimed Behavior: Enqueue a job.
-Observed Implementation:
-```go
-func (w *Worker) Enqueue(job Job) {
-    w.jobChan <- job
-}
-```
-No guard against sending to a closed channel. After `Stop()` calls `close(w.jobChan)`, calling `Enqueue` would panic. In demo and tests, Enqueue is always called before Stop — safe in current usage. No runtime protection.
-Assessment: WARNING
-Severity: MEDIUM
-Notes: A caller that calls Enqueue after Stop will panic. No test covers this. In a real system this would need a guard (e.g., recover or a state flag). For a lab demonstrating the pattern, this is acceptable but is a gap.
+Location: internal/db/db.go:61-69 (GetUser fallback logic)
+Claimed Behavior: Legacy records (Name only, no FirstName/LastName) are returned with FirstName/LastName split from Name. Modern records (with FirstName/LastName) return combined Name if Name is empty.
+Observed Implementation: If `FirstName==""` AND `LastName==""` AND `Name!=""`: splits Name on first space into FirstName/LastName. If `Name==""`: constructs Name from FirstName+LastName. The check `rec.Name==""` in the else-if is only reached when at least one of FirstName/LastName is non-empty (due to prior if condition).
+Assessment: PASS
+Severity: LOW
+Notes: Edge case: single-name legacy record (e.g., "Madonna") correctly sets FirstName="Madonna", LastName="". Covered by TestDBSingleNameLegacy. Empty firstName with lastName-only also covered. Logic is correct.
 
 ---
 
 ## Finding 7
 
-Location: internal/db/db.go:61-69 (GetUser — fallback logic)
-Claimed Behavior: Backward-compatible read for both legacy (Name only) and modern (FirstName+LastName) records.
-Observed Implementation:
-- If FirstName and LastName are empty but Name is set → split Name on first space to derive FirstName/LastName.
-- Else if Name is empty → derive Name from FirstName+LastName.
-- Both fields present → return as-is.
-
-Edge case: a user with a single-name (no space) inserted via InsertLegacy would produce LastName="" — which is acceptable behavior. The `strings.SplitN` with n=2 handles the single-word case via `len(parts) > 1` guard.
-
-Edge case: SaveExpand with empty firstName or lastName produces a combined Name via TrimSpace — handled correctly.
+Location: internal/db/db.go:41-51 (SaveExpand)
+Claimed Behavior: SaveExpand writes all three fields (Name, FirstName, LastName).
+Observed Implementation: `Name` is set to `strings.TrimSpace(firstName + " " + lastName)`. When firstName="", Name becomes the trimmed lastName (no leading space). When lastName="", Name becomes trimmed firstName (no trailing space).
 Assessment: PASS
 Severity: LOW
-Notes: No test for single-name legacy user or empty-field expand writes. Minor gap, not a correctness failure.
+Notes: TrimSpace correctly handles empty component cases. Verified by TestDBSaveExpandEmptyFields.
 
 ---
 
 ## Finding 8
 
-Location: internal/server/server.go:73-79 (Start method)
-Claimed Behavior: Start listening; return nil on graceful close.
-Observed Implementation: `http.ErrServerClosed` is explicitly excluded from the error return. This is the standard Go pattern and is correct.
-Assessment: PASS
+Location: cmd/demo/main.go:55-63 (SIGTERM simulation)
+Claimed Behavior: Demo simulates orchestrator SIGTERM signal to trigger graceful shutdown.
+Observed Implementation: `signal.Notify(sig, ...)` then injects `syscall.SIGTERM` into the channel via goroutine. This exercises the shutdown code path but bypasses actual OS signal delivery. The real OS signal path (kernel → process → Go runtime → channel) is not tested.
+Assessment: WARNING
 Severity: LOW
-Notes: None.
+Notes: Adequate for demo/illustration purposes. Not a fabricated result — the shutdown logic is genuinely exercised. Acceptable ceiling for a lab context.
 
 ---
 
 ## Finding 9
 
-Location: cmd/demo/main.go (overall orchestration)
-Claimed Behavior: Simulate startup, in-flight request, SIGTERM, graceful shutdown of server and worker.
-Observed Implementation:
-- Worker started, job enqueued (DemoJob-1, 2s duration)
-- Server started on :8080
-- 1s init sleep, then SetReady(true)
-- In-flight HTTP request goroutine (2s work)
-- 500ms sleep, then simulate SIGTERM via channel
-- Server Shutdown with 10s context (includes 1s preStop)
-- Worker Stop with 5s timeout
-
-Timeline: SIGTERM at ~1.5s. PreStop completes at ~2.5s. Worker job (DemoJob-1, 2s) finishes at ~2s. HTTP /work request (2s, started at ~1s) finishes at ~3s. All within timeouts.
-
-Actual output confirmed: Client request completed status 200, "Demo finished cleanly."
-Assessment: PASS
+Location: tests/server_test.go (all tests using fixed ports 8081-8087)
+Claimed Behavior: Tests are isolated and independently runnable.
+Observed Implementation: Each test uses a hardcoded port. Go test runs tests within a package sequentially by default (no t.Parallel()), so port conflicts within the package are avoided. However, if tests in the package ran in parallel or if another process occupies these ports, tests would fail with bind errors.
+Assessment: WARNING
 Severity: LOW
-Notes: None.
+Notes: Not a correctness issue in the current setup. Tests pass cleanly. Not a blocking concern.
 
 ---
 
 ## Finding 10
 
-Location: tests/worker_test.go:10-28 (TestWorkerGracefulShutdown)
-Claimed Behavior: Both job-1 and job-2 complete in order.
-Observed Implementation: Test asserts `completed[0] == "job-1"` and `completed[1] == "job-2"`. With 1 worker goroutine, this is deterministic. With concurrency=1 and FIFO channel, ordering is guaranteed.
+Location: tests/worker_test.go:47-65 (TestWorkerShutdownTimeout)
+Claimed Behavior: Worker drain timeout causes context cancellation, job-slow completes (it was already running), job-dropped is abandoned.
+Observed Implementation: 1 worker, job-slow (100ms), job-dropped (100ms). Stop(20ms timeout). job-slow starts immediately. After 20ms timeout, context cancelled. job-slow's `time.Sleep` is not preemptible → finishes. job-dropped was still in the channel; the goroutine exits because `ctx.Done()` fires between jobs. Test asserts exactly 1 completed job.
 Assessment: PASS
 Severity: LOW
-Notes: None.
-
----
-
-## Finding 11
-
-Location: tests/worker_test.go:30-48 (TestWorkerShutdownTimeout)
-Claimed Behavior: job-slow (in-flight) completes; job-dropped is abandoned due to timeout.
-Observed Implementation: timeout=20ms, job-slow=100ms. Stop is called after 5ms sleep (job-slow is in-flight). After close(jobChan), the worker finishes job-slow (takes ~95ms more), then context is cancelled. job-dropped is never dequeued because the channel was closed before it could be picked up (worker was busy with job-slow). Result: exactly 1 completed job.
-
-This test correctly exercises the timeout/drain behavior. However, it relies on timing: if job-slow finishes within 20ms, the context cancel would not fire and job-dropped might be dequeued. At 100ms job duration and 20ms timeout, there is sufficient margin. Minor timing sensitivity exists on heavily loaded CI machines.
-Assessment: PASS
-Severity: LOW
-Notes: Timing-sensitive but margins are sufficient (5x ratio).
+Notes: Behavior is correctly modeled. The test passes and verifies the claimed drain-with-timeout semantics.

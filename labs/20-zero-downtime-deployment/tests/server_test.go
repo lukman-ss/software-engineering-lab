@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -179,6 +180,50 @@ func TestServerReadyUnreadyTransition(t *testing.T) {
 	resp, err = http.Get("http://127.0.0.1:8087/healthz/ready")
 	if err != nil || resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 after unready, got %v err=%v", resp.StatusCode, err)
+	}
+}
+
+func TestServerMultiRequestDrain(t *testing.T) {
+	srv := server.NewServer("127.0.0.1:8088", 0)
+	srv.SetReady(true)
+
+	go func() {
+		_ = srv.Start()
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	const n = 3
+	results := make([]bool, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			resp, err := http.Get("http://127.0.0.1:8088/work?d=100ms")
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			results[idx] = string(body) == "WORK COMPLETED"
+		}(i)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Fatalf("shutdown failed: %v", err)
+	}
+
+	wg.Wait()
+
+	for i, ok := range results {
+		if !ok {
+			t.Errorf("request %d did not complete successfully during drain", i)
+		}
 	}
 }
 

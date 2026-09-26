@@ -1,9 +1,13 @@
-# Code Audit
+# 05 — Code Audit
 
-Status: NOT_APPLICABLE
+Target Lab: `labs/20-zero-downtime-deployment`
+Research Run: `research/runs/2026-09-26-zero-downtime-deployment/`
+Audit Date: 2026-09-26
 
-Reason:
-Pipeline override explicitly instructed:
-"Audit research only. Do not audit implementation/code in this stage."
+## Scope & Status
 
-No implementation code was evaluated in this phase.
+PIPELINE OVERRIDE:
+- Research audit stage only.
+- Code implementation and test executions are deferred to the engineering audit stage.
+
+Status: `NOT_APPLICABLE` (Skipped per pipeline instructions for Research Auditor).

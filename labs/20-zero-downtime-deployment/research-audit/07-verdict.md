@@ -1,51 +1,40 @@
 # Audit Verdict
 
-Target Lab: labs/20-zero-downtime-deployment
-
+Target Lab: `labs/20-zero-downtime-deployment`
 Audit Date: 2026-09-26
 
 ## Summary
 
-Major Claims Reviewed: 6
+Major Claims Reviewed: 8
 Sources Reviewed: 14
-Unsupported Claims: 1 (Properly marked unverified by researcher)
+Unsupported Claims: 0
 Contradictions: 0
-Code Issues: 0 (Not Applicable)
-Test Failures: 0 (Not Applicable)
-Research Gaps: 2
+Code Issues: NOT_APPLICABLE (Pipeline Override)
+Test Failures: NOT_APPLICABLE (Pipeline Override)
+Research Gaps: 3 (All LOW severity)
 
 ## Quality Gates
 
-Source Integrity:
-PASS
-
-Claim Support:
-PASS
-
-Internal Consistency:
-PASS
-
-Code Correctness:
-NOT_APPLICABLE
-
-Tests:
-NOT_APPLICABLE
-
-Documentation Accuracy:
-PASS
+Source Integrity: PASS
+Claim Support: PASS
+Internal Consistency: PASS
+Code Correctness: NOT_APPLICABLE
+Tests: NOT_APPLICABLE
+Documentation Accuracy: PASS
 
 ## Blocking Issues
 
-None
+None.
 
 ## Non-Blocking Issues
 
-1. The research lacks an authoritative source for Redis cluster zero-downtime upgrades, as the original URL resulted in a 404 error. The researcher appropriately marked the claim unverified.
-2. The NGINX active health check and upstream drain directives are commercial (NGINX Plus) features. The research correctly identifies this, meaning the engineering phase must use OSS-compatible methods (e.g., `nginx -s reload`).
+1. Redis upgrade URL returned 404 and is explicitly marked `NOT VERIFIED`. No core findings depend on it.
+2. NGINX OSS lacks native active health checks without commercial Plus or Lua; adequately documented in limitations.
+3. Specific drain grace period durations must be defined in the engineering phase based on demo requirements.
 
 ## Required Revisions
 
-1. (Optional) Provide the correct official Redis documentation for topology upgrades if Redis version upgrades are considered in scope for the final lab implementation.
+None for research approval. Findings are well-grounded, accurately sourced, and transparently scoped.
 
 ## Final Status
 
