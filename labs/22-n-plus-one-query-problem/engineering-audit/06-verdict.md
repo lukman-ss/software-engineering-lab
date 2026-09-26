@@ -5,12 +5,20 @@ Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed: 4 (`internal/blog/models.go`, `internal/blog/store.go`, `internal/blog/repository.go`, `cmd/demo/main.go`)
-Tests Reviewed: 1 (`internal/blog/repository_test.go`)
+Code Files Reviewed:
+- `internal/blog/models.go`
+- `internal/blog/store.go`
+- `internal/blog/repository.go`
+- `cmd/demo/main.go`
+
+Tests Reviewed:
+- `internal/blog/repository_test.go`
+
 Commands Executed:
 - `go test -v ./...`
-- `go test -race -v ./...`
-- `go run ./cmd/demo/main.go`
+- `go test -race ./...`
+- `go run ./cmd/demo`
+
 Failures: 0
 Warnings: 0
 

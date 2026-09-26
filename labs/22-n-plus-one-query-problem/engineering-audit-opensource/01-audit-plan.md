@@ -1,38 +1,27 @@
 # Engineering Audit Plan
 
 Target Lab: labs/22-n-plus-one-query-problem
-Audit Output Directory: labs/22-n-plus-one-query-problem/engineering-audit-opensource/
-
-## Implementation Files
-- `internal/blog/models.go`: Domain models (`Author`, `Post`, `AuthorWithPosts`).
-- `internal/blog/store.go`: In-memory mock data store with mutex-protected query counting.
-- `internal/blog/repository.go`: Repository with `GetAuthorsWithPostsNPlusOne` and `GetAuthorsWithPostsEager`.
-
-## Tests
-- `internal/blog/repository_test.go`: Unit tests asserting query counts and data equivalence.
-
-## Executable/Demo
-- `cmd/demo/main.go`: CLI runner printing query counts for naive vs. eager loading.
-
-## Approved Research Inputs
-- Research directory (`research/`) exists with a report. Engineering design (`engineering/01-design.md`) marks "Research Status: APPROVED".
-> Note: Per pipeline override, this audit covers implementation and tests only; research content is not audited in this stage.
-
-## Main Claims To Verify
-1. Naive fetch performs N+1 queries (expected total = 4 for N=3 authors).
-2. Eager/batched fetch performs 2 queries total regardless of N.
-3. Naive and eager results return identical data (deep equality).
-4. Empty store returns empty results without panics.
-5. Query counting is thread-safe (Store protected by mutex).
-
-## Commands To Run
-- `go build ./...`
-- `go test -v ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
-- `go vet ./...`
-
-## Primary Risks
-- The in-memory mock may not reflect real DB I/O (by-design limitation; documented).
-- Query counting is the sole correctness proxy; tests must assert exact counts.
-- Concurrency safety must be verified since Store is accessed via methods guarded by a mutex.
+Implementation Files:
+- internal/blog/models.go
+- internal/blog/store.go
+- internal/blog/repository.go
+- cmd/demo/main.go
+Tests:
+- internal/blog/repository_test.go
+Executable/Demo:
+- cmd/demo/main.go
+Approved Research Inputs:
+- research/ (not audited in this stage)
+Main Claims To Verify:
+1. The N+1 problem is demonstrated correctly: 1 query for authors + N queries for posts.
+2. The eager loading solution reduces queries to 2: 1 query for authors + 1 batched query for posts.
+3. The results of both methods are equivalent (same data returned).
+4. The store correctly tracks query counts with thread safety (using mutex).
+Commands To Run:
+- go test ./...
+- go test -race ./...
+- go run ./cmd/demo
+Primary Risks:
+- The eager loading implementation might not actually batch correctly (if GetPostsByAuthorIDs is not used or if it still does per-author queries).
+- The test might not cover edge cases (zero authors, duplicate author IDs, etc.).
+- Concurrency safety: ensure mutex is used correctly in all store methods.

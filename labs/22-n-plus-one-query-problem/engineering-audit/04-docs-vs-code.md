@@ -1,44 +1,20 @@
-# Documentation vs Code Audit
+# Docs vs Code Audit
 
 Target Lab: `labs/22-n-plus-one-query-problem`
 
-## Structure & File Map Comparison
+## Document Comparison
 
-| Documented File | Actual File | Exists | Description Matches |
-|---|---|---|---|
-| `cmd/demo/main.go` | `cmd/demo/main.go` | YES | YES |
-| `internal/blog/models.go` | `internal/blog/models.go` | YES | YES |
-| `internal/blog/store.go` | `internal/blog/store.go` | YES | YES |
-| `internal/blog/repository.go` | `internal/blog/repository.go` | YES | YES |
-| `internal/blog/repository_test.go` | `internal/blog/repository_test.go` | YES | YES |
+1. **README vs Code**:
+   - `README.md` file paths (`cmd/demo/main.go`, `internal/blog/models.go`, `internal/blog/store.go`, `internal/blog/repository.go`, `internal/blog/repository_test.go`) match actual layout exactly.
+   - Run instructions (`go run ./cmd/demo`, `go test -v ./...`, `go test -race ./...`) execute as documented and produce the described results.
 
-## Execution Commands Comparison
+2. **Engineering Notes vs Code**:
+   - `engineering/01-design.md` specifies an in-memory Store with query counter, Repository with `GetAuthorsWithPostsNPlusOne` and `GetAuthorsWithPostsEager`, and CLI demo in `cmd/demo/main.go`. Implementation matches design 1:1.
+   - `engineering/03-execution-result.md` matches the live test and demo outputs.
 
-- `README.md`:
-  - `go run ./cmd/demo` -> Matches command and runs cleanly.
-  - `go test -v ./...` -> Matches command and tests pass.
-  - `go test -race ./...` -> Matches command and passes race detection.
+3. **Research Claims vs Implementation**:
+   - Research defines the N+1 problem and batching / eager loading mitigation. Implementation models this accurately with simulated round-trip counters.
 
-## Demo Output Verification
+## Mismatch Findings
 
-README / Engineering Notes claim:
-- Section 1: Loaded 3 authors, 4 total queries (1 author + 3 post queries).
-- Section 2: Loaded 3 authors, 2 total queries (1 author + 1 batched post query).
-
-Actual Demo Execution (`go run ./cmd/demo/main.go`):
-```text
---- 1. Simulating N+1 Query Problem ---
-Loaded 3 authors with their posts.
-Total queries executed: 4 (1 query for authors + 3 queries for posts)
-
---- 2. Simulating Eager Loading (Batching) ---
-Loaded 3 authors with their posts.
-Total queries executed: 2 (1 query for authors + 1 batched query for posts)
-```
-
-Discrepancy: None. Exact match.
-
-## Findings
-- `DOC_CODE_MISMATCH`: None
-- `TEST_CLAIM_MISMATCH`: None
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None
+None found. No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH`.

@@ -11,21 +11,21 @@ Executable/Demo:
 - `cmd/demo/main.go`
 Approved Research Inputs:
 - `research/05-report.md`
-- `research-audit/07-verdict.md` (APPROVED)
 - `engineering/01-design.md`
 - `engineering/02-implementation-notes.md`
 - `engineering/03-execution-result.md`
 Main Claims To Verify:
-1. Lazy/unbatched relationship fetching executes N+1 database queries (1 query for parent authors + N queries for children posts).
-2. Eager loading / batching query mitigation reduces total queries down to 2 (1 query for parent authors + 1 query for all associated posts).
-3. Eager loaded output is functionally equivalent to the lazy loaded output.
-4. Concurrency safety in query counting mock store via proper mutex usage.
-5. Zero dependency, self-contained implementation with real execution match.
+1. `GetAuthorsWithPostsNPlusOne` executes 1 initial query + N queries for posts (1 + 3 = 4 queries for 3 authors).
+2. `GetAuthorsWithPostsEager` executes 1 initial query + 1 batched query for posts (total 2 queries).
+3. Eager loading produces functionally equivalent results to N+1 loading.
+4. Empty dataset handling produces empty slice results without errors or miscounts.
+5. In-memory mock store accurately increments query counts under concurrent access (`sync.Mutex`).
+6. Demo runs without error and prints observed query count reduction.
 Commands To Run:
 - `go test -v ./...`
 - `go test -race ./...`
-- `go run ./cmd/demo/main.go`
+- `go run ./cmd/demo`
 Primary Risks:
-- Thread-safety / race conditions on mock query counting store.
-- Slice mutation / nil handling on empty store.
-- Discrepancy between documentation / demo output and actual execution results.
+- Lack of negative or non-existent key edge case tests.
+- Discrepancy between documentation descriptions and implemented code.
+- Query counter race conditions if accessed concurrently.
