@@ -12,7 +12,7 @@ Low: 0
 
 ## Resolution
 
-Resolved: 0 (No open issues required code revision)
+Resolved: 0
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None identified.
+None.
 
 ## Re-Audit Status
 
