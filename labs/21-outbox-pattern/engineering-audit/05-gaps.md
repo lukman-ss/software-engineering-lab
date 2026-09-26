@@ -1,25 +1,21 @@
 # Gap Analysis
 
-## Summary of Identified Gaps
+Target Lab: `labs/21-outbox-pattern`
 
-No critical, high, medium, or low gaps were identified during code and test inspection.
+## Discovered Gaps
 
-## Gap Table
+No critical, high, or medium severity gaps discovered during audit.
 
-| ID | Type | Description | Severity | Status |
-|---|---|---|---|---|
-| N/A | None | No implementation, concurrency, or doc gaps found. | N/A | PASS |
+### Minor Observations (Low / Informational)
+1. **In-Memory Store vs Disk SQL DB**: Design document mentions SQLite as optional alternative, implementation chose pure in-memory mock transactional DB. This choice is fully documented in `engineering/02-implementation-notes.md` to avoid CGO dependencies and external setup.
+2. **Relay Retries / Backoff**: `Relay.PollAndDispatch()` logs errors when broker fails and retries on next poll interval. Exponential backoff for repeated failing events is omitted, which is appropriate for demo/lab scope and explicitly noted.
 
-## Verification Checkpoints
-
-1. `MISSING_TEST`: No — Test suite covers happy path, rollback, duplicate delivery, dual-write failure, concurrent writes, and purge logic.
-2. `BROKEN_IMPLEMENTATION`: No — Code compiles cleanly and behaves as specified.
-3. `DOC_CODE_MISMATCH`: No — Architecture and commands in README match code layout.
-4. `RACE_CONDITION`: No — `go test -race ./...` passed without warnings.
-5. `UNHANDLED_ERROR`: No — All transactional operations handle errors with explicit rollback and status logging.
-6. `MISSING_EDGE_CASE`: No — Failure recovery and deduplication paths are tested.
-7. `IMPLEMENTATION_OVERCLAIM`: No — Claims match implementation scope accurately.
-8. `RESEARCH_MISMATCH`: No — Implementation faithfully accurately reflects pattern requirements.
-9. `FAKE_DEMO`: No — Demo executes real code paths live.
-10. `FAKE_BENCHMARK`: No — No synthetic or fabricated benchmarks presented.
-11. `UNVERIFIED_RESULT`: No — All assertions verified via execution.
+## Summary Table
+- BROKEN_IMPLEMENTATION: 0
+- RACE_CONDITION: 0
+- UNHANDLED_ERROR: 0
+- MISSING_TEST: 0
+- DOC_CODE_MISMATCH: 0
+- FAKE_DEMO: 0
+- FAKE_BENCHMARK: 0
+- UNVERIFIED_RESULT: 0

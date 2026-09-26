@@ -1,81 +1,63 @@
 # Test Audit
 
-## Test 1: TestTransactionalOutbox_HappyPath (tests/outbox_test.go:11-59)
-Coverage: Happy path - atomic write, relay dispatch, broker publish, outbox status update, consumer processing.
-- Creates order via transactional outbox
-- Verifies order persisted in DB
-- Waits for relay to dispatch
-- Verifies broker received exactly 1 message with correct EventType
-- Verifies outbox message marked as Processed
-- Verifies consumer processed the message
+## Test Coverage Summary
 
-Assessment: PASS - comprehensive happy path test. Covers the full pipeline from atomic write to end-to-end dispatch and consumption.
+Tests: tests/outbox_test.go
 
-## Test 2: TestTransactionalOutbox_Rollback (tests/outbox_test.go:61-90)
-Coverage: Rollback/failure path.
-- Begins a transaction
-- Stages an order and outbox message
-- Rolls back the transaction
-- Verifies neither order nor outbox was persisted
-- Verifies no messages were sent to broker
+## Test 1: TestTransactionalOutbox_HappyPath
 
-Assessment: PASS - verifies rollback discards all staged mutations. Proves atomicity.
+Location: tests/outbox_test.go:11-59
+Coverage: happy path, atomic persistence, relay dispatch, consumer processing
+Finding: PASS
+Notes: Verifies order persisted in DB, message published to broker (count=1), outbox marked PROCESSED, consumer receives (count=1). Covers core claim.
 
-## Test 3: TestTransactionalOutbox_Idempotency_DuplicateDelivery (tests/outbox_test.go:92-115)
-Coverage: Idempotency / duplicate delivery edge case.
-- Sends the same message twice to consumer
-- First call returns true (processed)
-- Second call returns false (duplicate rejected)
-- Verifies consumer received count is exactly 1
+## Test 2: TestTransactionalOutbox_Rollback
 
-Assessment: PASS - proves consumer idempotency under duplicate delivery (simulating at-least-once delivery).
+Location: tests/outbox_test.go:61-90
+Coverage: rollback path
+Finding: PASS
+Notes: Verifies order and outbox not persisted after rollback. Confirms zero messages sent to broker. Covers rollback success criteria.
 
-## Test 4: TestDualWriteProblem_Failure (tests/outbox_test.go:117-139)
-Coverage: Negative/failure path - dual-write inconsistency.
-- Simulates broker failure via SetFailNext(true)
-- Calls naive dual-write
-- Verifies error returned
-- Verifies order IS in DB
-- Verifies NO message was published to broker
-- Asserts system is in inconsistent state
+## Test 2 Assessment:
 
-Assessment: PASS - proves the dual-write flaw and resulting inconsistency.
+## Coverage Gaps:
 
-## Test 5: TestTransactionalOutbox_ConcurrentWrites (tests/outbox_test.go:141-170)
-Coverage: Concurrency / race detector.
-- 10 workers each writing 10 orders (100 total writes)
-- Same order ID reused ("o-concurrent-1") across all goroutines
-- Runs under race detector (go test -race)
-- NO assertions after wg.Wait() - test only verifies no race/panic
+### Gap 1: No Concurrency Correctness Assertion
 
-Assessment: WARNING - no assertions verify correctness of concurrent writes. Reuses the same order ID (overwrite semantics), does not test concurrent writes of distinct orders. Does not verify data integrity, no loss, or count of published messages. Passes race detector but provides no behavioral proof.
+Location: tests/outbox_test.go:141-170
+Coverage: TestTransactionalOutbox_ConcurrentWrites runs 10 workers x 10 writes
+Finding: WARNING
+Notes: Test has no assertions on final state. Only checks race detector. All workers write same orderID "o-concurrent-1", so final DB state has only 1 order, not 100. Does not prove concurrent writes produce correct aggregate state. Missing assertion: broker.GetPublished() count, db.GetOrder consistency.
 
-## Test 6: TestTransactionalOutbox_PurgeProcessed (tests/outbox_test.go:172-193)
-Coverage: Purge / cleanup edge case.
-- Stages pending and processed messages in a transaction
-- Commits
-- Calls PurgeProcessedOutbox
-- Verifies exactly 1 record purged (the processed one)
-- Verifies pending message remains, processed message is gone
+### Gap 2: No Relay Retry/Error Recovery Test
 
-Assessment: PASS - covers cleanup/purge behavior.
+Location: tests/outbox_test.go (missing)
+Finding: FAIL
+Severity: MEDIUM
+Notes: No test where broker fails during relay dispatch causing PENDING message to retry. Design claims at-least-once delivery with idempotent consumer handling retries. Test coverage missing: broker.SetFailNext(true) before relay.PollAndDispatch(), verify message stays PENDING, then succeeds, verify consumer dedup.
 
-## Summary
-Tests executed: 6
-Tests passing: 6
-Tests failing: 0
-Race detector: PASS (no races detected)
+### Gap 3: No Outbox Cleanup Worker Test in Concurrent Context
 
-Test categories covered:
-- Happy path: YES
-- Failure path: YES (dual-write)
-- Edge cases: YES (idempotency, purge, rollback)
-- Transitions: YES (pending -> processed)
-- Recovery: NO (no test for broker failure during relay retry)
-- Rollback: YES
-- Concurrency: PARTIAL (race-free but no assertions)
-- Negative cases: YES (dual-write failure, duplicate rejection)
+Location: tests/outbox_test.go:172-193
+Coverage: TestTransactionalOutbox_PurgeProcessed
+Finding: PASS
+Notes: Verifies purge removes PROCESSED only. Does not test purge after relay processing flow.
 
-Missing coverage:
-- Relay retry after broker failure (broker fails on first poll, succeeds on second)
-- Concurrent relay operation with broker failures
+### Gap 4: No Edge Case for Outbox Message Not Found
+
+Location: internal/outbox/db.go:59-69
+Coverage: MarkOutboxProcessed returns "message not found" error
+Finding: FAIL
+Severity: MEDIUM
+Notes: No test for MarkOutboxProcessed on non-existent ID. Error path unverified.
+
+### Gap 5: No Duplicate ID Detection on Commit
+
+Location: internal/outbox/db.go:112-129
+Coverage: concurrent writes with same ID (last writer wins)
+Finding: FAIL
+Severity: LOW
+Notes: No test asserting behavior when duplicate order IDs committed concurrently. Could silently overwrite.
+
+### Gap 6: Test Assertion Completeness
+Notes: TestTransactionalOutbox_ConcurrentWrites is effectively a smoke test that only validates race-freedom. No behavioral assertions on outcome. This is a weak concurrency test.

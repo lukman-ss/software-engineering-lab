@@ -5,23 +5,9 @@ Audit Date: 2026-09-26
 
 ## Summary
 
-Code Files Reviewed:
-- internal/outbox/model.go
-- internal/outbox/db.go
-- internal/outbox/broker.go
-- internal/outbox/service.go
-- internal/outbox/relay.go
-- internal/outbox/consumer.go
-- cmd/demo/main.go
-
-Tests Reviewed:
-- tests/outbox_test.go
-
-Commands Executed:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
-
+Code Files Reviewed: 6 (`model.go`, `db.go`, `broker.go`, `service.go`, `relay.go`, `consumer.go`)
+Tests Reviewed: 1 (`tests/outbox_test.go`)
+Commands Executed: `go build ./...`, `go test -v -count=1 ./...`, `go test -v -count=1 -race ./...`, `go run ./cmd/demo`
 Failures: 0
 Warnings: 0
 

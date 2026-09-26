@@ -1,25 +1,25 @@
 # Docs vs Code Audit
 
-## Comparisons
+Target Lab: `labs/21-outbox-pattern`
 
-### 1. Architecture Claims in README.md vs Code
-- **README Claim**: `internal/outbox/db.go` provides in-memory transactional database simulating `BeginTx`, `Commit`, and `Rollback` across `orders` and `outbox` records.
-  - **Code Reality**: Exact match (`db.go`).
-- **README Claim**: `internal/outbox/broker.go` provides thread-safe mock message broker simulating publish failures and event reception.
-  - **Code Reality**: Exact match (`broker.go` with mutex protection and `failNext` flag).
-- **README Claim**: `internal/outbox/service.go` provides business logic comparing naive dual-write vs atomic outbox writes.
-  - **Code Reality**: Exact match (`service.go` with `CreateOrderWithOutbox` and `CreateOrderDualWriteNaive`).
-- **README Claim**: `internal/outbox/relay.go` provides asynchronous polling worker querying pending outbox records and dispatching them to the broker.
-  - **Code Reality**: Exact match (`relay.go` with ticker-based polling).
-- **README Claim**: `internal/outbox/consumer.go` provides subscriber enforcing idempotency through event ID tracking.
-  - **Code Reality**: Exact match (`consumer.go` with set of processed event IDs).
+## Documents Reviewed
+1. `README.md`
+2. `engineering/01-design.md`
+3. `engineering/02-implementation-notes.md`
+4. `engineering/03-execution-result.md`
 
-### 2. Commands Verification
-- `go test ./...` in README: Verified and passes.
-- `go test -race ./...` in README: Verified and passes cleanly with no race conditions detected.
-- `go run ./cmd/demo` in README: Verified and runs successfully demonstrating dual-write problem, outbox resolution, and duplicate suppression.
+## Comparison Matrix
 
-## Mismatch Findings
-- `DOC_CODE_MISMATCH`: None
-- `TEST_CLAIM_MISMATCH`: None
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None
+| Component / Claim | README & Design Claim | Actual Implementation | Status |
+|---|---|---|---|
+| Architecture & File Structure | `db.go`, `broker.go`, `service.go`, `relay.go`, `consumer.go` | Exactly matches internal package structure | MATCH |
+| Database Engine | `01-design.md` mentions SQLite DB or mock engine | Implemented as zero-dependency in-memory transactional DB (`internal/outbox/db.go`), documented in `02-implementation-notes.md` | MATCH |
+| Dual-Write Failure Demonstration | Demonstrates state inconsistency on broker failure | Implemented in `service.CreateOrderDualWriteNaive` and demo Scenario 1 | MATCH |
+| Atomic Outbox Persistence | Persists order and outbox record atomically in single transaction | Implemented in `service.CreateOrderWithOutbox` and `Tx.Commit` | MATCH |
+| Polling Relay | Background polling worker with ticker interval | Implemented in `relay.Start` / `PollAndDispatch` | MATCH |
+| Consumer Deduplication | Consumer tracking processed event IDs | Implemented in `consumer.Handle` with internal map | MATCH |
+| Outbox Purge | Purges processed outbox records | Implemented in `db.PurgeProcessedOutbox` | MATCH |
+| Demo Execution | `go run ./cmd/demo` executes scenarios 1, 2, and 3 | Verified real terminal execution matches `03-execution-result.md` | MATCH |
+
+## Identified Discrepancies
+None. Design notes accurately capture the in-memory transactional model choice, limitations (no CDC / log tailing), and trade-offs.
