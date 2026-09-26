@@ -1,7 +1,7 @@
 # Engineering Design
 
 Target Lab: labs/13-backward-compatibility
-Research Status: APPROVED_WITH_WARNINGS
+Research Status: APPROVED
 
 ## Concept To Prove
 Prove the **Expand -> Migrate -> Contract (Parallel Change)** pattern for database schema and API evolution:

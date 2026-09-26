@@ -65,12 +65,12 @@ Legacy read attempt post-contract: legacy field has been retired (contracted) (L
 Modern client read post-contract: Alice with 1 phones.
 
 --- [METRICS & OBSERVABILITY SNAPSHOT] ---
-- new_reads: 2
-- dual_writes: 1
-- dual_write_errors: 0
 - backfilled: 2
 - drift_detected: 0
+- dual_write_errors: 0
+- dual_writes: 1
 - legacy_reads: 3
+- new_reads: 2
 
 DEMO COMPLETED SUCCESSFULLY.
 ```

@@ -1,10 +1,7 @@
-# 01 - Audit Plan
+# Audit Plan
 
 ## Target Lab
-`labs/13-backward-compatibility`
-
-## Scope
-Research audit only (Implementation and code execution skipped per pipeline override).
+`labs/13-backward-compatibility` (Research Phase)
 
 ## Files Reviewed
 - `research/01-research-plan.md`
@@ -20,26 +17,24 @@ Research audit only (Implementation and code execution skipped per pipeline over
 - `research/11-final-research.md`
 
 ## Claims To Verify
-1. Expand-Migrate-Contract (Parallel Change) guarantees zero-downtime evolution by separating additive expansion from legacy contraction.
-2. Stripe's API versioning maintains backward compatibility using a backwards-walking transformation pipeline rather than separate codebases.
-3. Zero-downtime database schema migrations require non-destructive additive changes (e.g. nullable columns or safe defaults) and non-blocking index creation.
-4. During rolling deployments, Version N and Version N+1 run simultaneously, requiring the shared database schema to be compatible with both versions.
-5. Dual-writing introduces latency overhead, transactional complexity, and data drift risk without reconciliation or atomicity.
-6. Large-scale data backfill requires chunked batch processing and throttling to avoid table locks and replication lag.
-7. Feature flags allow decoupling code deployment from feature release, enabling safe canary rollouts and instant rollback.
-8. Retiring and contracting legacy interfaces requires observability indicating zero legacy access, with quiet periods (e.g. 30 days) treated as operational heuristics.
+- Definition of backward vs forward compatibility.
+- Mechanics of Parallel Change (Expand, Migrate, Contract).
+- Zero-downtime database migration operations and locking rules.
+- Dual-write failure modes and consistency trade-offs.
+- Multi-deployment safety sequences and rollback rules.
+- API deprecation headers and lifecycle standards.
 
 ## Code To Execute
-- None. Implementation/code audit excluded per pipeline override.
+- Skipped per PIPELINE OVERRIDE: Audit research only. Do not audit implementation/code in this stage.
 
 ## Primary Risks
-- Overgeneralizing specific vendor/framework practices (e.g., Stripe API architecture or Prisma database patterns) to all distributed architectures.
-- Arbitrary numeric guidelines (such as the 30-day legacy retirement rule) presented as proven engineering laws.
-- Unverified claims regarding zero-downtime DDL constraints across different database engines and versions.
+- Generalizing PostgreSQL-specific database behaviors (e.g. `CREATE INDEX CONCURRENTLY`, non-rewriting constant defaults) to universal relational principles.
+- Lack of authoritative citations for heuristic thresholds (e.g. 30-day deprecation observation window, batch sizes 1000-5000).
+- Conflating theoretical patterns (Outbox/CDC) with verified real-world operational guidance.
 
 ## Audit Strategy
-1. Verify source URLs, authorship, publication validity, and relevance.
-2. Evaluate claim support against primary sources (Martin Fowler / Danilo Sato, Stripe Engineering, Prisma Data Guide).
-3. Check internal consistency across research documents.
-4. Identify missing edge cases, unverified claims, and scope limitations.
-5. Produce evidence-based verdict.
+1. Audit all 10 sources in `02-sources.md` for reachability, relevance, and tier appropriateness.
+2. Evaluate 15 core claims extracted across research documents.
+3. Check for internal contradictions between documents.
+4. Record research gaps and limitations.
+5. Provide evidence-backed verdict.

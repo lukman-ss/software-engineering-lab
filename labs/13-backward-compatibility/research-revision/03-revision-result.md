@@ -1,18 +1,27 @@
 # Revision Result
 
 Target Lab: labs/13-backward-compatibility
-Previous Audit Status: APPROVED_WITH_WARNINGS
+Previous Audit Status: NEEDS_REVISION (research-audit/07-verdict.md)
 
 ## Issues
 
-Critical: 0
-High: 0
-Medium: 1 (Gap 1: 30-day heuristic labeled as universal standard)
-Low: 0
+Critical:
+0
+
+High:
+1 (Evidence 7 source mismatch — blocking)
+
+Medium:
+1 (Evidence 5 PostgreSQL overgeneralization — Gap 2)
+1 (Evidence 6 dual read partial support)
+1 (Evidence 8 backfill PARTIAL support)
+
+Low:
+1 (Evidence 3 30-day heuristic — already handled in prior revision)
 
 ## Resolution
 
-Resolved: 1
+Resolved: 4
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,11 +34,9 @@ Demo: N/A
 
 ## Remaining Risks
 
-- None identified beyond audit scope
-- All heuristic numbers (batch sizes, observation periods) now labeled as unverified industry practices where they appear
-- Source inventory matches reviewed sources (Sources 1-3)
-- All claims in research properly supported by cited sources per audit claim-audit.md
+- PostgreSQL-specific migration optimizations not universally portable across database engines
+- Evidence 6, 8 remain inferential with LOW confidence; could be strengthened with explicit examples in implementation phase
 
 ## Ready For Re-Audit
 
-READY_FOR_REAUDIT
+READY_FOR_RESEARCH_REAUDIT

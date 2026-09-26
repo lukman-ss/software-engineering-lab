@@ -1,57 +1,41 @@
 # Code Audit
 
-Target Lab: labs/13-backward-compatibility
-
 ## Finding 1
-
-Location: `internal/compat/store.go:16-86`
-Claimed Behavior: Thread-safe in-memory storage supporting legacy, dual-write, and modern mutations.
-Observed Implementation: Uses `sync.RWMutex` protecting `users` and `userPhones` maps. `CreateDual` synchronously populates both `users.phone` and `userPhones` entry.
+Location: `internal/compat/store.go` - `CreateDual()` and `CreateModern()`
+Claimed Behavior: Atomic dual-writes populate both `users` and `user_phones` schemas.
+Observed Implementation: The `MemoryStore` utilizes a single `sync.RWMutex` to guard mutation across two internal maps (`users` and `user_phones`), accurately representing a locked relational transaction. 
 Assessment: PASS
 Severity: LOW
-Notes: Properly documented with `ponytail: in-memory mock storage; replace with database/sql for persistent store.` Meets lab requirements without introducing external database dependencies.
+Notes: `ponytail` comment appropriately calls out `sync.RWMutex` simulating relational locking, with an upgrade path to `database/sql`.
 
 ## Finding 2
-
-Location: `internal/compat/backfill.go:36-85`
-Claimed Behavior: Resumable and idempotent batch backfill worker.
-Observed Implementation: Checkpoint tracks `LastProcessedID` protected by mutex. Fetches sorted IDs strictly greater than `lastProcessedID`. In `RunBatch`, calls `SavePhoneEntry`, which checks for duplicate numbers before insertion, guaranteeing idempotency.
+Location: `internal/compat/backfill.go` - `RunBatch()`
+Claimed Behavior: Backfill is resumable and idempotent.
+Observed Implementation: Uses a `BackfillCheckpoint` struct (`LastProcessedID`). Iterates via `GetUserIDs` which correctly sorts IDs. Idempotency is enforced by `b.store.SavePhoneEntry` checking if a number already exists before insertion.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles context cancellation via `ctx.Done()`.
+Notes: Clear checkpoint handling. Context cancellation correctly escapes the batch loop if triggered. 
 
 ## Finding 3
-
-Location: `internal/compat/service.go:98-148`
-Claimed Behavior: Fallback read (dual-read) with lazy backfill when reading unmigrated records.
-Observed Implementation: In `ReadFallback` mode, if `len(phones) == 0` and legacy `u.Phone != nil`, it reads `u.Phone` and triggers lazy persistence to `userPhones` via `s.store.SavePhoneEntry(id, phoneVal, true)`.
+Location: `internal/compat/service.go` - `GetUser()`
+Claimed Behavior: Fallback read prevents data starvation for un-backfilled users.
+Observed Implementation: `ReadMode == ReadFallback` checks `len(phones)`. If 0, it falls back to `u.Phone`, and proactively calls `SavePhoneEntry` to lazily backfill.
 Assessment: PASS
 Severity: LOW
-Notes: Prevents data starvation during the migration window before batch backfill runs.
+Notes: Effective lazy-backfill implementation handling the time-gap between deploy and batch backfill completion.
 
 ## Finding 4
-
-Location: `internal/compat/service.go:229-245`
-Claimed Behavior: Contract phase guarded against premature execution when legacy traffic is still active.
-Observed Implementation: `ApplyContract(force bool)` checks `s.obs.LegacyReadHits.Load() > 0` when `force == false`, returning `ErrContractViolation`. When satisfied or forced, switches write mode to `WriteNewOnly`, read mode to `ReadNewOnly`, sets `contractApplied` flag, and invokes `s.store.ApplyContractDropLegacyColumn()`.
+Location: `internal/compat/service.go` - `ApplyContract()`
+Claimed Behavior: Contract phase drops legacy schema safely after verifying zero legacy traffic.
+Observed Implementation: `s.obs.LegacyReadHits.Load() > 0` returns an error (`ErrContractViolation`), blocking the operation unless forced. If conditions are met, it switches modes to `NewOnly` and drops the legacy column in `MemoryStore`.
 Assessment: PASS
 Severity: LOW
-Notes: Reliably prevents premature column retirement.
+Notes: Accurate metric-driven guardrail against premature contract execution.
 
 ## Finding 5
-
-Location: `internal/compat/handler.go:20-41`
-Claimed Behavior: HTTP API handler returns RFC 8594 deprecation and sunset headers for legacy endpoints.
-Observed Implementation: `GetUserV1` sets `Deprecation: true` and `Sunset: Mon, 31 Dec 2026 23:59:59 GMT`. Returns `410 Gone` once the contract has dropped the legacy endpoint.
+Location: `internal/compat/handler.go` - `GetUserV1()`
+Claimed Behavior: Observability and Deprecation integration using standard headers.
+Observed Implementation: Returns `Deprecation: true` and `Sunset` headers. Post-contract returns `410 Gone`.
 Assessment: PASS
 Severity: LOW
-Notes: Standard-compliant header emission verified.
-
-## Finding 6
-
-Location: `internal/compat/metrics.go:7-29`
-Claimed Behavior: Thread-safe observability counters tracking traffic and operational events.
-Observed Implementation: Uses `sync/atomic.Int64` for all metric counters (`LegacyReadHits`, `NewReadHits`, `DualWriteCount`, `DualWriteErrors`, `BackfillProcessed`, `DriftDetected`).
-Assessment: PASS
-Severity: LOW
-Notes: No lock contention on metric updates. Concurrency safe.
+Notes: Adheres strictly to RFC 8594 standard.

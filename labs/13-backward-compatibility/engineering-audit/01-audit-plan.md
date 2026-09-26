@@ -21,31 +21,31 @@ Executable/Demo:
 
 Approved Research Inputs:
 - `research/03-core-concepts.md`
-- `research/04-database-migration.md`
-- `research/05-api-compatibility.md`
 - `research/06-expand-migrate-contract.md`
 - `research/07-deployment-and-rollback.md`
 - `research/08-failure-modes.md`
-- `research/11-final-research.md`
-- `research-audit/07-verdict.md`
+- `research-audit/07-verdict.md` (APPROVED)
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. Expand-Migrate-Contract lifecycle executes without breaking legacy V1 consumers or starving modern V2 consumers.
-2. Dual-write writes atomically to both legacy and modern representations.
-3. Batch backfill worker is resumable, idempotent, and non-duplicative.
-4. Fallback read (dual-read) hydrates missing records lazily without read failures.
-5. Observability metrics accurately count legacy reads, modern reads, dual writes, backfill progress, and drift detection.
-6. Safe rollback is verified during dual-write, and unsafe rollback consequences are proven when dual-write is stopped prematurely.
-7. Contract phase enforces zero legacy traffic guard before dropping legacy columns.
-8. Concurrent execution of reads, writes, and backfills is data-race free under `go test -race`.
+1. Expand-Migrate-Contract pattern correctly evolutes 1:1 schema (`users.phone`) to 1:N schema (`user_phones`) without breaking legacy V1 consumers.
+2. Dual-write synchronously updates legacy and modern models under feature flag control.
+3. Batch backfill worker is resumable via checkpoints and idempotent across repeated invocations.
+4. Fallback reading (dual-read) handles reading un-backfilled legacy records in modern mode with lazy backfill.
+5. Safe rollback behaves correctly: rolling back during dual-write incurs no data loss for legacy consumers, while stopping dual-write prematurely causes legacy data loss.
+6. HTTP handlers return RFC 8594 standard `Deprecation` and `Sunset` headers for legacy endpoints, and return 410 Gone post-contract.
+7. Concurrency under `go test -race` demonstrates thread safety across writers, readers, backfill worker, and drift reconciliation.
+8. Demo binary executes deterministically with real output matching documented output.
 
 Commands To Run:
-- `cd labs/13-backward-compatibility && go test -count=1 ./...`
-- `cd labs/13-backward-compatibility && go test -count=1 -race ./...`
-- `cd labs/13-backward-compatibility && go run ./cmd/demo`
+```bash
+go test -v ./...
+go test -race -count=1 ./...
+go run ./cmd/demo
+```
 
 Primary Risks:
-- Thread safety in shared in-memory state under high concurrency.
-- Incomplete fallback lazy hydration edge cases.
-- Discrepancy between SQL schema in `schema.sql` and in-memory store simulation.
-- Overclaiming production database capabilities (e.g. distributed locking or ACID outbox) in an in-memory simulation.
+- Race conditions or deadlocks between concurrent writes, fallback read mutations, and batch backfill cursor tracking.
+- Desynchronization/drift between legacy `users.phone` and modern `user_phones`.
+- Premature drop of legacy column before traffic reaches zero or before consumers migrate.

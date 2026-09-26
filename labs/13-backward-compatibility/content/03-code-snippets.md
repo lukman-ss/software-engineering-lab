@@ -1,449 +1,344 @@
-## Snippet 1 — Domain Models (Legacy & Modern DTOs)
+## Snippet 1 — Data Models and DTOs
 
-**Source File:** `internal/compat/model.go:1-39`
-
-**Purpose:** Define structured types for legacy (1:1) and modern (1:N) phone representations. The `UserResponse` uses additive JSON tags to serve both client versions from a single endpoint.
+Source File: internal/compat/model.go
+Purpose: Definisikan struktur data untuk merepresentasikan schema legacy dan modern, beserta DTO untuk konsumen API V1 dan V2.
 
 ```go
-type PhoneEntry struct {
-	ID        int    `json:"id"`
-	UserID    int    `json:"user_id"`
-	Number    string `json:"number"`
-	IsPrimary bool   `json:"is_primary"`
-}
-
 type User struct {
-	ID        int
-	Name      string
-	Phone     *string // Legacy field; nil once contracted
-	CreatedAt time.Time
+    ID        int
+    Name      string
+    Phone     *string // Legacy field; nil once contracted
+    CreatedAt time.Time
 }
 
 // UserResponse is an enriched additive response supporting both legacy and modern clients
 type UserResponse struct {
-	ID     int          `json:"id"`
-	Name   string       `json:"name"`
-	Phone  string       `json:"phone,omitempty"` // Legacy field maintained for v1 consumers
-	Phones []PhoneEntry `json:"phones"`          // New field for v2 consumers
+    ID     int          `json:"id"`
+    Name   string       `json:"name"`
+    Phone  string       `json:"phone,omitempty"` // Legacy field maintained for v1 consumers
+    Phones []PhoneEntry `json:"phones"`          // New field for v2 consumers
 }
 
 // LegacyConsumerDTO models an un-upgraded client expecting only string phone
 type LegacyConsumerDTO struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
+    ID    int    `json:"id"`
+    Name  string `json:"name"`
+    Phone string `json:"phone"`
 }
 
 // ModernConsumerDTO models an upgraded client expecting phones array
 type ModernConsumerDTO struct {
-	ID     int          `json:"id"`
-	Name   string       `json:"name"`
-	Phones []PhoneEntry `json:"phones"`
+    ID     int          `json:"id"`
+    Name   string       `json:"name"`
+    Phones []PhoneEntry `json:"phones"`
 }
 ```
 
-**Explanation:** The `omitempty` on `Phone` ensures legacy field is omitted when empty (post-contract), while `Phones` array is always present. This single payload shape satisfies both client generations without versioned endpoints for reads.
+Explanation:
+- Struct `User` menggunakan pointer `*string` untuk field `Phone` sehingga dapat di-set ke `nil` setelah kontrak diterapkan (simulasi drop kolom).
+- Struct `UserResponse` memberikan response yang "di-enrich" dengan baik field lama (`phone`) maupun field baru (`phones`) untuk mendukung kompatibilitas mundur dan maju dalam satu payload.
+- DTO terpisah (`LegacyConsumerDTO` dan `ModernConsumerDTO`) menunjukkan kontrak eksplisit yang diharapkan oleh masing-masing versi klien, mempermudah validasi pada level marshalling/unmarshalling JSON.
 
----
+## Snippet 2 — Dual-Write Storage Implementation
 
-## Snippet 2 — In-Memory Store with Dual-Write and Contract Drop
-
-**Source File:** `internal/compat/store.go:53-85, 204-212`
-
-**Purpose:** Simulate relational tables with atomic dual-write during Expand/Migrate and legacy column drop during Contract.
+Source File: internal/compat/store.go
+Purpose: Tampilkan mekanisme dual-write atomic yang menulis ke kedua tabel legacy dan modern dalam satu kritial section.
 
 ```go
 func (s *MemoryStore) CreateDual(name, phone string) (*User, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+    s.mu.Lock()
+    defer s.mu.Unlock()
 
-	s.userSeq++
-	id := s.userSeq
+    s.userSeq++
+    id := s.userSeq
 
-	var phonePtr *string
-	if !s.legacyDropped {
-		p := phone
-		phonePtr = &p
-	}
+    var phonePtr *string
+    if !s.legacyDropped {
+        p := phone
+        phonePtr = &p
+    }
 
-	u := &User{
-		ID:        id,
-		Name:      name,
-		Phone:     phonePtr,
-		CreatedAt: time.Now(),
-	}
-	s.users[id] = u
+    u := &User{
+        ID:        id,
+        Name:      name,
+        Phone:     phonePtr,
+        CreatedAt: time.Now(),
+    }
+    s.users[id] = u
 
-	// Write to modern user_phones table
-	s.phoneSeq++
-	entry := PhoneEntry{
-		ID:        s.phoneSeq,
-		UserID:    id,
-		Number:    phone,
-		IsPrimary: true,
-	}
-	s.userPhones[id] = append(s.userPhones[id], entry)
+    // Write to modern user_phones table
+    s.phoneSeq++
+    entry := PhoneEntry{
+        ID:        s.phoneSeq,
+        UserID:    id,
+        Number:    phone,
+        IsPrimary: true,
+    }
+    s.userPhones[id] = append(s.userPhones[id], entry)
 
-	return u, nil
-}
-
-func (s *MemoryStore) ApplyContractDropLegacyColumn() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.legacyDropped = true
-	for _, u := range s.users {
-		u.Phone = nil
-	}
+    return u, nil
 }
 ```
 
-**Explanation:** `CreateDual` atomically writes to both `users.phone` (unless already contracted) and `user_phones` table under a single mutex, simulating a transactional dual-write. `ApplyContractDropLegacyColumn` simulates `ALTER TABLE ... DROP COLUMN` by clearing the legacy pointer and setting a guard flag.
+Explanation:
+- Fungsi ini hanya dipanggil ketika `WriteMode` diatur ke `WriteDual`.
+- `sync.RWMutex` digunakan untuk menjamin atomicity penulisan ke kedua tabel dalam satu operasi kritial.
+- Tulis ke tabel legacy terjadi jika `!s.legacyDropped` (kolom belum di-drop).
+- Tulis ke tabel modern terjadi tanpa kondisi (selalu terjadi selama dual-write aktif).
+- Jika sistem crash di tengah eksekusi, baik keduanya akan diperbarui atau keduanya tidak berubah, menjamin konsistensi data.
 
----
+## Snippet 3 — Backfill Worker with Idempotent and Resumable Logic
 
-## Snippet 3 — Feature Flags Controlling Migration Phases
-
-**Source File:** `internal/compat/flags.go:7-54`
-
-**Purpose:** Atomic feature flags that gate write/read modes and contract state, enabling canary rollout and instant rollback.
-
-```go
-type WriteMode int
-type ReadMode int
-
-const (
-	WriteLegacyOnly WriteMode = iota
-	WriteDual
-	WriteNewOnly
-)
-
-const (
-	ReadLegacyOnly ReadMode = iota
-	ReadFallback
-	ReadNewOnly
-)
-
-type FeatureFlags struct {
-	writeMode       atomic.Value // WriteMode
-	readMode        atomic.Value // ReadMode
-	contractApplied atomic.Bool  // true if legacy column/endpoints dropped
-}
-
-func (f *FeatureFlags) GetWriteMode() WriteMode {
-	return f.writeMode.Load().(WriteMode)
-}
-
-func (f *FeatureFlags) SetWriteMode(m WriteMode) {
-	f.writeMode.Store(m)
-}
-
-func (f *FeatureFlags) GetReadMode() ReadMode {
-	return f.readMode.Load().(ReadMode)
-}
-
-func (f *FeatureFlags) SetReadMode(m ReadMode) {
-	f.readMode.Store(m)
-}
-
-func (f *FeatureFlags) IsContractApplied() bool {
-	return f.contractApplied.Load()
-}
-
-func (f *FeatureFlags) SetContractApplied(b bool) {
-	f.contractApplied.Store(b)
-}
-```
-
-**Explanation:** Using `atomic.Value` and `atomic.Bool` ensures lock-free, thread-safe flag reads during concurrent request processing. Phases map directly: `WriteLegacyOnly` (Baseline), `WriteDual` (Expand/Migrate), `WriteNewOnly` (Post-Contract).
-
----
-
-## Snippet 4 — Fallback Read with Lazy Backfill
-
-**Source File:** `internal/compat/service.go:108-140`
-
-**Purpose:** Read path that serves data from legacy column when modern table is empty, and lazily backfills during fallback reads.
-
-```go
-func (s *Service) GetUser(id int) (UserResponse, error) {
-	u, err := s.store.GetUser(id)
-	if err != nil {
-		return UserResponse{}, err
-	}
-
-	phones, _ := s.store.GetPhones(id)
-	var phoneVal string
-
-	readMode := s.flags.GetReadMode()
-
-	switch readMode {
-	case ReadLegacyOnly:
-		if u.Phone != nil {
-			phoneVal = *u.Phone
-		}
-	case ReadFallback:
-		if len(phones) > 0 {
-			phoneVal = phones[0].Number
-			for _, p := range phones {
-				if p.IsPrimary {
-					phoneVal = p.Number
-					break
-				}
-			}
-		} else if u.Phone != nil {
-			// Fallback read from legacy column
-			phoneVal = *u.Phone
-			// Lazy backfill: write to new schema during fallback read
-			_, _ = s.store.SavePhoneEntry(id, phoneVal, true)
-		}
-	case ReadNewOnly:
-		if len(phones) > 0 {
-			phoneVal = phones[0].Number
-			for _, p := range phones {
-				if p.IsPrimary {
-					phoneVal = p.Number
-					break
-				}
-			}
-		}
-	}
-
-	return UserResponse{
-		ID:     u.ID,
-		Name:   u.Name,
-		Phone:  phoneVal,
-		Phones: phones,
-	}, nil
-}
-```
-
-**Explanation:** In `ReadFallback` mode, if `user_phones` is empty but `users.phone` exists, the legacy value is returned AND lazily written to `user_phones` via `SavePhoneEntry`. This ensures reads succeed during backfill without requiring full historical migration upfront.
-
----
-
-## Snippet 5 — Idempotent Resumable Backfill Worker
-
-**Source File:** `internal/compat/backfill.go:35-101`
-
-**Purpose:** Batch-process legacy records with checkpoint persistence and idempotent insert logic.
+Source File: internal/compat/backfill.go
+Purpose: Tampilkan worker backfill yang dapat dihentikan dan dilanjutkan lagi dengan memanfaatkan checkpoint dan logika idempotent.
 
 ```go
 func (b *BackfillWorker) RunBatch(ctx context.Context) (int, bool, error) {
-	b.checkpoint.mu.Lock()
-	defer b.checkpoint.mu.Unlock()
+    b.checkpoint.mu.Lock()
+    defer b.checkpoint.mu.Unlock()
 
-	if b.checkpoint.IsComplete {
-		return 0, true, nil
-	}
+    if b.checkpoint.IsComplete {
+        return 0, true, nil
+    }
 
-	ids := b.store.GetUserIDs(b.checkpoint.LastProcessedID, b.batchSize)
-	if len(ids) == 0 {
-		b.checkpoint.IsComplete = true
-		return 0, true, nil
-	}
+    ids := b.store.GetUserIDs(b.checkpoint.LastProcessedID, b.batchSize)
+    if len(ids) == 0 {
+        b.checkpoint.IsComplete = true
+        return 0, true, nil
+    }
 
-	migratedInBatch := 0
-	for _, id := range ids {
-		select {
-		case <-ctx.Done():
-			return migratedInBatch, false, ctx.Err()
-		default:
-		}
+    migratedInBatch := 0
+    for _, id := range ids {
+        select {
+        case <-ctx.Done():
+            return migratedInBatch, false, ctx.Err()
+        default:
+        }
 
-		user, err := b.store.GetUser(id)
-		if err != nil {
-			continue
-		}
+        user, err := b.store.GetUser(id)
+        if err != nil {
+            continue
+        }
 
-		// Only backfill if legacy phone exists and user_phones is empty
-		if user.Phone != nil && *user.Phone != "" {
-			phones, _ := b.store.GetPhones(id)
-			if len(phones) == 0 {
-				_, err := b.store.SavePhoneEntry(id, *user.Phone, true)
-				if err != nil {
-					return migratedInBatch, false, fmt.Errorf("failed backfilling user %d: %w", id, err)
-				}
-				migratedInBatch++
-				b.obs.BackfillProcessed.Add(1)
-			}
-		}
-		b.checkpoint.LastProcessedID = id
-	}
+        // Only backfill if legacy phone exists and user_phones is empty
+        if user.Phone != nil && *user.Phone != "" {
+            phones, _ := b.store.GetPhones(id)
+            if len(phones) == 0 {
+                _, err := b.store.SavePhoneEntry(id, *user.Phone, true)
+                if err != nil {
+                    return migratedInBatch, false, fmt.Errorf("failed backfilling user %d: %w", id, err)
+                }
+                migratedInBatch++
+                b.obs.BackfillProcessed.Add(1)
+            }
+        }
+        b.checkpoint.LastProcessedID = id
+    }
 
-	b.checkpoint.TotalMigrated += migratedInBatch
+    b.checkpoint.TotalMigrated += migratedInBatch
 
-	if len(ids) < b.batchSize {
-		b.checkpoint.IsComplete = true
-	}
+    if len(ids) < b.batchSize {
+        b.checkpoint.IsComplete = true
+    }
 
-	return migratedInBatch, b.checkpoint.IsComplete, nil
-}
-
-func (b *BackfillWorker) RunAll(ctx context.Context) (int, error) {
-	total := 0
-	for {
-		migrated, done, err := b.RunBatch(ctx)
-		if err != nil {
-			return total, err
-		}
-		total += migrated
-		if done {
-			break
-		}
-	}
-	return total, nil
+    return migratedInBatch, b.checkpoint.IsComplete, nil
 }
 ```
 
-**Explanation:** Checkpoint uses `LastProcessedID` cursor for resumability. Idempotency achieved by checking `len(phones) == 0` before insert and `SavePhoneEntry` checking for existing number (see `store.go:155-160`). Batch size configurable for throttling.
+Explanation:
+- Checkpoint (`LastProcessedID` dan `IsComplete`) menyimpan state sehingga worker dapat dilanjutkan dari titik berhenti jika dihentikan.
+- Loop memproses record dalam batch yang ditentukan oleh `batchSize`.
+- Idempotency dicapai dengan memeriksa `len(phones) == 0` sebelum melakukan insert—jika sudah ada entri di `user_phones`, maka tidak dilakukan apa-apa.
+- Setiap backfill yang berhasil meningkatkan counter observasi `BackfillProcessed`.
+- Jika jumlah ID yang diterima kurang dari `batchSize`, maka diasumsikan bahwa seluruh data telah diproses dan `IsComplete` disetel ke true.
 
----
+## Snippet 4 — Fallback Read (Dual Read) Mechanism
 
-## Snippet 6 — Data Reconciliation for Drift Detection
-
-**Source File:** `internal/compat/service.go:186-226`
-
-**Purpose:** Compare legacy `users.phone` against `user_phones` primary entry to detect dual-write desynchronization.
+Source File: internal/compat/service.go
+Purpose: Tampilkan mekanisme bacaan yang coba baca dari skema baru terlebih dahulu, lalu fallback ke skema lama jika diperlukan.
 
 ```go
-func (s *Service) ReconcileData() (int, error) {
-	if s.flags.IsContractApplied() {
-		return 0, nil
-	}
+func (s *Service) GetUser(id int) (UserResponse, error) {
+    u, err := s.store.GetUser(id)
+    if err != nil {
+        return UserResponse{}, err
+    }
 
-	ids := s.store.GetUserIDs(0, s.store.TotalUsers()+10)
-	drifts := 0
+    phones, _ := s.store.GetPhones(id)
+    var phoneVal string
 
-	for _, id := range ids {
-		user, err := s.store.GetUser(id)
-		if err != nil {
-			continue
-		}
-		if user.Phone == nil {
-			continue
-		}
+    readMode := s.flags.GetReadMode()
 
-		phones, err := s.store.GetPhones(id)
-		if err != nil || len(phones) == 0 {
-			drifts++
-			s.obs.DriftDetected.Add(1)
-			continue
-		}
+    switch readMode {
+    case ReadLegacyOnly:
+        if u.Phone != nil {
+            phoneVal = *u.Phone
+        }
+    case ReadFallback:
+        if len(phones) > 0 {
+            // Find primary or first phone
+            phoneVal = phones[0].Number
+            for _, p := range phones {
+                if p.IsPrimary {
+                    phoneVal = p.Number
+                    break
+                }
+            }
+        } else if u.Phone != nil {
+            // Fallback read from legacy column
+            phoneVal = *u.Phone
+            // Lazy backfill: write to new schema during fallback read
+            _, _ = s.store.SavePhoneEntry(id, phoneVal, true)
+        }
+    case ReadNewOnly:
+        if len(phones) > 0 {
+            phoneVal = phones[0].Number
+            for _, p := range phones {
+                if p.IsPrimary {
+                    phoneVal = p.Number
+                    break
+                }
+            }
+        }
+    }
 
-		var primaryNumber string
-		for _, p := range phones {
-			if p.IsPrimary {
-				primaryNumber = p.Number
-				break
-			}
-		}
-
-		if primaryNumber != *user.Phone {
-			drifts++
-			s.obs.DriftDetected.Add(1)
-		}
-	}
-
-	return drifts, nil
+    return UserResponse{
+        ID:     u.ID,
+        Name:   u.Name,
+        Phone:  phoneVal,
+        Phones: phones,
+    }, nil
 }
 ```
 
-**Explanation:** Iterates all users, compares legacy `phone` pointer against primary entry in `user_phones`. Increments drift counter for missing entries or value mismatches. Guarded by `IsContractApplied()` to skip after legacy column dropped.
+Explanation:
+- Pada mode `ReadFallback`, sistem pertama-tama mencoba membaca dari `user_phones` (skema baru).
+- Jika hasilnya kosong dan data legacy masih tersedia (`u.Phone != nil`), maka nilai dari kolom legacy digunakan.
+- Setelah fallback read berhasil, sistem melakukan "lazy backfill" dengan menulis nilai tersebut ke `user_phones` untuk mengurangi beban bacaan di masa depan.
+- Mekanisme ini mencegah "data starvation" saat backfill belum selesai namun aplikasi sudah mulai membaca dari skema baru.
 
----
+## Snippet 5 — Contract Enforcement with Traffic Guard
 
-## Snippet 7 — Contract Enforcement with Zero-Traffic Guard
-
-**Source File:** `internal/compat/service.go:228-245`
-
-**Purpose:** Apply Contract phase only when observability confirms zero legacy traffic (unless forced).
+Source File: internal/compat/service.go
+Purpose: Tampilkan bagaimana kontrak hanya dapat diterapkan ketika tidak ada trafic legacy terdeteksi.
 
 ```go
 func (s *Service) ApplyContract(force bool) error {
-	// Guard: Ensure legacy read hits are zero since last reset, unless forced
-	if !force && s.obs.LegacyReadHits.Load() > 0 {
-		return fmt.Errorf("%w: recorded %d legacy reads", ErrContractViolation, s.obs.LegacyReadHits.Load())
-	}
+    // Guard: Ensure legacy read hits are zero since last reset, unless forced
+    if !force && s.obs.LegacyReadHits.Load() > 0 {
+        return fmt.Errorf("%w: recorded %d legacy reads", ErrContractViolation, s.obs.LegacyReadHits.Load())
+    }
 
-	// 1. Switch write mode to NewOnly
-	s.flags.SetWriteMode(WriteNewOnly)
-	// 2. Switch read mode to NewOnly
-	s.flags.SetReadMode(ReadNewOnly)
-	// 3. Mark contract applied
-	s.flags.SetContractApplied(true)
-	// 4. Drop legacy column from storage
-	s.store.ApplyContractDropLegacyColumn()
+    // 1. Switch write mode to NewOnly
+    s.flags.SetWriteMode(WriteNewOnly)
+    // 2. Switch read mode to NewOnly
+    s.flags.SetReadMode(ReadNewOnly)
+    // 3. Mark contract applied
+    s.flags.SetContractApplied(true)
+    // 4. Drop legacy column from storage
+    s.store.ApplyContractDropLegacyColumn()
 
-	return nil
+    return nil
 }
 ```
 
-**Explanation:** The `force` parameter allows bypassing the zero-traffic check (used in demo/tests to simulate post-observation-window). In production, `force=false` enforces the safety gate. Sequence: stop dual-write → stop legacy reads → mark contract → drop column.
+Explanation:
+- Fungsi ini memeriksa meter `LegacyReadHits` sebelum mengizinkan kontrak.
+- Jika tidak dipaksa (`force == false`) dan masih ada baca legacy yang terdeteksi, maka fungsi mengembalikan error `ErrContractViolation`.
+- Jika izin diberikan, maka:
+  1. Mode tulis diatur ke `WriteNewOnly` (tidak lagi menulis ke legacy)
+  2. Mode baca diatur ke `ReadNewOnly` (tidak lagi membaca dari legacy)
+  3. Flag kontrak diatur ke `true`
+  4. Operasi drop kolom legacy dipanggil pada storage (`ApplyContractDropLegacyColumn`)
+- Pendekatan ini memastikan bahwa kontrak hanya diterapkan ketika kita yakin tidak ada klien lama yang masih aktif.
 
----
+## Snippet 6 — HTTP Handler with Deprecation Headers
 
-## Snippet 8 — HTTP Deprecation and Sunset Headers
-
-**Source File:** `internal/compat/handler.go:20-41`
-
-**Purpose:** RFC 8594-compliant headers signaling deprecation to legacy consumers.
+Source File: internal/compat/handler.go
+Purpose: Tampilkan implementasi header Deprecation dan Sunset sesuai RFC 8594 untuk memberi tahu klien tentang pengangkatan.
 
 ```go
 func (h *APIHandler) GetUserV1(w http.ResponseWriter, r *http.Request) {
-	idStr := r.URL.Query().Get("id")
-	id, _ := strconv.Atoi(idStr)
+    idStr := r.URL.Query().Get("id")
+    id, _ := strconv.Atoi(idStr)
 
-	dto, err := h.svc.GetLegacyUser(id)
-	if err != nil {
-		if errors.Is(err, ErrLegacyUnavailable) {
-			w.WriteHeader(http.StatusGone) // 410 Gone after sunset
-			w.Write([]byte(`{"error": "legacy v1 endpoint has been permanently removed"}`))
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
+    dto, err := h.svc.GetLegacyUser(id)
+    if err != nil {
+        if errors.Is(err, ErrLegacyUnavailable) {
+            w.WriteHeader(http.StatusGone) // 410 Gone after sunset
+            w.Write([]byte(`{"error": "legacy v1 endpoint has been permanently removed"}`))
+            return
+        }
+        w.WriteHeader(http.StatusNotFound)
+        return
+    }
 
-	// Inject Deprecation Headers
-	w.Header().Set("Deprecation", "true")
-	w.Header().Set("Sunset", "Mon, 31 Dec 2026 23:59:59 GMT") // Sunset date
-	w.Header().Set("Content-Type", "application/json")
+    // Inject Deprecation Headers
+    w.Header().Set("Deprecation", "true")
+    w.Header().Set("Sunset", "Mon, 31 Dec 2026 23:59:59 GMT") // Sunset date
+    w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(dto)
+    json.NewEncoder(w).Encode(dto)
 }
 ```
 
-**Explanation:** Legacy endpoint `/api/v1/users` returns `Deprecation: true` and `Sunset` date headers. After contract, returns `410 Gone`. Modern endpoint `/api/v2/users` (lines 44-55) has no deprecation headers.
+Explanation:
+- Header `Deprecation: true` memberitahu klien bahwa endpoint ini tidak lagi disarankan untuk digunakan.
+- Header `Sunset: <tanggal>` memberitahu klien tanggal tepat ketika endpoint akan dihapus kembali (setelah tanggal ini, klien akan menerima HTTP 410 Gone).
+- Implementasi ini mengikuti standar RFC 8594 yang digunakan oleh platform seperti GitHub API untuk pengangkatan versi API.
+- Setelah kontrak diterapkan dan legacy endpoint diakses, klien akan menerima respons `410 Gone` dengan pesan error bahwa endpoint telah dihapus secara permanen.
 
----
+## Snippet 7 — Feature Flags for Runtime Control
 
-## Snippet 9 — Observability Metrics Collector
-
-**Source File:** `internal/compat/metrics.go:7-28`
-
-**Purpose:** Thread-safe atomic counters for migration monitoring.
+Source File: internal/compat/flags.go
+Purpose: Tampilkan implementasi fitur flag yang memungkinkan kontrol runtime atas mode tulis dan baca tanpa perlu redeploy.
 
 ```go
-type Observability struct {
-	LegacyReadHits    atomic.Int64
-	NewReadHits       atomic.Int64
-	DualWriteCount    atomic.Int64
-	DualWriteErrors   atomic.Int64
-	BackfillProcessed atomic.Int64
-	DriftDetected     atomic.Int64
+type FeatureFlags struct {
+    writeMode       atomic.Value // WriteMode
+    readMode        atomic.Value // ReadMode
+    contractApplied atomic.Bool  // true if legacy column/endpoints dropped
 }
 
-func (o *Observability) Snapshot() map[string]int64 {
-	return map[string]int64{
-		"legacy_reads":      o.LegacyReadHits.Load(),
-		"new_reads":         o.NewReadHits.Load(),
-		"dual_writes":       o.DualWriteCount.Load(),
-		"dual_write_errors": o.DualWriteErrors.Load(),
-		"backfilled":        o.BackfillProcessed.Load(),
-		"drift_detected":    o.DriftDetected.Load(),
-	}
+func NewFeatureFlags() *FeatureFlags {
+    f := &FeatureFlags{}
+    f.writeMode.Store(WriteLegacyOnly)
+    f.readMode.Store(ReadLegacyOnly)
+    return f
+}
+
+func (f *FeatureFlags) GetWriteMode() WriteMode {
+    return f.writeMode.Load().(WriteMode)
+}
+
+func (f *FeatureFlags) SetWriteMode(m WriteMode) {
+    f.writeMode.Store(m)
+}
+
+func (f *FeatureFlags) GetReadMode() ReadMode {
+    return f.readMode.Load().(ReadMode)
+}
+
+func (f *FeatureFlags) SetReadMode(m ReadMode) {
+    f.readMode.Store(m)
+}
+
+func (f *FeatureFlags) IsContractApplied() bool {
+    return f.contractApplied.Load()
+}
+
+func (f *FeatureFlags) SetContractApplied(b bool) {
+    f.contractApplied.Store(b)
 }
 ```
 
-**Explanation:** Uses `sync/atomic` for lock-free incrementing under concurrent load. `Snapshot()` provides a point-in-time view for dashboards and contract gates.
+Explanation:
+- Menggunakan `atomic.Value` dan `atomic.Bool` untuk memastikan akses thread-safe ke nilai flag tanpa mutex eksplisit.
+- Tiga mode yang dikoordinasikan:
+  - `WriteMode`: Mengontrol kemana data baru ditulis (`WriteLegacyOnly`, `WriteDual`, `WriteNewOnly`)
+  - `ReadMode`: Mengontrol darimana data dibaca (`ReadLegacyOnly`, `ReadFallback`, `ReadNewOnly`)
+  - `ContractApplied`: Bendera boolean yang menunjukkan apakah kontrak (drop kolom legacy) telah diterapkan
+- Fitur flag ini memungkinkan:
+  - Canary rollout: mengalihkan sebagian kecil traffic ke mode baru terlebih dahulu
+  - Instant rollback: kembali ke mode legacy dengan satu operasi jika diperlukan
+  - Pengendalian fase migrasi: masing-masing fase (Expand, Migrate, Contract) dapat dikontrol independen melalui kombinasi flag yang berbeda

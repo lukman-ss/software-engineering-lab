@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"compat/internal/compat"
 )
@@ -122,8 +123,13 @@ func main() {
 	// -------------------------------------------------------------
 	fmt.Println("\n--- [METRICS & OBSERVABILITY SNAPSHOT] ---")
 	metrics := obs.Snapshot()
-	for k, v := range metrics {
-		fmt.Printf("- %s: %d\n", k, v)
+	var keys []string
+	for k := range metrics {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("- %s: %d\n", k, metrics[k])
 	}
 	fmt.Println("\nDEMO COMPLETED SUCCESSFULLY.")
 }

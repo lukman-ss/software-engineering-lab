@@ -1,28 +1,30 @@
-# Docs vs Code Audit
+# Documentation vs Code
 
-Target Lab: labs/13-backward-compatibility
+## Comparisons
 
-## Comparisons Evaluated
+1. **README Claims vs. Code Execution**
+   - *Claim:* Parallel Change (Expand-Migrate-Contract) lifecycle demonstrated without downtime.
+   - *Observation:* Supported. Tests and demo traverse the cycle successfully while maintaining uninterrupted reading and writing capabilities.
+   - *Result:* MATCH
 
-1. **README vs Code**
-   - The README describes an architecture demonstrating Expand -> Migrate -> Contract with dual-writes, backfill, fallback reading, data reconciliation, and safe rollback.
-   - The codebase includes explicit packages and methods for every claimed feature (e.g., `compat.WriteDual`, `BackfillWorker`, `s.store.ApplyContractDropLegacyColumn()`, `TestRollbackScenarios`).
-   - Mismatch: None. Alignment is exact.
+2. **Research Plan vs. Implementation**
+   - *Claim:* Backfill must be resumable and idempotent.
+   - *Observation:* Implemented using chunked `last_processed_id` cursor and duplication checks.
+   - *Result:* MATCH
 
-2. **Research Claims vs Implementation**
-   - Research claims: Schema migration split into non-destructive phases, idempotency in backfill, safe rollbacks, and deprecation headers.
-   - Implementation: Simulated table structure (`users`, `user_phones`) adheres exactly to the relational pattern described in `schema.sql`. The backfiller checks `last_processed_id` and existing entries (idempotent). Rollbacks are tested explicitly. HTTP handler injects `Deprecation: true` and `Sunset`.
-   - Mismatch: None. The implementation is a perfect simulated translation of the abstract research.
+3. **Engineering Design vs. Demonstration Output**
+   - *Claim:* Fallback read mechanism, drift reconciliation audit, dual write.
+   - *Observation:* Implemented in `service.go` and explicitly demonstrated in `cmd/demo/main.go` output.
+   - *Result:* MATCH
 
-3. **Engineering Notes vs Reality**
-   - Notes clearly bound the scope: "In-Memory Store... ponytail: in-memory mock storage; replace with database/sql for persistent store." and explicitly states what is NOT demonstrated (distributed coordination, lock timeouts).
-   - This clear scoping prevents implementation overclaiming.
-   - Mismatch: None.
+4. **Failure Modes Research vs. Implemented Guardrails**
+   - *Claim:* Guard against premature contract and data starvation.
+   - *Observation:* Guardrails implemented in `ApplyContract` (checking metrics) and lazy-hydration in `GetUser`. Tested in `migration_test.go` and `service_test.go`.
+   - *Result:* MATCH
 
-4. **Demo Output vs Promises**
-   - Demo executable step-by-step output directly mirrors the required phase transitions.
-   - Mismatch: None.
+5. **Demo Execution Output**
+   - Output perfectly mirrors the text documented in `engineering/03-execution-result.md`.
+   - *Result:* MATCH
 
-## Assessment
-
-**PASS**. The documentation correctly boundaries the lab as an in-memory proof of concept for the relational migration pattern without overclaiming distributed system state capabilities.
+## Summary
+The implementation exactly matches the boundaries, requirements, and features described in the research and engineering notes. There are no missing claims, unverified behaviors, or faked outputs.
