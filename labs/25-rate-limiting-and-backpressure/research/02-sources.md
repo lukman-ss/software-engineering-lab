@@ -1,101 +1,131 @@
-# Rate Limiting & Backpressure Sources
+# Research Sources
 
-## Source 1: RFC 6585 - Additional HTTP Status Codes
+## Source 1
 
-**Title:** Additional HTTP Status Codes  
-**Publisher:** Internet Engineering Task Force (IETF)  
-**URL:** https://datatracker.ietf.org/doc/html/rfc6585  
-**Published:** April 2012  
-**Accessed:** 2026-09-26  
-**Source Tier:** 1 (Official Standard)  
-**Relevance:** Defines HTTP 429 "Too Many Requests" status code for rate limiting
+Title: Token bucket - Wikipedia
+Publisher: Wikimedia Foundation
+URL: https://en.wikipedia.org/wiki/Token_bucket
+Published: 14 September 2026 (last revision)
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable reference work
+Relevance: Primary source on Token Bucket algorithm - one of the key rate limiting algorithms mentioned in the topic
 
-## Source 2: Wikipedia - Rate Limiting
+## Source 2
 
-**Title:** Rate limiting - Wikipedia  
-**Publisher:** Wikimedia Foundation  
-**URL:** https://en.wikipedia.org/wiki/Rate_limiting  
-**Published:** 2 September 2026 (last edit)  
-**Accessed:** 2026-09-26  
-**Source Tier:** 3 (Community Encyclopedia)  
-**Relevance:** Overview of rate limiting algorithms and implementations
+Title: Exponential backoff - Wikipedia
+Publisher: Wikimedia Foundation
+URL: https://en.wikipedia.org/wiki/Exponential_backoff
+Published: 21 August 2026 (last revision)
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable reference work
+Relevance: Primary source on Exponential backoff algorithm with jitter, critical for retry mechanisms
 
-## Source 3: Wikipedia - Token Bucket
+## Source 3
 
-**Title:** Token bucket - Wikipedia  
-**Publisher:** Wikimedia Foundation  
-**URL:** https://en.wikipedia.org/wiki/Token_bucket  
-**Published:** 14 September 2026 (last edit)  
-**Accessed:** 2026-09-26  
-**Source Tier:** 3 (Community Encyclopedia)  
-**Relevance:** Technical specification of token bucket algorithm used in rate limiting
+Title: Rate limiting - Wikipedia
+Publisher: Wikimedia Foundation
+URL: https://en.wikipedia.org/wiki/Rate_limiting
+Published: 2 September 2026 (last revision)
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable reference work
+Relevance: Primary source on rate limiting concepts and algorithms
 
-## Source 4: Medium - An Alternative Approach to Rate Limiting
+## Source 4
 
-**Title:** An alternative approach to rate limiting  
-**Publisher:** Medium (Figma Design)  
-**URL:** https://medium.com/figma-design/an-alternative-approach-to-rate-limiting-f8a06cf7c94c  
-**Published:** April 12, 2017  
-**Accessed:** 2026-09-26  
-**Source Tier:** 2 (Technical Article)  
-**Relevance:** Practical implementation patterns for rate limiting
+Title: Little's law - Wikipedia
+Publisher: Wikimedia Foundation
+URL: https://en.wikipedia.org/wiki/Little%27s_law
+Published: 20 August 2026 (last revision)
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable reference work
+Relevance: Primary source on Little's Law for queue analysis and capacity planning
 
-## Source 5: IEEE Paper - Datacenter Traffic Control
+## Source 5
 
-**Title:** Datacenter Traffic Control: Understanding Techniques and Trade-offs  
-**Publisher:** IEEE Communications Surveys & Tutorials  
-**URL:** https://www.researchgate.net/publication/321744877_Datacenter_Traffic_Control_Understanding_Techniques_and_Trade-offs  
-**Published:** May 2018  
-**Accessed:** 2026-09-26  
-**Source Tier:** 1 (Academic Paper)  
-**Relevance:** Rate limiting in datacenter environments with multi-tenant considerations
+Title: Module ngx_http_limit_req_module
+Publisher: NGINX (F5)
+URL: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html
+Published: N/A (Documentation)
+Accessed: 2026-09-26
+Source Tier: Tier 1 - Official documentation
+Relevance: Primary source on NGINX rate limiting implementation using leaky bucket
 
-## Source 6: Wikipedia - Leaky Bucket
+## Source 6
 
-**Title:** Leaky bucket - Wikipedia  
-**Publisher:** Wikimedia Foundation  
-**URL:** https://en.wikipedia.org/wiki/Leaky_bucket  
-**Published:** Latest edit available  
-**Accessed:** 2026-09-26  
-**Source Tier:** 3 (Community Encyclopedia)  
-**Relevance:** Comparison with token bucket, queue-based vs meter-based versions
+Title: HTTP/1.1 429 Too Many Requests - RFC 6585
+Publisher: IETF
+URL: https://www.rfc-editor.org/rfc/rfc6585#section-4
+Published: April 2012
+Accessed: 2026-09-26
+Source Tier: Tier 1 - Standards document
+Relevance: Primary source on HTTP 429 status code for rate limiting
 
-## Source 7: Redis - IO Scheduler Implementation
+## Source 7
 
-**Title:** Implementing a New IO Scheduler Algorithm for Mixed Read/Write Workloads  
-**Publisher:** ScyllaDB Blog  
-**URL:** https://www.scylladb.com/2022/08/03/implementing-a-new-io-scheduler-algorithm-for-mixed-read-write-workloads/  
-**Published:** 3 August 2022  
-**Accessed:** 2026-09-26  
-**Source Tier:** 2 (Technical Blog)  
-**Relevance:** Token bucket used for database IO flow control
+Title: Scaling your API with rate limiters
+Publisher: Stripe Engineering Blog
+URL: https://stripe.com/blog/rate-limiters
+Published: March 30, 2017
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable technical publication
+Relevance: Primary source on practical rate limiting implementation with 4 types of limiters
 
-## Source 8: Wikipedia - Reactive Streams
+## Source 8
 
-**Title:** Reactive Streams - Wikipedia  
-**Publisher:** Wikimedia Foundation  
-**URL:** https://en.wikipedia.org/wiki/Reactive_Streams  
-**Published:** 30 May 2026  
-**Accessed:** 2026-09-26  
-**Source Tier:** 3 (Community Encyclopedia)  
-**Relevance:** Standard for asynchronous stream processing with non-blocking back pressure
+Title: Exponential Backoff And Jitter
+Publisher: AWS Architecture Blog
+URL: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+Published: March 4, 2015
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable technical publication
+Relevance: Primary source on exponential backoff with jitter algorithms
 
-## Source 9: Wikipedia - Little's Law
+## Source 9
 
-**Title:** Little's law - Wikipedia  
-**Publisher:** Wikimedia Foundation  
-**URL:** https://en.wikipedia.org/wiki/Little%27s_law  
-**Published:** 20 August 2026  
-**Accessed:** 2026-09-26  
-**Source Tier:** 3 (Community Encyclopedia)  
-**Relevance:** Theorem in queueing theory relating L = λW
+Title: Retry behavior
+Publisher: AWS SDK Documentation
+URL: https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html
+Published: May 2023 (updated)
+Accessed: 2026-09-26
+Source Tier: Tier 1 - Official documentation
+Relevance: Primary source on AWS SDK retry implementation with exponential backoff and jitter
 
-## Source 10: AWS Architecture Blog - Exponential Backoff And Jitter
+## Source 10
 
-**Title:** Exponential Backoff And Jitter  
-**Publisher:** Amazon Web Services Architecture Blog  
-**URL:** https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/  
-**Published:** 4 March 2015 (Updated May 2023)  
-**Accessed:** 2026-09-26  
-**Source Tier:** 2 (Technical Blog - Authority Source)  
-**Relevance:** Exponential backoff with jitter pattern for preventing retry storms
+Title: Handling Overload
+Publisher: Google SRE Workbook
+URL: https://landing.google.com/sre/sre-book/chapters/handling-overload/
+Published: 2016 (book publication)
+Accessed: 2026-09-26
+Source Tier: Tier 1 - Authoritative systems engineering resource
+Relevance: Primary source on backpressure, load shedding, and overload handling in production systems
+
+## Source 11
+
+Title: Cloudflare's Rate Limiting Documentation (Redis rate limiter)
+Publisher: Redis Documentation
+URL: https://redis.io/docs/latest/develop/use-cases/rate-limiter/
+Published: N/A (Documentation)
+Accessed: 2026-09-26
+Source Tier: Tier 1 - Official documentation
+Relevance: Primary source on implementing rate limiters with Redis including token bucket
+
+## Source 12
+
+Title: Leaky bucket - Wikipedia
+Publisher: Wikimedia Foundation
+URL: https://en.wikipedia.org/wiki/Leaky_bucket
+Published: 2026 (last revision)
+Accessed: 2026-09-26
+Source Tier: Tier 2 - Reputable reference work
+Relevance: Primary source on leaky bucket algorithm, alternative to token bucket
+
+## Source 13
+
+Title: RabbitMQ Tutorials
+Publisher: RabbitMQ (Broadcom)
+URL: https://www.rabbitmq.com/tutorials
+Published: N/A (Documentation)
+Accessed: 2026-09-26
+Source Tier: Tier 1 - Official documentation
+Relevance: Primary source on queue-based message processing patterns

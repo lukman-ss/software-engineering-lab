@@ -2,68 +2,49 @@
 
 ## Unanswered Questions
 
-1. **Distributed Token Bucket Consistency**: How to maintain exact token bucket consistency across distributed instances without centralized Redis? What are the trade-offs of eventual consistency vs strong consistency in distributed rate limiting?
+1. **Exact implementation details of per-tenant fair queueing algorithms:** While the topic mentions "Fair queueing" as a solution for multi-tenant isolation, specific algorithms (e.g., Weighted Fair Queuing variants) and their implementation trade-offs need deeper investigation.
 
-2. **Rate Limiting at Different Layers**: What are the specific implementation patterns and trade-offs for rate limiting at:
-   - API Gateway level (AWS API Gateway, Kong, Envoy)
-   - Application middleware level
-   - Database connection pool level
-   - OS/kernel level (TC, cgroups)
+2. **Dynamic cost-based rate limiting:** The topic mentions rate limits should consider "cost of operation" but how to dynamically compute operation costs in real-time is not well documented in public sources.
 
-3. **Circuit Breaker Integration**: How do circuit breakers interact with rate limiting and backpressure? Best practices for cascading failure prevention when combining these patterns?
+3. **Queue aging vs. queue length:** While queue age is mentioned as a better metric than queue length, the exact thresholds and alerting strategies for different system types (API vs batch processing) need empirical research.
 
-4. **gRPC Flow Control**: How does gRPC's HTTP/2 flow control (window-based) compare to application-level rate limiting? When to use each?
+4. **Autoscaling interaction with backpressure:** The topic mentions "autoscaling can make downstream collapse faster" but specific patterns for coordinating autoscaling with rate limiting/batching need more investigation.
 
-5. **Kubernetes Backpressure**: How do Kubernetes HPA, KEDA, and queue-proxy interact with application-level backpressure? What metrics should trigger scaling vs backpressure?
+5. **Dead letter queue (DLQ) strategies:** Retry with bounded limits and DLQ handling is mentioned, but optimal DLQ processing strategies for different failure types (transient vs permanent) are not fully covered.
 
-6. **Observability Standards**: What are the standard Prometheus metrics for rate limiting and backpressure? (e.g., rate_limit_exceeded_total, queue_depth, queue_oldest_age, retry_rate)
+## Weak Evidence
 
-## Weak Evidence Areas
+1. **Topic spec claims about "1 public IP for 200 users":** While true that NAT shares an IP, the actual implementation details of how enterprise networks route API traffic through multiple egress IPs or how to handle this for rate limiting need verification from enterprise architecture sources.
 
-1. **Multi-tenant Fair Queueing Algorithms**: Limited public documentation on specific fair queueing implementations (Deficit Round Robin, Weighted Fair Queueing) in application-level systems.
+2. **"500 request/second downing an endpoint" scenario:** While plausible, specific failure cascade timing (worker saturation → DB connection exhaustion → CPU overload → health check failure → restart) needs empirical validation.
 
-2. **Database-Level Backpressure**: ScyllaDB's token bucket for IO is one example; how do PostgreSQL, MySQL, MongoDB handle backpressure from application connections?
-
-3. **Webhook Provider Rate Limits**: Industry standards for webhook rate limiting (Stripe, GitHub, Slack) - are they documented publicly?
-
-4. **Real-world Failure Case Studies**: Limited public post-mortems of production outages caused by rate limiting/backpressure failures.
-
-5. **Machine Learning / AI Workloads**: How do these patterns apply to GPU inference workloads with highly variable processing times?
+3. **Burst capacity recommendations:** The topic spec suggests specific token bucket values (capacity=100, refill=10/s) but doesn't cite sources for these specific values.
 
 ## Claims Needing Deeper Research
 
-1. **Token Bucket vs Sliding Window Log**: Medium article claims sliding window log is alternative for distributed rate limiting. Need quantitative comparison of accuracy, memory, latency.
+1. **Per-tenant concurrency limits of "5 concurrent jobs":** The specific recommendation of equal per-tenant limits (5) may be oversimplified. Better approaches like weighted fair queuing or adaptive limits based on tenant tier need investigation.
 
-2. **Hierarchical Token Bucket (HTB)**: Linux HTB used for traffic control. Can/should this be applied at application layer for multi-tenant systems?
+2. **Retry storm threshold:** The claim that retrying at the same rate as the original traffic creates a "retry storm" needs quantitative analysis of specific retry multiplier effects.
 
-3. **Rate Limiting with Cost-based Tokens**: ScyllaDB uses normalized sum of weight + length. How to generalize cost-based tokens for arbitrary API operations?
-
-4. **Dynamic Rate Limit Adjustment**: How to automatically adjust rate limits based on system health metrics (CPU, latency, error rate) without oscillation?
-
-5. **Priority Queue Implementation**: Best practices for priority queues in multi-tenant systems where enterprise tenants get higher priority without starving free tier.
+3. **Health check failure patterns during overload:** The cascade from "endpoint slow" to "health check fails" to "instance restart" is plausible but the exact mechanisms and prevention strategies need deeper investigation.
 
 ## Possible Next Research Directions
 
-1. **Empirical Benchmarking**: Compare rate limiting algorithm implementations under realistic workloads (burst, sustained, adversarial).
+1. **Investigate actual implementations of rate limiters in production:**
+   - Envoy Proxy rate limit filter implementation
+   - Kong API gateway rate limiting plugin
+   - NGINX Plus rate limiting features
 
-2. **Failure Mode Analysis**: Systematic analysis of failure modes when rate limiting/backpressure is misconfigured or absent.
+2. **Research specific backpressure implementations:**
+   - Reactive Streams backpressure protocol (Project Reactor, RxJava)
+   - TCP congestion control mechanisms
+   - HTTP/2 flow control
 
-3. **Cloud Provider Implementations**: Deep dive into AWS API Gateway, Google Cloud Load Balancing, Azure API Management rate limiting implementations.
+3. **Analyze real-world incident postmortems involving rate limiting/backpressure failures:**
+   - AWS service throttling incidents
+   - Google SRE incident reports on overload
+   - Industry case studies on cascading failures
 
-4. **Service Mesh Integration**: How Istio/Linkerd rate limiting and circuit breaking integrates with application-level patterns.
+4. **Benchmark different rate limiting algorithms under realistic load patterns**
 
-5. **Formal Verification**: Can rate limiting/backpressure policies be formally verified for correctness? (e.g., using TLA+)
-
-6. **Adaptive Rate Limiting**: Research on ML-based adaptive rate limiting that learns traffic patterns and adjusts limits dynamically.
-
-7. **Cost-Aware Scheduling**: Extending token bucket to support cost-aware scheduling where different operations have different "costs" in terms of resources.
-
-## Research Freshness Note
-
-- **Current research date**: 2026-09-26
-- **Most recent source edits**: Wikipedia articles edited Aug-Sep 2026
-- **AWS blog**: Updated May 2023
-- **IEEE paper**: May 2018 (may need more recent datacenter research)
-- **ScyllaDB blog**: Aug 2022
-
-**Recommendation**: Re-verify cloud provider specific implementations and emerging patterns (e.g., gRPC flow control, Kubernetes-native queue management) as these evolve rapidly.
+5. **Investigate multi-region rate limiting and global consistency approaches**
