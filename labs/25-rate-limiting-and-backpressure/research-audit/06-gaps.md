@@ -1,36 +1,19 @@
-# Research Gap Analysis
+# Research Gaps
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
-
----
-
-## Gap 1
-
-Type: SCOPE_ERROR (Non-blocking)  
-Severity: LOW  
-Location: `research/06-open-questions.md` §5  
-Problem: Absence of universal quantitative threshold recommendations (e.g. standard retry limits or exact queue depth numbers).  
-Required Revision: None required for research approval; numeric defaults are domain-dependent and must be derived per system via load testing.  
-Can Be Approved Without Fix: YES  
+## Gap 1: Reliance on Tertiary Wikipedia Sources for Core Algorithms
+- **Type**: WEAK_SOURCE
+- **Severity**: LOW
+- **Location**: `research/02-sources.md` (Sources 2, 3, 6, 8, 9)
+- **Problem**: 5 out of 10 sources cited in `02-sources.md` are Wikipedia articles rather than primary academic publications or standard textbooks (e.g., Kurose & Ross, John D.C. Little's 1961 Operations Research paper, or the official Reactive Streams specification repository).
+- **Required Revision**: Supplement Wikipedia citations with primary academic or specification references where rigorous mathematical or protocol authority is needed.
+- **Can Be Approved Without Fix**: YES (The cited Wikipedia formulations accurately reflect canonical definitions and formulas).
 
 ---
 
-## Gap 2
-
-Type: WEAK_SOURCE (Non-blocking)  
-Severity: LOW  
-Location: `research/03-sources.md` Source #10  
-Problem: Industry case studies (Netflix/Cloudflare/Stripe) are referenced generically without direct canonical links.  
-Required Revision: Add specific blog/paper URLs when creating publication-level case study documents in later stages.  
-Can Be Approved Without Fix: YES  
-
----
-
-## Gap 3
-
-Type: IMPLEMENTATION_GAP (Non-blocking)  
-Severity: LOW  
-Location: `research/06-open-questions.md` §6  
-Problem: Comparative empirical benchmarks between cloud rate limiters (AWS API Gateway vs Cloudflare vs Azure API Management) are not included.  
-Required Revision: None for foundational research; can be added in future lab iterations.  
-Can Be Approved Without Fix: YES  
+## Gap 2: Limited Empirical Benchmarks for High-Concurrency Rate Limiting
+- **Type**: MISSING_CASE
+- **Severity**: LOW
+- **Location**: `research/05-report.md:185`, `research/06-open-questions.md:35`
+- **Problem**: The research identifies the difference between Sliding Window Log, Sliding Window Counter, and Token Bucket, but lacks quantitative throughput/memory benchmark comparisons under heavy concurrent loads.
+- **Required Revision**: Include empirical benchmark numbers (e.g. Redis memory per million keys across algorithms) in future deep dives.
+- **Can Be Approved Without Fix**: YES (Noted in `06-open-questions.md` as open research areas).

@@ -1,131 +1,69 @@
 # Open Questions
 
-## Original Open Questions (from research/01-plan.md)
+## Unanswered Questions
 
-### 1. Numeric Recommendations Are Illustrative
+1. **Distributed Token Bucket Consistency**: How to maintain exact token bucket consistency across distributed instances without centralized Redis? What are the trade-offs of eventual consistency vs strong consistency in distributed rate limiting?
 
-**Original Status**: Identified in plan Risks/Unknowns
-**Resolution**: ADDRESSED in `02-findings.md`
+2. **Rate Limiting at Different Layers**: What are the specific implementation patterns and trade-offs for rate limiting at:
+   - API Gateway level (AWS API Gateway, Kong, Envoy)
+   - Application middleware level
+   - Database connection pool level
+   - OS/kernel level (TC, cgroups)
 
-Plan claimed: "Beberapa klaim lab adalah ilustrasi numerik internal (mis. 500 req/detik, 200 user per IP)"
+3. **Circuit Breaker Integration**: How do circuit breakers interact with rate limiting and backpressure? Best practices for cascading failure prevention when combining these patterns?
 
-**Action**: Clarified in findings and report that numeric values (500 req/s, 200 users/IP) are hypothetical illustrations, not real-world statistics. No specific timeout/retry/threshold values are presented as recommendations without evidence.
+4. **gRPC Flow Control**: How does gRPC's HTTP/2 flow control (window-based) compare to application-level rate limiting? When to use each?
 
-**Outcome**: Resolved — illustrative values now explicitly labeled.
+5. **Kubernetes Backpressure**: How do Kubernetes HPA, KEDA, and queue-proxy interact with application-level backpressure? What metrics should trigger scaling vs backpressure?
 
----
+6. **Observability Standards**: What are the standard Prometheus metrics for rate limiting and backpressure? (e.g., rate_limit_exceeded_total, queue_depth, queue_oldest_age, retry_rate)
 
-### 2. Queue Age vs Queue Depth Evidence
+## Weak Evidence Areas
 
-**Original Status**: Flagged as "mungkin bersifat praktik (interpretasi)"
-**Resolution**: RESOLVED with vendor documentation
+1. **Multi-tenant Fair Queueing Algorithms**: Limited public documentation on specific fair queueing implementations (Deficit Round Robin, Weighted Fair Queueing) in application-level systems.
 
-**Evidence Found**:
-- AWS SQS CloudWatch: `ApproximateAgeOfOldestMessage` — official AWS metric
-- Kafka documentation: Consumer Lag monitoring — official Apache documentation
-- Google SRE Book: queue saturation leads to latency increase (§22.10)
+2. **Database-Level Backpressure**: ScyllaDB's token bucket for IO is one example; how do PostgreSQL, MySQL, MongoDB handle backpressure from application connections?
 
-**Action**: Added AWS SQS and Kafka documentation references in `02-findings.md` §Claim 7 and `03-sources.md` Source #8, #9.
+3. **Webhook Provider Rate Limits**: Industry standards for webhook rate limiting (Stripe, GitHub, Slack) - are they documented publicly?
 
-**Outcome**: Resolved — queue age claim now supported by primary vendor sources.
+4. **Real-world Failure Case Studies**: Limited public post-mortems of production outages caused by rate limiting/backpressure failures.
 
----
+5. **Machine Learning / AI Workloads**: How do these patterns apply to GPU inference workloads with highly variable processing times?
 
-### 3. Little's Law Attribution
+## Claims Needing Deeper Research
 
-**Original Status**: Flagged as "risiko salah atribusi"
-**Resolution**: RESOLVED in `02-findings.md` §Claim 3
+1. **Token Bucket vs Sliding Window Log**: Medium article claims sliding window log is alternative for distributed rate limiting. Need quantitative comparison of accuracy, memory, latency.
 
-**Action**:
-- Explicitly separated Little's Law ($L = \lambda W$) from deterministic queue buildup ($\Delta Q = (r_{in} - r_{out}) \cdot \Delta t$)
-- Cited Little (1961) with proper formula and requirements
-- Noted misattribution risk and corrected original plan statement
+2. **Hierarchical Token Bucket (HTB)**: Linux HTB used for traffic control. Can/should this be applied at application layer for multi-tenant systems?
 
-**Outcome**: Resolved — mathematical distinction now documented.
+3. **Rate Limiting with Cost-based Tokens**: ScyllaDB uses normalized sum of weight + length. How to generalize cost-based tokens for arbitrary API operations?
 
----
+4. **Dynamic Rate Limit Adjustment**: How to automatically adjust rate limits based on system health metrics (CPU, latency, error rate) without oscillation?
 
-### 4. Vendor Blog Volatility
+5. **Priority Queue Implementation**: Best practices for priority queues in multi-tenant systems where enterprise tenants get higher priority without starving free tier.
 
-**Original Status**: "Konten yang berubah (blog vendor) — catat tanggal akses"
-**Resolution**: ADDRESSED in `03-sources.md`
+## Possible Next Research Directions
 
-**Action**: All sources verified as of 2026-09-26. AWS blog still accessible; Google SRE Book permanent online; RFC documents stable.
+1. **Empirical Benchmarking**: Compare rate limiting algorithm implementations under realistic workloads (burst, sustained, adversarial).
 
-**Outcome**: Resolved — access date documented.
+2. **Failure Mode Analysis**: Systematic analysis of failure modes when rate limiting/backpressure is misconfigured or absent.
 
----
+3. **Cloud Provider Implementations**: Deep dive into AWS API Gateway, Google Cloud Load Balancing, Azure API Management rate limiting implementations.
 
-## New Open Questions (Post-Revision)
+4. **Service Mesh Integration**: How Istio/Linkerd rate limiting and circuit breaking integrates with application-level patterns.
 
-### 5. Empirically-Validated Threshold Recommendations
+5. **Formal Verification**: Can rate limiting/backpressure policies be formally verified for correctness? (e.g., using TLA+)
 
-**Status**: OPEN — Research Gap
+6. **Adaptive Rate Limiting**: Research on ML-based adaptive rate limiting that learns traffic patterns and adjusts limits dynamically.
 
-**Problem**: No authoritative source found for universal "best practice" timeout/retry/threshold values (e.g., "timeout = 3 seconds", "retry = 5 times", "threshold = 50%").
+7. **Cost-Aware Scheduling**: Extending token bucket to support cost-aware scheduling where different operations have different "costs" in terms of resources.
 
-**Why Not Addressed**:
-- Service types vary dramatically (database vs cache vs external API)
-- Optimal values depend on traffic patterns, network latency, backend capacity
-- No single vendor publishes universal recommendations
-- SRE books recommend service-specific load testing
+## Research Freshness Note
 
-**Requirement for Resolution**:
-- Find peer-reviewed study or industry survey comparing thresholds across service types
-- Or: present as service-specific configuration guidance with load testing recommendation
+- **Current research date**: 2026-09-26
+- **Most recent source edits**: Wikipedia articles edited Aug-Sep 2026
+- **AWS blog**: Updated May 2023
+- **IEEE paper**: May 2018 (may need more recent datacenter research)
+- **ScyllaDB blog**: Aug 2022
 
-**Can Be Approved Without Fix**: YES (non-blocking)
-
----
-
-### 6. Cross-Cloud Rate Limiting Comparison
-
-**Status**: OPEN — Enhancement Opportunity
-
-**Problem**: Research primarily cites AWS and Google documentation; Azure, Cloudflare, Twilio implementations not deeply analyzed.
-
-**Why Not Addressed**:
-- Pipeline override limited scope to research revision
-- Primary blocking issues (findings document, Little's Law) took priority
-- Cross-cloud comparison is enhancement beyond original scope
-
-**Requirement for Resolution**:
-- Systematic review of rate limiting implementations across AWS API Gateway, Azure API Management, Cloudflare, Google Cloud Endpoints
-- Comparative analysis of algorithm choices (token bucket vs sliding window), defaults, observability metrics
-
-**Can Be Approved Without Fix**: YES (non-blocking)
-
----
-
-### 7. Real-World Cascade Failure Case Studies
-
-**Status**: OPEN — Enhancement Opportunity
-
-**Problem**: Findings rely on theoretical failure patterns from Google SRE Book; specific production incidents with published postmortems not documented.
-
-**Why Not Addressed**:
-- Time constraints (pipeline override, research revision scope)
-- Available sources cover theoretical patterns adequately for current audit resolution
-
-**Requirement for Resolution**:
-- Identify 2-3 documented production failures where rate limiting/backpressure mitigated or failed to prevent cascade
-- Examples: AWS outage postmortems, Stripe incident reports, Cloudflare postmortems
-
-**Can Be Approved Without Fix**: YES (non-blocking)
-
----
-
-## Summary
-
-| # | Question | Status | Blocking? |
-|---|----------|--------|-----------|
-| 1 | Numeric recommendations illustrative | RESOLVED | — |
-| 2 | Queue age vs depth evidence | RESOLVED | — |
-| 3 | Little's Law attribution | RESOLVED | YES (was blocking) |
-| 4 | Vendor blog volatility | RESOLVED | — |
-| 5 | Empirically-validated thresholds | OPEN | NO |
-| 6 | Cross-cloud comparison | OPEN | NO |
-| 7 | Real-world case studies | OPEN | NO |
-
-**Blocking Open Questions**: 0 (all blocking issues resolved)
-**Non-Blocking Open Questions**: 3 (enhancement opportunities)
+**Recommendation**: Re-verify cloud provider specific implementations and emerging patterns (e.g., gRPC flow control, Kubernetes-native queue management) as these evolve rapidly.

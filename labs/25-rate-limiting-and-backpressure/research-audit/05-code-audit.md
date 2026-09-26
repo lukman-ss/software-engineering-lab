@@ -1,14 +1,9 @@
 # Code Audit
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+## Pipeline Override Status
+**NOT APPLICABLE**
 
-## Pipeline Scope Note
-PIPELINE OVERRIDE:
-- Audit research only.
-- Do not audit implementation/code in this stage.
-- Runtime verification and test execution are not applicable for this research-stage audit.
-
-## Status
-- **Code Correctness**: NOT_APPLICABLE
-- **Tests**: NOT_APPLICABLE
-- **Demo Execution**: NOT_APPLICABLE
+Per pipeline instructions:
+- Research-only audit mode was specified.
+- Target lab implementation, Go tests, and demo code were not in scope for this audit run.
+- Code correctness and implementation vs documentation verification will be executed during engineering audit stages.

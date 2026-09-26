@@ -1,47 +1,36 @@
-# Contradictions Resolution Log
+# Contradictions Analysis
 
-## Original Contradictions (from research-audit/04-contradictions.md)
+## No Material Contradictions Discovered
 
-### Contradiction 1 (HIGH) — Little's Law Misattribution
+After reviewing all sources, no significant factual contradictions were found between authoritative sources. The following minor differences in emphasis were observed but do not represent contradictions:
 
-**Statement A**: "Little's Law: backlog = (arrival − processing) × waktu" (Research Question Q3 in `01-plan.md`)
+### Areas of Consistent Agreement:
 
-**Statement B**: "Little's Law vs formula backlog kumulatif: risiko salah atribusi — bedakan dengan jelas." (Risks / Unknowns in `01-plan.md`)
+1. **HTTP 429 Status Code**: RFC 6585 and Wikipedia both confirm 429 is the standard rate limiting response with optional Retry-After header.
 
-**Resolution**: RESOLVED in `02-findings.md` §Claim 3
+2. **Token Bucket Algorithm**: All sources (Wikipedia, IEEE paper, ScyllaDB blog, Medium article) describe the same core algorithm: tokens added at fixed rate, bucket capacity limits burst, packet requires n tokens to pass.
 
-**Action Taken**:
-- Explicitly separated Little's Law ($L = \lambda W$) from deterministic queue buildup ($\Delta Q = (r_{in} - r_{out}) \cdot \Delta t$)
-- Provided proper mathematical formulation with variable definitions
-- Cited Little (1961) original paper with DOI
-- Clarified that the fluid model is an approximation, not Little's Law
-- Statement A was **incorrect** — the formula does not represent Little's Law
-- Statement B was **correct** — identified the misattribution risk
+3. **Backpressure Definition**: Reactive Streams specification and general systems literature agree: backpressure prevents downstream from being overwhelmed by upstream production rate.
 
-**Outcome**: Statement A corrected; the original claim has been replaced with precise distinction.
+4. **Little's Law**: Universally accepted as L = λW with the same conditions (ergodic, stationary system).
 
----
+5. **Exponential Backoff + Jitter**: AWS blog and general practice agree jitter is essential to prevent retry storms; multiple jitter variants exist (Full, Equal, Decorrelated).
 
-### Contradiction 2 (LOW) — Irrelevant RFC Citations
+### Minor Differences in Emphasis:
 
-**Statement A**: Plan lists RFC 8305 and RFC 5321 under Expected Primary Sources
+1. **Leaky Bucket Confusion**: Wikipedia Leaky Bucket article notes there are TWO versions (as meter and as queue) causing confusion in literature. Token bucket article states they are "fundamentally the same" when implemented correctly with same parameters. This is a terminology issue, not a factual contradiction.
 
-**Statement B**: "RFC 8305? (mungkin tidak relevan) — ganti: RFC 5321 (SMTP) tidak relevan; fokus: RFC 6585, RFC 9110."
+2. **Distributed Rate Limiting**: Wikipedia mentions Redis/Aerospike for distributed rate limiting; Medium article discusses sliding window log alternative. These are complementary approaches, not contradictory.
 
-**Resolution**: RESOLVED in `03-sources.md`
+3. **Rate Limiting vs Throttling**: RFC 6585 says servers "not required to use 429; may drop connections during attacks." Wikipedia mentions "should be used along with throttling pattern." Both agree on the mechanism; difference is in terminology and when to apply each.
 
-**Action Taken**:
-- Removed RFC 8305 (Happy Eyeballs — not relevant to rate limiting)
-- Removed RFC 5321 (SMTP — not relevant to HTTP rate limiting)
-- Focused on RFC 6585, RFC 9110 as correct primary sources
-- This was a self-correction within the original plan that has been formalized
+4. **Retry Behavior**: AWS blog focuses on client-side retry logic. RFC 6585 mentions Retry-After header for server-side guidance. Both are complementary layers (client and server).
 
-**Outcome**: Irrelevant sources removed; source list is now clean.
+### Assessment:
 
----
+All sources are consistent on core technical facts. Differences are in:
+- Level of abstraction (standard vs implementation vs theory)
+- Specific use case focus (network vs application vs database)
+- Terminology preferences
 
-## Additional Contradictions Found During Research
-
-### None
-
-No additional contradictions were found. The original research plan's risk flags were accurate. The primary issue was the absence of a findings document to execute the self-identified corrections.
+No source contradicts another on fundamental mechanisms or mathematical relationships.

@@ -1,29 +1,22 @@
 # Contradictions Audit
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+## Contradiction Analysis Summary
 
----
+No material factual contradictions were found among the cited research sources or within the research reports (`01-plan.md` through `06-open-questions.md`).
 
-## Contradiction Review
+### Examined Potential Conflict Areas
 
-### 1. Little's Law vs Queue Fluid Dynamics
+1. **Leaky Bucket vs Token Bucket Definitions**:
+   - *Issue*: Literature sometimes uses "Leaky Bucket" interchangeably with "Token Bucket" or splits Leaky Bucket into a traffic shaping queue vs meter.
+   - *Audit Finding*: `04-contradictions.md` and `05-report.md` explicitly document this distinction, noting that as a meter, Leaky Bucket is mathematically equivalent/dual to Token Bucket, whereas as a queue, it enforces a rigid output rate without burst capabilities.
 
-- **Statement A**: Plan originally phrased Q3 around `backlog = (arrival - processing) * time` under Little's Law discussion.
-- **Statement B**: `02-findings.md` and `05-report.md` rigorously distinguish Little's Law ($L = \lambda W$) from deterministic fluid buildup ($\Delta Q = (r_{in} - r_{out})\Delta t$).
-- **Type**: INTERNAL (Resolved)
-- **Impact**: Critical clarification preventing mathematical and conceptual errors in downstream lab code and documentation.
-- **Assessment**: RESOLVED. No lingering contradiction in active findings or technical report.
+2. **Distributed Consistency in Rate Limiters**:
+   - *Issue*: Centralized Redis token bucket enforcement introduces single-point latency/availability dependency, whereas local token buckets permit rate overshoots during node expansion.
+   - *Audit Finding*: The research documents this as an architectural trade-off rather than making a contradictory universal claim.
 
-### 2. Irrelevant RFC Citations
+3. **HTTP 429 Status Code vs Connection Dropping**:
+   - *Issue*: RFC 6585 specifies HTTP 429 status code for rate limiting, while network-layer protection often drops TCP packets.
+   - *Audit Finding*: Both RFC 6585 and research report `05-report.md` clarify that HTTP 429 applies to application layer rate limiting, whereas TCP drops/throttling apply at connection layer under severe load/DDoS.
 
-- **Statement A**: Plan mentioned RFC 8305 and RFC 5321 as potential primary sources.
-- **Statement B**: `03-sources.md` explicitly filtered out RFC 8305 (Happy Eyeballs) and RFC 5321 (SMTP), focusing strictly on RFC 6585, RFC 9110, RFC 2697, and RFC 6598.
-- **Type**: SOURCE_CONFLICT (Resolved)
-- **Impact**: Eliminated noise and irrelevant standards from the research baseline.
-- **Assessment**: RESOLVED.
-
----
-
-## Overall Assessment
-
-No material contradictions found across `01-plan.md`, `02-findings.md`, `03-sources.md`, `04-contradictions.md`, `05-report.md`, and `06-open-questions.md`.
+## Assessment
+**PASS**: No unresolved contradictions found.
