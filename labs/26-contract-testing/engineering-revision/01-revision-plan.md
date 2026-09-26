@@ -4,16 +4,16 @@ Target Lab: labs/26-contract-testing
 Previous Verdict: APPROVED
 
 ## Blocking Issues
-None. The engineering audit passed with zero blocking issues.
-
-## Non-Blocking Issues
 None.
 
+## Non-Blocking Issues
+- GAP-01: `verifier.diffValues` lacks slice/array recursion. Single-resource contract in current lab scope does not utilize JSON arrays; no refactoring required.
+
 ## Files To Change
-None. Existing codebase is completely aligned with research and audit criteria.
+None (all existing implementations and tests pass cleanly and match documentation).
 
 ## Tests To Add/Modify
-None. Existing contract test suite covers consumer contract generation, V1 verification, breaking change detection, dual routing compatibility, and concurrency.
+None.
 
 ## Validation Commands
 ```bash

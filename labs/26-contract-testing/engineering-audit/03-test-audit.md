@@ -1,42 +1,73 @@
-# Test Audit
+# Test Audit: Lab 26 Contract Testing
 
-## Test Suite Overview
+## Test Execution Summary
 
-Test file: `tests/contract_test.go`
-Execution Command: `go test -count=1 -v ./...` & `go test -count=1 -race ./...`
-
-### Test Cases
-
-1. `TestConsumerContractGeneration`
-   - Covers: Contract generator schema, interactions count, endpoints.
-   - Result: PASS (0.00s)
-
-2. `TestProviderV1_ContractVerification_Success`
-   - Covers: Provider V1 contract validation pass, client parsing and field integrity check.
-   - Result: PASS (0.00s)
-
-3. `TestProviderBreaking_ContractVerification_Fails`
-   - Covers: Negative verification path. Verifies breaking provider triggers >= 3 errors and client fails.
-   - Result: PASS (0.00s)
-
-4. `TestProviderDual_ContractVerification_Success`
-   - Covers: Safe evolutionary schema. Provider serves V1 endpoint maintaining backward compatibility alongside V2.
-   - Result: PASS (0.00s)
-
-5. `TestConcurrentContractVerification`
-   - Covers: 20 concurrent goroutines executing verification simultaneously against provider server.
-   - Result: PASS under `-race` detector (0.00s)
-
-## Race Detector Output
-
+Command: `go test -v ./...`
+Result:
 ```text
-ok  	labs/26-contract-testing/tests	1.155s
+=== RUN   TestConsumerContractGeneration
+--- PASS: TestConsumerContractGeneration (0.00s)
+=== RUN   TestProviderV1_ContractVerification_Success
+--- PASS: TestProviderV1_ContractVerification_Success (0.00s)
+=== RUN   TestProviderBreaking_ContractVerification_Fails
+--- PASS: TestProviderBreaking_ContractVerification_Fails (0.00s)
+=== RUN   TestProviderDual_ContractVerification_Success
+--- PASS: TestProviderDual_ContractVerification_Success (0.00s)
+=== RUN   TestConcurrentContractVerification
+--- PASS: TestConcurrentContractVerification (0.00s)
+PASS
+ok  	labs/26-contract-testing/tests	0.399s
 ```
-Zero data races detected.
 
-## Test Depth & Coverage Assessment
+Command: `go test -race ./...`
+Result:
+```text
+PASS
+ok  	labs/26-contract-testing/tests	1.406s
+```
 
-- Happy path: Tested (`TestProviderV1_ContractVerification_Success`, `TestProviderDual_ContractVerification_Success`).
-- Negative / Breaking path: Tested with explicit error count and client failure checks (`TestProviderBreaking_ContractVerification_Fails`).
-- Concurrency: Tested (`TestConcurrentContractVerification`).
-- Assessment: PASS.
+Command: `go run ./cmd/demo`
+Result:
+```text
+=== Contract Testing Lab: Consumer-Driven Contracts & CI Verification ===
+
+[Stage 1] Consumer generates contract:
+Generated Contract (MobileApp -> OrderService):
+...
+[Stage 2] Running Provider V1 Contract Verification:
+Result: PASSED. Provider V1 satisfies Mobile consumer contract.
+CI Deployment Gate: ALLOWED.
+
+[Stage 3] Running Breaking Provider Contract Verification:
+Result: BLOCKED! Breaking changes detected before deployment:
+  1. [A request for order details by ID] path 'status': value mismatch (expected "IN_PROGRESS", got "in_progress")
+  2. [A request for order details by ID] missing expected field 'customer.name'
+  3. [A request for order details by ID] path 'total': type mismatch (expected 150000 [json.Number], got 150000 [string])
+CI Deployment Gate: PREVENTED PRODUCTION OUTAGE.
+
+[Stage 4] Running Dual Provider (V1 + V2) Verification:
+Result: PASSED. Dual provider maintains backwards-compatible V1 contract.
+CI Deployment Gate: ALLOWED for independent canary/migration.
+
+=== Contract Testing Demonstration Complete ===
+```
+
+## Coverage & Quality Assessment
+
+1. **Happy Path**:
+   - `TestProviderV1_ContractVerification_Success` verifies verification succeeds against Provider V1.
+   - Verifies consumer client fetches and deserializes order correctly.
+
+2. **Negative / Breaking Path**:
+   - `TestProviderBreaking_ContractVerification_Fails` asserts that verification fails and catches all 3 breaking changes.
+   - Asserts mobile client call actually fails when talking to breaking provider.
+
+3. **Evolution / Dual Path**:
+   - `TestProviderDual_ContractVerification_Success` validates dual provider passes V1 contract verification and client consumption.
+
+4. **Concurrency / Thread Safety**:
+   - `TestConcurrentContractVerification` executes 20 parallel goroutines verifying contracts against HTTP test server with race detector active. Zero data races observed.
+
+5. **Edge Cases**:
+   - Unknown paths return 404.
+   - Non-GET methods return 405.

@@ -6,23 +6,18 @@ Audit Date: 2026-09-26
 ## Summary
 
 Code Files Reviewed:
-- `internal/model/order.go`
 - `internal/consumer/client.go`
 - `internal/contract/verifier.go`
+- `internal/model/order.go`
 - `internal/provider/server.go`
 - `cmd/demo/main.go`
-- `go.mod`
-- `README.md`
-- `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
-- `engineering/03-execution-result.md`
 
 Tests Reviewed:
 - `tests/contract_test.go`
 
 Commands Executed:
-- `go test -count=1 -v ./...`
-- `go test -count=1 -race ./...`
+- `go test -v ./...`
+- `go test -race ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
@@ -41,7 +36,7 @@ Documentation Accuracy: PASS
 None.
 
 ## Non-Blocking Issues
-None.
+1. `verifier.diffValues` compares objects and primitive scalar values, omitting slice/array recursion. Acceptable for current lab scope.
 
 ## Required Revisions
 None.

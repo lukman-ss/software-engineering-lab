@@ -2,41 +2,39 @@
 
 Target Lab: labs/26-contract-testing
 Implementation Files:
-- internal/model/order.go
-- internal/consumer/client.go
-- internal/contract/verifier.go
-- internal/provider/server.go
-- cmd/demo/main.go
-- go.mod
+- `internal/consumer/client.go`
+- `internal/contract/verifier.go`
+- `internal/model/order.go`
+- `internal/provider/server.go`
 
 Tests:
-- tests/contract_test.go
+- `tests/contract_test.go`
 
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
 
 Approved Research Inputs:
-- research/01-plan.md
-- research/02-sources.md
-- research/03-evidence.md
-- research/04-contradictions.md
-- research/05-report.md
-- research-audit/07-verdict.md (Verdict: APPROVED)
+- `research/01-plan.md`
+- `research/02-sources.md`
+- `research/03-evidence.md`
+- `research/04-contradictions.md`
+- `research/05-report.md`
+- `research/06-open-questions.md`
 
 Main Claims To Verify:
-1. Consumer generates contract specification with minimal required schema.
-2. Provider V1 passes contract verification and mobile consumer client succeeds.
-3. Breaking changes (casing mutation, field renaming, primitive type change) are detected by verifier and trigger CI gate block.
-4. Dual-versioned provider preserves V1 compatibility alongside V2 evolution.
-5. Verification engine is safe under concurrent execution.
-6. Execution outputs match claims without mock/faked test passes.
+1. Consumer generates minimal required schema/interaction specification contract.
+2. Custom lightweight Go contract verifier detects non-breaking and breaking API changes.
+3. Breaking changes (casing change `IN_PROGRESS` -> `in_progress`, field rename `name` -> `full_name`, type mutation `int64` -> `string`) are caught and fail contract verification.
+4. Dual provider (V1 & V2) deployment maintains backwards compatibility for V1 consumer while enabling API evolution.
+5. All code compiles, tests pass, race detector passes, and interactive demo runs correctly.
+6. Documentation (`README.md`) accurately reflects codebase paths, usage, and commands.
 
 Commands To Run:
-- go test -count=1 -v ./...
-- go test -count=1 -race ./...
-- go run ./cmd/demo
+- `go test -v ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 
 Primary Risks:
-- Loose JSON diff matching in custom verifier allowing false positives or false negatives.
-- Verifier failing to validate HTTP status codes, headers, or field types properly.
-- Race conditions during concurrent HTTP verification against the provider.
+- Partial diff engine in contract verifier missing slice or unhandled type recursive checks.
+- False pass on breaking provider schema changes.
+- Unhandled HTTP transport errors during verifier execution causing panic or false result.
