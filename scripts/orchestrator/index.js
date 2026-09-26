@@ -346,20 +346,55 @@ async function main() {
 
     console.log(`Found ${pendingTasks.length} tasks.`);
     
-    // Safety cap: max workers = CPU cores - 1 (min 1)
+    // Adaptive scaling: start with 1 worker, add more every minute if CPU < 80%
     const maxWorkers = Math.max(1, os.cpus().length - 1);
-    console.log(`Starting dynamic pool with up to ${maxWorkers} workers (Target CPU < 80%)`);
+    console.log(`Starting adaptive pool (Max workers: ${maxWorkers}). Starting with 1 worker...`);
     
     const queue = [...pendingTasks];
-    
-    const workers = Array.from({ length: maxWorkers }).map(async (_, id) => {
+    let activeWorkers = 0;
+
+    async function workerLoop(id) {
+        console.log(`[WORKER ${id}] Started.`);
         while (queue.length > 0) {
             const task = queue.shift();
             await processTask(task);
         }
-    });
+        activeWorkers--;
+        console.log(`[WORKER ${id}] Finished. Remaining workers: ${activeWorkers}`);
+    }
 
-    await Promise.all(workers);
+    // Start the first worker immediately
+    activeWorkers++;
+    workerLoop(1);
+
+    let nextWorkerId = 2;
+
+    // Master scaling loop
+    while (true) {
+        // Wait 60 seconds, checking every second if we're done
+        for (let i = 0; i < 60; i++) {
+            if (activeWorkers === 0 && queue.length === 0) break;
+            await sleep(1000);
+        }
+
+        if (activeWorkers === 0 && queue.length === 0) {
+            break; // Everything is finished
+        }
+
+        // If tasks remain and we have capacity for more workers
+        if (queue.length > 0 && activeWorkers < maxWorkers) {
+            const usage = updateCPUUsage();
+            if (usage < 80) {
+                console.log(`\n[SCALING] 1 minute passed. CPU usage is ${usage}%. Adding worker ${nextWorkerId}...`);
+                activeWorkers++;
+                workerLoop(nextWorkerId);
+                nextWorkerId++;
+            } else {
+                console.log(`\n[SCALING] 1 minute passed. CPU usage is ${usage}%. Holding steady at ${activeWorkers} workers.`);
+            }
+        }
+    }
+
     console.log("All tasks processed.");
     process.exit(0);
 }
