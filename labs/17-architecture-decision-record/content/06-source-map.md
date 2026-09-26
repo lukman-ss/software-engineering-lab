@@ -3,21 +3,21 @@
 ## Problem & Why This Matters
 
 Research:
-research/runs/2026-09-26-architecture-decision-record/05-report.md (Finding 1)
-research/runs/2026-09-26-architecture-decision-record/03-evidence.md (Evidence 1, 3)
+research/05-report.md (Finding 1, Finding 2)
+research/03-evidence.md (Evidence 1, Evidence 2)
 
 Sources:
-Documenting Architecture Decisions (Nygard)
-AWS Prescriptive Guidance
+Source 1: Documenting Architecture Decisions (Nygard)
+Source 5: AWS Prescriptive Guidance
 
 ## Mental Model & Core Concept
 
 Research:
-research/runs/2026-09-26-architecture-decision-record/05-report.md (Finding 2, Finding 3)
-research/runs/2026-09-26-architecture-decision-record/03-evidence.md (Evidence 2, 4, 5)
+research/05-report.md (Finding 1, Finding 5)
+research/03-evidence.md (Evidence 1, Evidence 4)
 
 Implementation:
-internal/adr/models.go (Status Lifecycle)
+internal/adr/models.go (Status & Record struct)
 
 ## Failure Scenario & How It Works
 
@@ -55,11 +55,8 @@ engineering/03-execution-result.md
 ## Case Study
 
 Research:
-research/runs/2026-09-26-architecture-decision-record/05-report.md (Finding 5)
-
-Research Audit:
-research-audit/03-claim-audit.md (Claim 6 Warning)
-research-audit/04-contradictions.md (Contradiction 1)
+research/05-report.md (Finding 5)
+research-audit/03-claim-audit.md (Claim 6 - MEDIUM warning on anecdotal evidence)
 
 Implementation:
 cmd/demo/main.go

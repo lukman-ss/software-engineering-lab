@@ -31,7 +31,7 @@ Architecture Decision Record (ADR) dapat dipahami melalui prinsip-prinsip kunci 
 ## Core Concept
 
 ### 1. Batasan Keputusan yang Signifikan (*Architecturally Significant*)
-Tidak semua perubahan kode memerlukan ADR. Berdasarkan kriteria Richards & Ford (2020) yang diadopsi dalam literatur ADR, sebuah keputusan dinilai bernilai arsitektural jika berdampak langsung pada:
+Tidak semua perubahan kode memerlukan ADR. Berdasarkan Nygard (2011) dan Zimmermann (2020), sebuah keputusan dinilai bernilai arsitektural jika berdampak langsung pada:
 - **Struktur (*Structure*):** Pemisahan subsistem, batasan domain, atau pola modularitas.
 - **Persyaratan Non-Fungsional (*Non-Functional Requirements / NFR*):** Skalabilitas, ketersediaan, performa, dan toleransi kegagalan.
 - **Ketergantungan (*Dependencies*):** Pemilihan kerangka kerja utama, basis data, atau protokol integrasi eksternal.
@@ -301,29 +301,43 @@ Sebelum menggabungkan (*merging*) ADR ke cabang utama:
 
 ## Sources
 
+Sumber di bawah ini sesuai `research/02-sources.md` yang telah disetujui audit.
+
 1. **Documenting Architecture Decisions**
    - Penulis: Michael Nygard
    - Publikasi: Cognitect Blog (2011-11-15)
    - URL: https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions
-2. **Architectural Decision Record Process**
-   - Publikasi: AWS Prescriptive Guidance, Amazon Web Services (2023-04-14)
-   - URL: https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/adr-process.html
-3. **Architectural Decision Records (ADRs)**
-   - Publikasi: adr.github.io (2024-11-10)
+2. **Architectural Decision Records**
+   - Publikasi: adr.github.io (community)
    - URL: https://adr.github.io/
-4. **Markdown Architectural Decision Records (MADR)**
-   - Publikasi: adr/madr project (scientific publication 2018-04-03; MADR 4.0.0 on 2024-09-17)
-   - URL: https://adr.github.io/madr/
-5. **Maintain an architecture decision record (ADR)**
-   - Publikasi: Microsoft Learn — Azure Well-Architected Framework (2026-04-13)
-   - URL: https://learn.microsoft.com/en-us/azure/well-architected/architect-role/architecture-decision-record
+3. **Markdown Architectural Decision Records (MADR)**
+   - Publikasi: adr/madr di GitHub (2018–sekarang)
+   - URL: https://github.com/adr/madr
+4. **Architectural Decisions — The Making Of**
+   - Penulis: Olaf Zimmermann
+   - Publikasi: ozimmer.ch (2020-04-27, diperbarui 2026-09-12)
+   - URL: https://ozimmer.ch/practices/2020/04/27/ArchitectureDecisionMaking.html
+5. **Using architectural decision records to streamline decision-making during development**
+   - Penulis: Darius Kunce, Dominik Goby
+   - Publikasi: AWS Prescriptive Guidance
+   - URL: https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/introduction.html
 6. **Monolith First**
    - Penulis: Martin Fowler
    - Publikasi: martinfowler.com (2015-06-03)
    - URL: https://martinfowler.com/bliki/MonolithFirst.html
-7. **Architecture decision record (ADR) — repository README and template collection**
-   - Penulis: Joel Parker Henderson
-   - Publikasi: GitHub — architecture-decision-record/architecture-decision-record (community-maintained)
-   - URL: https://github.com/joelparkerhenderson/architecture-decision-record
+7. **Microservice Premium**
+   - Penulis: Martin Fowler
+   - Publikasi: martinfowler.com (2015-05-13)
+   - URL: https://martinfowler.com/bliki/MicroservicePremium.html
+8. **ISO/IEC/IEEE 42010: Systems and software engineering — Architecture description**
+   - Publikasi: ISO/IEC/IEEE (2011)
+   - URL: http://www.iso-architecture.org/ieee-1471/index.html
+9. **Love Unrequited: The Story of Architecture, Agile, and How Architecture Decision Records Brought Them Together**
+   - Penulis: Michael Keeling
+   - Publikasi: IEEE Software (2022)
+   - URL: https://ieeexplore.ieee.org/document/9801811
+10. **Architectural Decision Guidance Across Projects**
+    - Publikasi: WICSA 2015 Conference
+    - URL: https://www.ost.ch/fileadmin/dateiliste/3_forschung_dienstleistung/institute/ifs/cloud-application-lab/admentor-wicsa2015ubmissionv11nc.pdf
 
-Catatan: Sumber 1–6 adalah sumber primer Tier 1. Sumber 7 adalah referensi komunitas Tier 2 yang dipakai untuk koregatasi praktik "living document" vs imutan.
+Catatan: Klaim "monolith-first" (Sumber 6) didukung observasi anekdot praktisi dengan confidence MEDIUM, sebagaimana dicatat di `research/05-report.md` dan `research-audit/07-verdict.md`. Tidak ada metrik kuantitatif dampak ADR terhadap velocity/onboarding dalam cakupan lab ini.

@@ -46,8 +46,8 @@ Mendefinisikan 5 status siklus hidup formal ADR sesuai panduan *AWS Prescriptive
 
 ## Snippet 2 — Parsing Metadata ADR Berbasis Regex
 
-Source File: `internal/adr/parser.go:17-83`
-Purpose: Memindai teks berkas Markdown untuk mengekstrak ID, Judul, Status, dan relasi silsilah keputusan.
+Source File: `internal/adr/parser.go:20-131`
+Purpose: Memindai teks berkas Markdown untuk mengekstrak ID, Judul, Status, dan relasi silsilah keputusan, serta memvalidasi keberadaan dan keberisian bagian Context, Decision, dan Consequences.
 
 ```go
 func Parse(content string) (*Record, error) {
@@ -58,6 +58,15 @@ func Parse(content string) (*Record, error) {
 
 	foundTitle := false
 	foundStatus := false
+	foundContext := false
+	foundDecision := false
+	foundConsequences := false
+	
+	contextHasContent := false
+	decisionHasContent := false
+	consequencesHasContent := false
+	
+	var activeSection *bool
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -90,6 +99,7 @@ func Parse(content string) (*Record, error) {
 					}
 				}
 			}
+			continue
 		}
 
 		if strings.HasPrefix(strings.ToLower(line), "supersedes:") {
@@ -100,6 +110,29 @@ func Parse(content string) (*Record, error) {
 					record.Supersedes = supersedes
 				}
 			}
+			continue
+		}
+
+		if contextRegex.MatchString(line) {
+			foundContext = true
+			activeSection = &contextHasContent
+			continue
+		}
+		if decisionRegex.MatchString(line) {
+			foundDecision = true
+			activeSection = &decisionHasContent
+			continue
+		}
+		if consequencesRegex.MatchString(line) {
+			foundConsequences = true
+			activeSection = &consequencesHasContent
+			continue
+		}
+		
+		if strings.HasPrefix(line, "#") {
+			activeSection = nil
+		} else if activeSection != nil && len(line) > 0 {
+			*activeSection = true
 		}
 	}
 
@@ -115,12 +148,24 @@ func Parse(content string) (*Record, error) {
 		return nil, fmt.Errorf("invalid status: %s", record.Status)
 	}
 
+	if !foundContext || !contextHasContent {
+		return nil, fmt.Errorf("context section missing or empty")
+	}
+
+	if !foundDecision || !decisionHasContent {
+		return nil, fmt.Errorf("decision section missing or empty")
+	}
+
+	if !foundConsequences || !consequencesHasContent {
+		return nil, fmt.Errorf("consequences section missing or empty")
+	}
+
 	return record, nil
 }
 ```
 
 Explanation:
-Fungsi `Parse` membaca dokumen baris demi baris menggunakan `bufio.Scanner`. Atribut judul dan ID diekstraksi dari heading `# 1. Title`, status dan target pengganti diekstraksi dari baris `Status: Superseded by 2`, dan referensi ke keputusan sebelumnya diekstraksi dari `Supersedes: 1`.
+Fungsi `Parse` membaca dokumen baris demi baris menggunakan `bufio.Scanner`. Atribut judul dan ID diekstraksi dari heading `# 1. Title`, status dan target pengganti diekstraksi dari baris `Status: Superseded by 2`, dan referensi ke keputusan sebelumnya diekstraksi dari `Supersedes: 1`. Selain itu parser memverifikasi bahwa bagian `## Context`, `## Decision`, dan `## Consequences` hadir dan tidak kosong. Setiap penanganan baris metadata diakhiri `continue` agar baris tersebut tidak ikut ditandai sebagai konten bagian section.
 
 ---
 
@@ -152,8 +197,8 @@ Linter mengumpulkan seluruh ID ADR yang terdaftar, mengurutkannya dari terkecil 
 
 ## Snippet 4 — Validasi Konkuren Relasi Timbal-Balik Graf Keputusan
 
-Source File: `internal/adr/linter.go:41-79`
-Purpose: Memvalidasi integritas dua arah silsilah keputusan arsitektur secara paralel menggunakan Goroutines.
+Source File: `internal/adr/linter.go:64-106`
+Purpose: Memvalidasi integritas dua arah silsilah keputusan arsitektur secara paralel menggunakan Goroutines, termasuk deteksi self-supersession.
 
 ```go
 	// Validate graph in parallel
@@ -165,7 +210,9 @@ Purpose: Memvalidasi integritas dua arah silsilah keputusan arsitektur secara pa
 			var localErrs []error
 
 			if rec.Status == StatusSuperseded {
-				if rec.SupersededBy == 0 {
+				if rec.SupersededBy == rec.ID {
+					localErrs = append(localErrs, fmt.Errorf("ADR %d cannot supersede itself", rec.ID))
+				} else if rec.SupersededBy == 0 {
 					localErrs = append(localErrs, fmt.Errorf("ADR %d is superseded but missing superseded_by reference", rec.ID))
 				} else {
 					replacement, exists := recordMap[rec.SupersededBy]
@@ -178,11 +225,15 @@ Purpose: Memvalidasi integritas dua arah silsilah keputusan arsitektur secara pa
 			}
 
 			if rec.Supersedes != 0 {
-				old, exists := recordMap[rec.Supersedes]
-				if !exists {
-					localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes non-existent ADR %d", rec.ID, rec.Supersedes))
-				} else if old.Status != StatusSuperseded || old.SupersededBy != rec.ID {
-					localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes ADR %d, but ADR %d is not properly marked as superseded by ADR %d", rec.ID, rec.Supersedes, rec.Supersedes, rec.ID))
+				if rec.Supersedes == rec.ID {
+					localErrs = append(localErrs, fmt.Errorf("ADR %d cannot supersede itself", rec.ID))
+				} else {
+					old, exists := recordMap[rec.Supersedes]
+					if !exists {
+						localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes non-existent ADR %d", rec.ID, rec.Supersedes))
+					} else if old.Status != StatusSuperseded || old.SupersededBy != rec.ID {
+						localErrs = append(localErrs, fmt.Errorf("ADR %d supersedes ADR %d, but ADR %d is not properly marked as superseded by ADR %d", rec.ID, rec.Supersedes, rec.Supersedes, rec.ID))
+					}
 				}
 			}
 
@@ -198,14 +249,14 @@ Purpose: Memvalidasi integritas dua arah silsilah keputusan arsitektur secara pa
 ```
 
 Explanation:
-Setiap record divalidasi dalam goroutine terpisah. Jika record berstatus `Superseded`, ia memverifikasi bahwa record penggantinya ada dan menyatakan `Supersedes` secara resiprokal. Sebaliknya, jika record menyatakan `Supersedes`, record lama harus berstatus `Superseded` dengan penunjuk ke ID baru. Akses penggabungan ke slice galat `errs` dilindungi oleh `sync.Mutex`.
+Setiap record divalidasi dalam goroutine terpisah. Jika record berstatus `Superseded`, ia memverifikasi bahwa record penggantinya ada dan menyatakan `Supersedes` secara resiprokal. Jika record menyatakan `Supersedes`, record lama harus berstatus `Superseded` dengan penunjuk ke ID baru. Kedua arah juga memeriksa self-supersession (referensi ke diri sendiri). Akses penggabungan ke slice galat `errs` dilindungi oleh `sync.Mutex`.
 
 ---
 
 ## Snippet 5 — Pengujian Kegagalan Referensi Penggantian
 
-Source File: `tests/linter_test.go:36-100`
-Purpose: Menguji deteksi kegagalan struktural referensi rusak atau tautan sepihak.
+Source File: `tests/linter_test.go:36-175`
+Purpose: Menguji deteksi kegagalan struktural referensi rusak atau tautan sepihak, termasuk self-supersession, duplikasi ID, dan siklus supersession.
 
 ```go
 func TestLinter_BrokenReferences(t *testing.T) {
@@ -251,7 +302,6 @@ func TestLinter_BrokenReferences(t *testing.T) {
 					ID:     2,
 					Title:  "Microservices",
 					Status: adr.StatusAccepted,
-					// Forgot Supersedes: 1
 				},
 			},
 			wantErr: "ADR 1 superseded by ADR 2, but ADR 2 does not declare it supersedes ADR 1",
@@ -272,8 +322,84 @@ func TestLinter_BrokenReferences(t *testing.T) {
 			},
 			wantErr: "non-monotonic numbering, expected 2 but got 3",
 		},
+		{
+			name: "self supersession",
+			records: []*adr.Record{
+				{
+					ID:           1,
+					Title:        "Self",
+					Status:       adr.StatusSuperseded,
+					SupersededBy: 1,
+				},
+			},
+			wantErr: "ADR 1 cannot supersede itself",
+		},
+		{
+			name: "duplicate ADR ID",
+			records: []*adr.Record{
+				{
+					ID:     1,
+					Title:  "First",
+					Status: adr.StatusAccepted,
+				},
+				{
+					ID:     1,
+					Title:  "Duplicate First",
+					Status: adr.StatusAccepted,
+				},
+			},
+			wantErr: "duplicate ADR ID: 1",
+		},
+		{
+			name: "cyclical supersession",
+			records: []*adr.Record{
+				{
+					ID:           1,
+					Title:        "One",
+					Status:       adr.StatusSuperseded,
+					SupersededBy: 2,
+				},
+				{
+					ID:           2,
+					Title:        "Two",
+					Status:       adr.StatusSuperseded,
+					Supersedes:   1,
+					SupersededBy: 3,
+				},
+				{
+					ID:           3,
+					Title:        "Three",
+					Status:       adr.StatusSuperseded,
+					Supersedes:   2,
+					SupersededBy: 1,
+				},
+			},
+			wantErr: "cyclical supersession detected",
+		},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			linter := adr.NewLinter()
+			errs := linter.Validate(tt.records)
+			if len(errs) == 0 {
+				t.Fatalf("expected errors, got none")
+			}
+
+			found := false
+			for _, err := range errs {
+				if strings.Contains(err.Error(), tt.wantErr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected error containing %q, got %v", tt.wantErr, errs)
+			}
+		})
+	}
+}
 ```
 
 Explanation:
-Uji tabel (*table-driven test*) yang memvalidasi bahwa linter secara akurat menghasilkan pesan galat yang sesuai pada empat skenario kegagalan struktural: target pengganti tidak ada, asal yang digantikan tidak ada, tautan sepihak yang tidak sinkron, dan penomoran tidak monotonik.
+Uji tabel (*table-driven test*) yang memvalidasi bahwa linter secara akurat menghasilkan pesan galat pada tujuh skenario kegagalan: target pengganti tidak ada, asal yang digantikan tidak ada, tautan sepihak yang tidak sinkron, penomoran tidak monotonik, self-supersession, duplikasi ID, dan siklus supersession.
