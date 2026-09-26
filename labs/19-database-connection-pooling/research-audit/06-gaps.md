@@ -1,43 +1,25 @@
-# Research Gaps
+# Research Gap Analysis
 
 ## Gap 1
-
-Type:
-UNVERIFIED_CLAIM
-
-Severity:
-LOW
-
-Location:
-`06-open-questions.md`: Unanswered Question 1 & Weak Evidence 1
-
-Problem:
-The research posits open questions regarding the latency trade-offs between dynamic vs fixed-size pools under flash traffic, and notes the lack of empirical NVMe sizing constants for PostgreSQL 16+.
-
-Required Revision:
-None. The researcher has correctly classified these as open questions / future research directions rather than asserting unsupported claims.
-
-Can Be Approved Without Fix:
-YES
-
----
+Type: UNVERIFIED_CLAIM
+Severity: LOW
+Location: `research/05-report.md:Limitations`
+Problem: The pool sizing formula `((core_count * 2) + effective_spindle_count)` was designed for spinning disks; its applicability to SSDs is explicitly noted as unanalyzed by primary sources.
+Required Revision: None required. Explicitly disclosed in report limitations.
+Can Be Approved Without Fix: YES
 
 ## Gap 2
+Type: WEAK_SOURCE
+Severity: LOW
+Location: `research/05-report.md:Finding 5`
+Problem: The 50x latency reduction from reducing connections from 2048 to 96 is sourced from an Oracle Real-World Performance video demonstration rather than a formal technical paper.
+Required Revision: None required. Clearly identified as secondary evidence in the report.
+Can Be Approved Without Fix: YES
 
-Type:
-IMPLEMENTATION_GAP
-
-Severity:
-LOW
-
-Location:
-`06-open-questions.md`: Unanswered Question 2
-
-Problem:
-The research touches upon `max_prepared_statements` in PgBouncer (v1.21+) but does not fully resolve its memory overhead in transaction pooling mode.
-
-Required Revision:
-None. Classified accurately as an open question.
-
-Can Be Approved Without Fix:
-YES
+## Gap 3
+Type: SCOPE_ERROR
+Severity: LOW
+Location: `research/05-report.md:Limitations`
+Problem: Research focuses heavily on PostgreSQL and HikariCP/PgBouncer, with minimal coverage of MySQL or SQL Server pooling nuances.
+Required Revision: None. Lab topic targets PostgreSQL patterns.
+Can Be Approved Without Fix: YES

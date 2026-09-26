@@ -1,39 +1,36 @@
-# Audit Plan: Database Connection Pooling Research
+# Audit Plan
 
 ## Target Lab
 `labs/19-database-connection-pooling`
 
-## Pipeline Scope & Override
-- Stage: Research Audit Only.
-- Implementation and code testing are deferred / NOT APPLICABLE in this stage per pipeline override.
-- Output directory: `labs/19-database-connection-pooling/research-audit/`.
-
 ## Files Reviewed
-- `labs/19-database-connection-pooling/research/01-plan.md`
-- `labs/19-database-connection-pooling/research/02-sources.md`
-- `labs/19-database-connection-pooling/research/03-evidence.md`
-- `labs/19-database-connection-pooling/research/04-contradictions.md`
-- `labs/19-database-connection-pooling/research/05-report.md`
-- `labs/19-database-connection-pooling/research/06-open-questions.md`
+- `research/01-plan.md`
+- `research/02-sources.md`
+- `research/03-evidence.md`
+- `research/04-contradictions.md`
+- `research/05-report.md`
+- `research/06-open-questions.md`
 
 ## Claims To Verify
-1. Direct connection establishment imposes severe latency and per-process memory penalties.
-2. Pool sizes beyond core/hardware saturation degrade throughput ("the knee" / resource contention).
-3. The baseline sizing formula `((core_count * 2) + effective_spindle_count)` approaches `core_count * 2` under modern flash/SSD storage.
-4. Independent application worker connection pools multiply linearly, causing backend connection exhaustion unless multiplexed by a proxy pooler (e.g. PgBouncer).
-5. Connection pool deadlock formula `pool size = Tn x (Cm - 1) + 1` sets the theoretical minimum pool floor for multi-connection threads.
-6. Leaks and starvation are observable via `pg_stat_activity` wait states (`idle in transaction`, `ClientRead`).
+1. PostgreSQL `max_connections` behavior and defaults.
+2. Pool size formula: `((core_count * 2) + effective_spindle_count)`.
+3. HikariCP Oracle 50x improvement claim.
+4. PgBouncer pool modes and features.
+5. Cloud provider (Azure, AWS, GCP) connection limits and recommendations.
+6. HikariCP leak detection thresholds.
+7. HikariCP deadlock prevention formula.
 
 ## Code To Execute
-- Code audit and test suite execution are skipped per pipeline override (Research Audit Only).
+*N/A — Pipeline override restricts to research audit only.*
 
 ## Primary Risks
-- Citation accuracy and hallucination in sizing formulas and quotes.
-- Conflating classical rotational storage heuristics (`effective_spindle_count`) with modern SSD/NVMe deployment reality.
-- Treating application-side pooling and proxy-layer pooling as mutually exclusive rather than complementary architectural layers.
+- Oracle 50x claim relies on secondary source (HikariCP citing a video).
+- AWS RDS connection limit formula cited via "subagent search" without direct verification.
+- SSD pool sizing formula unverified.
+- "Knee" curve based on 2014 Wiki data.
 
 ## Audit Strategy
-1. Live network verification of all cited source URLs.
-2. Exact string and semantic matching between research claims and source text.
-3. Analysis of architectural and hardware boundary conditions in sizing claims.
-4. Consistency check across research findings, contradiction synthesis, and open questions.
+1. Cross-reference major claims against provided URLs (where valid/accessible).
+2. Evaluate if sources directly support the claims.
+3. Identify unsupported claims, overgeneralizations, or gaps.
+4. Record contradictions and produce final verdict.

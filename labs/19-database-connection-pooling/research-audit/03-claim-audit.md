@@ -1,161 +1,82 @@
 # Claim Audit
 
-## Claim 1
+## Claim 1: PostgreSQL max_connections default is 100 and acts as a hard slot limit
+Location: `research/03-evidence.md:Evidence 1`, `research/05-report.md:Finding 1`
+Evidence Provided: Direct quote from PostgreSQL documentation.
+Source: PostgreSQL 18 Documentation
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Verified accurate.
 
-Claim: Direct database connection establishment imposes significant latency and backend process memory overhead; PostgreSQL allocates shared memory structures based on `max_connections`.
+## Claim 2: Database performance degrades past a "knee" due to contention and context switching
+Location: `research/03-evidence.md:Evidence 3`, `research/05-report.md:Finding 4`
+Evidence Provided: PostgreSQL Wiki description of disk thrashing, RAM usage, lock contention, context switches.
+Source: PostgreSQL Wiki — Number Of Database Connections
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Verified accurate.
 
-Location:
-`05-report.md`: Finding 1 & `03-evidence.md`: Evidence 3
+## Claim 3: Optimal pool sizing formula is ((core_count * 2) + effective_spindle_count)
+Location: `research/03-evidence.md:Evidence 4`, `research/05-report.md:Finding 2`
+Evidence Provided: Cited by PostgreSQL Wiki and HikariCP Wiki.
+Source: PostgreSQL Wiki & HikariCP Wiki
+Source Actually Supports Claim: YES
+Classification: FACT / INTERPRETATION
+Severity: LOW
+Notes: Supported as a heuristic/starting point. Correctly noted that it was designed for HDDs and unverified for SSDs.
 
-Evidence Provided:
-PostgreSQL fork overhead per connection, `max_connections` shared memory sizing, compared to PgBouncer 2 kB connection memory footprint.
+## Claim 4: Oracle Real-World Performance group demonstrated a 50x latency improvement by reducing pool size from 2048 to 96
+Location: `research/03-evidence.md:Evidence 5`, `research/05-report.md:Finding 5`
+Evidence Provided: Quoted from HikariCP Wiki referencing Oracle video demonstration.
+Source: HikariCP Wiki — About Pool Sizing
+Source Actually Supports Claim: YES
+Classification: EXAMPLE
+Severity: LOW
+Notes: Secondary citation accurately noted in research. Confirmed directly in the HikariCP wiki text.
 
-Source:
-PostgreSQL Documentation (`runtime-config-connection`) & PgBouncer Features
+## Claim 5: HikariCP leakDetectionThreshold default is 0 with a minimum of 2000ms
+Location: `research/03-evidence.md:Evidence 8`, `research/05-report.md:Finding 3`
+Evidence Provided: HikariCP README snippet.
+Source: HikariCP README
+Source Actually Supports Claim: YES
+Classification: IMPLEMENTATION-SPECIFIC
+Severity: LOW
+Notes: Accurate for HikariCP.
 
-Source Actually Supports Claim:
-YES
+## Claim 6: PgBouncer transaction mode breaks session-level state
+Location: `research/03-evidence.md:Evidence 10`, `research/05-report.md:Finding 8`
+Evidence Provided: PgBouncer config documentation list of breaking features.
+Source: PgBouncer Config Documentation
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurate.
 
-Classification:
-FACT
+## Claim 7: AWS RDS calculates PostgreSQL max_connections as LEAST(DBInstanceClassMemory/9531392, 5000)
+Location: `research/03-evidence.md:Evidence 14`, `research/05-report.md:Finding 6`
+Evidence Provided: AWS documentation table.
+Source: AWS RDS User Guide — Connection Limits
+Source Actually Supports Claim: YES
+Classification: FACT / IMPLEMENTATION-SPECIFIC
+Severity: LOW
+Notes: Directly verified via AWS documentation.
 
-Severity:
-LOW
+## Claim 8: Azure PostgreSQL reserves 15 connections and recommends PgBouncer with 2-5x vCores
+Location: `research/03-evidence.md:Evidence 12-13`, `research/05-report.md:Finding 6`
+Evidence Provided: Azure Flexible Server Limits documentation.
+Source: Microsoft Azure Documentation
+Source Actually Supports Claim: YES
+Classification: FACT / IMPLEMENTATION-SPECIFIC
+Severity: LOW
+Notes: Directly verified via Microsoft Learn documentation.
 
-Notes:
-Accurately reflects engine-level mechanics for process-per-connection architectures.
-
----
-
-## Claim 2
-
-Claim: Increasing pool size beyond hardware resource saturation degrades transaction throughput and spikes response latency ("the knee").
-
-Location:
-`05-report.md`: Finding 2 & `03-evidence.md`: Evidence 1, 3
-
-Evidence Provided:
-HikariCP / Oracle benchmark references (decreasing pool size dropped response times from ~100ms to ~2ms) and PostgreSQL Wiki analysis of contention points (RAM/work_mem, lock contention, context switching, cache line contention).
-
-Source:
-HikariCP Wiki & PostgreSQL Wiki
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Supported by empirical tests cited in both primary/secondary sources.
-
----
-
-## Claim 3
-
-Claim: Baseline connection sizing formula is `((core_count * 2) + effective_spindle_count)`, simplifying toward `core_count * 2` (or closer to `core_count`) on modern SSD/NVMe storage.
-
-Location:
-`05-report.md`: Finding 3 & `03-evidence.md`: Evidence 2 & `04-contradictions.md`: Contradiction 1
-
-Evidence Provided:
-Formulas documented in HikariCP wiki and PostgreSQL Wiki with nuance regarding zero rotational latency on SSDs.
-
-Source:
-HikariCP Wiki & PostgreSQL Wiki
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-INTERPRETATION
-
-Severity:
-LOW
-
-Notes:
-The formula serves as a baseline starting point for load testing, not an absolute invariant. The research correctly identifies this caveat.
-
----
-
-## Claim 4
-
-Claim: In horizontally scaled distributed deployments, aggregate application pools multiply linearly and can exhaust database backend slots unless decoupled by a proxy pooler like PgBouncer.
-
-Location:
-`05-report.md`: Finding 4 & `03-evidence.md`: Evidence 4
-
-Evidence Provided:
-Multiplication example (4 instances * 16 workers * 10 connections = 640 vs max_connections 200) and PgBouncer transaction pooling mechanics.
-
-Source:
-PgBouncer Features & PostgreSQL Documentation
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-EXAMPLE
-
-Severity:
-LOW
-
-Notes:
-Clear demonstration of pool multiplication risk in distributed architectures.
-
----
-
-## Claim 5
-
-Claim: Pool deadlocks occur when threads hold multiple connections simultaneously; the theoretical minimum pool size to avoid deadlock is `pool size = Tn x (Cm - 1) + 1`.
-
-Location:
-`03-evidence.md`: Evidence 5
-
-Evidence Provided:
-Resource allocation formula from HikariCP documentation where `Tn` is maximum thread count and `Cm` is maximum simultaneous connections per thread.
-
-Source:
-HikariCP Wiki
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Verified directly in HikariCP documentation.
-
----
-
-## Claim 6
-
-Claim: Connection leaks and starvation are observable via `pg_stat_activity` when sessions remain in `idle in transaction` while waiting on client-side I/O (`ClientRead`).
-
-Location:
-`05-report.md`: Finding 5 & `03-evidence.md`: Evidence 6
-
-Evidence Provided:
-`pg_stat_activity` state definitions and wait event descriptions from PostgreSQL documentation.
-
-Source:
-PostgreSQL Documentation (`monitoring-stats.html`)
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Matches PostgreSQL catalog documentation and production diagnostic standards.
+## Claim 9: Deadlock avoidance pool sizing formula is Tn * (Cm - 1) + 1
+Location: `research/03-evidence.md:Evidence 17`, `research/05-report.md:Finding 11`
+Evidence Provided: Quoted from HikariCP Wiki.
+Source: HikariCP Wiki
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurate mathematical lower bound for resource deadlock avoidance.

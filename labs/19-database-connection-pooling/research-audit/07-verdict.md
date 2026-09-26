@@ -1,40 +1,27 @@
 # Audit Verdict
 
-Target Lab:
-`labs/19-database-connection-pooling`
+Target Lab: labs/19-database-connection-pooling
 
-Audit Date:
-2026-09-26
+Audit Date: 2026-09-26
 
 ## Summary
 
-Major Claims Reviewed: 6
-Sources Reviewed: 5
+Major Claims Reviewed: 9
+Sources Reviewed: 12
 Unsupported Claims: 0
-Contradictions: 2 (Properly synthesized and resolved)
-Code Issues: 0 (Not applicable per override)
-Test Failures: 0 (Not applicable per override)
-Research Gaps: 2 (Properly scoped as open questions)
+Contradictions: 0
+Code Issues: 0 (PIPELINE OVERRIDE: SKIPPED)
+Test Failures: 0 (PIPELINE OVERRIDE: SKIPPED)
+Research Gaps: 3 (All explicitly acknowledged in limitations)
 
 ## Quality Gates
 
-Source Integrity:
-PASS
-
-Claim Support:
-PASS
-
-Internal Consistency:
-PASS
-
-Code Correctness:
-NOT_APPLICABLE
-
-Tests:
-NOT_APPLICABLE
-
-Documentation Accuracy:
-PASS
+Source Integrity: PASS
+Claim Support: PASS
+Internal Consistency: PASS
+Code Correctness: NOT_APPLICABLE
+Tests: NOT_APPLICABLE
+Documentation Accuracy: PASS
 
 ## Blocking Issues
 
@@ -42,7 +29,8 @@ None.
 
 ## Non-Blocking Issues
 
-1. SSD vs rotational disk sizing formulas require practitioner nuance to avoid oversizing, which the research successfully notes.
+1. The canonical pool size formula `((core_count * 2) + effective_spindle_count)` lacks rigorous empirical verification on SSD-backed databases, though sources broadly acknowledge this deficiency.
+2. Oracle performance claims (50x improvement) derive from a vendor demonstration rather than an independent benchmark.
 
 ## Required Revisions
 

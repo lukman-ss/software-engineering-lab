@@ -1,31 +1,42 @@
-# Research Plan: Database Connection Pooling
+# Research Plan
 
 ## Research Topic
-Database Connection Pooling: Architecture, Sizing Formulas, Connection Leaks, Resource Contention, and Production Diagnostics.
+Database Connection Pooling — Connection Pool, Connection Exhaustion, Connection Leak, Pool Size, Connection Wait Time, Database Capacity, Monitoring, Production Troubleshooting
 
 ## Objective
-Investigate how connection pooling operates at the protocol, process, and application layers; determine authoritative sizing formulas and limits; understand failure modes (connection exhaustion, leaks, lock contention); and establish production diagnostic playbooks for PostgreSQL deployments.
+Investigate how database connection pooling works, why applications experience connection exhaustion despite database health, the mechanics of connection leaks, optimal pool sizing strategies, and evidence-based monitoring and troubleshooting approaches for production environments.
 
 ## Research Questions
-1. **Connection Lifecycle & Overhead**: What exact resource overhead (memory, process creation, TLS/handshake) does a direct database connection incur in process-per-connection architectures like PostgreSQL?
-2. **Pool Sizing & Saturation Dynamics**: Why does throughput degrade when pool sizes exceed CPU core limits ("the knee" in the TPS curve), and what mathematical formulas govern optimal sizing?
-3. **Failure Modes (Leaks & Exhaustion)**: What mechanisms trigger connection leaks (`idle in transaction`, unclosed connections, hanging external I/O), and how does connection starvation cascade into application 500 errors?
-4. **Architecture Sizing**: In multi-instance distributed deployments (e.g., 4 instances × 16 workers × 10 connections = 640 potential connections vs `max_connections = 200`), how should client-side pooling vs intermediary proxy pooling (e.g., PgBouncer) be structured?
-5. **Monitoring & Diagnostic Sequence**: What metrics and database catalog views (`pg_stat_activity`, wait events) must be inspected before altering server-side `max_connections`?
+1. What is the relationship between `max_connections` and application-side pool configuration, and what happens when they are mismatched?
+2. What is the optimal pool size formula, and what evidence supports it?
+3. How do connection leaks occur, and what are the observable symptoms versus root causes?
+4. What are the mechanisms of external connection poolers (PgBouncer) and how do they mitigate exhaustion?
+5. What monitoring metrics are necessary to detect connection pool issues before they cause outages?
+6. What are cloud-provider-specific limits and recommendations for connection management?
 
 ## Search Strategy
-- Query primary database engine documentation (PostgreSQL 15-18 documentation).
-- Consult authoritative connection pool engineering literature (HikariCP / Brett Wooldridge, Oracle Real-World Performance Group).
-- Review database proxy architecture specifications (PgBouncer documentation).
-- Review community wiki and benchmark analyses (PostgreSQL Wiki on "Number Of Database Connections").
+- Query: "database connection pooling production troubleshooting"
+- Query: "HikariCP pool sizing formula optimal connections"
+- Query: "PostgreSQL max_connections connection exhaustion"
+- Query: "PgBouncer connection pooler configuration transaction mode"
+- Query: "connection leak detection JDBC pool"
+- Query: "database connection pool monitoring metrics active idle wait"
+- Query: "AWS RDS max_connections connection pooling limits"
+- Query: "Azure PostgreSQL connection limits PgBouncer"
+- Query: "Google Cloud SQL managed connection pooling"
 
-## Expected Primary Sources
-- PostgreSQL Official Documentation: Connections and Authentication (`max_connections`, `reserved_connections`), Cumulative Statistics System (`pg_stat_activity`).
-- HikariCP Architecture Documentation: Pool Sizing Principles & Formulas.
-- PostgreSQL Wiki: Number Of Database Connections (Contention analysis, scaling bottlenecks).
-- PgBouncer Documentation: Architecture & Pooling Modes (Session, Transaction, Statement).
+Expected Primary Sources:
+- PostgreSQL official documentation (runtime-config-connection)
+- PostgreSQL wiki (Number Of Database Connections)
+- HikariCP official documentation (About Pool Sizing, Configuration)
+- PgBouncer official documentation (Configuration, Features)
+- Azure Database for PostgreSQL limits documentation
+- Google Cloud SQL database connection management docs
+- AWS RDS limits documentation
 
 ## Risks / Unknowns
-- SSD vs spinning disk variance in the classical PostgreSQL connection formula `((core_count * 2) + effective_spindle_count)`.
-- Transaction pooling incompatibilities with application-level session states (`SET/RESET`, prepared statements, advisory locks).
-- Discrepancy between single-tenant internal connection pooling and distributed microservice pooling over multi-tier orchestrators.
+- The pool sizing formula `(core_count * 2) + effective_spindle_count` was designed for spinning disks; its applicability to SSDs is explicitly noted as unanalyzed in the source.
+- The Oracle Real-World Performance video demonstrating 50x improvement from pool reduction was cited by HikariCP but not independently verified (secondary citation).
+- Cloud provider documentation may have changed since publication; Azure docs were last updated 2026-07-08.
+- Connection leak detection thresholds are framework-specific (HikariCP); equivalent mechanisms in other pools (e.g., c3p0, DBCP) were not investigated.
+- The PostgreSQL wiki article was last edited in 2014 and may not reflect recent PostgreSQL versions' changes.
