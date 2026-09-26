@@ -1,39 +1,66 @@
 # Test Audit
 
-## Test Suite Overview
+Target Lab: `labs/20-zero-downtime-deployment`
 
-Total Tests: 18
-Total Packages Tested: 1 (`tests`)
-Race Detector Verified: Yes (`go test -race ./...`)
+## Test Execution Results
 
-## Breakdown of Tests
+All commands executed locally inside `labs/20-zero-downtime-deployment`:
 
-### Database (`tests/db_test.go`)
-- `TestDBNotFound`: Verifies `ErrNotFound` on nonexistent keys. PASS.
-- `TestDBSingleNameLegacy`: Verifies legacy single-name record splitting without panic or malformed last name. PASS.
-- `TestDBSaveExpandEmptyFields`: Verifies edge cases with empty first name or empty last name. PASS.
-- `TestDBLegacyOverwriteWithExpand`: Verifies overwriting a legacy entry with modern expanded format. PASS.
-- `TestExpandContractDatabase`: Verifies core Expand and Contract flow: legacy write readable via modern structure, expand write dual-populated. PASS.
+### Command 1: `go test -v ./...`
+Status: PASS
+Output summary:
+- `TestDBNotFound` (PASS)
+- `TestDBSingleNameLegacy` (PASS)
+- `TestDBSaveExpandEmptyFields` (PASS)
+- `TestDBLegacyOverwriteWithExpand` (PASS)
+- `TestExpandContractDatabase` (PASS)
+- `TestServerProbes` (PASS)
+- `TestServerGracefulShutdown` (PASS)
+- `TestServerPreStopHook` (PASS)
+- `TestServerPreStopContextCancellation` (PASS)
+- `TestServerInvalidDurationFallback` (PASS)
+- `TestServerReadyUnreadyTransition` (PASS)
+- `TestServerMultiRequestDrain` (PASS)
+- `TestServerWorkRequestCancellation` (PASS)
+- `TestWorkerConcurrency` (PASS)
+- `TestWorkerGracefulShutdown` (PASS)
+- `TestWorkerEnqueueAfterStop` (PASS)
+- `TestWorkerConcurrentEnqueueStop` (PASS)
+- `TestWorkerShutdownTimeout` (PASS)
 
-### HTTP Server (`tests/server_test.go`)
-- `TestServerProbes`: Verifies liveness returns 200, readiness returns 503 before readiness and 200 after. PASS.
-- `TestServerGracefulShutdown`: Verifies single in-flight request completes with HTTP 200 while shutdown is in progress. PASS.
-- `TestServerPreStopHook`: Verifies that shutdown waits for the configured preStop duration. PASS.
-- `TestServerPreStopContextCancellation`: Verifies that shutdown aborts promptly without hanging when context deadline expires during preStop. PASS.
-- `TestServerInvalidDurationFallback`: Verifies invalid `d` query parameter falls back to 50ms safely. PASS.
-- `TestServerReadyUnreadyTransition`: Verifies manual state transition from ready to unready. PASS.
-- `TestServerMultiRequestDrain`: Verifies multiple concurrent in-flight requests (n=3) all complete successfully during shutdown drain. PASS.
-- `TestServerWorkRequestCancellation`: Verifies client cancellation decrements active request counter cleanly. PASS.
+### Command 2: `go test -count=1 -race ./...`
+Status: PASS
+Duration: 1.922s
+Race Detector Verdict: 0 data races detected.
 
-### Background Worker (`tests/worker_test.go`)
-- `TestWorkerConcurrency`: Verifies multiple concurrent workers drain all enqueued jobs cleanly. PASS.
-- `TestWorkerGracefulShutdown`: Verifies active and buffered jobs finish during graceful stop. PASS.
-- `TestWorkerEnqueueAfterStop`: Verifies attempts to enqueue jobs after `Stop()` are rejected without panicking. PASS.
-- `TestWorkerConcurrentEnqueueStop`: Stress tests concurrent enqueuers racing against `Stop()` across 50 iterations to ensure zero closed-channel panics and data races. PASS.
-- `TestWorkerShutdownTimeout`: Verifies that when drain timeout expires, in-flight/queued work exceeding timeout is aborted via context cancellation. PASS.
+### Command 3: `go run ./cmd/demo`
+Status: PASS
+Runtime Output:
+```text
+2026/09/26 19:51:41 Starting Zero-Downtime Deployment Demo
+2026/09/26 19:51:41 Background worker started
+2026/09/26 19:51:41 Worker 0 starting job DemoJob-1
+2026/09/26 19:51:41 Server starting on 127.0.0.1:8080
+2026/09/26 19:51:42 Application is ready to receive traffic (Readiness check passes)
+2026/09/26 19:51:43 Simulating SIGTERM from orchestrator (e.g. Kubernetes)
+2026/09/26 19:51:43 SIGTERM received, initiating graceful shutdown procedures
+2026/09/26 19:51:43 Server received shutdown request
+2026/09/26 19:51:43 Server marked unready, detached from load balancer
+2026/09/26 19:51:43 Executing preStop sleep for 1s to allow routing table updates...
+2026/09/26 19:51:43 Worker 0 finished job DemoJob-1
+2026/09/26 19:51:44 Initiating graceful shutdown of HTTP listeners...
+2026/09/26 19:51:44 Client request completed with status: 200
+2026/09/26 19:51:44 All in-flight requests completed. Server stopped gracefully.
+2026/09/26 19:51:44 Worker receiving stop signal, no longer accepting new jobs...
+2026/09/26 19:51:44 Worker gracefully stopped
+2026/09/26 19:51:44 Demo finished cleanly. Zero downtime achieved.
+```
 
-## Test Execution Summary
+## Test Coverage Evaluation
 
-- `go test -v -count=1 ./...`: 18/18 PASS (0 failures)
-- `go test -race -v -count=1 ./...`: 18/18 PASS (0 data races detected)
-- Test Coverage Quality: Robust. Covers happy path, boundary cases, concurrent races, timeouts, and negative paths.
+| Component | Tested Scenarios | Missing / Weak Scenarios | Rating |
+| :--- | :--- | :--- | :--- |
+| `internal/db` | - Not found error check<br>- Legacy single name<br>- Empty field fallback<br>- Legacy overwrite with expanded record<br>- Expand & contract read/write | None. All primary state transitions and edge cases covered. | STRONG |
+| `internal/server` | - Liveness & readiness probes<br>- Ready to unready toggle<br>- Graceful drain with active request<br>- Multi-request concurrent drain<br>- PreStop hook delay<br>- PreStop context cancellation<br>- Request context cancellation<br>- Malformed duration parameter fallback | None. Probe lifecycle, concurrency, and cancellation edge cases covered. | STRONG |
+| `internal/worker` | - Multi-worker concurrency<br>- Graceful shutdown of in-flight jobs<br>- Rejection of enqueue post-stop<br>- Highly concurrent Enqueue vs Stop race test (50 iterations x 10 goroutines)<br>- Drain timeout interruption | None. Cooperative shutdown, preemption, and edge cases covered. | STRONG |
+| `cmd/demo` | - Full end-to-end lifecycle execution | Executable runs cleanly to completion. | STRONG |

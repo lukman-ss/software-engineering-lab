@@ -1,46 +1,62 @@
 # Code Audit
 
-## Finding 1
+Target Lab: `labs/20-zero-downtime-deployment`
 
-Location: `internal/server/server.go:88-99`
-Claimed Behavior: Server unreadiness transition and preStop delay hook for load balancer detachment latency.
-Observed Implementation: `Shutdown(ctx)` sets `s.ready.Store(false)` first, then if `s.preStop > 0`, waits via `select` on `time.After(s.preStop)` or `ctx.Done()`. If canceled, returns `ctx.Err()`.
+## Finding 1: Correctness of Server Lifecycle and PreStop Hook
+
+Location: `internal/server/server.go:85-110`
+Claimed Behavior: Server marks readiness probe unready (`503`), executes configurable `preStop` delay to simulate routing detachment, then invokes graceful shutdown waiting for active in-flight requests.
+Observed Implementation:
+- `s.SetReady(false)` is invoked immediately upon `Shutdown()`.
+- If `s.preStop > 0`, it waits on `select` between `time.After(s.preStop)` and `ctx.Done()`, avoiding unbounded blocking on cancelled context.
+- Calls standard library `s.srv.Shutdown(ctx)`, followed by `s.wg.Wait()` on in-flight requests.
+- Active requests are tracked with `atomic.Int32` and `sync.WaitGroup`.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles context cancellation without blocking indefinitely.
+Notes: Implementation matches design specifications.
 
-## Finding 2
+---
 
-Location: `internal/server/server.go:43-63`
-Claimed Behavior: Active HTTP request tracking and connection draining during graceful shutdown.
-Observed Implementation: `/work` handler increments `activeCount` and `wg`, defers decrements/`Done()`, and listens to `r.Context().Done()` during long work simulation. `Shutdown(ctx)` calls `srv.Shutdown(ctx)` (which stops accepting new connections) and then `s.wg.Wait()` to wait for active requests.
+## Finding 2: Safe Concurrency and Teardown in Worker Queue
+
+Location: `internal/worker/worker.go:76-107`
+Claimed Behavior: Background queue worker accepts jobs, runs workers concurrently, and allows in-flight jobs to complete gracefully during shutdown while dropping jobs enqueued after shutdown.
+Observed Implementation:
+- `Enqueue()` protects channel send with `enqueueMu` and checks `w.stopped.Load()`.
+- `Stop()` acquires `enqueueMu`, flags `stopped = true`, closes `jobChan`, and releases lock before waiting on workers.
+- Channel closure guarantees no deadlock or panic on enqueue attempt after stop.
+- Worker goroutines check `w.ctx.Done()` both before and after job channel dequeues to prevent stale job dispatch if timeout triggers.
+- Protected slice append in `w.completed` with `completedMu`.
 Assessment: PASS
 Severity: LOW
-Notes: Properly coordinates standard library `http.Server.Shutdown` with custom WaitGroup tracking for active handlers.
+Notes: Tested under heavy concurrent enqueue/stop loops with Go race detector enabled; no races detected.
 
-## Finding 3
+---
 
-Location: `internal/worker/worker.go:76-91`
-Claimed Behavior: Safe concurrent job enqueuing and graceful worker stop.
-Observed Implementation: `Enqueue` acquires `enqueueMu`, checks `w.stopped.Load()`, and sends to `jobChan` under lock. `Stop` acquires `enqueueMu`, sets `stopped = true`, closes `jobChan`, and releases lock.
-Assessment: PASS
-Severity: LOW
-Notes: Thread-safe close-and-send synchronization prevents sending on a closed channel under race conditions.
-
-## Finding 4
-
-Location: `internal/worker/worker.go:47-69`
-Claimed Behavior: Worker job processing and drain timeout context cancellation.
-Observed Implementation: Workers select from `jobChan` or `w.ctx.Done()`. Upon dequeue, workers check `w.ctx.Done()` before and during job execution to abort if drain timeout expires.
-Assessment: PASS
-Severity: LOW
-Notes: Clean handling of graceful drain versus hard shutdown timeout escalation.
-
-## Finding 5
+## Finding 3: Database Expand and Contract Pattern Compatibility
 
 Location: `internal/db/db.go:41-71`
-Claimed Behavior: Expand and Contract pattern with fallback read compatibility.
-Observed Implementation: `SaveExpand` writes both `Name` and `FirstName`/`LastName`. `GetUser` checks missing fields and dynamically reconciles legacy `Name` splitting or modern `FirstName`/`LastName` combining. Protected by `RWMutex`.
+Claimed Behavior: Database store supports legacy single-name format and modern first/last name format, dual-writing during the Expand phase and transparently falling back on reads.
+Observed Implementation:
+- `InsertLegacy` writes `Name`.
+- `SaveExpand` writes `FirstName`, `LastName`, and computes dual-written `Name = strings.TrimSpace(firstName + " " + lastName)`.
+- `GetUser` checks if `FirstName == "" && LastName == ""` with non-empty `Name`, splitting via `strings.SplitN(rec.Name, " ", 2)` to populate legacy reads into new format.
+- Fallback checks empty `Name` when first/last names exist.
+- Thread-safe access using `sync.RWMutex`.
 Assessment: PASS
 Severity: LOW
-Notes: Implementation correctly demonstrates schema evolution fallback without data loss.
+Notes: Edge cases (single name without space, empty strings) properly covered and tested.
+
+---
+
+## Finding 4: In-Flight HTTP Request Abort Handling
+
+Location: `internal/server/server.go:43-63`
+Claimed Behavior: When a client terminates early during `/work`, server handles context cancellation cleanly without leaking active request counts.
+Observed Implementation:
+- Uses `s.wg.Add(1)` / `defer s.wg.Done()` and `s.activeCount.Add(1)` / `defer s.activeCount.Add(-1)`.
+- Listens on `r.Context().Done()` alongside `time.After(d)`.
+- Upon context cancellation, exits handler promptly; `defer` blocks decrement counter and mark WaitGroup done.
+Assessment: PASS
+Severity: LOW
+Notes: Verified by `TestServerWorkRequestCancellation`.
