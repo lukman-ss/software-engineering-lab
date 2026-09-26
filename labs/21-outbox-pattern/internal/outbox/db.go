@@ -68,6 +68,19 @@ func (db *DB) MarkOutboxProcessed(id string) error {
 	return nil
 }
 
+func (db *DB) PurgeProcessedOutbox() int {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	purged := 0
+	for id, msg := range db.outbox {
+		if msg.Status == MessageStatusProcessed {
+			delete(db.outbox, id)
+			purged++
+		}
+	}
+	return purged
+}
+
 type Tx struct {
 	mu           sync.Mutex
 	db           *DB

@@ -168,3 +168,26 @@ func TestTransactionalOutbox_ConcurrentWrites(t *testing.T) {
 	wg.Wait()
 	time.Sleep(50 * time.Millisecond) // Let relay catch up
 }
+
+func TestTransactionalOutbox_PurgeProcessed(t *testing.T) {
+	db := outbox.NewDB()
+	tx := db.BeginTx()
+	_ = tx.SaveOutbox(outbox.OutboxMessage{ID: "m1", Status: outbox.MessageStatusPending})
+	_ = tx.SaveOutbox(outbox.OutboxMessage{ID: "m2", Status: outbox.MessageStatusProcessed})
+	_ = tx.Commit()
+
+	purged := db.PurgeProcessedOutbox()
+	if purged != 1 {
+		t.Fatalf("expected 1 record purged, got %d", purged)
+	}
+
+	_, ok := db.GetOutbox("m1")
+	if !ok {
+		t.Fatalf("expected pending message to remain")
+	}
+
+	_, ok = db.GetOutbox("m2")
+	if ok {
+		t.Fatalf("expected processed message to be purged")
+	}
+}
