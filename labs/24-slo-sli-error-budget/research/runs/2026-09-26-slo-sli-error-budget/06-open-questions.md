@@ -1,0 +1,23 @@
+# Open Questions
+
+## Weak Evidence / Perlu Cross-Check Independen
+1. **Four Golden Signals** – Sumber Tier 1 hanya Google SRE Book Ch.6. Tidak ada sumber independen (mis. CNCF, AWS, Azure, paper konferensi) yang saya berhasil ambil (404/timeout). Tapi konsep "latency, traffic, errors, saturation" sangat umum; pertanyaan: apakah ada formulasi atau penyebutan berbeda di literatur monitoring umum?
+2. **Burn rate metodologi** – Pendekatan multiwindow-multi-burn-rate hanya terdocumentasi di SRE Workbook Ch.5. Sumber independen: apakah vendor Prometheus/Grafana/Datadog/New Relic merekomendasikan parameter serupa? Apakah ada studi perbandingan recall/precision dari berbagai strategi alerting SLO?
+3. **Statistik "70% outages akibat change"** – Hanya muncul di Appendix B Error Budget Policy sebagai catatan tanpa metodologi atau referensi ilmiah. Apakah ini hasil audit internal Google yang dipublikasikan di tempat lain? Apakah studi industri lain (mis. Uptime Institute, SREcon talks) mendukung angka serupa?
+4. **Rekomendasi window 4 minggu rolling** – Hanya berasal dari SRE Workbook Ch.2 ("we have found..."). Apakah ada benchmark independen (mis. studi case di Netflix/Spotify/Shopify) yang membandingkan window 1 minggu, 2 minggu, 1 bulan, 3 bulan dalam hal stabilitas SLO dan overhead alerting?
+
+## Unanswered Questions dari Topik Lab
+1. **Terjemahan istilah teknis ke Bahasa Indonesia** – Apakah ada standar resmi (mis. BNSP, Komtek) untuk SLI/SLO/error budget/burn rate dalam konteks kurikulum Teknik Informatika? Atau apakah tetap memakai istilah Inggris dalam dokumentasi internal perusahaan Indonesia?
+2. **Implementasi pada monolith vs microservices** – Contoh di SRE Book Workoutfokus pada layanan satu jenis (HTTP API). Bagaimana prinsip SLO berlaku bila satu layanan terdiri dari ratusan microservices dengan criticality bervariasi? Apakah perlu SLO per service, per endpoint, atau per user journey?
+3. **SLO untuk layanan non-request-driven** – Contoh di Workbook Ch.2 menyentuh pipeline/storage (freshness, correctness, durability) tetapi tidak detail. Bagaimana menerapkan SLI/SLO pada sistem batch harian (mis. ETL data warehouse) atau sistem event-driven (mis. Kafka consumer) di mana konsep "request" tidak jelas?
+4. **Relasi dengan observability modern (OpenTelemetry, Loki, Tempo)** – SRE Book menggunakan Borgmon/tsdb. Bagaimana menerapkan prinsip yang sama bila stack observasi berbasis OpenTelemetry signals (traces, metrics, logs) dengan backend seperti Tempo/Prometheus/Loki? Apakah SLI/SLO harus didefinisikan per signal type atau gabungan?
+5. **Trade-off biaya kejenuhan (alert fatigue) vs deteksi cepat** – Rekomendasi multiwindow-multi-burn-rate menurunkan false positive tetapi tetap memerlukan pengaturan parameter (14.4×, 6×, 1×). Apakah ada metodologi untuk menentukan parameter ini secara dinamis berdasarkan histori incident dan beban on-call tim? Misalnya: machine learning on past alert value vs action taken?
+6. **Hall of Fame SLO di industri** – Di luar Google, apakah ada publikasi case study terverifikasi (mis. dari AWS re:Invent, Azure blog, CNCF testimonial) tentang penerapan SLO yang sukses mengurangi conflict product vs engineering dengan metrik kuat (mis. decrease in MTTR, increase in deployment frequency tanpa naiknya incident)?
+7. **Regulasi dan standar industri** – Apakah ada standar industri (mis. ISO, ITIL, Telcordia) yang menspesifikasikan SLI/SLO untuk layanan tertentu (mis. perbankan, telekomunikasi, kesehatan)? Apakah penggunaan SLO dalam kontrak eksternal (mis. dengan cloud provider, SaaS vendor) sudah adopsi standar de facto?
+
+## Possible Next Research Directions (jika diberikan waktu tambahan)
+1. **Meta-analisis studi kasus SLO di industri** – Kumpulkan publikasi dari blog perusahaan (Netflix Tech Blog, Uber Engineering, Shopify Engineering) tentang SLO/SLI/error budget; ekstrak best practice dan pitfall yang konsisten.
+2. **Perbandingan alat monitoring** – Evaluasi cara menerapkan SLI/SLO/PromQL di Prometheus, Datadog, New Relic, AWS CloudWatch, Azure Monitor; catat keterbatasan masing-masing dalam menangkap histogram/percentile dan multiwindow alerting.
+3. **Simulasi error budget** – Buat model sederhana (mis. Python) yang mensimulasikan aliran request dengan distribusi latency/error tertentu; hitung konsumsi budget dengan berbagai strategi alerting dan ukur MTTR vs alert noise.
+4. **Wawancara dengan praktisi SRE di Indonesia** – Untuk konteks lab Bahasa Indonesia, eksplorasi adopsi SLO di perusahaan teknologi lokal (GO-JEK, Tokopedia, Traveloka, Bukalapak) dan tantangan kulturyalim dalam mengadopsi filosofi error budget.
+5. **Terima kasih.
