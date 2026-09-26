@@ -1,55 +1,56 @@
 # Test Audit
 
 Target Lab: labs/19-database-connection-pooling
-Tests Reviewed: tests/pool_test.go (4 tests)
+Tests: tests/pool_test.go
 
-## Test Results
+Actual Execution:
+- go test ./... → ok (0.253s, cached)
+- go test -race ./... → PASS (race clean)
+- go vet ./... → clean
 
-Commands Executed:
-- go test -v ./... → PASS (all 4 tests)
-- go test -race -v ./... → PASS (no data races)
+## Coverage Matrix
 
-### TestDirectConnectionOverhead
-- Type: Happy path (performance comparison)
-- Assertion: pooledDuration < unpooledDuration
-- Coverage: PASS — timing assumption stable (5x 5ms delay vs reuse)
-- Result: PASS (0.03s)
+| Test | Category | PASS | Notes |
+|------|----------|------|-------|
+| TestDirectConnectionOverhead | happy | YES | pooled faster than unpooled |
+| TestOversizedPoolExhaustsServerConnections | failure | YES | >=10 failures (20 pool, 10 server) |
+| TestConnectionStarvationDueToLeak | edge/leak | YES | 20ms timeout fires |
+| TestSafeProcessingConcurrently | concurrency happy | YES | 20 goroutines, pool 5 |
+| TestPoolLockingDeadlock | edge | YES | 2nd Conn(ctx) times out |
+| TestMockConnDoubleClose | edge | YES | idempotent close |
+| TestExternalCallErrorPropagation (x2) | failure | YES | error propagated, conn cleaned |
+| TestPreCancelledContextProcessOrderSafe | negative | YES | pre-cancelled ctx errors |
+| TestUnsafeLeakExecContextFailure | failure | YES | saturated pool errors |
+| TestTotalCreatedPoolReuse | happy | YES | pooled reuses conns |
 
-### TestOversizedPoolExhaustsServerConnections
-- Type: Failure path (server limit enforcement)
-- Assertion: errCount > 0 when 20 concurrent conns vs server limit 10
-- Coverage: PASS — validates server-side rejection of oversized client pool
-- Result: PASS (0.02s)
+## Findings
 
-### TestConnectionStarvationDueToLeak
-- Type: Edge case / failure path (leak-induced starvation)
-- Assertion: second request with 20ms timeout fails while pool of 1 held for 100ms
-- Coverage: PASS — proves holding conn during external IO blocks pool
-- Result: PASS (0.03s)
+## Finding 1
+Coverage: happy path, failure path, edge, negative, concurrency all present.
+Assessment: PASS
+Severity: NONE
+Notes: Matches design Test Strategy.
 
-### TestSafeProcessingConcurrently
-- Type: Happy path + concurrency (20 goroutines, pool of 5)
-- Assertion: no errors under concurrent safe processing
-- Coverage: PASS — validates safe pattern scales concurrently
-- Result: PASS (0.01s)
+## Finding 2
+Timing assertion weakness.
+Assessment: WARNING
+Severity: LOW
+Notes: TestDirectConnectionOverhead/totalCreated rely on time comparison (flaky on slow CI). Passed here; inherent nondeterminism, not fraud.
 
-## Coverage Assessment
+## Finding 3
+Starvation assertions are strong (>=10 errors, context deadline).
+Assessment: PASS
+Severity: LOW
+Notes: No fake/fabricated expectations.
 
-- Happy path: YES (overhead + concurrent safe)
-- Failure path: YES (exhaustion + starvation)
-- Edge cases: YES (pool=1 starvation, timeout propagation)
-- Transitions: YES (safe vs unsafe ordering)
-- Recovery: PARTIAL — pool recovers after leak goroutine finishes, but no explicit test asserts post-leak recovery succeeds
-- Rollback: NOT_APPLICABLE — mock Exec never fails; no tx rollback path in service
-- Concurrency: YES — all race-relevant paths run under -race cleanly
-- Negative cases: YES — exhaustion errors, starvation timeouts asserted
+## Finding 4
+Resource cleanup asserted via ActiveConnections()==0.
+Assessment: PASS
+Severity: LOW
+Notes: Proves no real leak in safe/error paths.
 
-## Weaknesses
-
-- Timing-dependent assertions (5ms delay, 20ms timeouts) are stable on this run but could flake under extreme CI load. Margins (25ms pooled vs unpooled gap; 80ms starvation margin) adequate. LOW severity.
-- No test for externalCall error propagation in either safe or unsafe path. Test suite does not assert that a failing externalCall returns error without acquiring DB conn (safe) or returns error while still releasing conn (unsafe). MEDIUM — negative case gap.
-- No test for ErrAcquireTimeout / context cancellation on db.Conn beyond starvation case. Minor.
-
-## Overall
-
-Passing suite is not weak on core claims. All four claimed behaviors proven. Gaps are non-blocking for verdict.
+## Finding 5
+No benchmark suite (no go test -bench).
+Assessment: WARNING
+Severity: LOW
+Notes: README never claims benchmark; demo output is illustrative, not bench. Not fake.

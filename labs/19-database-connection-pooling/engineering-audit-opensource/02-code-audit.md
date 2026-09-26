@@ -1,62 +1,76 @@
+# Code Audit
+
+Target Lab: labs/19-database-connection-pooling
+Files: internal/pool/mockdb.go, internal/pool/service.go, cmd/demo/main.go
+
 ## Finding 1
 
-Location: internal/pool/mockdb.go:41-48
-Claimed Behavior: Mock driver enforces server max_connections limit
-Observed Implementation: Open() checks maxConnections under mutex and returns ErrServerOverloaded when exceeded
+Location: internal/pool/mockdb.go:33-49 (MockDriver.Open)
+Claimed Behavior: Simulate server max_connections + connect latency.
+Observed Implementation: Sleep outside lock, check+increment under mu.Lock. Atomic ops inside mutex redundant but correct.
 Assessment: PASS
-Severity: N/A
-Notes: Correct use of mutex for check-then-increment pattern. Atomic operations used for counters.
+Severity: LOW
+Notes: No race. Race detector clean.
 
 ## Finding 2
 
-Location: internal/pool/mockdb.go:69-76
-Claimed Behavior: Connection close decrements active connection count
-Observed Implementation: Close() uses atomic decrement when connection not already closed
-Assessment: PASS
-Severity: N/A
-Notes: Thread-safe and idempotent close operation.
+Location: internal/pool/mockdb.go:145-147 (MockConnector.Connect)
+Claimed Behavior: Open DB connections.
+Observed Implementation: Ignores ctx, calls blocking Open with time.Sleep.
+Assessment: WARNING
+Severity: LOW
+Notes: Cancel during connectDelay not honored by driver; sql package still enforces Conn(ctx) timeout. Limits realism only.
 
 ## Finding 3
 
-Location: internal/pool/service.go:21-39
-Claimed Behavior: ProcessOrderSafe performs external I/O before DB operation to avoid connection leaks
-Observed Implementation: External call happens before acquiring DB connection via db.Conn()
+Location: internal/pool/mockdb.go:69-77 (mockConn.Close)
+Claimed Behavior: Connection release.
+Observed Implementation: closed flag + mutex, idempotent, decrements once.
 Assessment: PASS
-Severity: N/A
-Notes: Correct ordering prevents holding DB connection during external I/O.
+Severity: LOW
+Notes: TestMockConnDoubleClose proves it.
 
 ## Finding 4
 
-Location: internal/pool/service.go:41-62
-Claimed Behavior: ProcessOrderUnsafeLeak holds DB connection during external I/O (demonstrates leak)
-Observed Implementation: External call happens after DB operation but before connection close
-Assessment: PASS
-Severity: N/A
-Notes: Intentionally demonstrates the anti-pattern; connection properly closed via defer.
+Location: internal/pool/mockdb.go:79-113 (mockTx, mockStmt.Exec)
+Claimed Behavior: Query/tx simulation.
+Observed Implementation: Exec always success, Tx Commit/Rollback no-ops, never exercised by service (service uses Conn+ExecContext, no Begin).
+Assessment: WARNING
+Severity: LOW
+Notes: Dead tx path. No failure injection for query errors. Unnecessary surface, harmless.
 
 ## Finding 5
 
-Location: tests/pool_test.go
-Claimed Behavior: Tests verify connection overhead, pool exhaustion, leaks, and concurrent safety
-Observed Implementation: Four tests covering all claimed scenarios with appropriate assertions
+Location: internal/pool/service.go:17-34 (ProcessOrderSafe)
+Claimed Behavior: External I/O outside connection hold, short bounded DB op.
+Observed Implementation: externalCall first, then db.Conn + ExecContext + defer Close. Error propagated.
 Assessment: PASS
-Severity: N/A
-Notes: Tests are deterministic, use context timeouts appropriately, and validate expected behaviors.
+Severity: LOW
+Notes: Correct ordering. Proven by starvation + concurrency tests.
 
 ## Finding 6
 
-Location: cmd/demo/main.go
-Claimed Behavior: Demo visually demonstrates overhead, exhaustion, and starvation
-Observed Implementation: Three demo functions matching test scenarios with timing output
-Assessment: PASS
-Severity: N/A
-Notes: Demo output matches expected patterns; ignores Exec errors for brevity (acceptable in demo).
+Location: internal/pool/service.go:37-57 (ProcessOrderUnsafeLeak)
+Claimed Behavior: Hold connection during external I/O to starve pool.
+Observed Implementation: db.Conn, Exec, then externalCall while holding, defer Close releases after.
+Assessment: WARNING
+Severity: LOW
+Notes: Name says Leak but it releases via defer; it holds, not leaks. Behavior still proves starvation. externalCall takes no ctx so not cancellable; fine for demo.
 
 ## Finding 7
 
-Location: internal/pool/mockdb.go:33-49 (Open method)
-Claimed Behavior: Connection delay simulates network handshake penalty
-Observed Implementation: time.Sleep(d.connectDelay) before attempting connection
+Location: internal/pool/service.go error paths
+Claimed Behavior: Error propagation + cleanup.
+Observed Implementation: Both paths return externalCall/Exec errors directly; defer conn.Close() always runs.
 Assessment: PASS
-Severity: N/A
-Notes: Delay is applied per connection attempt; affects unpooled but not pooled scenarios as expected.
+Severity: LOW
+Notes: Proven by TestExternalCallErrorPropagation checking ActiveConnections()==0.
+
+## Finding 8
+
+Location: concurrency safety (MockDriver.mu + atomics, mockConn.mu, service stateless)
+Claimed Behavior: Safe concurrent use.
+Observed Implementation: Shared counters guarded; service holds no mutable state.
+Assessment: PASS
+Severity: LOW
+Notes: go test -race clean. TestSafeProcessingConcurrently 20 goroutines x pool 5 passes.

@@ -1,19 +1,38 @@
 # Gap Analysis
 
-## 1. RACE_CONDITION
-- **Location:** `internal/pool/mockdb.go:41`
-- **Description:** `MockDriver.Open()` reads `d.activeConns` non-atomically while `mockConn.Close()` writes to it atomically. This causes a confirmed data race when `go test -race` is executed.
-- **Severity:** HIGH
-- **Resolution:** Modify `MockDriver.Open()` to use `atomic.LoadInt32(&d.activeConns)` when evaluating the `if d.activeConns >= d.maxConnections` condition.
+## GAP-001
 
-## 2. MISSING_EDGE_CASE
-- **Location:** `tests/pool_test.go`
-- **Description:** The research identified pool-locking deadlock (Finding 11) where a single thread requires multiple connections concurrently. The lab does not test or demonstrate this failure mode.
-- **Severity:** LOW
-- **Resolution:** Add a demo or test case showing pool exhaustion caused by a transaction requiring two connections from a strictly sized pool.
+Type: DOC_CODE_MISMATCH
+Location: go.mod:3
+Description: `go 1.26.7` is a non-existent Go version. The module specifies a future/fabricated toolchain version.
+Severity: LOW
+Impact: None on compilation or test execution. Misleading version metadata.
+Recommendation: Update to the actual Go version used (e.g., `go 1.21` or `go 1.23`).
 
-## 3. IMPLEMENTATION_OVERCLAIM
-- **Location:** `engineering/01-design.md` vs `internal/pool/mockdb.go`
-- **Description:** The design lists "throughput degradation" as a concept to prove, but the driver only implements a hard limit cutoff (`ErrServerOverloaded`). The performance "knee" is not simulated.
-- **Severity:** MEDIUM
-- **Resolution:** Either update the engineering docs to reflect only max connection enforcement, or update `MockDriver` to introduce artificial `time.Sleep` latency that scales non-linearly with `d.activeConns` exceeding optimal levels.
+---
+
+## GAP-002
+
+Type: MISSING_TEST
+Location: tests/pool_test.go
+Description: No test for `ProcessOrderSafe` with nil externalCall on a healthy unconstrained pool (explicit success path). Covered implicitly by starvation test but not as a standalone positive assertion.
+Severity: LOW
+Impact: Minor coverage gap. Core safe path is validated via concurrent and starvation tests.
+Recommendation: Optional — add a simple `TestSafeNilExternalCall` for explicitness.
+
+---
+
+## GAP-003
+
+Type: MISSING_TEST
+Location: tests/pool_test.go
+Description: No test verifying that `MockDriver.connectDelay` actually delays connection establishment (unit-level test of the mock itself). Only tested implicitly through `TestDirectConnectionOverhead`.
+Severity: LOW
+Impact: If connectDelay logic broke, `TestDirectConnectionOverhead` would still be the detector, but the failure message would be less precise.
+Recommendation: Optional — low priority.
+
+---
+
+## No HIGH or CRITICAL gaps found.
+
+All core behaviors (overhead penalty, pool exhaustion, starvation, safe pattern, error propagation, concurrency safety) are implemented, tested, and verified by actual execution.

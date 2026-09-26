@@ -1,42 +1,35 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/19-database-connection-pooling
-Audit Date: Sat Sep 26 2026
+Audit Date: 2026-09-26
 
 ## Summary
-
-Code Files Reviewed:
-- internal/pool/mockdb.go
-- internal/pool/service.go
+Code Files Reviewed: internal/pool/mockdb.go, internal/pool/service.go, cmd/demo/main.go
 Tests Reviewed: tests/pool_test.go
-Commands Executed: go build, go test -v, go test -race, go run ./cmd/demo
+Commands Executed: go test ./..., go test -race ./..., go run ./cmd/demo
 Failures: None
-Warnings: 2 low-severity gaps in test coverage
+Warnings: 3 (timing-sensitive test, missing Exec error path, connector context ignored)
 
 ## Quality Gates
-
 Compilation: PASS
 Tests: PASS
 Race Detector: PASS
-Demo: PASS
-Research Alignment: PASS (out of scope per override; engineering notes align with code)
+Demo: PASS (observable real behavior)
+Research Alignment: OUT_OF_SCOPE (pipeline override)
 Documentation Accuracy: PASS
 
 ## Blocking Issues
-
-None. No HIGH/CRITICAL issues found.
+None
 
 ## Non-Blocking Issues
-
-1. Missing test: externalCall error propagation not asserted for safe/unsafe paths. (LOW)
-2. Missing test: post-leak pool recovery not explicitly asserted. (LOW)
+1. Timing-sensitive assertions in TestDirectConnectionOverhead & TestTotalCreatedPoolReuse may flake under CI load.
+2. Missing edge-case: mockStmt.Exec never errors; no test of ExecContext failure recovery.
+3. MockConnector.Connect ignores context during connectDelay; cannot cancel in-progress connection attempt.
 
 ## Required Revisions
-
-1. Add test: verify ProcessOrderSafe returns externalCall error without acquiring DB connection.
-2. Add test: verify ProcessOrderUnsafeLeak releases DB connection when externalCall returns error.
-3. Add test: after connection starvation due to leak, subsequent request succeeds once leak resolved. (optional, low priority)
+1. Consider making timing assertions more robust (e.g., assert pooled time < unpooled * 0.5).
+2. Add Exec failure injection path via driver flag; test safe/unsafe error paths.
+3. Make MockConnector.Connect respect ctx for connectDelay (check ctx.Err() during sleep loop).
 
 ## Final Status
-
 APPROVED

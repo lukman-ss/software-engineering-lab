@@ -1,56 +1,92 @@
 # Test Audit
 
+## Test Inventory
+
+| Test | Path | Category |
+|---|---|---|
+| TestDirectConnectionOverhead | tests/pool_test.go:13 | Happy path / performance |
+| TestOversizedPoolExhaustsServerConnections | tests/pool_test.go:51 | Failure path / exhaustion |
+| TestConnectionStarvationDueToLeak | tests/pool_test.go:88 | Failure path / leak |
+| TestSafeProcessingConcurrently | tests/pool_test.go:126 | Happy path / concurrency |
+| TestPoolLockingDeadlock | tests/pool_test.go:154 | Edge case / deadlock |
+| TestMockConnDoubleClose | tests/pool_test.go:176 | Edge case / idempotency |
+| TestExternalCallErrorPropagation | tests/pool_test.go:199 | Failure path / error propagation |
+| TestPreCancelledContextProcessOrderSafe | tests/pool_test.go:237 | Edge case / cancelled context |
+| TestUnsafeLeakExecContextFailure | tests/pool_test.go:253 | Failure path / pool-exhausted exec |
+| TestTotalCreatedPoolReuse | tests/pool_test.go:283 | Happy path / connection reuse count |
+
 ## Coverage Assessment
 
-- **Happy Path:** Covered by `TestDirectConnectionOverhead` and `TestSafeProcessingConcurrently`.
-- **Failure Path:** Covered by `TestOversizedPoolExhaustsServerConnections` (server rejection) and `TestConnectionStarvationDueToLeak` (context timeout).
-- **Edge Cases:** Missing deadlock test (Research Finding 11: pool-locking deadlock).
-- **Transitions:** Pool warmup transitions covered implicitly in overhead test.
-- **Recovery:** Implicitly covered; context cancellations correctly unblock pool acquisition.
-- **Concurrency:** Covered by `TestSafeProcessingConcurrently` and `TestOversizedPoolExhaustsServerConnections`.
-- **Negative Cases:** Covered (timeout, rejection).
+### Happy Path
+- COVERED: Pooled connections reuse (TestDirectConnectionOverhead, TestTotalCreatedPoolReuse)
+- COVERED: Safe concurrent processing (TestSafeProcessingConcurrently)
 
-A passing test suite can still be weak. In this lab, tests successfully capture the business logic constraints (timeout and rejection) but expose a race condition in the underlying driver mock.
+### Failure Path
+- COVERED: Oversized pool exhausting server limits (TestOversizedPoolExhaustsServerConnections)
+- COVERED: Connection starvation from leak (TestConnectionStarvationDueToLeak)
+- COVERED: ExecContext failure when pool exhausted (TestUnsafeLeakExecContextFailure)
+- COVERED: External call error propagation for both safe and unsafe paths (TestExternalCallErrorPropagation)
 
-## Required Execution Results
+### Edge Cases
+- COVERED: Pool deadlock / double acquisition (TestPoolLockingDeadlock)
+- COVERED: Double-close idempotency on mock connection (TestMockConnDoubleClose)
+- COVERED: Pre-cancelled context (TestPreCancelledContextProcessOrderSafe)
 
-### 1. `go test ./...`
-```text
-ok      github.com/lukman/software-engineering-lab/labs/19-database-connection-pooling/tests    0.185s
+### Concurrency / Race
+- COVERED: TestSafeProcessingConcurrently runs 20 goroutines against 5-slot pool
+- COVERED: Race detector: `go test -race ./...` — all PASS
+
+### Rollback
+- NOT TESTED: No transaction rollback test. Lab does not claim rollback behavior — ACCEPTABLE.
+
+### Negative Cases
+- COVERED: Nil externalCall handled gracefully in both ProcessOrderSafe and ProcessOrderUnsafeLeak (guarded by `if externalCall != nil`)
+
+## Execution Results (Actual, This Audit)
+
+```
+go test -v ./...
+
+=== RUN   TestDirectConnectionOverhead
+--- PASS: TestDirectConnectionOverhead (0.03s)
+=== RUN   TestOversizedPoolExhaustsServerConnections
+--- PASS: TestOversizedPoolExhaustsServerConnections (0.02s)
+=== RUN   TestConnectionStarvationDueToLeak
+--- PASS: TestConnectionStarvationDueToLeak (0.02s)
+=== RUN   TestSafeProcessingConcurrently
+--- PASS: TestSafeProcessingConcurrently (0.01s)
+=== RUN   TestPoolLockingDeadlock
+--- PASS: TestPoolLockingDeadlock (0.05s)
+=== RUN   TestMockConnDoubleClose
+--- PASS: TestMockConnDoubleClose (0.00s)
+=== RUN   TestExternalCallErrorPropagation
+    --- PASS: TestExternalCallErrorPropagation/ProcessOrderSafe (0.00s)
+    --- PASS: TestExternalCallErrorPropagation/ProcessOrderUnsafeLeak (0.00s)
+--- PASS: TestExternalCallErrorPropagation (0.00s)
+=== RUN   TestPreCancelledContextProcessOrderSafe
+--- PASS: TestPreCancelledContextProcessOrderSafe (0.00s)
+=== RUN   TestUnsafeLeakExecContextFailure
+--- PASS: TestUnsafeLeakExecContextFailure (0.02s)
+=== RUN   TestTotalCreatedPoolReuse
+--- PASS: TestTotalCreatedPoolReuse (0.00s)
+PASS
+ok  	github.com/lukman/software-engineering-lab/labs/19-database-connection-pooling/tests
 ```
 
-### 2. `go test -race ./...`
-```text
-==================
-WARNING: DATA RACE
-Write at 0x00c00032e00c by goroutine 42:
-  sync/atomic.AddInt32()
-...
-  github.com/lukman/software-engineering-lab/labs/19-database-connection-pooling/internal/pool.(*mockConn).Close()
-      /Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/19-database-connection-pooling/internal/pool/mockdb.go:73
-
-Previous read at 0x00c00032e00c by goroutine 59:
-  github.com/lukman/software-engineering-lab/labs/19-database-connection-pooling/internal/pool.(*MockDriver).Open()
-      /Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/19-database-connection-pooling/internal/pool/mockdb.go:41
-...
-FAIL    github.com/lukman/software-engineering-lab/labs/19-database-connection-pooling/tests    0.178s
 ```
-**Result: FAIL**
+go test -race -v ./...
 
-### 3. `go run ./cmd/demo`
-```text
---- Database Connection Pooling Demo ---
-
-1. Direct Connection Overhead Penalty
-Unpooled (5 requests): 55.086041ms
-Pooled (5 requests): 14.792µs
-
-2. Oversized Pool Exhausting Server Connections
-Client attempted: 30, Succeeded: 15, Server Rejected: 15
-
-3. Connection Leak Starving Pool
-Starting 2 unsafe orders (holding connection during slow external IO)
-Attempting 3rd order with safe flow and short timeout...
-Order 3 Failed: context deadline exceeded
+All 10 tests: PASS
+Race detector: no data races detected
+ok  	github.com/lukman/software-engineering-lab/labs/19-database-connection-pooling/tests	1.279s
 ```
-**Result: PASS**
+
+## Weaknesses / Observations
+
+1. `TestDirectConnectionOverhead` and `TestTotalCreatedPoolReuse` are timing/count-based. They are structurally sound, but on a machine with scheduler interference the timing test could theoretically flake. The 5ms/connection gap provides reasonable margin.
+
+2. `TestOversizedPoolExhaustsServerConnections` asserts `errCount >= 10`. With 20 goroutines and server max=10, at least 10 must fail simultaneously. Given all goroutines hold connections for 20ms and are launched near-simultaneously, this is reliable in practice.
+
+3. No benchmark tests (`func Benchmark...`). Not required by the design, but would strengthen performance claims.
+
+4. No test for `ProcessOrderSafe` with a nil externalCall and a working DB — trivially covered by the starvation test (nil externalCall path), but not as an explicit dedicated test.
