@@ -1,21 +1,22 @@
 # Contradiction Audit
 
-## Audit Result
-No material contradictions found within the research artifacts or between cited authoritative sources.
+## Material Contradictions Analysis
 
-## Nuances & Framing Differences Analyzed
+No material contradictions found across the audited research files (`01-plan.md`, `02-sources.md`, `03-evidence.md`, `04-contradictions.md`, `05-report.md`, `06-open-questions.md`) or between the research report and authoritative external sources.
 
-### 1. CDC Log Tailing vs. Polling Publisher Framing
-- **microservices.io**: Categorizes Polling Publisher and Transaction Log Tailing as equal sibling choices for the Message Relay.
-- **Debezium**: Positions Log-based Change Data Capture (WAL/binlog) as the primary/superior outbox implementation to avoid DB polling overhead.
-- **Assessment**: Complementary design alternatives. The research report accurately notes both options, their respective trade-offs (polling: portable across any DB, higher latency; log-tailing: low latency, DB-specific), and presents them without contradiction.
+### Evaluated Areas:
 
-### 2. Table Deletion / Cleanup Mechanics
-- **Debezium CDC Pattern**: In Debezium's blog post, events are `persist()`ed and `remove()`d in the same application transaction so the physical table remains empty while WAL captures the `INSERT`. Alternatively, connectors process table rows and delete after publish.
-- **Generic Relational Outbox**: Application inserts to outbox table; async relay process publishes then sets `processed_at` timestamp or deletes rows.
-- **Assessment**: The research report (`05-report.md`, Finding 6 & `04-contradictions.md`) acknowledges both ephemeral outbox (CDC WAL-tailing) and persistent table cleanup (batch archival/deletion). No contradiction.
+1. **Transaction Log Tailing vs Polling Publisher**:
+   - Both sources (Chris Richardson / Microservices.io and Gunnar Morling / Debezium) acknowledge log-tailing and polling as alternative implementations with distinct trade-offs (latency vs database portability). The research report reflects this consensus without conflicting assertions.
 
-## Internal Consistency Check
-- `01-plan.md` vs `05-report.md`: All research questions in plan are systematically answered in findings.
-- `02-sources.md` vs `03-evidence.md`: All evidence items map directly to Tier 1 sources listed in source catalog.
-- `03-evidence.md` vs `06-open-questions.md`: Items with weak or illustrative evidence (e.g. alert threshold numbers) are properly recorded in open questions.
+2. **Event Sizing (Thin vs Fat Events)**:
+   - The report synthesizes the Debezium recommendation (rich domain event payload for event-carried state transfer) and the practical operational constraint (avoiding massive payloads that degrade database performance). It appropriately designates this as an architectural trade-off rather than an absolute rule.
+
+3. **Cleanup Mechanisms**:
+   - The Debezium blog demonstrates an immediate `entityManager.remove()` pattern within the transaction for CDC log-tailing, whereas Polling Publisher requires batch deletion/archiving of rows where `processed_at IS NOT NULL`. The research accurately documents these differing requirements without presenting one as universally standard.
+
+4. **Consistency Model**:
+   - All research files consistently state that transactional outbox provides database-event atomicity and eventual consistency downstream, requiring idempotent consumers due to at-least-once delivery semantics. No claims of "exactly-once delivery without consumer idempotency" exist.
+
+Assessment:
+PASS (No material contradictions found).

@@ -1,28 +1,14 @@
 # Research Gap Analysis
 
-## Gap 1
+## Gaps Review
 
-Type:
-SCOPE_ERROR
+The research report in `labs/21-outbox-pattern/research/05-report.md` and evidence ledger in `research/03-evidence.md` provide solid coverage of the core transactional outbox pattern mechanics. The research agent appropriately captured open questions in `research/06-open-questions.md`.
 
-Severity:
-LOW
-
-Location:
-`research/05-report.md` - Section "Operational Requirements: Cleanup and Monitoring"
-
-Problem:
-Specific SLA alert thresholds (e.g., 2 seconds normal, 47 minutes error) are environment-specific operational examples rather than derived from primary literature standards.
-
-Required Revision:
-None required for approval. The research report already includes explicit disclaimer: "These are illustrative examples, not universal constants, and must be tuned to specific service-level objectives."
-
-Can Be Approved Without Fix:
-YES
+Below is the auditor assessment of documented gaps and potential nuances:
 
 ---
 
-## Gap 2
+## Gap 1: Schema Evolution for Long-Lived Outbox Payloads
 
 Type:
 MISSING_CASE
@@ -31,13 +17,57 @@ Severity:
 LOW
 
 Location:
-`research/06-open-questions.md`
+`research/06-open-questions.md` (Question 4)
 
 Problem:
-Schema evolution strategies for outbox event payloads (e.g. backward compatibility in JSON/Avro schemas over time) and Dead Letter Queue (DLQ) retry policies for failed message relay attempts are listed as open questions without exhaustive secondary source synthesis.
+When payload models change over time, downstream consumers processing backlogged or replayed outbox events may encounter serialization mismatches unless schema registry (Avro/Protobuf) or forward/backward compatible JSON schemas are enforced.
 
 Required Revision:
-Can be explored in future lab revisions or implementation notes.
+None required for base lab approval. Adequately identified in open questions and Debezium Avro docs.
+
+Can Be Approved Without Fix:
+YES
+
+---
+
+## Gap 2: High-Throughput Partitioning & Outbox Table Contention
+
+Type:
+MISSING_CASE
+
+Severity:
+LOW
+
+Location:
+`research/06-open-questions.md` (Question 2)
+
+Problem:
+In high-throughput relational databases (10k+ tx/sec), a single monotonically incrementing or polled outbox table can suffer from lock contention, write hotspots, and vacuum/bloat overhead.
+
+Required Revision:
+None required for conceptual understanding and lab scope. Identified as an open question for scale-up scenarios.
+
+Can Be Approved Without Fix:
+YES
+
+---
+
+## Gap 3: Dead-Letter Queue (DLQ) and Relay Retry Policies
+
+Type:
+MISSING_CASE
+
+Severity:
+LOW
+
+Location:
+`research/06-open-questions.md` (Question 1)
+
+Problem:
+If the broker is unreachable or a message payload fails validation permanently, the relay must specify retry backoff and poison pill routing to avoid stalling the publisher queue.
+
+Required Revision:
+Covered as an open research question; not blocking for core pattern foundation.
 
 Can Be Approved Without Fix:
 YES
