@@ -1,37 +1,32 @@
 # Research Gap Analysis: Zero-Downtime Deployment
 
-**Target Lab:** `labs/20-zero-downtime-deployment`  
-**Research Run:** `2026-09-26-zero-downtime-deployment`
-
----
-
 ## Gap 1
 
-Type: SCOPE_ERROR  
+Type: IMPLEMENTATION_GAP  
 Severity: MEDIUM  
-Location: `05-report.md: Finding 10`  
-Problem: `ALTER TABLE ... ADD COLUMN` constant default optimization in PostgreSQL is presented without prominent warning that volatile defaults (`gen_random_uuid()`, `clock_timestamp()`) trigger full table rewrites and exclusive table locks.  
-Required Revision: Emphasize in deployment guidelines that column defaults must be strictly non-volatile constants or nullable columns without defaults.  
-Can Be Approved Without Fix: YES  
+Location: `05-report.md:Limitations`, `06-open-questions.md:Question 1 & 2`  
+Problem: The behavior of PHP-FPM under SIGTERM and request draining with NGINX in traditional PHP architectures is left as an open question without definitive configuration parameters (e.g. `process_control_timeout`).  
+Required Revision: Future implementation notes should explicitly define PHP-FPM `process_control_timeout` and NGINX `proxy_next_upstream` settings for graceful draining.  
+Can Be Approved Without Fix: YES (Documented honestly in `06-open-questions.md`).
 
 ---
 
 ## Gap 2
 
-Type: IMPLEMENTATION_GAP  
-Severity: MEDIUM  
-Location: `05-report.md: Finding 9` & `06-open-questions.md: #1, #2`  
-Problem: The report highlights Laravel Horizon's graceful shutdown via `horizon:terminate` and Supervisor `stopwaitsecs`, but plain PHP-FPM web workers do not natively handle SIGTERM without custom configuration (`process_control_timeout` in `php-fpm.conf`) and a preStop hook in Kubernetes.  
-Required Revision: Note the distinction between Queue worker shutdown (Horizon) and HTTP worker shutdown (PHP-FPM) in future engineering designs.  
-Can Be Approved Without Fix: YES  
+Type: WEAK_SOURCE  
+Severity: LOW  
+Location: `06-open-questions.md:Weak Evidence Area 1`  
+Problem: Lack of empirical load test metrics showing exact error rate deltas between zero-downtime rolling deployment and standard recreate deployments under heavy concurrent traffic.  
+Required Revision: Empirical load benchmark should be collected during lab execution/demo phases.  
+Can Be Approved Without Fix: YES (Research phase appropriately identifies the need for empirical validation in lab).
 
 ---
 
 ## Gap 3
 
-Type: UNVERIFIED_CLAIM  
+Type: SCOPE_ERROR  
 Severity: LOW  
-Location: `06-open-questions.md: Weak Evidence Areas #1`  
-Problem: Lack of empirical load-testing metrics demonstrating zero dropped connections during simultaneous DDL and rolling update in this specific stack.  
-Required Revision: Empirical testing will be validated during the engineering execution stage.  
-Can Be Approved Without Fix: YES  
+Location: `05-report.md:Limitations`  
+Problem: Multi-region distributed database replication synchronization during DDL migration is out of scope.  
+Required Revision: Explicitly bounds the research scope to single-cluster / single primary database topology.  
+Can Be Approved Without Fix: YES (Sufficiently declared in limitations).

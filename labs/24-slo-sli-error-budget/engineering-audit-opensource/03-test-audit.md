@@ -1,57 +1,59 @@
-## Finding 1
+# Test Audit
 
-Location: tests/slo_test.go
-Claimed Behavior: Tests cover happy path, edge cases, failure paths, and concurrency.
-Observed Implementation:
-- TestMetricsWindowTracker: records events, checks totals, verifies eviction.
-- TestSLOEvaluator: tests SLI calculation and CanDeploy flag at budget boundary.
-- TestAlertEngineBurnRate: triggers alert when burn rate exceeds threshold.
-- TestConcurrencyMetrics: runs multiple goroutines updating tracker concurrently with race detector.
-Assessment: PASS
-Severity: LOW
-Notes: Tests adequately cover core functionality. However, the following gaps exist:
-- No test for 100% error rate (SLI = 0) in SLOEvaluator.
-- No test for zero total events (division by zero) in SLOEvaluator (should handle gracefully).
-- No explicit test for CalculateBurnRate edge cases (total==0, allowedErrorRate<=0).
-- No test for concurrent Summary and Record (TestConcurrencyMetrics waits for all goroutines to finish before Summary).
-- No test verifying that Summary eviction works when called without prior Record (stale buckets evicted on Summary alone).
-- No test for WindowTracker with custom bucketSize <= 0 to trigger defaulting logic.
+## Test Coverage Analysis
 
-## Finding 2
+### Test File: tests/slo_test.go
 
-Location: tests/slo_test.go:13-59 (TestMetricsWindowTracker)
-Claimed Behavior: Verifies bucket aggregation and eviction.
-Observed Implementation: Records 10 good, 1 bad (slow), 1 bad (error) events, checks totals, then verifies eviction after window passes.
-Assessment: PASS
-Severity: LOW
-Notes: The test uses a fixed isGood function (status<500 && duration<=100ms). It correctly identifies slow (200ms) as bad and error (500) as bad.
+#### Test: TestMetricsWindowTracker
+- **Happy Path**: Records 10 good events and 2 bad events, verifies totals. PASS (lines 13-58)
+- **Eviction**: Records events, then checks summary at a future timestamp to verify stale events are evicted. PASS (lines 53-58)
+- **Good/bad classification**: Uses a composite predicate (status + latency). Covers both slow and error paths. PASS
+- **Assessment**: Solid happy path + eviction test. Missing edge cases.
 
-## Finding 3
+#### Test: TestSLOEvaluator
+- **Happy Path**: 99 good, 1 bad with 99% target SLO. Verifies SLI and CanDeploy. PASS (lines 61-91)
+- **Failure Path/Boundary**: Adds another bad event, verifies CanDeploy transitions to false. PASS (lines 85-90)
+- **Assessment**: Covers boundary transition. However relies on floating-point quirk (see Finding 2 in Code Audit). The test expects CanDeploy=true when budgetRemaining=0, but this only holds due to floating-point imprecision.
 
-Location: tests/slo_test.go:61-91 (TestSLOEvaluator)
-Claimed Behavior: Validates SLI calculation and deploy gate.
-Observed Implementation: 99 good + 1 bad => SLI=0.99, CanDeploy=true; add another bad => SLI<0.99, CanDeploy=false.
-Assessment: PASS
-Severity: LOW
-Notes: Boundary condition tested correctly.
+#### Test: TestAlertEngineBurnRate
+- **Happy Path Trigger**: Creates 98 good + 2 bad events with 99.9% SLO target, verifies PAGE alert triggers at >14.4x burn rate. PASS (lines 93-129)
+- **Assessment**: Good coverage of alert triggering logic. Missing test for non-triggering case (burn rate below threshold).
 
-## Finding 4
+#### Test: TestConcurrencyMetrics
+- **Concurrency**: 20 goroutines x 100 requests, verifies total count and good+bad=total invariant. PASS (lines 131-167)
+- **Assessment**: Solid concurrency test. Validates thread-safety of `Record` and `Summary`. Passes under `-race` detector.
 
-Location: tests/slo_test.go:93-129 (TestAlertEngineBurnRate)
-Claimed Behavior: Triggers alert when burn rate exceeds factor.
-Observed Implementation: 98 good, 2 bad => error rate=2%, allowed error rate=0.1% => burn rate=20x > 14.4x triggers PAGE alert.
-Assessment: PASS
-Severity: LOW
-Notes: Test uses isGood = status<500, matches burn rate calculation.
+## Coverage Gaps
 
-## Finding 5
+### Missing Test Categories
+1. **Edge Cases**:
+   - Empty tracker (0 events) — not tested. `Summary()` would return (0,0,0). `Evaluate` would set SLI=1.0, budgetRemaining=0.0, CanDeploy=true. This path is untested.
+   - Window/bucket boundary tests — events exactly at the window edge are not tested.
+   - Out-of-order event recording — not tested (documented as unsupported).
 
-Location: tests/slo_test.go:131-166 (TestConcurrencyMetrics)
-Claimed Behavior: Thread-safety of WindowTracker under concurrent Record.
-Observed Implementation: 20 goroutines each recording 100 events (10% errors), waits, then checks totals.
-Assessment: PASS
-Severity: LOW
-Notes: Race detector passes; no data races detected.
+2. **Failure Path**:
+   - `CalculateBurnRate` with total=0 returns 0.0 — not explicitly tested.
+   - Alert engine with zero events — not tested.
 
-## Summary
-Test suite provides good coverage of normal operation and concurrency. Missing tests for edge cases (zero traffic, 100% errors, CalculateBurnRate edge cases) reduce confidence in extreme scenarios.
+3. **Configuration Validation**:
+   - No tests for invalid Config (e.g., TargetUptime > 1 or < 0, LatencyThreshold = 0).
+   - No tests for invalid BurnRateRule (e.g., BurnRateFactor = 0).
+
+4. **Alert Non-Triggering**:
+   - No test verifies that no alerts fire when burn rate is below threshold.
+   - No test for mixed short/long burn rates (short triggers, long doesn't).
+
+5. **SLO Evaluator Edge Cases**:
+   - CanDeploy when total=0 is not tested.
+   - SLI rounding behavior (4 decimal places) is not tested.
+   - BudgetRemaining rounding (2 decimal places) is not tested.
+
+## Test Quality Assessment
+
+- **Happy Path**: Covered well across all components.
+- **Failure Path**: Partially covered (CanDeploy=false, but boundary is fragile).
+- **Edge Cases**: Largely missing.
+- **Concurrency**: Well covered with race detector passing.
+- **Negative Cases**: Minimal coverage.
+
+**Overall**: Tests pass and run cleanly under both `go test` and `go test -race`. Core functionality is proven. Coverage is weakest at boundary conditions and edge cases.

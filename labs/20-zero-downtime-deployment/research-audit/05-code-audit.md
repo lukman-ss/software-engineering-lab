@@ -1,19 +1,23 @@
-# Code Audit: Zero-Downtime Deployment (Pipeline Override)
+# Research Code Audit: Zero-Downtime Deployment
 
-**Target Lab:** `labs/20-zero-downtime-deployment`  
-**Audit Scope:** RESEARCH AUDIT ONLY
+## Code Audit Scope Note
+*Pipeline Override Notice:* This audit stage is restricted to auditing technical research artifacts (`research/runs/2026-09-26-zero-downtime-deployment/`). Implementation code, demo scripts, and tests in `internal/`, `cmd/`, and `tests/` are reserved for subsequent engineering audit stages.
 
----
+## Research Code Snippets Review
+The research artifacts (`03-evidence.md`, `05-report.md`) cite SQL statements and architectural configuration snippets:
 
-## Pipeline Override Notice
+1. **Evolutionary Database DDL/DML:**
+   - Cites `ALTER TABLE inventory ADD ...` and `CREATE VIEW customer AS SELECT ...` patterns.
+   - Syntax is standard ANSI SQL / PostgreSQL / Oracle compliant.
+   - Conceptual alignment with zero-downtime expand-contract principles is valid.
 
-As specified in the execution instructions:
-- **Pipeline Override:** Audit research only.
-- **Do not audit implementation/code** in this stage.
-- **Do not execute code or run tests** in this research audit stage.
+2. **Supervisor Configuration Snippet:**
+   - Cites `[program:horizon]` with `stopwaitsecs=3600`.
+   - Syntax is standard Supervisord INI configuration.
+   - Matches official Laravel Horizon deployment documentation.
 
----
+3. **Kubernetes Deployment Specification Snippets:**
+   - Cites `RollingUpdate` parameters `maxUnavailable` and `maxSurge`.
+   - Matches Kubernetes Workloads API spec (`apps/v1`).
 
-## Assessment
-
-Code correctness auditing is **NOT APPLICABLE** for this research audit phase. All code-related compliance and verification will be conducted in a separate code/engineering audit stage.
+Assessment: PASS (Research snippets are conceptually sound and accurately reflect upstream reference documentation).

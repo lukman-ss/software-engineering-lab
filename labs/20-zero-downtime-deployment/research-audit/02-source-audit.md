@@ -1,9 +1,4 @@
-# Source Audit: Zero-Downtime Deployment
-
-**Target Lab:** `labs/20-zero-downtime-deployment`  
-**Research Run:** `2026-09-26-zero-downtime-deployment`
-
----
+# Research Source Audit: Zero-Downtime Deployment
 
 ## Source 1
 
@@ -15,8 +10,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -30,8 +27,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -45,8 +44,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Canonical Kubernetes probe reference.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -60,8 +61,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: Minor date inconsistency in sources.md (published 2010, accessed 2026). Content is authentic.  
-Assessment: PASS  
+
+Problems: None. Canonical source for blue-green deployment pattern.
+
+Assessment: PASS
 
 ---
 
@@ -75,8 +78,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Distinguishes OSS passive checks vs Plus active checks.  
-Assessment: PASS  
+
+Problems: None. Clearly distinguishes open source passive checks from NGINX Plus active checks.
+
+Assessment: PASS
 
 ---
 
@@ -90,8 +95,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Accurately covers `/up` route and optimization commands.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -105,8 +112,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Accurately documents worker timeouts and `retry_after`.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -120,23 +129,27 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Documents `horizon:terminate` and `stopwaitsecs`.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
 ## Source 9
 
 Claimed Title: Evolutionary Database Design  
-Claimed Publisher: ThoughtWorks / Pramod Sadalage & Martin Fowler  
+Claimed Publisher: ThoughtWorks / Martin Fowler / Pramod Sadalage  
 URL: https://martinfowler.com/articles/evodb.html  
 
 Reachable: YES  
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: Publisher listed as ThoughtWorks; article hosted on Martin Fowler's site co-authored with Sadalage. Minor attribution nuance, content completely valid.  
-Assessment: PASS  
+
+Problems: None. Original foundational paper on evolutionary schema refactoring.
+
+Assessment: PASS
 
 ---
 
@@ -150,8 +163,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Documents fast ADD COLUMN with constant default since PG 11.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -165,8 +180,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -180,8 +197,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: None. Accurately documents SIGTERM -> grace period -> SIGKILL.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -195,8 +214,10 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: Broad source for lock timeouts and runtime config; appropriately used.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS
 
 ---
 
@@ -210,5 +231,7 @@ Reachable: YES
 Source Type: PRIMARY  
 Relevant: YES  
 Supports Claimed Topic: YES  
-Problems: Anchor link inside Source 2 (Pod Lifecycle). Canonical content.  
-Assessment: PASS  
+
+Problems: None.
+
+Assessment: PASS

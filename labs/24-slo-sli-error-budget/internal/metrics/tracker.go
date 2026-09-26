@@ -63,6 +63,34 @@ func (w *WindowTracker) Record(e Event) {
 		return
 	}
 
+	// If timestamp belongs to an earlier existing bucket or should be inserted in order
+	if n > 0 && bucketStart.Before(w.buckets[n-1].StartTime) {
+		for i := 0; i < n; i++ {
+			if w.buckets[i].StartTime.Equal(bucketStart) {
+				w.buckets[i].TotalCount++
+				if good {
+					w.buckets[i].GoodCount++
+				} else {
+					w.buckets[i].BadCount++
+				}
+				return
+			}
+			if w.buckets[i].StartTime.After(bucketStart) {
+				b := Bucket{
+					StartTime:  bucketStart,
+					TotalCount: 1,
+				}
+				if good {
+					b.GoodCount = 1
+				} else {
+					b.BadCount = 1
+				}
+				w.buckets = append(w.buckets[:i], append([]Bucket{b}, w.buckets[i:]...)...)
+				return
+			}
+		}
+	}
+
 	b := Bucket{
 		StartTime:  bucketStart,
 		TotalCount: 1,

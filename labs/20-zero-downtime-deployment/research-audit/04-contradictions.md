@@ -1,58 +1,58 @@
-# Contradiction Audit: Zero-Downtime Deployment
+# Research Contradictions: Zero-Downtime Deployment
 
-**Target Lab:** `labs/20-zero-downtime-deployment`  
-**Research Run:** `2026-09-26-zero-downtime-deployment`
+## Contradiction 1
 
----
+Statement A: Blue-Green deployment requires maintaining two complete, distinct production environments (blue and green) with traffic routed all at once.
 
-## Contradiction 1: Rolling Update vs Blue-Green Infrastructural Requirements
+Location: `05-report.md:Finding 3`, `04-contradictions.md:Contradiction 1`
 
-Statement A:
-Blue-Green deployment requires maintaining two identical environments (blue and green) with instant traffic switching via router.  
-Location: `research/.../05-report.md: Finding 3`, Martin Fowler  
+Statement B: Rolling deployment replaces Pods incrementally within a single shared infrastructure environment using `maxSurge` / `maxUnavailable`.
 
-Statement B:
-Rolling deployment operates incrementally in-place within the same environment using `maxSurge` / `maxUnavailable`.  
-Location: `research/.../05-report.md: Finding 1`, Kubernetes Docs  
+Location: `05-report.md:Finding 1`, `04-contradictions.md:Contradiction 1`
 
-Type: INTERNAL / PATTERN SELECTION  
-Impact: LOW. Both achieve zero downtime through different resource/operational tradeoffs.  
-Assessment: Properly analyzed and reconciled in `04-contradictions.md`.  
+Type: ARCHITECTURAL_CHOICE
+
+Impact: Low. Both achieve zero-downtime under different operational and resource constraints.
+
+Assessment: Analyzed and resolved in research report. Blue-green doubles infrastructure costs for instant rollback capability, whereas rolling deployment conserves resources by updating instances in place.
 
 ---
 
-## Contradiction 2: Endpoint Deregistration vs Cloud Load Balancer Draining
+## Contradiction 2
 
-Statement A:
-Kubernetes EndpointSlice immediately sets `ready=false` on pod deletion, preventing new traffic.  
-Location: `research/.../03-evidence.md: Evidence 6`, Kubernetes Pod Lifecycle  
+Statement A: Active health probes periodically test endpoints prior to traffic assignment (NGINX Plus `health_check`).
 
-Statement B:
-External cloud load balancers (AWS ALB/NLB, NGINX) exhibit connection draining latency (up to hundreds of seconds) before completely removing targets.  
-Location: `research/.../04-contradictions.md: Contradiction 3` & `06-open-questions.md: #6`  
+Location: `05-report.md:Finding 7`
 
-Type: CODE_DOC_MISMATCH / REALITY GAP  
-Impact: MEDIUM. If `terminationGracePeriodSeconds` is shorter than the load balancer drain timeout, client connections drop with 502/504 errors.  
-Assessment: Properly documented in contradictions and open questions. Mitigated by recommending preStop hooks and coordinated timeouts.  
+Statement B: NGINX Open Source only supports passive health checks (`max_fails` and `fail_timeout`), marking backends down only after failed live client requests.
 
----
+Location: `05-report.md:Finding 7`, `04-contradictions.md:Contradiction 2`
 
-## Contradiction 3: Fast Metadata Column Addition vs Lock Contention
+Type: TOOLING_LIMITATION
 
-Statement A:
-Adding a column with constant default is metadata-only and fast.  
-Location: `research/.../05-report.md: Finding 10`  
+Impact: Medium. Relying on passive health checks in NGINX Open Source can expose initial real user requests to a non-ready backend during deployment unless readiness probes are handled at container orchestration layer (Kubernetes/Docker).
 
-Statement B:
-PostgreSQL `ALTER TABLE` still requires an `ACCESS EXCLUSIVE` lock briefly, which can queue behind long-running queries and cause connection starvation.  
-Location: PostgreSQL lock semantics (noted in `06-open-questions.md: #4`).  
-
-Type: SCOPE_LIMITATION  
-Impact: MEDIUM. A "metadata-only" DDL can still cause an outage on high-concurrency tables if lock acquisition blocks queries.  
-Assessment: Acknowledged in open questions as an area needing explicit lock timeout safeguards.  
+Assessment: Properly documented in research report and contradiction analysis.
 
 ---
 
-## Summary
+## Contradiction 3
 
-No fatal or unaddressed contradictions exist between sources or report sections. The research appropriately identified nuanced discrepancies between theoretical zero-downtime and real-world failure modes.
+Statement A: PostgreSQL `ALTER TABLE ... ADD COLUMN` with a constant default is fast and metadata-only.
+
+Location: `05-report.md:Finding 10`
+
+Statement B: Evolutionary Database Design recommends nullable columns without default, data backfill via `UPDATE`, followed by adding default / NOT NULL constraint in separate steps.
+
+Location: `04-contradictions.md:Contradiction 4`
+
+Type: METHODOLOGICAL_VARIANCE
+
+Impact: Low. PostgreSQL optimizes constant default column additions, but multi-step evolutionary database refactoring is required for volatile defaults or complex data transformations.
+
+Assessment: Properly resolved in research report.
+
+---
+
+## Summary Assessment
+No unresolved or invalidating contradictions found in the research files. All architectural and tooling trade-offs were explicitly identified and analyzed.

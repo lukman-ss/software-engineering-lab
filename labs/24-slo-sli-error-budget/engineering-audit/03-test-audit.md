@@ -4,6 +4,11 @@ Target Lab: `labs/24-slo-sli-error-budget`
 
 ## Test Execution Results
 
+Command executed:
+```bash
+go test -v -count=1 ./tests
+```
+Output:
 ```text
 === RUN   TestMetricsWindowTracker
 --- PASS: TestMetricsWindowTracker (0.00s)
@@ -14,27 +19,42 @@ Target Lab: `labs/24-slo-sli-error-budget`
 === RUN   TestConcurrencyMetrics
 --- PASS: TestConcurrencyMetrics (0.00s)
 PASS
-ok  	labs/24-slo-sli-error-budget/tests	0.339s
+ok  	labs/24-slo-sli-error-budget/tests	0.205s
 ```
 
-Race detector:
+Race detector command:
+```bash
+go test -race -count=1 ./tests
+```
+Output:
 ```text
-ok  	labs/24-slo-sli-error-budget/tests	1.107s
+PASS
+ok  	labs/24-slo-sli-error-budget/tests	0.448s
 ```
 
-## Test Coverage Analysis
+## Coverage of Test Scenarios
 
-| Test Name | Target Unit | Path Covered | Verification Quality |
-|---|---|---|---|
-| `TestMetricsWindowTracker` | `internal/metrics` | Ingestion, good/bad separation, window eviction | Strong: tests counts and complete window eviction in future time. |
-| `TestSLOEvaluator` | `internal/slo` | Exact threshold (99%), budget exhaustion, `CanDeploy` state change | Strong: tests transition from `CanDeploy=true` to `CanDeploy=false`. |
-| `TestAlertEngineBurnRate` | `internal/alerting` | Burn rate threshold trigger, alert severity output | Strong: tests multi-window firing when burn rate > 14.4x. |
-| `TestConcurrencyMetrics` | `internal/metrics` | Parallel recording (20 goroutines, 2,000 requests total) | Strong: validates total, good, bad sums and race detector pass. |
+### 1. Happy Path
+- `TestMetricsWindowTracker`: Verifies recording of successful events and correct total/good/bad counts within window.
+- `TestSLOEvaluator`: Verifies 99% SLI calculation with 99 good and 1 bad event.
+- Status: COVERED (PASS)
 
-## Assessment
+### 2. Failure Path & Policy Enforcement
+- `TestSLOEvaluator`: Injects an additional bad event to deplete budget below SLO, asserting `CanDeploy == false`.
+- `TestAlertEngineBurnRate`: Verifies 2% error rate against 99.9% SLO triggers a 20x burn rate alert with `SeverityPage`.
+- Status: COVERED (PASS)
 
-- Happy path covered: YES
-- Failure path / error budget breach covered: YES
-- Concurrency covered: YES
-- Race detector passed: YES
-- Flaky tests detected: NO
+### 3. Edge Cases & Eviction
+- `TestMetricsWindowTracker`: Tests advancing timestamp past window (`now.Add(20 * time.Second)`), verifying that all stale buckets are evicted and total/good/bad counts return to 0.
+- Missing: Explicit test verifying behaviour when `total == 0` on `Evaluator.Evaluate()` (though code inspection shows it returns 1.0 and `CanDeploy=true`).
+- Status: COVERED WITH MINOR GAP (PASS)
+
+### 4. Concurrency Safety
+- `TestConcurrencyMetrics`: Spawns 20 goroutines running 100 requests each concurrently writing to the `WindowTracker` with alternating status codes.
+- Asserts that `total == 2000` and `good + bad == total` with zero data races detected under `-race`.
+- Status: COVERED (PASS)
+
+### 5. Multi-Window Alerting Thresholds
+- `TestAlertEngineBurnRate`: Covers threshold exceeding condition.
+- Missing: Negative test asserting that an alert is NOT triggered when only short window exceeds threshold while long window does not.
+- Status: PARTIAL (WARNING)

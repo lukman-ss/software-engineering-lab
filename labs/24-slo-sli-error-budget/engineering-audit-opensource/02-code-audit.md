@@ -1,62 +1,94 @@
-## Finding 1
+# Code Audit
 
-Location: internal/metrics/tracker.go:30-37 (NewWindowTracker)
-Claimed Behavior: Constructor correctly sets bucketSize and windowSize with defaults.
-Observed Implementation: If bucketSize <= 0, bucketSize set to time.Second. Then numBuckets = int(windowSize/bucketSize). If numBuckets < 1, numBuckets = 1.
-Assessment: PASS
+## Finding 1: Summary() uses write lock instead of read lock
+
+Location: internal/metrics/tracker.go:89-91
+Claimed Behavior: Summary should be a read-only operation using RLock
+Observed Implementation:
+```go
+func (w *WindowTracker) Summary(now time.Time) (total int64, good int64, bad int64) {
+    w.mu.Lock()
+    defer w.mu.Unlock()
+    w.evictStaleLocked(now)
+    ...
+}
+```
+Assessment: WARNING
 Severity: LOW
-Notes: The defaulting logic is correct but the test does not cover the branch where bucketSize <= 0 triggers the default. This is a missing test branch.
+Notes: The `Summary` method calls `evictStaleLocked` which modifies the `buckets` slice by reassigning it. Since it modifies state, using `Lock()` is technically correct. However, this means `Summary` is NOT a pure read — it performs implicit writes (garbage collection of stale buckets). This reduces concurrency. If `evictStaleLocked` were removed from `Summary` (and only called in `Record`), a `RLock` could be used, allowing concurrent reads. The current design works but has suboptimal concurrency. The `RWMutex` is used but only for write-side semantics; read-side locking is never exercised.
 
-## Finding 2
+## Finding 2: Floating-point boundary fragility in CanDeploy
 
-Location: internal/alerting/engine.go:51-61 (CalculateBurnRate)
-Claimed Behavior: Burn rate calculation handles zero division and negative allowed error rate.
-Observed Implementation: Returns 0.0 if total == 0 or allowedErrorRate <= 0.
-Assessment: PASS
-Severity: LOW
-Notes: The conditional branches for total==0 and allowedErrorRate<=0 are not exercised by existing tests. Add tests for these edge cases.
+Location: internal/slo/evaluator.go:49-56
+Claimed Behavior: CanDeploy should be true when budget remaining > 0, false when exhausted (<=0)
+Observed Implementation:
+```go
+allowedFailureRate := 1.0 - e.config.TargetUptime
+totalErrorBudget := allowedFailureRate * float64(total)
+budgetConsumed := float64(bad)
+budgetRemaining := totalErrorBudget - budgetConsumed
 
-## Finding 3
-
-Location: internal/metrics/tracker.go:89-99 (Summary)
-Claimed Behavior: Summary returns total good/bad counts after evicting stale entries.
-Observed Implementation: Takes write lock (mu.Lock()), calls evictStaleLocked, then iterates buckets summing counts.
-Assessment: PASS
-Severity: LOW
-Notes: Although taking a write lock is necessary due to mutation via evictStaleLocked, the method name "Summary" suggests read-only. Consider renaming or documenting the side effect of eviction. This is a minor naming concern.
-
-## Finding 4
-
-Location: internal/slo/evaluator.go:66-68 (Evaluate)
-Claimed Behavior: BudgetRemaining and BudgetConsumed are rounded to two decimal places for display.
-Observed Implementation: Uses math.Round(x*100)/100 for TotalErrorBudget, BudgetRemaining; BudgetConsumed is not rounded (direct float64(bad)).
+canDeploy := true
+if total > 0 && budgetRemaining <= 0 {
+    canDeploy = false
+}
+```
 Assessment: WARNING
 Severity: MEDIUM
-Notes: BudgetConsumed is not rounded while other budget fields are. This leads to inconsistency in displayed precision (e.g., budgetConsumed may show many decimal places if bad is large). However, bad is int64 so conversion to float64 is exact for values up to 2^53. Still, for consistency, rounding should be applied.
+Notes: The test `TestSLOEvaluator` expects `CanDeploy=true` when SLI exactly equals target SLO (99% SLI, 99% target, 1 error out of 100). Mathematically, `budgetRemaining` should be exactly 0.0, which would trigger `budgetRemaining <= 0` → CanDeploy=false. However, due to IEEE 754 floating-point arithmetic, `1.0 - 0.99` yields `0.010000000000000009` (not exactly 0.01), making `totalErrorBudget` slightly exceed 1.0, and `budgetRemaining` a tiny positive value (~8.88e-16). Thus `budgetRemaining <= 0` evaluates to false, and CanDeploy stays true. The test passes "by accident" of floating-point precision. If the arithmetic were exact, the test would fail. This is fragile: any future refactoring (e.g., using exact decimal arithmetic or different target values) could break this behavior silently.
 
-## Finding 5
+## Finding 3: No handling for events recorded out of order
 
-Location: internal/alerting/engine.go:73 (Check)
-Claimed Behavior: Alert triggers when both short and long window burn rates meet or exceed threshold.
-Observed Implementation: Condition `if shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
-Assessment: PASS
+Location: internal/metrics/tracker.go:46-76
+Claimed Behavior: Tracker should handle events in any timestamp order
+Observed Implementation: `Record` checks only if the new event matches the LAST bucket (index n-1). If an out-of-order event arrives that falls into a non-last bucket, it creates a new duplicate bucket.
+Assessment: WARNING
 Severity: LOW
-Notes: The logic requires both windows to exceed threshold. This matches the design of multi-window alerting to reduce false positives. However, the demo only triggered the slow burn alert (6x) because the fast burn threshold (14.4x) was not met in either window. Correct behavior.
+Notes: The tracker assumes monotonically increasing event timestamps. Out-of-order events would create duplicate buckets and inflate counts. While this is consistent with typical use cases (recording events as they occur), there is no validation or handling. This is acceptable for the stated scope but is a limitation.
 
-## Finding 6
+## Finding 4: Missing validation for negative or zero window/bucket sizes
 
-Location: internal/metrics/tracker.go:15-20 (Bucket struct)
-Claimed Behavior: Bucket aggregates counts per time window.
-Observed Implementation: Bucket has StartTime, TotalCount, GoodCount, BadCount.
-Assessment: PASS
+Location: internal/metrics/tracker.go:30-44
+Claimed Behavior: Constructor should validate inputs
+Observed Implementation: `NewWindowTracker` only guards against `bucketSize <= 0` (defaulting to 1 second) and `numBuckets < 1` (defaulting to 1). No validation for negative `windowSize`.
+Assessment: WARNING
 Severity: LOW
-Notes: The bucket representation is correct and thread-safe due to enclosing mutex.
+Notes: If a caller passes negative `windowSize`, `evictStaleLocked` computes `cutoff := now.Add(-w.windowSize)`. A negative windowSize with negation produces a positive offset, meaning ALL buckets would appear "fresh" (never evicted). This could cause unbounded memory growth. The constructor should reject negative window sizes.
 
-## Finding 7
+## Finding 5: Demo variable naming inconsistency
 
-Location: cmd/demo/main.go:12-119 (main)
-Claimed Behavior: Demo simulates baseline, incident, and alert checking.
-Observed Implementation: Executes three phases and prints expected metrics.
-Assessment: PASS
+Location: cmd/demo/main.go:24
+Claimmed Behavior: Variable names should be accurate
+Observed Implementation:
+```go
+window30d := 30 * time.Minute
+```
+Assessment: WARNING
 Severity: LOW
-Notes: Demo output matches computed values exactly. No discrepancies observed.
+Notes: `window30d` implies a 30-day window, but is set to 30 minutes. This is misleading and inconsistent with the README claim of `internal/metrics` using sliding-window tracking. The name does not reflect reality. Should be renamed to `window30m`.
+
+## Finding 6: LatencyThreshold in Config is unused
+
+Location: internal/slo/evaluator.go:11-14
+Claimed Behavior: Config should use LatencyThreshold
+Observed Implementation:
+```go
+type Config struct {
+    Name            string
+    TargetUptime    float64
+    LatencyThreshold time.Duration
+}
+```
+The `LatencyThreshold` field in `Config` is never read by `Evaluator.Evaluate`. Good/bad determination is delegated to the `metrics.Event` -> `isGood` callback in `WindowTracker`. The `LatencyThreshold` is passed to `Config` but not used.
+Assessment: WARNING
+Severity: LOW
+Notes: The field is defined but dead. Either the evaluator should use it for latency-based SLI calculation, or it should be removed. The demo passes `latencyThreshold` in the config but it has no effect on the evaluator's logic — the `isGood` function in the demo does the latency check instead.
+
+## Finding 7: No error handling or panic recovery
+
+Location: All implementation files
+Claimed Behavior: The code should handle edge cases gracefully
+Observed Implementation: No input validation, no nil checks, no panic recovery. E.g., `NewEvaluator` does not check if `tracker` is nil.
+Assessment: PASS (with caveats)
+Severity: LOW
+Notes: The absence of defensive checks is consistent with Go idioms for internal packages where invariants are maintained at the call site. For this lab scope, this is acceptable. Not a defect but a design choice.

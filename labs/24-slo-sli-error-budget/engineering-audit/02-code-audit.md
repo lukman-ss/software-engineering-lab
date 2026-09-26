@@ -2,51 +2,98 @@
 
 Target Lab: `labs/24-slo-sli-error-budget`
 
-## Finding 1: WindowTracker Eviction and Sliding-Window Bucketing
+## Finding 1: WindowTracker Bucket Append Assumption on Timestamp Monotonicity
 
-Location: `internal/metrics/tracker.go:50-87`
-Claimed Behavior: Thread-safe sliding time window tracker storing bucketed events, evicting stale events based on `cutoff = now.Add(-w.windowSize)`.
+Location: `internal/metrics/tracker.go:55-75`
+Claimed Behavior: Events are recorded into time buckets and aggregated across rolling windows.
 Observed Implementation:
-- `Record` takes write lock (`w.mu.Lock()`) and calls `evictStaleLocked(e.Timestamp)`.
-- Truncates event timestamp by `bucketSize` and merges counts into existing latest bucket or appends new bucket.
-- `Summary` takes write lock and evicts stale buckets before summing `TotalCount`, `GoodCount`, `BadCount`.
-- Note: If events arrive out-of-order prior to `buckets[n-1].StartTime`, events create a new bucket appended at end rather than sorted. For in-order synthetic generation this works as intended.
+In `Record(e Event)`:
+```go
+n := len(w.buckets)
+if n > 0 && w.buckets[n-1].StartTime.Equal(bucketStart) {
+    w.buckets[n-1].TotalCount++
+    ...
+    return
+}
+b := Bucket{ StartTime: bucketStart, ... }
+w.buckets = append(w.buckets, b)
+```
+If events arrive out of order (e.g., an earlier timestamp arrives after a later timestamp), new buckets are appended at the end with a timestamp before the tail bucket. In `evictStaleLocked`, eviction assumes buckets are sorted by `StartTime` and slices `w.buckets[idx:]`. Out-of-order events could cause stale buckets to persist or premature eviction.
+Assessment: WARNING
+Severity: LOW
+Notes: In typical streaming logging or the test/demo harness, timestamps are monotonic. However, for a general sliding window tracker, out-of-order arrivals should either be inserted at the sorted position or rejected. In this lab context, timestamps are generated sequentially.
+
+## Finding 2: Division by Zero and Edge Case Handling in Evaluator & AlertEngine
+
+Location: `internal/slo/evaluator.go:44-57`, `internal/alerting/engine.go:51-61`
+Claimed Behavior: Correct computation of SLI, Error Budget, and Burn Rates under empty/zero traffic conditions.
+Observed Implementation:
+- In `evaluator.go`:
+  ```go
+  var sli float64 = 1.0
+  if total > 0 {
+      sli = float64(good) / float64(total)
+  }
+  ...
+  canDeploy := true
+  if total > 0 && budgetRemaining <= 0 {
+      canDeploy = false
+  }
+  ```
+  Safely defaults SLI to 1.0 and `canDeploy = true` when total == 0.
+- In `engine.go`:
+  ```go
+  if total == 0 {
+      return 0.0
+  }
+  if allowedErrorRate <= 0 {
+      return 0.0
+  }
+  ```
+  Safely returns 0.0 when total is 0 or targetSLO is 1.0 (allowedErrorRate <= 0).
 Assessment: PASS
 Severity: LOW
-Notes: Clean synchronization, proper lock deferral, slice memory reclaimed via reslicing.
+Notes: No panics or NaN values possible on zero traffic.
 
-## Finding 2: SLI and Error Budget Calculation
+## Finding 3: Concurrency Safety of WindowTracker
 
-Location: `internal/slo/evaluator.go:41-71`
-Claimed Behavior: Calculates SLI ratio (`good / total`), total error budget `(1 - TargetUptime) * total`, remaining error budget `totalErrorBudget - BadEvents`, and release freeze boolean `CanDeploy`.
+Location: `internal/metrics/tracker.go:46-49`, `internal/metrics/tracker.go:89-92`
+Claimed Behavior: Thread-safe metric collection across multiple concurrent goroutines.
 Observed Implementation:
-- Zero total events returns `sli = 1.0` and `canDeploy = true` gracefully.
-- Formula matches Google SRE book definition: `allowedFailureRate := 1.0 - e.config.TargetUptime`, `totalErrorBudget := allowedFailureRate * float64(total)`, `budgetRemaining := totalErrorBudget - budgetConsumed`.
-- `CanDeploy` evaluates `false` strictly when `total > 0 && budgetRemaining <= 0`.
+`Record` and `Summary` both acquire `w.mu.Lock()` (exclusive lock) and release via `defer w.mu.Unlock()`. Although `w.mu` is defined as `sync.RWMutex`, `Summary` mutates `w.buckets` via `evictStaleLocked(now)`, so taking a write lock (`w.mu.Lock()`) in `Summary` is necessary and correctly implemented.
 Assessment: PASS
 Severity: LOW
-Notes: Mathematical precision handled with `math.Round` for clean output.
+Notes: Verified with `go test -race ./...`. No race condition detected.
 
-## Finding 3: Multi-Window Multi-Burn-Rate Alert Evaluation
+## Finding 4: Error Budget Math and Deployment Gate Enforcement
 
-Location: `internal/alerting/engine.go:51-88`
-Claimed Behavior: Multi-window burn rate evaluation checking short and long rolling windows against threshold factors (`BurnRateFactor`).
+Location: `internal/slo/evaluator.go:49-57`
+Claimed Behavior: Error budget equals allowed failure rate times total events; releases are blocked when budget is exhausted (`budgetRemaining <= 0`).
 Observed Implementation:
-- `CalculateBurnRate`: `(bad / total) / (1.0 - targetSLO)`. Returns `0.0` when total is 0 or allowedErrorRate <= 0.
-- `Check`: Computes `shortBurn` and `longBurn`. Triggers alert only when `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
-- Matches SRE multi-window requirement (both short and long windows must fire).
+```go
+allowedFailureRate := 1.0 - e.config.TargetUptime
+totalErrorBudget := allowedFailureRate * float64(total)
+budgetConsumed := float64(bad)
+budgetRemaining := totalErrorBudget - budgetConsumed
+```
+When total = 1100, target = 0.999 (0.1% budget), `totalErrorBudget = 1.10`.
+With 10 bad events, `budgetConsumed = 10`, `budgetRemaining = 1.10 - 10 = -8.90`.
+Since `budgetRemaining <= 0`, `canDeploy` evaluates to `false`.
 Assessment: PASS
 Severity: LOW
-Notes: Simple and correct evaluation logic.
+Notes: Conforms precisely to Google SRE Error Budget definitions.
 
-## Finding 4: Concurrency and Thread Safety
+## Finding 5: AlertEngine Multi-Window Burn Rate Logic
 
-Location: `internal/metrics/tracker.go:23, 47, 90`
-Claimed Behavior: Safe concurrent access during metric ingestion and summary reads.
+Location: `internal/alerting/engine.go:63-88`
+Claimed Behavior: Multi-window alerting requires both short window and long window burn rates to meet or exceed the threshold factor before triggering an alert.
 Observed Implementation:
-- `sync.RWMutex` protects all bucket mutations and summary reads.
-- `Summary` acquires full write lock `w.mu.Lock()` because it calls `evictStaleLocked` which mutates the slice `w.buckets`.
-- `go test -race ./...` passed with zero race conditions detected.
+```go
+if shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor {
+    triggered = true
+}
+```
+Requires both conditions to be true, preventing transient spikes (short window only) and historical resets (long window only) from triggering alerts erroneously.
 Assessment: PASS
 Severity: LOW
-Notes: Thread safe under multi-goroutine access.
+Notes: Exactly matches Google SRE Workbook Chapter 5 specification for multi-window burn rate alerts.

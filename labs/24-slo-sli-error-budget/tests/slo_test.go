@@ -126,6 +126,75 @@ func TestAlertEngineBurnRate(t *testing.T) {
 	if alerts[0].Severity != alerting.SeverityPage {
 		t.Fatalf("expected Page alert severity, got %s", alerts[0].Severity)
 	}
+
+	// Negative Test: Transient spike in short window only, long window error rate is low.
+	// Short window: 10% errors (100x burn rate).
+	// Long window: 10,000 requests, 1 error = 0.01% error rate (0.1x burn rate < 14.4x threshold).
+	shortOnlyTracker := metrics.NewWindowTracker(5*time.Minute, time.Second, isGood)
+	longCleanTracker := metrics.NewWindowTracker(60*time.Minute, time.Second, isGood)
+	engineTransient := alerting.NewAlertEngine(0.999, shortOnlyTracker, longCleanTracker, rules)
+
+	for i := 0; i < 90; i++ {
+		shortOnlyTracker.Record(metrics.Event{Timestamp: now, StatusCode: 200})
+	}
+	for i := 0; i < 10; i++ {
+		shortOnlyTracker.Record(metrics.Event{Timestamp: now, StatusCode: 500})
+	}
+	for i := 0; i < 9999; i++ {
+		longCleanTracker.Record(metrics.Event{Timestamp: now, StatusCode: 200})
+	}
+	longCleanTracker.Record(metrics.Event{Timestamp: now, StatusCode: 500})
+
+	transientAlerts := engineTransient.Check(now)
+	if len(transientAlerts) != 0 {
+		t.Fatalf("expected 0 alerts for transient spike (long window below threshold), got %d", len(transientAlerts))
+	}
+}
+
+func TestOutOfOrderTimestamps(t *testing.T) {
+	tracker := metrics.NewWindowTracker(10*time.Second, 1*time.Second, func(e metrics.Event) bool {
+		return e.StatusCode == 200
+	})
+	now := time.Now()
+
+	// Record later event first
+	tracker.Record(metrics.Event{Timestamp: now.Add(5 * time.Second), StatusCode: 200})
+	// Record earlier event second
+	tracker.Record(metrics.Event{Timestamp: now.Add(2 * time.Second), StatusCode: 200})
+	// Record another event in the same earlier bucket
+	tracker.Record(metrics.Event{Timestamp: now.Add(2 * time.Second + 100*time.Millisecond), StatusCode: 500})
+
+	total, good, bad := tracker.Summary(now.Add(6 * time.Second))
+	if total != 3 || good != 2 || bad != 1 {
+		t.Fatalf("expected total 3, good 2, bad 1; got total=%d, good=%d, bad=%d", total, good, bad)
+	}
+
+	// Advance time past the earlier bucket to verify sorted slice eviction
+	total, good, bad = tracker.Summary(now.Add(13 * time.Second)) // cutoff is now + 3s, earlier bucket at +2s is evicted, +5s bucket remains
+	if total != 1 || good != 1 || bad != 0 {
+		t.Fatalf("expected total 1, good 1, bad 0 after partial eviction; got total=%d, good=%d, bad=%d", total, good, bad)
+	}
+}
+
+func TestEvaluatorZeroTraffic(t *testing.T) {
+	tracker := metrics.NewWindowTracker(1*time.Minute, 1*time.Second, func(e metrics.Event) bool {
+		return e.StatusCode == 200
+	})
+	evaluator := slo.NewEvaluator(slo.Config{
+		Name:         "API SLO",
+		TargetUptime: 0.99,
+	}, tracker)
+
+	status := evaluator.Evaluate(time.Now())
+	if status.TotalEvents != 0 {
+		t.Fatalf("expected 0 total events, got %d", status.TotalEvents)
+	}
+	if status.CurrentSLI != 1.0 {
+		t.Fatalf("expected SLI 1.0 on zero traffic, got %f", status.CurrentSLI)
+	}
+	if !status.CanDeploy {
+		t.Fatalf("expected CanDeploy=true on zero traffic, got %v", status.CanDeploy)
+	}
 }
 
 func TestConcurrencyMetrics(t *testing.T) {

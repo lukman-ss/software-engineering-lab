@@ -113,6 +113,38 @@ func main() {
 				a.Severity, a.RuleName, a.ShortBurnRate, a.LongBurnRate, a.ThresholdRate)
 		}
 	}
+
+	fmt.Println("\n[PHASE 4] Endpoint Criticality Comparison (Payment 99.9% vs Reports 95.0%)...")
+	reportsTracker := metrics.NewWindowTracker(window30d, 10*time.Second, isGood)
+	reportsEvaluator := slo.NewEvaluator(slo.Config{
+		Name:             "Reports Service Availability",
+		TargetUptime:     0.95, // 95% non-critical SLO
+		LatencyThreshold: latencyThreshold,
+	}, reportsTracker)
+
+	// Ingest identical 10 errors out of 100 requests (10% error rate) to Reports
+	for i := 0; i < 90; i++ {
+		reportsTracker.Record(metrics.Event{
+			Timestamp:  incStart.Add(time.Duration(i) * 10 * time.Millisecond),
+			Duration:   50 * time.Millisecond,
+			StatusCode: 200,
+			Endpoint:   "/api/v1/reports",
+		})
+	}
+	for i := 0; i < 10; i++ {
+		reportsTracker.Record(metrics.Event{
+			Timestamp:  incStart.Add(time.Duration(90+i) * 10 * time.Millisecond),
+			Duration:   500 * time.Millisecond,
+			StatusCode: 500,
+			Endpoint:   "/api/v1/reports",
+		})
+	}
+	reportStatus := reportsEvaluator.Evaluate(evalTime)
+	fmt.Printf("Reports Target SLO: %.1f%% | Current SLI: %.1f%% | Budget Remaining: %.2f\n",
+		reportStatus.TargetSLO*100, reportStatus.CurrentSLI*100, reportStatus.BudgetRemaining)
+	fmt.Printf("Payment CanDeploy: %v | Reports CanDeploy: %v (Reports has wider 5%% error tolerance)\n",
+		status.CanDeploy, reportStatus.CanDeploy)
+
 	fmt.Println("\n================================================================")
 	fmt.Println("  DEMO COMPLETE")
 	fmt.Println("================================================================")
