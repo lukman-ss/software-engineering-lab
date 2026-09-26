@@ -1,12 +1,12 @@
 # Content Brief
 
 Topic: N+1 Query Problem
-Target Reader: Software Engineer
-Problem: 1 primary query + N iterative queries causes aggregate latency.
-Core Mental Model: Batch requests. Trade iterative N queries for 1-2 batched queries.
+Target Reader: Software Engineer implementing data access layers
+Problem: Iterative query execution inside loops generates N+1 database round-trips, causing undetected latency degradation
+Core Mental Model: Batch all related data in one or two queries instead of per-row lookups
 Approved Research Status: APPROVED
 Approved Engineering Status: APPROVED
-Main Concepts: N+1 Query, Eager Loading, Request Batching.
-Verified Behaviors: Iterative logic executes 4 queries for 3 authors. Batched logic executes 2 queries for 3 authors.
-Available Case Studies: Author-Post store simulation.
-Warnings: Mapping-level eager loading (e.g., JPA `FetchType.EAGER`) causes memory bloat. Query-level eager loading is the correct fix.
+Main Concepts: N+1 Anti-pattern, Eager Loading, Query Batching, ORM Lazy Loading, Request Aggregation
+Verified Behaviors: 3 authors + 1 initial query = 4 queries (N+1). Batched approach = 2 queries regardless of record count.
+Available Case Studies: Author-Post store simulation demonstrating query count reduction
+Warnings: Mapping-level eager loading (JPA FetchType.EAGER) causes memory bloat. Lab demonstrates query-level eager loading only. Performance numbers are illustrative, not universal benchmarks.

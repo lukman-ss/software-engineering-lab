@@ -1,42 +1,56 @@
-# Research Plan
+# Research Plan: N+1 Query Problem
+
+## Research Topic: N+1 Query Problem
+
+## Lab Specification
+- Lab: 22
+- Category: Backend Engineering / Database Performance
+- Format: Practical Engineering Lab
+- Language: Bahasa Indonesia
+- Level: Senior Software Engineer
+- Series: Senior Software Engineer Daily
+- Keywords: N+1 Query Problem, ORM, Lazy Loading, Eager Loading, Database Performance, Pagination, Database Optimization
+- Author: Lukman (lukman-ss)
+- Source Repository: https://github.com/lukman-ss/software-engineering-lab
 
 ## Research Topic
-N+1 Query Problem in ORM-based Applications — Causes, Detection, and Mitigation Strategies
+N+1 Query Problem — Database Performance Anti-Pattern in ORM-Based Applications
 
 ## Objective
-Investigate the N+1 query problem comprehensively: understand its mechanics, impact on database performance, detection methods, and industry-standard mitigation strategies (eager loading, query optimization, pagination, column selection). Provide evidence-based guidance for senior backend engineers.
+Investigate the N+1 query problem as a fundamental database performance issue, focusing on:
+- Root cause and technical mechanism
+- Detection and measurement methods
+- Solution strategies and trade-offs
+- Real-world impact and case studies
+- Best practices for prevention and remediation
 
 ## Research Questions
-1. What is the N+1 query problem and how does it manifest in popular ORMs (Laravel Eloquent, Hibernate, Entity Framework, Django ORM, SQLAlchemy)?
-2. What are the performance impacts (latency, connection pool exhaustion, throughput degradation) at scale?
-3. What are the standard detection methods (query counting, monitoring tools, profiling)?
-4. What are the primary mitigation strategies: eager loading (join vs separate queries), `withCount`/aggregation, column selection, pagination?
-5. What are the trade-offs of eager loading (memory usage, cartesian product explosion, over-fetching)?
-6. How does N+1 manifest beyond databases (microservices API calls, GraphQL resolvers, frontend data fetching)?
-7. What are common anti-patterns and mistakes engineers make when addressing N+1?
-8. What is the recommended troubleshooting workflow for a senior engineer encountering a slow endpoint?
+1. What is the formal definition and technical mechanism of the N+1 query pattern?
+2. How does lazy loading in ORMs contribute to N+1 query generation?
+3. What are the quantifiable performance impacts of N+1 queries on database and application layers?
+4. What tools and techniques exist for detecting N+1 queries in production and development environments?
+5. What are the primary solution patterns (eager loading, batch loading, denormalization) and their trade-offs?
+6. How does N+1 manifest in microservices architectures and API integrations?
+7. What are the common anti-patterns in N+1 remediation (over-fetching, blind eager loading)?
+8. What monitoring metrics and thresholds indicate N+1 problems in production systems?
 
 ## Search Strategy
-- Search official ORM documentation for "N+1", "eager loading", "lazy loading", "with", "include", "preload"
-- Search technical articles from reputable sources (Martin Fowler, High Scalability, Percona, PlanetScale, AWS, Google Cloud blogs)
-- Search academic papers on ORM performance patterns
-- Search for case studies from engineering blogs (Shopify, GitHub, Uber, Netflix, etc.)
-- Search for "N+1 query problem" + "connection pool" + "production incident"
+- Search for authoritative ORM documentation on lazy vs eager loading
+- Look for database performance monitoring tools that track query counts
+- Find academic papers or technical articles on N+1 query analysis
+- Search for case studies from major tech companies on N+1 remediation
+- Look for benchmarks comparing query patterns (N+1 vs batch vs single query)
 
-## Expected Primary Sources (Tier 1)
-- Official ORM documentation: Laravel Eloquent, Hibernate, Entity Framework Core, Django ORM, SQLAlchemy, Sequelize, Prisma
-- Database vendor docs: PostgreSQL, MySQL, SQL Server query optimization guides
-- Cloud provider performance guides: AWS RDS, Google Cloud SQL, Azure Database
-- Standards: JPA specification, ODBC/JDBC behavior
-
-## Expected Secondary Sources (Tier 2)
-- Engineering blogs: Percona, PlanetScale, pgMustard, pganalyze, Datadog, New Relic
-- Technical publications: ACM Queue, IEEE Software, Martin Fowler's bliki
-- Conference talks: QCon, Strange Loop, PyCon, LaravelConf, Microsoft Build
+## Expected Primary Sources
+- Laravel Eloquent documentation (the example context uses PHP/Laravel)
+- Django ORM documentation
+- Hibernate documentation
+- Academic papers on database query optimization
+- Database performance monitoring tool documentation (e.g., Datadog, New Relic)
+- Case studies from engineering blogs (e.g., Stripe, GitHub, Airbnb)
 
 ## Risks / Unknowns
-- Some ORMs handle N+1 differently (batch loading vs join fetching) — need to distinguish
-- "N+1" term sometimes used loosely; must define precisely
-- Performance numbers highly context-dependent (network latency, DB size, indexes) — avoid quoting unverified benchmarks
-- GraphQL DataLoader pattern is related but distinct — clarify boundary
-- Microservices "network N+1" is analogous but different failure domain
+- Some real-world production N+1 cases may be undocumented
+- Performance impacts vary significantly by database, network latency, and data distribution
+- Over-fetching as an alternative to N+1 may not be well-documented
+- The boundary between "acceptable" and "problematic" query counts may be context-dependent
