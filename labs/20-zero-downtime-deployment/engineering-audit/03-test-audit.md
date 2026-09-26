@@ -1,43 +1,39 @@
 # Test Audit
 
-## Test Suite Execution Results
+## Test Suite Overview
 
-### Standard Unit & Integration Tests
-Command: `go test -v ./...`
-Status: PASS
-Output Summary:
-- `TestServerProbes`: PASS (0.08s)
-- `TestServerGracefulShutdown`: PASS (0.12s)
-- `TestServerPreStopHook`: PASS (0.14s)
-- `TestServerPreStopContextCancellation`: PASS (0.05s)
-- `TestServerInvalidDurationFallback`: PASS (0.06s)
-- `TestServerReadyUnreadyTransition`: PASS (0.00s)
-- `TestServerMultiRequestDrain`: PASS (0.18s)
-- `TestServerWorkRequestCancellation`: PASS (0.08s)
-- `TestWorkerConcurrency`: PASS (0.05s)
-- `TestWorkerGracefulShutdown`: PASS (0.04s)
-- `TestWorkerEnqueueAfterStop`: PASS (0.00s)
-- `TestWorkerConcurrentEnqueueStop`: PASS (0.01s)
-- `TestWorkerShutdownTimeout`: PASS (0.04s)
-- `TestDBNotFound`: PASS
-- `TestDBSingleNameLegacy`: PASS
-- `TestDBSaveExpandEmptyFields`: PASS
-- `TestDBLegacyOverwriteWithExpand`: PASS
-- `TestExpandContractDatabase`: PASS
+Total Tests: 18
+Total Packages Tested: 1 (`tests`)
+Race Detector Verified: Yes (`go test -race ./...`)
 
-### Race Detector
-Command: `go test -race ./...`
-Status: PASS
-Output Summary: All tests passed with 0 data races detected.
+## Breakdown of Tests
 
-## Test Coverage & Rigor Assessment
+### Database (`tests/db_test.go`)
+- `TestDBNotFound`: Verifies `ErrNotFound` on nonexistent keys. PASS.
+- `TestDBSingleNameLegacy`: Verifies legacy single-name record splitting without panic or malformed last name. PASS.
+- `TestDBSaveExpandEmptyFields`: Verifies edge cases with empty first name or empty last name. PASS.
+- `TestDBLegacyOverwriteWithExpand`: Verifies overwriting a legacy entry with modern expanded format. PASS.
+- `TestExpandContractDatabase`: Verifies core Expand and Contract flow: legacy write readable via modern structure, expand write dual-populated. PASS.
 
-1. **Happy Path Coverage**: Fully covered (`TestServerProbes`, `TestServerGracefulShutdown`, `TestWorkerConcurrency`, `TestExpandContractDatabase`).
-2. **Failure & Edge Cases**:
-   - `TestServerPreStopContextCancellation` verifies fast cancellation when shutdown context times out during preStop hook.
-   - `TestServerWorkRequestCancellation` verifies client disconnect cleanup.
-   - `TestServerInvalidDurationFallback` tests bad input parameter handling.
-   - `TestWorkerConcurrentEnqueueStop` stress-tests concurrent enqueue and shutdown calls (50 iterations of 10 concurrent goroutines).
-   - `TestWorkerShutdownTimeout` verifies context cancellation of worker jobs upon drain timeout.
-   - `TestDBSaveExpandEmptyFields` tests partial field input fallback.
-3. **Assessment**: PASS. The test suite provides strong coverage across concurrency, failure recovery, probe state transitions, and schema fallback logic.
+### HTTP Server (`tests/server_test.go`)
+- `TestServerProbes`: Verifies liveness returns 200, readiness returns 503 before readiness and 200 after. PASS.
+- `TestServerGracefulShutdown`: Verifies single in-flight request completes with HTTP 200 while shutdown is in progress. PASS.
+- `TestServerPreStopHook`: Verifies that shutdown waits for the configured preStop duration. PASS.
+- `TestServerPreStopContextCancellation`: Verifies that shutdown aborts promptly without hanging when context deadline expires during preStop. PASS.
+- `TestServerInvalidDurationFallback`: Verifies invalid `d` query parameter falls back to 50ms safely. PASS.
+- `TestServerReadyUnreadyTransition`: Verifies manual state transition from ready to unready. PASS.
+- `TestServerMultiRequestDrain`: Verifies multiple concurrent in-flight requests (n=3) all complete successfully during shutdown drain. PASS.
+- `TestServerWorkRequestCancellation`: Verifies client cancellation decrements active request counter cleanly. PASS.
+
+### Background Worker (`tests/worker_test.go`)
+- `TestWorkerConcurrency`: Verifies multiple concurrent workers drain all enqueued jobs cleanly. PASS.
+- `TestWorkerGracefulShutdown`: Verifies active and buffered jobs finish during graceful stop. PASS.
+- `TestWorkerEnqueueAfterStop`: Verifies attempts to enqueue jobs after `Stop()` are rejected without panicking. PASS.
+- `TestWorkerConcurrentEnqueueStop`: Stress tests concurrent enqueuers racing against `Stop()` across 50 iterations to ensure zero closed-channel panics and data races. PASS.
+- `TestWorkerShutdownTimeout`: Verifies that when drain timeout expires, in-flight/queued work exceeding timeout is aborted via context cancellation. PASS.
+
+## Test Execution Summary
+
+- `go test -v -count=1 ./...`: 18/18 PASS (0 failures)
+- `go test -race -v -count=1 ./...`: 18/18 PASS (0 data races detected)
+- Test Coverage Quality: Robust. Covers happy path, boundary cases, concurrent races, timeouts, and negative paths.

@@ -2,36 +2,45 @@
 
 ## Finding 1
 
-Location: `internal/server/server.go:85-110`
-Claimed Behavior: Graceful HTTP server shutdown with preStop routing delay and in-flight request draining.
-Observed Implementation: `Shutdown(ctx)` sets readiness to false atomically via `s.SetReady(false)`, executes `preStop` delay (interruptible via context cancellation), calls `srv.Shutdown(ctx)`, and waits for in-flight handlers registered via `sync.WaitGroup` to complete.
+Location: `internal/server/server.go:88-99`
+Claimed Behavior: Server unreadiness transition and preStop delay hook for load balancer detachment latency.
+Observed Implementation: `Shutdown(ctx)` sets `s.ready.Store(false)` first, then if `s.preStop > 0`, waits via `select` on `time.After(s.preStop)` or `ctx.Done()`. If canceled, returns `ctx.Err()`.
 Assessment: PASS
 Severity: LOW
-Notes: Correct synchronization primitives (`atomic.Bool`, `sync.WaitGroup`, `time.After` inside `select` with `ctx.Done()`).
+Notes: Correctly handles context cancellation without blocking indefinitely.
 
 ## Finding 2
 
-Location: `internal/worker/worker.go:76-107`
-Claimed Behavior: Background queue worker graceful shutdown preventing post-stop enqueues and draining queued/active jobs up to a timeout.
-Observed Implementation: `w.stopped` atomic boolean coupled with `w.enqueueMu` prevents closed channel panics when `Enqueue` is called concurrently with `Stop`. Channel `w.jobChan` is closed, worker goroutines finish processing jobs, and `w.wg.Wait()` is bounded by `select` with `time.After(timeout)`. If timeout expires, `w.cancel()` signals goroutines to abort current job.
+Location: `internal/server/server.go:43-63`
+Claimed Behavior: Active HTTP request tracking and connection draining during graceful shutdown.
+Observed Implementation: `/work` handler increments `activeCount` and `wg`, defers decrements/`Done()`, and listens to `r.Context().Done()` during long work simulation. `Shutdown(ctx)` calls `srv.Shutdown(ctx)` (which stops accepting new connections) and then `s.wg.Wait()` to wait for active requests.
 Assessment: PASS
 Severity: LOW
-Notes: Race-free concurrent enqueue/stop handling verified via test suite and race detector.
+Notes: Properly coordinates standard library `http.Server.Shutdown` with custom WaitGroup tracking for active handlers.
 
 ## Finding 3
 
-Location: `internal/db/db.go:32-71`
-Claimed Behavior: Expand-Contract database pattern supporting dual-write/read logic for legacy `Name` and modern `FirstName`/`LastName` fields.
-Observed Implementation: `InsertLegacy` writes `Name`, `SaveExpand` populates all fields (`Name`, `FirstName`, `LastName`), and `GetUser` provides fallback parsing when fields are missing or empty. Protected by `sync.RWMutex`.
+Location: `internal/worker/worker.go:76-91`
+Claimed Behavior: Safe concurrent job enqueuing and graceful worker stop.
+Observed Implementation: `Enqueue` acquires `enqueueMu`, checks `w.stopped.Load()`, and sends to `jobChan` under lock. `Stop` acquires `enqueueMu`, sets `stopped = true`, closes `jobChan`, and releases lock.
 Assessment: PASS
 Severity: LOW
-Notes: Simplification note (`ponytail:`) properly documents in-memory ceiling and PostgreSQL/MySQL migration path.
+Notes: Thread-safe close-and-send synchronization prevents sending on a closed channel under race conditions.
 
 ## Finding 4
 
-Location: `cmd/demo/main.go:16-78`
-Claimed Behavior: End-to-end demo execution illustrating zero-downtime deployment flow.
-Observed Implementation: Initializes background worker and HTTP server, enqueues jobs, makes a mock HTTP request taking 2s, sends simulated `SIGTERM`, triggers graceful server shutdown (with 1s preStop delay) and worker drain (5s timeout), verifying request completion.
+Location: `internal/worker/worker.go:47-69`
+Claimed Behavior: Worker job processing and drain timeout context cancellation.
+Observed Implementation: Workers select from `jobChan` or `w.ctx.Done()`. Upon dequeue, workers check `w.ctx.Done()` before and during job execution to abort if drain timeout expires.
 Assessment: PASS
 Severity: LOW
-Notes: All demo operations complete cleanly and log expected output matching claimed behavior.
+Notes: Clean handling of graceful drain versus hard shutdown timeout escalation.
+
+## Finding 5
+
+Location: `internal/db/db.go:41-71`
+Claimed Behavior: Expand and Contract pattern with fallback read compatibility.
+Observed Implementation: `SaveExpand` writes both `Name` and `FirstName`/`LastName`. `GetUser` checks missing fields and dynamically reconciles legacy `Name` splitting or modern `FirstName`/`LastName` combining. Protected by `RWMutex`.
+Assessment: PASS
+Severity: LOW
+Notes: Implementation correctly demonstrates schema evolution fallback without data loss.

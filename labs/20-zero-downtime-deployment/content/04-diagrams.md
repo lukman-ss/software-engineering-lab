@@ -35,7 +35,8 @@
      |                                                 |
      |  - jobChan         : Buffered in-memory queue   |
      |  - Goroutines      : Background processing      |
-     |  - Stop()          : Finish active job cleanly  |
+     |  - Stop(timeout)   : Close channel, drain; cancel|
+     |    context after timeout (buffered jobs dropped)|
      +-------------------------------------------------+
 ```
 
@@ -50,8 +51,10 @@ Orchestrator               HTTP Server                  In-Flight Client
      |                          |-- SetReady(false)            |
      |                          |   (detach from LB)           |
      |                          |                              |
-     |                          |-- Sleep(preStop) ----------->| (Allows network routes
-     |                          |   (wait routing tables)      |  to propagate to proxy)
+     |                          |-- select{                   |
+     |                          |   time.After(preStop) ----->| (Allows network routes
+     |                          |   ctx.Done() (cancel)        |  to propagate to proxy)
+     |                          |   }                          |
      |                          |                              |
      |                          |-- srv.Shutdown()             |
      |                          |   (stop accepting new reqs)  |

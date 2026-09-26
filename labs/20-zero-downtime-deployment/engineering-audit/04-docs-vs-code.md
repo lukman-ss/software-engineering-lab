@@ -1,32 +1,17 @@
-# Docs vs Code Audit
+# Documentation vs Code Audit
 
-## Documentation Verification
+## Comparisons
 
-Target: `README.md` compared against `internal/`, `cmd/demo/`, and `tests/`.
+### 1. Components Claimed vs Implemented
+- **README.md**:
+  - Mentions `internal/db` with Expand/Contract parallel change. Implemented in `internal/db/db.go`. Matches.
+  - Mentions `internal/server` with liveness/readiness probes, preStop delay, and connection draining. Implemented in `internal/server/server.go`. Matches.
+  - Mentions `internal/worker` with background queue and graceful stop. Implemented in `internal/worker/worker.go`. Matches.
+  - Mentions `cmd/demo` with lifecycle orchestration. Implemented in `cmd/demo/main.go`. Matches.
 
-### 1. Component Descriptions
-- **Database (`internal/db`)**: README states it demonstrates "Expand and Contract" pattern (Parallel Change) with dual schema versions (`Name` and `FirstName`/`LastName`) and transparent fallback logic.
-  - Verification: Code in `internal/db/db.go` and tests in `tests/db_test.go` directly mirror this description.
-  - Result: MATCH.
-
-- **Server (`internal/server`)**: README states it exposes Liveness and Readiness probes, executes configurable `preStop` delay upon shutdown signal, and drains in-flight requests before termination.
-  - Verification: Implemented in `internal/server/server.go:NewServer` and `Shutdown`. Probes at `/healthz/live` and `/healthz/ready`.
-  - Result: MATCH.
-
-- **Worker (`internal/worker`)**: README states worker is a background daemon pulling jobs from a queue, stopping new pulls on shutdown, and processing active jobs until completion.
-  - Verification: Implemented in `internal/worker/worker.go:Start`, `Enqueue`, and `Stop`.
-  - Result: MATCH.
-
-- **Demo (`cmd/demo`)**: README describes CLI orchestrator wiring components, simulating startup, running workloads, and sending termination signal.
-  - Verification: Implemented in `cmd/demo/main.go`. Output matches claimed steps.
-  - Result: MATCH.
-
-### 2. Execution Commands
-- README commands:
-  - `go run ./cmd/demo` -> Tested, works as documented.
-  - `go test -v ./...` -> Tested, works as documented.
-  - `go test -race ./...` -> Tested, works as documented.
-  - Result: MATCH.
+### 2. Run Commands
+- `go run ./cmd/demo`: Documented in `README.md`. Executed and confirmed working with output matching engineering records.
+- `go test -v ./...` & `go test -race ./...`: Documented in `README.md`. Executed and verified passing without issues.
 
 ### 3. Discrepancies
-- None identified. No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH`.
+- None detected. No `DOC_CODE_MISMATCH`, no `TEST_CLAIM_MISMATCH`, and no `RESEARCH_IMPLEMENTATION_MISMATCH`.

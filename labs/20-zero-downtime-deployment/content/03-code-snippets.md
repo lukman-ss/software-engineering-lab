@@ -3,7 +3,7 @@
 ## Snippet 1 — Graceful Server Shutdown with PreStop Delay
 
 Source File: `internal/server/server.go`
-Purpose: Mengatur penghentian server HTTP secara bertahap, mencakup perubahan status kesiapan, penundaan simulasi routing table, dan penutupan listener secara halus.
+Purpose: Mengatur penghentian server HTTP secara bertahap, mencakup perubahan status kesiapan, penundaan simulasi routing table menggunakan select-based timer, dan penutupan listener secara halus.
 
 ```go
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -14,7 +14,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	if s.preStop > 0 {
 		log.Printf("Executing preStop sleep for %v to allow routing table updates...", s.preStop)
-		time.Sleep(s.preStop)
+		select {
+		case <-time.After(s.preStop):
+		case <-ctx.Done():
+			log.Println("preStop sleep interrupted by context cancellation")
+			return ctx.Err()
+		}
 	}
 
 	log.Println("Initiating graceful shutdown of HTTP listeners...")
@@ -30,7 +35,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 ```
 
 Explanation:
-Method `Shutdown` pertama-tama menandai instance tidak siap (`s.SetReady(false)`) agar dikeluarkan dari rotasi load balancer. Lalu ia melakukan jeda eksekusi selama `preStop` untuk memberikan waktu pada jaringan mendeteksi pencabutan pod/instance, sebelum akhirnya memanggil `srv.Shutdown(ctx)` dan menunggu seluruh goroutine in-flight selesai via `s.wg.Wait()`.
+Method `Shutdown` pertama-tama menandai instance tidak siap (`s.SetReady(false)`) agar dikeluarkan dari rotasi load balancer. Lalu ia menunggu selama `preStop` menggunakan `select` pada `time.After` atau `ctx.Done()` untuk memberikan waktu pada jaringan mendeteksi pencabutan pod/instance, sebelum akhirnya memanggil `srv.Shutdown(ctx)` dan menunggu seluruh goroutine in-flight selesai via `s.wg.Wait()`. Jika konteks dibatalkan selama penundaan, method mengembalikan `ctx.Err()`.
 
 ---
 
@@ -67,10 +72,10 @@ Fungsi `GetUser` memeriksa keberadaan nilai kolom. Bila kolom baru (`FirstName`,
 
 ---
 
-## Snippet 3 — Worker Loop with Context Termination
+## Snippet 3 — Worker Loop with Cooperative Context Termination
 
 Source File: `internal/worker/worker.go`
-Purpose: Mengelola siklus hidup goroutine background worker yang memproses pekerjaan dan berhenti saat menerima instruksi shutdown.
+Purpose: Mengelola siklus hidup goroutine background worker yang memproses pekerjaan dan berhenti saat menerima instruksi shutdown, dengan perlindungan konteks tambahan pada setiap iterasi.
 
 ```go
 func (w *Worker) Start(concurrency int) {
@@ -86,12 +91,25 @@ func (w *Worker) Start(concurrency int) {
 					if !ok {
 						return
 					}
+					// If context canceled after channel dequeue, do not execute
+					select {
+					case <-w.ctx.Done():
+						log.Printf("Worker %d dropping job %s due to shutdown context cancellation", workerID, job.ID)
+						return
+					default:
+					}
+
 					log.Printf("Worker %d starting job %s", workerID, job.ID)
-					time.Sleep(job.Duration)
-					w.completedMu.Lock()
-					w.completed = append(w.completed, job.ID)
-					w.completedMu.Unlock()
-					log.Printf("Worker %d finished job %s", workerID, job.ID)
+					select {
+					case <-time.After(job.Duration):
+						w.completedMu.Lock()
+						w.completed = append(w.completed, job.ID)
+						w.completedMu.Unlock()
+						log.Printf("Worker %d finished job %s", workerID, job.ID)
+					case <-w.ctx.Done():
+						log.Printf("Worker %d aborted job %s due to shutdown timeout", workerID, job.ID)
+						return
+					}
 				}
 			}
 		}(i)
@@ -100,14 +118,14 @@ func (w *Worker) Start(concurrency int) {
 ```
 
 Explanation:
-Goroutine pekerja mendengarkan channel tugas `w.jobChan` atau pembatalan konteks `w.ctx.Done()`. Selama sebuah tugas sedang diproses (`time.Sleep`), goroutine tidak langsung terputus secara mendadak saat sinyal berhenti dikirim, melainkan menyelesaikan tugas tersebut hingga tuntas sebelum membaca instruksi berhenti pada iterasi berikutnya.
+Goroutine pekerja mendengarkan channel tugas `w.jobChan` atau pembatalan konteks `w.ctx.Done()`. Setelah tugas didequeue, goroutine memeriksa ulang konteks sebelum dan selama eksekusi (`time.After`). Jika konteks dibatalkan (akibat drain timeout), goroutine menghentikan pekerjaan dan keluar. Ini memastikan pekerjaan aktif selesai saat konteks masih valid, tetapi tidak menunggu melebihi batas timeout yang ditetapkan oleh `Stop()`.
 
 ---
 
 ## Snippet 4 — Simulating Orchestrator Termination in Demo
 
 Source File: `cmd/demo/main.go`
-Purpose: Menunjukkan rangkaian orkestrasi: inisialisasi, status siap, trafik in-flight, dan shutdown tertib berbasis sinyal OS.
+Purpose: Menunjukkan rangkaian orkestrasi: inisialisasi, status siap, trafik in-flight, dan shutdown tertib berbasis sinyal OS dengan konfigurasi preStop delay 1 detik.
 
 ```go
 	// Simulate an orchestrator sending SIGTERM during a deployment
@@ -134,8 +152,8 @@ Purpose: Menunjukkan rangkaian orkestrasi: inisialisasi, status siap, trafik in-
 	}
 
 	// Stop background workers gracefully
-	w.Stop()
+	w.Stop(5 * time.Second)
 ```
 
 Explanation:
-Aplikasi demo merekam sinyal sistem operasi (`SIGINT`, `SIGTERM`), menyimulasikan penerimaan `SIGTERM`, kemudian secara berurutan memicu penutupan server (dengan batas waktu timeout 10 detik via context) dan penutupan worker antrean.
+Aplikasi demo merekam sinyal sistem operasi (`SIGINT`, `SIGTERM`), menyimulasikan penerimaan `SIGTERM`, kemudian secara berurutan memicu penutupan server (dengan batas waktu timeout 10 detik via context) dan penutupan worker antrean dengan timeout drain 5 detik (`w.Stop(5 * time.Second)`).
