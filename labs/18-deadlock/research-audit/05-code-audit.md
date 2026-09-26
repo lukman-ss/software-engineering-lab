@@ -1,5 +1,10 @@
 # Code Audit
 
-Status: NOT_APPLICABLE
+## Status
 
-Reason: Pursuant to pipeline override instructions ("PIPELINE OVERRIDE: Audit research only. Do not audit implementation/code in this stage."), code execution and implementation auditing are not performed during this research stage.
+NOT_APPLICABLE
+
+## Reason
+
+Pipeline override specifies: "Audit research only. Do not audit implementation/code in this stage."
+Code execution and audit skipped for this research audit phase.

@@ -2,17 +2,17 @@
 
 Target Lab: labs/18-deadlock
 
-Audit Date: 2026-09-25
+Audit Date: 2026-09-26
 
 ## Summary
 
-Major Claims Reviewed: 6
-Sources Reviewed: 3
+Major Claims Reviewed: 8
+Sources Reviewed: 11
 Unsupported Claims: 0
 Contradictions: 0
-Code Issues: 0 (Skipped per override)
-Test Failures: 0 (Skipped per override)
-Research Gaps: 0
+Code Issues: 0 (Skipped per pipeline override)
+Test Failures: 0 (Skipped per pipeline override)
+Research Gaps: 3
 
 ## Quality Gates
 
@@ -29,12 +29,15 @@ None.
 
 ## Non-Blocking Issues
 
-None.
+1. MySQL sources returned 403 Forbidden; MySQL claims marked as unverified.
+2. Coffman conditions cited via Wikipedia instead of primary 1971 paper.
+3. Transaction retry backoff specifics are derived from general engineering practice rather than authoritative DB standards.
 
 ## Required Revisions
 
-None.
+1. Obtain accessible mirror or MariaDB documentation for MySQL deadlock comparison if MySQL is included in final lab.
+2. Reference Coffman (1971) directly for completeness.
 
 ## Final Status
 
-APPROVED
+APPROVED_WITH_WARNINGS

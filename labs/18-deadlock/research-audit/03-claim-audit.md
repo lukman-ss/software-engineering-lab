@@ -1,107 +1,89 @@
+# Claim Audit
+
 ## Claim 1
 
-Claim: Deadlock terjadi ketika dua transaksi saling menahan lock yang dibutuhkan satu sama lain, membentuk siklus tunggu permanen (circular wait).
-
-Location: `03-evidence.md` (Evidence 1), `05-report.md` (Finding 1)
-
-Evidence Provided: "A deadlock occurs when two or more tasks permanently block each other by each task having a lock on a resource that the other tasks are trying to lock."
-
-Source: Deadlocks Guide - SQL Server; PostgreSQL 18 Documentation: 13.3. Explicit Locking
-
+Claim: Deadlock terjadi hanya jika empat kondisi Coffman terpenuhi secara bersamaan (mutual exclusion, hold and wait, no preemption, circular wait).
+Location: 05-report.md (Finding 1)
+Evidence Provided: Wikipedia & PostgreSQL explicit locking docs.
+Source: https://en.wikipedia.org/wiki/Deadlock_(computer_science)#Conditions
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Definisi standar deadlock dalam RDBMS yang didukung penuh oleh dokumentasi PostgreSQL dan SQL Server.
+Notes: Well-established theoretical foundation.
 
 ## Claim 2
 
-Claim: Database memiliki deadlock monitor yang membatalkan (abort/rollback) salah satu transaksi sebagai deadlock victim secara periodik/otomatis.
-
-Location: `03-evidence.md` (Evidence 2), `05-report.md` (Finding 2)
-
-Evidence Provided: "The Database Engine deadlock monitor periodically checks for tasks that are in a deadlock. If the monitor detects a cyclic dependency, it chooses one of the tasks as a victim and terminates its transaction with an error."
-
-Source: Deadlocks Guide - SQL Server; PostgreSQL 18 Documentation: 13.3. Explicit Locking
-
+Claim: PostgreSQL otomatis mendeteksi deadlock dan membatalkan satu transaksi (victim), pemilihan transaksi victim tidak dapat diprediksi.
+Location: 05-report.md (Finding 2)
+Evidence Provided: PostgreSQL Documentation 13.3.4.
+Source: https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Didukung dokumentasi resmi kedua DBMS. Keduanya menerapkan pemilihan victim untuk memecahkan siklus.
+Notes: PostgreSQL docs confirm this behavior directly.
 
 ## Claim 3
 
-Claim: Urutan akses yang konsisten (Lock Ordering) mencegah mayoritas deadlock.
-
-Location: `03-evidence.md` (Evidence 3), `05-report.md` (Finding 3)
-
-Evidence Provided: "The best defense against deadlocks is generally to avoid them by being certain that all applications using a database acquire locks on multiple objects in a consistent order."
-
-Source: Deadlocks Guide - SQL Server; PostgreSQL 18 Documentation: 13.3. Explicit Locking
-
+Claim: PostgreSQL mengembalikan SQLSTATE 40P01 untuk deadlock dan 40001 untuk serialization failure; aplikasi harus meretry transaksi.
+Location: 05-report.md (Finding 3)
+Evidence Provided: Appendix A Error Codes & Transaction Isolation.
+Source: https://www.postgresql.org/docs/current/errcodes-appendix.html
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Kedua vendor menyebut konsistensi lock ordering sebagai mitigasi primer.
+Notes: Error codes and recommended retry behavior confirmed.
 
 ## Claim 4
 
-Claim: Durasi transaksi yang panjang (termasuk interaksi eksternal) memperbesar probabilitas deadlock.
-
-Location: `03-evidence.md` (Evidence 3), `05-report.md` (Finding 4)
-
-Evidence Provided: "Keep transactions short and in one batch... The longer the transaction, the longer the exclusive or update locks are held, blocking other activity and leading to possible deadlock situations."
-
-Source: Deadlocks Guide - SQL Server
-
+Claim: deadlock_timeout adalah interval sebelum deteksi deadlock dijalankan, sedangkan lock_timeout adalah durasi maksimum tunggu lock.
+Location: 05-report.md (Finding 4)
+Evidence Provided: Runtime config documentation.
+Source: https://www.postgresql.org/docs/current/runtime-config-locks.html
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Didukung dokumentasi SQL Server dan PostgreSQL.
+Notes: Important distinction accurately detailed.
 
 ## Claim 5
 
-Claim: Aplikasi sebaiknya menerapkan mekanisme Retry otomatis saat menangkap error deadlock (misal error 1205).
-
-Location: `03-evidence.md` (Evidence 4), `05-report.md` (Finding 5)
-
-Evidence Provided: "Implementing an error handler that catches error 1205 allows an application to handle deadlocks and take remedial action (for example, automatically resubmitting the query that was involved in the deadlock)."
-
-Source: Deadlocks Guide - SQL Server; PostgreSQL 18 Documentation: 13.3. Explicit Locking
-
+Claim: Konsistensi urutan perolehan lock (lock ordering) di seluruh transaksi mencegah terbentuknya circular wait.
+Location: 05-report.md (Finding 5)
+Evidence Provided: PostgreSQL Documentation 13.3.4.
+Source: https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS
 Source Actually Supports Claim: YES
-
 Classification: FACT
-
 Severity: LOW
-
-Notes: Didukung kedua referensi vendor.
+Notes: Well-supported standard prevention technique.
 
 ## Claim 6
 
-Claim: Pemeriksaan deadlock memakan waktu (overhead tinggi), sehingga database biasanya menunggu (deadlock timeout) sebelum melakukan pengecekan.
-
-Location: `03-evidence.md` (Evidence 5)
-
-Evidence Provided: "The check for deadlock is relatively expensive, so the server doesn't run it every time it waits for a lock."
-
-Source: PostgreSQL Lock Management (`deadlock_timeout`)
-
+Claim: Operasi eksternal (API WhatsApp, generate PDF) dalam transaksi memperpanjang waktu penguncian dan memperbesar peluang deadlock.
+Location: 05-report.md (Finding 6)
+Evidence Provided: Lab case study and generic best practices.
+Source: Topic spec / Application patterns.
 Source Actually Supports Claim: YES
-
-Classification: FACT
-
+Classification: INTERPRETATION
 Severity: LOW
+Notes: Correct application engineering principle derived from duration risk.
 
-Notes: Didukung dokumentasi resmi PostgreSQL.
+## Claim 7
+
+Claim: Retry dengan backoff dan jitter adalah praktik standar untuk penanganan deadlock transaksi idempoten di Go.
+Location: 05-report.md (Finding 8)
+Evidence Provided: Go standard library pkg/time docs.
+Source: https://pkg.go.dev/time
+Source Actually Supports Claim: PARTIAL
+Classification: EXAMPLE
+Severity: MEDIUM
+Notes: Standard pattern, though standard library does not specifically mandate retry patterns for deadlocks.
+
+## Claim 8
+
+Claim: Monitoring deadlock production mengandalkan log_lock_waits, pg_locks, dan pg_stat_activity.
+Location: 05-report.md (Finding 9)
+Evidence Provided: PostgreSQL monitoring and logging docs.
+Source: https://www.postgresql.org/docs/current/runtime-config-logging.html
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Standard PostgreSQL observability practices confirmed.
