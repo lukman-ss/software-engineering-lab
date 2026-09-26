@@ -1,18 +1,29 @@
-# Docs vs Code Audit
+# Documentation vs Code Audit
 
-## Documentation Review (`README.md`)
+Target Lab: `labs/24-slo-sli-error-budget`
 
-- Structure documented matches directory contents (`internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, `tests/`).
-- Instructions to run tests (`go test ./...`, `go test -race ./...`) execute cleanly without errors.
-- Instructions to run demo (`go run ./cmd/demo`) produce exact expected phase outputs.
+## Comparison Points
 
-## Research vs Code Audit
+### 1. README vs Implementation
+- **Claim in README**: Describes packages `internal/metrics`, `internal/slo`, `internal/alerting`, `cmd/demo`, and `tests/`.
+- **Observed Code**: All referenced packages exist and match the described responsibilities.
+- **Assessment**: PASS (no mismatch).
 
-- Research claim: Google SRE multi-window multi-burn-rate alerting requires both short-window and long-window thresholds to be met before alerting to avoid false alarms on transient spikes.
-- Code implementation: `internal/alerting/engine.go:73` enforces `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
-- Research claim: Error budget exhaustion should signal deployment freeze.
-- Code implementation: `internal/slo/evaluator.go:55` sets `CanDeploy = false` when `budgetRemaining <= 0`.
+### 2. Engineering Notes / Design vs Implementation
+- **Claim in Design**: Sliding window event recording, SLI evaluation as Good/Total ratio, Multi-window multi-burn-rate alerting, Release freeze when budget <= 0, and Endpoint criticality bucketing demo.
+- **Observed Code**: Implemented exactly as specified in design and revisions.
+- **Assessment**: PASS (no mismatch).
 
-## Discrepancies Found
+### 3. Demo Output vs Execution Result
+- **Claim in `cmd/demo` & `engineering/03-execution-result.md`**:
+  - Phase 1: 1,000 baseline requests, 100% SLI, CanDeploy=true.
+  - Phase 2: 100 requests with 10 errors, budget drops to -8.90, CanDeploy=false.
+  - Phase 3: Triggers Slow Burn Alert (6.0x) with ShortBurn: 9.09x and LongBurn: 9.09x.
+  - Phase 4: Compares Payment (99.9%) vs Reports (95.0%) with CanDeploy statuses.
+- **Observed Execution**: Live output from `go run ./cmd/demo` precisely matches all 4 phases.
+- **Assessment**: PASS (verified authentic output).
 
-None. Documentation, research claims, implementation code, test assertions, and demo output are fully consistent.
+## Findings
+- `DOC_CODE_MISMATCH`: 0 detected
+- `TEST_CLAIM_MISMATCH`: 0 detected
+- `RESEARCH_IMPLEMENTATION_MISMATCH`: 0 detected

@@ -1,32 +1,39 @@
 # Engineering Audit Plan
 
-Target Lab: labs/24-slo-sli-error-budget
+Target Lab: `labs/24-slo-sli-error-budget`
 Implementation Files:
-- internal/metrics/tracker.go
-- internal/slo/evaluator.go
-- internal/alerting/engine.go
+- `internal/metrics/tracker.go`
+- `internal/slo/evaluator.go`
+- `internal/alerting/engine.go`
+- `cmd/demo/main.go`
+
 Tests:
-- tests/slo_test.go
+- `tests/slo_test.go`
+
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
+
 Approved Research Inputs:
-- research/01-plan.md
-- research/02-sources.md
-- research/03-evidence.md
-- research/04-contradictions.md
-- research/05-report.md
-- research/06-open-questions.md
+- `research/05-report.md`
+- `research-revision/03-revision-result.md`
+- `research-audit/07-verdict.md`
+
 Main Claims To Verify:
-1. Sliding window metric bucket tracking and event eviction (`WindowTracker`).
-2. Correct mathematical evaluation of SLI ratios, error budget consumption, and release freeze policy (`Evaluator`).
-3. Multi-window multi-burn-rate alerting logic matching Google SRE thresholds (`AlertEngine`).
-4. Thread safety under concurrent event ingestion.
-5. Functional demo matching output claims.
+1. SLI calculation implements good/total event ratio tracking over sliding time windows (`internal/metrics` + `internal/slo`).
+2. Error budget dynamically calculated as `(1 - SLO) * total_events - bad_events` and enforces freeze policy when exhausted.
+3. Multi-window multi-burn-rate alerting triggers only when both short and long window burn rates exceed rule thresholds.
+4. Concurrency safety: metrics aggregation and sliding window tracker are thread-safe under concurrent recording.
+5. Out-of-order event insertion and timestamp eviction function correctly.
+6. Zero-traffic edge cases do not trigger divide-by-zero panics and default to valid state.
+7. Endpoint criticality comparison (e.g. 99.9% vs 95.0%) behaves according to configured thresholds.
+
 Commands To Run:
-- `go test ./...`
+- `go test -v -count=1 ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
+
 Primary Risks:
-- Race conditions or out-of-order event ingestion handling in time-bucketed tracker.
-- Precision/rounding errors in float comparisons for burn rate calculations or error budget exhaustion.
-- Documentation vs implementation mismatches in thresholds or mathematical definitions.
+- Race conditions during concurrent slice mutations in `WindowTracker`.
+- Divide-by-zero panics in SLI or Burn Rate calculations on empty windows.
+- Out-of-order event eviction bugs causing stale bucket retention or slice index corruption.
+- Mismatch between demo output recorded in docs and live demo execution.
