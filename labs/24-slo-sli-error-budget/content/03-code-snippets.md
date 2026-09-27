@@ -169,7 +169,7 @@ Explanation: `evictStaleLocked` menghapus semua bucket dengan `StartTime < now -
 
 ---
 
-## Snippet 5 — SLO Evaluator: Config dan Status
+## Snippet 5 — Evaluator: Config dan Status
 
 Source File: `internal/slo/evaluator.go` (line 10-32)
 Purpose: Definisi konfigurasi SLO dan hasil evaluasi.
@@ -195,11 +195,11 @@ type Status struct {
 }
 ```
 
-Explanation: `Config` menyimpan nama layanan, target SLO (mis. 0.999), dan threshold latensi. `Status` adalah hasil evaluasi yang berisi SLI aktual, budget total/terpakai/sisa, dan flag `CanDeploy` untuk kebijakan release.
+Explanation: `Config` menyimpan nama layanan, target SLO (mis. 0.999), dan threshold latensi. Field `LatencyThreshold` tidak dibaca oleh `Evaluator.Evaluate()`. Penilaian latency dilakukan oleh caller melalui predicate `isGood`. `Status` adalah hasil evaluasi yang berisi SLI aktual, budget total/terpakai/sisa, dan flag `CanDeploy` untuk kebijakan release.
 
 ---
 
-## Snippet 6 — SLO Evaluator: Evaluate
+## Snippet 6 — Evaluator: Evaluate
 
 Source File: `internal/slo/evaluator.go` (line 41-71)
 Purpose: Menghitung SLI, error budget, dan kebijakan deployment.

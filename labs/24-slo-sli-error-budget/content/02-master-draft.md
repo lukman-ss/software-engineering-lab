@@ -24,7 +24,7 @@ Real SLI:  99.8%
 Budget Consumed: 2 errors > budget
 ```
 
-Setiap request yang gagal atau melanggar latency threshold mengonsumsi budget. Ketika budget habis, kebijakan mengatakan: **STOP deployment berisiko**, fokus pada perbaikan.
+Setiap request yang gagal atau melanggar latency threshold mengonsumsi budget. Latency threshold ditentukan oleh caller via closure `isGood`, bukan dibaca `Evaluator`. Ketika budget habis, kebijakan mengatakan: **STOP deployment berisiko**, fokus pada perbaikan.
 
 ## Core Concept
 
@@ -36,7 +36,7 @@ SLI adalah ukuran kuantitatif aspek kualitas layanan yang diberikan. Contohnya:
 - Error rate (4xx/5xx per total request)
 - Availability (request yang sukses / total request)
 
-Lab menggunakan **ratio good events / total events** sebagai SLI utama. Sebuah request dikatakan "good" jika statusnya < 500 **dan** durasinya ≤ latency threshold.
+Lab menggunakan **ratio good events / total events** sebagai SLI utama. Kriteria "good" ditentukan oleh caller melalui closure `isGood`: `StatusCode < 500 && Duration <= latencyThreshold`. Evaluator tidak membaca `LatencyThreshold` secara langsung.
 
 ```go
 isGood := func(e Event) bool {
@@ -67,12 +67,12 @@ Jika terjadi 2 error, budget habis (–1). Kebijakan `CanDeploy = false`.
 
 ## Failure Scenario
 
-1. Traffic normal: 1000 request, 0 error → SLI 100%, budget +0.1
+1. Traffic normal: 1000 request, 0 error → SLI 100%, budget remaining 1.00
 2. Regresi baru: latency naik 500ms, error rate 5%
 3. Dalam 1 jam: 100 request, 5 error → SLI 95%, budget habis
 4. Sistem mendorong alert: "Budget habis, SEMUA perubahan harus dihentikan"
 
-Tanpa error budget, tim tidak sadar sampai DINP (Dwell Time Incident Performance) sudah parah.
+Tanpa error budget, tim tidak sadar sampai **dwell time incident** sudah parah — tidak ada metrik yang memaksa perhatian pada budget consumption rate.
 
 ## How It Works
 
@@ -86,8 +86,8 @@ Event → WindowTracker → (total, good, bad) → Evaluator → SLI, Budget
 
 Komponen utama:
 
-- **WindowTracker** (internal/metrics/tracker.go): Sliding window dengan bucket time-based. Menyimpan totalCount, goodCount, badCount per bucket. Evicts data yang sudah terlewati jendela.
-- **Evaluator** (internal/slo/evaluator.go): Menghitung SLI, error budget, dan kebijakan deploy.
+- **WindowTracker** (internal/metrics/tracker.go): Sliding window dengan bucket time-based. Menyimpan totalCount, goodCount, badCount per bucket (tidak ada histogram bucket). Evicts data yang sudah terlewati jendela.
+- **Evaluator** (internal/slo/evaluator.go): Menghitung SLI, error budget, dan kebijakan deploy. Catatan: field `LatencyThreshold` di `Config` tidak dibaca oleh evaluator; penilaian latency dilakukan di closure `isGood` milik caller.
 - **AlertEngine** (internal/alerting/engine.go): Multi-window burn rate check pada short (5m) dan long (60m) windows.
 
 ### Error Budget Calculation
@@ -98,6 +98,8 @@ budgetRemaining := totalErrorBudget - float64(bad)
 ```
 
 Jika `budgetRemaining <= 0` dan ada traffic → `CanDeploy = false`.
+
+Zero traffic edge case: `SLI = 1.0` dan `CanDeploy = true` ketika `total = 0` — menghindari false freeze saat service baru start atau tidak ada trafik (evaluator.go:44-47).
 
 ### Burn Rate
 
@@ -124,8 +126,11 @@ Threshold yang direkomendasikan:
 | Rule | Burn Rate | Window | Budget |
 |------|-----------|--------|--------|
 | Page Fast | 14.4× | 1h + 5m | 2% |
-| Page Slow | 6.0× | 6h + 30m | 5% |
-| Ticket | 1× | 3d + 6h | 10% |
+| Ticket Slow | 6.0× | 6h + 30m | 5% |
+
+Hanya dua rule di atas yang diimplementasikan di demo (`cmd/demo/main.go:38-49`). Rule Ticket 1×/3d+6h/10% dari rekomendasi Google SRE bersifat research-only, tidak diimplementasikan.
+
+Catatan: field `LongWindow`, `ShortWindow`, `BudgetConsumedPct` di `BurnRateRule` diabaikan oleh `engine.Check()` — semua rule berbagi `shortTracker` dan `longTracker` konstruksi-time.
 
 ## Implementation
 
@@ -232,7 +237,7 @@ Race detector tidak mengembalikan error.
 
 Ini membuktikan bahwa **multi-window check** mengurangi false positive pada spike transit.
 
-## Recovery / Rollback
+## Recovery / Rollback (Hypothetical Procedure — NOT demonstrated in demo)
 
 Ketika `CanDeploy = false`:
 
@@ -241,11 +246,11 @@ Ketika `CanDeploy = false`:
 3. Perbaikan dideploy sebagai hotfix **dengan approval P0**
 4. Setelah error rate turun, budget kembali positif → `CanDeploy = true`
 
-No magic automation: keputusan tetap manual, hanya informasi yang lebih akurat.
+Catatan: Demo hanya menampilkan fase 1-4 (baseline → incident → alert → comparison). Tidak ada simulasi recovery yang benar-benar dijalankan.
 
 ## Production Considerations
 
-- **Window Size**: Lab gunakan 30 hari rolling window; Google rekomendasi 28 hari (4 minggu) untuk konsistensi weekend.
+- **Window Size**: Lab gunakan 30 menit *kompresi waktu* (mewakili 30 hari dalam simulasi); Google rekomendasi 28 hari (4 minggu) untuk konsistensi weekend.
 - **Persistency**: Semua metrics in-memory. Untuk produksi, dump ke TSDB (Prometheus, Datadog) setiap interval singkat.
 - **Status Corrections**: Google SRE Workbook membahas "status corrections" untuk mengecualikan jendela pemeliharaan.
 - **Multi-endpoint**: Setiap endpoint dapat punya SLO berbeda. Di demo, Payment 99.9% vs Reports 95.0%.

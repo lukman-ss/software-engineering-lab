@@ -16,7 +16,7 @@ Approved Research Status:
 APPROVED
 
 Approved Engineering Status:
-APPROVED
+APPROVED (internal audit); open-source audit: 2 non-blocking findings — LatencyThreshold dead field, per-rule window fields unimplemented — disclosed below
 
 Main Concepts:
 1. SLI (Service Level Indicator): ukuran kuantitatif pengalaman pengguna (mis. rasio good/total events).
@@ -39,7 +39,7 @@ Verified Behaviors:
 
 Available Case Studies:
 - Demo Phase 1: Traffic baseline 1000 request, 0 error → SLI 100%, budget tersisa.
-- Demo Phase 2: Insiden 10% error rate (10/100) pada SLO 99.9% → burn rate ~100x, budget habis, CanDeploy = false.
+- Demo Phase 2: 10 error dalam 100 request insiden ditambah 1000 baseline → total 1100 request, 10 bad (error rate 0.91% terhadap total) → burn rate ~9.09x, budget habis, CanDeploy = false.
 - Demo Phase 3: Burn rate alert (TICKET 6.0x) terpicu pada short & long window.
 - Demo Phase 4: Payment (99.9%) vs Reports (95.0%) dengan traffic error sama → kedua budget habis, tetapi Reports memiliki toleransi 5% yang jauh lebih lebar.
 - Test: Transient spike hanya pada short window (100x) tapi long window clean (0.1x) → alert TIDAK terpicu.
@@ -50,5 +50,6 @@ Warnings:
 - Cost kenaikan ~100x per nine adalah heuristic, bukan hukum matematis.
 - Implementasi menggunakan penyimpanan in-memory; metrics hilang saat proses restart.
 - Burn rate thresholds (14.4x, 6.0x) adalah rekomendasi Google, bukan standar universal.
-- Window demo menggunakan 30 hari (bukan 28 hari/4 minggu rekomendasi Google); keduanya valid dengan trade-off.
-- Latency tidak diukur sebagai histogram penuh; hanya boolean good/bad predicate.
+- Window demo menggunakan kompresi waktu: 30 menit mensimulasikan 30 hari (bukan jendela 30 hari sebenarnya); 28 hari/4 minggu rekomendasi Google keduanya valid dengan trade-off.
+- Latency tidak diukur sebagai histogram penuh; hanya boolean good/bad predicate (WindowTracker.Bucket hanya TotalCount/GoodCount/BadCount).
+- Zero traffic: Evaluator mengembalikan SLI=1.0, CanDeploy=true untuk hindari false freeze.
