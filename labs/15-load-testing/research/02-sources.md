@@ -142,13 +142,13 @@ Relevance: Documents Locust's HttpUser class, task decorator, wait_time function
 
 ## Source 15
 
-Title: A Collection of Best Practices for Production Services
-Publisher: Google SRE Book (Appendix B)
-URL: https://sre.google/sre-book/service-best-practices/
-Published: 2017 (Copyright Google, Inc., published by O'Reilly, Media)
+Title: Thresholds
+Publisher: Grafana k6 Documentation
+URL: https://grafana.com/docs/k6/latest/using-k6/thresholds/
+Published: Continuous (latest version)
 Accessed: 2026-09-26
 Source Tier: Tier 1
-Relevance: Contains SRE-recommended best practices for production services including performance testing, load testing, and capacity planning guidelines. Provides production-readiness checklist.
+Relevance: Authoritative documentation on k6 threshold syntax for pass/fail criteria including percentile-based expressions (p(95), p(99)), rate thresholds, and abortOnFail behavior. Provides examples for codifying SLOs into automated test criteria.
 
 ## Source 16
 
@@ -178,27 +178,26 @@ URL: https://grafana.com/docs/k6/latest/testing-guides/calculate-concurrent-user
 Published: Continuous
 Accessed: 2026-09-26
 Source Tier: Tier 1
-Relevance: Provides methodology for calculating concurrent VUs from real production traffic data (peak sessions per second × average session duration). Critical for answering the "how many VUs" question for the Booking Bengkel scenario.
+Relevance: Provides methodology for calculating concurrent VUs from real production traffic data using the formula "Concurrent users = Hourly sessions × Average session duration (in seconds) / 3600". Critical for answering the "how many VUs" question for the Booking Bengkel scenario.
 
 ## Source 19
 
-Title: Performance testing guidance
-Publisher: Microsoft Azure Documentation (Performance Efficiency Pillar)
-URL: https://learn.microsoft.com/en-us/azure/architecture/framework/scalability/load-testing/
-Published: 2025 or later
+Title: Architecture Strategies for Performance Testing (same as Source 11 — redirect target)
+Publisher: Microsoft Azure Well-Architected Framework
+URL: https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test
+Published: 2026-06-24 (last updated)
 Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Azure's performance testing and load testing overview covering methodology, tools, metrics (latency, throughput, error rate, resource utilization), and best practices for performance testing in cloud environments.
+Source Tier: Tier 1 (duplicate of Source 11, consolidated for reference clarity)
 
 ## Source 20
 
-Title: Application and infrastructure monitoring with k6
+Title: Built-in metrics reference
 Publisher: Grafana k6 Documentation
-URL: https://grafana.com/docs/k6/latest/testing-guides/test-types/load-testing/#results-analysis
+URL: https://grafana.com/docs/k6/latest/using-k6/metrics/reference/
 Published: Continuous
 Accessed: 2026-09-26
 Source Tier: Tier 1
-Relevance: Discusses results analysis methodology including interpreting trends across load stages.
+Relevance: Authoritative reference of all built-in k6 metrics including http_req_* family (duration, blocked, connecting, sending, waiting, receiving) with explanations of how metrics relate to HTTP request lifecycle and performance analysis.
 
 ## Source 21
 

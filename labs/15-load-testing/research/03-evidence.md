@@ -41,7 +41,7 @@ Claim: To determine if bottleneck originates from application, database, or exte
 
 Evidence:
 - Azure Performance Testing guidance recommends: "Correlate performance with business metrics" and "Consider user impact, frequency, cost of fix, and risk of change criteria when examining data" (Source 11)
-- k6 documentation shows how to break down HTTP request duration: http_req_duration = http_req_blocked + http_req_connecting + http_req_tls_handshaking + http_req_sending + http_req_waiting + http_req_receiving (Source 20)
+- k6 documentation shows how to break down HTTP request duration: http_req_duration = http_req_sending + http_req_waiting + http_req_receiving (Source 20). The total request lifecycle also includes http_req_blocked, http_req_connecting, and http_req_tls_handshaking as separate metrics not included in http_req_duration
 - When http_req_waiting (time to first byte) increases significantly while sending/receiving times remain stable, it indicates server-side processing delay (application or database)
 - When http_req_connecting or http_req_tls_handshaking increases, it indicates network/connection issues
 - When third-party API calls show increased latency while internal services remain stable, it indicates external API bottleneck
@@ -55,12 +55,12 @@ Notes: The methodology involves monitoring each component's metrics and looking 
 
 ## Evidence 4: Load Calculation Methodology for Booking Bengkel Scenario
 
-Claim: To determine appropriate virtual user count for Booking Bengkel, calculate based on peak sessions per second multiplied by average session duration.
+Claim: To determine appropriate virtual user count for Booking Bengkel, calculate based on peak hourly sessions and average session duration.
 
 Evidence:
 - k6 documentation provides: "To find this, look through APMs or analytic tools that provide information from the production environment. If you can’t access such tools, the business must provide these estimations." (Source 2)
-- The "Calculate concurrent users for load tests" guide states: "Calculate concurrent VUs from real production traffic data (peak sessions per second × average session duration)" (Source 18)
-- Example: If peak traffic is 100 sessions/second and average session is 30 seconds, concurrent users = 100 × 30 = 3,000 VUs
+- The "Calculate concurrent users for load tests" guide provides the formula: "Concurrent users = Hourly sessions × Average session duration (in seconds) / 3600" (Source 18)
+- Example: If peak hourly traffic is 2,591 sessions and average session is 82 seconds, concurrent users = 2,591 × 82 / 3600 ≈ 59 concurrent users
 - For Booking Bengkel with features like login, booking, branch selection, payment, invoice generation, and WhatsApp confirmation, each session would involve multiple requests but the concurrent user calculation remains based on simultaneous user sessions
 - Azure Performance Testing guidance recommends: "Know the specific number of users and the typical throughput per process in the system" (Source 11)
 
