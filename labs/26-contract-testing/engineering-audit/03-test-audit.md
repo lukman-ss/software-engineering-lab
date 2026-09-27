@@ -1,48 +1,80 @@
 # Test Audit
 
-Target Lab: `labs/26-contract-testing`
+Target Lab: labs/26-contract-testing
 
-## Test Execution Results
+## Test Suite Analysis
 
-Command executed:
-```bash
-go test -count=1 -v ./tests/...
-```
+Test file: `tests/contract_test.go`
 
-Output:
+### Test Coverage Breakdown
+
+1. `TestConsumerContractGeneration`:
+   - Validates consumer name ("MobileApp") and provider name ("OrderService").
+   - Asserts interaction count, endpoint path, and interaction definition.
+   - Result: PASS.
+
+2. `TestProviderV1_ContractVerification_Success`:
+   - Runs `verifier.Verify` against `ProviderV1` via `httptest.Server`.
+   - Asserts verification passes without errors.
+   - Executes real `MobileOrderClient.FetchOrder` and verifies parsed attributes.
+   - Result: PASS.
+
+3. `TestProviderBreaking_ContractVerification_Fails`:
+   - Runs `verifier.Verify` against `ProviderBreaking`.
+   - Asserts `result.Passed == false`.
+   - Asserts at least 3 breaking errors caught (enum casing mismatch, missing field, type mismatch).
+   - Asserts `MobileOrderClient.FetchOrder` fails when receiving breaking payload.
+   - Result: PASS.
+
+4. `TestProviderDual_ContractVerification_Success`:
+   - Runs `verifier.Verify` against `ProviderDual`.
+   - Asserts contract verification succeeds on backwards-compatible `/v1/` endpoint.
+   - Executes `FetchOrder` against dual provider and verifies data integrity.
+   - Result: PASS.
+
+5. `TestConcurrentContractVerification`:
+   - Spawns 20 concurrent goroutines executing `verifier.Verify` against `ProviderV1`.
+   - Asserts no data races and all verifications pass.
+   - Result: PASS.
+
+## Execution Output
+
+### `go test -count=1 ./...`
 ```text
-=== RUN   TestConsumerContractGeneration
---- PASS: TestConsumerContractGeneration (0.00s)
-=== RUN   TestProviderV1_ContractVerification_Success
---- PASS: TestProviderV1_ContractVerification_Success (0.00s)
-=== RUN   TestProviderBreaking_ContractVerification_Fails
---- PASS: TestProviderBreaking_ContractVerification_Fails (0.00s)
-=== RUN   TestProviderDual_ContractVerification_Success
---- PASS: TestProviderDual_ContractVerification_Success (0.00s)
-=== RUN   TestConcurrentContractVerification
---- PASS: TestConcurrentContractVerification (0.00s)
-PASS
-ok  	labs/26-contract-testing/tests	0.361s
+ok  	labs/26-contract-testing/tests	0.267s
 ```
 
-Race Detector:
-```bash
-go test -count=1 -race ./tests/...
-```
-
-Output:
+### `go test -race -count=1 ./...`
 ```text
-ok  	labs/26-contract-testing/tests	1.416s
+ok  	labs/26-contract-testing/tests	1.146s
 ```
 
-## Coverage Assessment
+### `go run ./cmd/demo`
+```text
+=== Contract Testing Lab: Consumer-Driven Contracts & CI Verification ===
 
-1. **Happy Path Coverage**: `TestProviderV1_ContractVerification_Success` validates contract verification and client HTTP fetching end-to-end against compliant provider.
-2. **Breaking/Failure Path Coverage**: `TestProviderBreaking_ContractVerification_Fails` verifies that contract runner catches all 3 breaking changes and mobile client fails parsing breaking payloads.
-3. **API Evolution / Dual Routing**: `TestProviderDual_ContractVerification_Success` asserts backward compatibility for legacy consumers against dual-endpoint provider.
-4. **Contract Generation**: `TestConsumerContractGeneration` asserts structure and target service metadata of generated CDC contracts.
-5. **Concurrency Safety**: `TestConcurrentContractVerification` executes 20 concurrent verification goroutines against provider server, running cleanly under `-race`.
+[Stage 1] Consumer generates contract:
+Generated Contract (MobileApp -> OrderService):
+...
+[Stage 2] Running Provider V1 Contract Verification:
+Result: PASSED. Provider V1 satisfies Mobile consumer contract.
+CI Deployment Gate: ALLOWED.
+
+[Stage 3] Running Breaking Provider Contract Verification:
+Result: BLOCKED! Breaking changes detected before deployment:
+  1. [A request for order details by ID] path 'status': value mismatch (expected "IN_PROGRESS", got "in_progress")
+  2. [A request for order details by ID] missing expected field 'customer.name'
+  3. [A request for order details by ID] path 'total': type mismatch (expected 150000 [json.Number], got 150000 [string])
+CI Deployment Gate: PREVENTED PRODUCTION OUTAGE.
+
+[Stage 4] Running Dual Provider (V1 + V2) Verification:
+Result: PASSED. Dual provider maintains backwards-compatible V1 contract.
+CI Deployment Gate: ALLOWED for independent canary/migration.
+
+=== Contract Testing Demonstration Complete ===
+```
 
 ## Assessment
 
-All tests pass deterministically. The test suite proves the core behavioral claims of consumer-driven contract testing.
+Coverage addresses happy paths, breaking negative paths, real client parsing behavior, dual backward compatibility, and concurrency.
+Test suite is robust and genuinely proves claimed behavior.

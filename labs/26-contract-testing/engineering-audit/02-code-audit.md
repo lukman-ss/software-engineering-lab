@@ -1,48 +1,48 @@
 # Code Audit
 
-Target Lab: `labs/26-contract-testing`
+Target Lab: labs/26-contract-testing
 
 ## Finding 1
 
-Location: `internal/contract/verifier.go:diffValues`
-Claimed Behavior: Detects breaking schema changes (missing fields, enum/value differences, data type mismatches) when comparing actual JSON responses against consumer expectations.
-Observed Implementation: Decodes JSON using `json.Number` via `decoder.UseNumber()` to prevent silent float conversions and compares nested object trees recursively. Detects type mismatches across strings vs numbers vs objects, missing fields, and exact value/enum differences.
+Location: `internal/contract/verifier.go:58-115`
+Claimed Behavior: Pure Go contract verifier testing HTTP interactions against baseURL with strict diff validation on status code, response headers, and response payload types/values.
+Observed Implementation: Verifier handles request dispatch, status code checks, JSON decoding using `json.Number`, and deep diff recursion for map keys, types, and numbers.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles Go's `json.Number` abstraction to differentiate between numeric representations and JSON strings or object keys.
+Notes: `diffValues` correctly handles nested object traversal, type assertion comparison, and number formatting checks.
 
 ## Finding 2
 
-Location: `internal/contract/verifier.go:Verify`
-Claimed Behavior: Verifies HTTP interactions (method, path, headers, status code, response body subset) without mutating provider state or failing silently.
-Observed Implementation: Makes HTTP calls to the target baseURL + interaction path, forwards request headers, checks status code, and validates expected response body as a consumer subset. Response body streams are properly closed using `defer` or explicit close after reading.
+Location: `internal/model/order.go:13-53`
+Claimed Behavior: Models support original schema (V1), breaking modification schema (enum casing, rename, type change), and evolutionary dual schema (V2).
+Observed Implementation: Struct tags and fields explicitly define `OrderResponseV1`, `OrderResponseBreaking`, and `OrderResponseV2` aligning with failure scenario specifications.
 Assessment: PASS
 Severity: LOW
-Notes: Minimal consumer subset matching ensures extra provider fields (like `notes` in `ProviderV1`) do not fail contract verification, adhering strictly to Postel's Law / Consumer-Driven Contracts.
+Notes: Clear separation of models cleanly models breaking changes.
 
 ## Finding 3
 
-Location: `internal/provider/server.go:ProviderBreaking`
-Claimed Behavior: Simulates unannounced breaking changes in provider API.
-Observed Implementation: Provides endpoints introducing lowercase status enum (`in_progress`), renamed customer field (`full_name` instead of `name`), and stringified total (`"150000"` instead of integer `150000`).
+Location: `internal/consumer/client.go:34-110`
+Claimed Behavior: Consumer implements client fetching order subset and generates minimal CDC contract specification.
+Observed Implementation: `FetchOrder` unmarshals into minimal struct (`id`, `status`, `customer.name`, `total`) and verifies validation rules. `GenerateMobileContract` produces expected interaction JSON data structure.
 Assessment: PASS
 Severity: LOW
-Notes: Conforms directly to the failure scenarios documented in design notes.
+Notes: Demonstrates consumer-driven specification pattern accurately.
 
 ## Finding 4
 
-Location: `internal/provider/server.go:ProviderDual`
-Claimed Behavior: Supports safe API evolution by providing both backward-compatible V1 endpoints and newly formatted V2 endpoints.
-Observed Implementation: Correctly serves `/v1/orders/{id}` using `OrderResponseV1` and `/v2/orders/{id}` using `OrderResponseV2`.
+Location: `internal/provider/server.go:11-131`
+Claimed Behavior: Provider servers implement V1, Breaking, and Dual (V1 + V2) HTTP routes.
+Observed Implementation: Handlers return respective model DTOs with JSON serialization and handle 404/405 conditions.
 Assessment: PASS
 Severity: LOW
-Notes: Demonstrates safe migration path in CI gates without breaking existing consumer contracts.
+Notes: Handlers are stateless and safe for concurrent requests.
 
 ## Finding 5
 
-Location: `internal/consumer/client.go:FetchOrder`
-Claimed Behavior: Consumer client parses and validates required fields, failing when contracts are violated.
-Observed Implementation: Deserializes response into consumer DTO, explicitly validating that `customer.name` is present and `status` conforms to expected uppercase enum values.
+Location: `internal/contract/verifier.go:47-55`
+Claimed Behavior: Concurrency safety during verification runs.
+Observed Implementation: `Verifier` uses `http.Client` which is goroutine-safe. `Verify` creates new requests and local verification state per invocation without shared mutable state.
 Assessment: PASS
 Severity: LOW
-Notes: Error propagation is clean with wrapped context.
+Notes: Concurrency test confirms race-free execution under `go test -race`.
