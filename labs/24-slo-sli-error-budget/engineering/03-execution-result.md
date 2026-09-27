@@ -8,7 +8,7 @@ PASS (no compilation errors)
 ```
 
 ## Tests
-Command: `go test -v ./...`
+Command: `go test -count=1 -v ./...`
 Result:
 ```text
 ?   	labs/24-slo-sli-error-budget/cmd/demo	[no test files]
@@ -21,21 +21,25 @@ Result:
 --- PASS: TestSLOEvaluator (0.00s)
 === RUN   TestAlertEngineBurnRate
 --- PASS: TestAlertEngineBurnRate (0.00s)
+=== RUN   TestOutOfOrderTimestamps
+--- PASS: TestOutOfOrderTimestamps (0.00s)
+=== RUN   TestEvaluatorZeroTraffic
+--- PASS: TestEvaluatorZeroTraffic (0.00s)
 === RUN   TestConcurrencyMetrics
 --- PASS: TestConcurrencyMetrics (0.00s)
 PASS
-ok  	labs/24-slo-sli-error-budget/tests	0.466s
+ok  	labs/24-slo-sli-error-budget/tests	0.334s
 ```
 
 ## Race Detector
-Command: `go test -race ./...`
+Command: `go test -count=1 -race ./...`
 Result:
 ```text
 ?   	labs/24-slo-sli-error-budget/cmd/demo	[no test files]
 ?   	labs/24-slo-sli-error-budget/internal/alerting	[no test files]
 ?   	labs/24-slo-sli-error-budget/internal/metrics	[no test files]
 ?   	labs/24-slo-sli-error-budget/internal/slo	[no test files]
-ok  	labs/24-slo-sli-error-budget/tests	1.386s
+ok  	labs/24-slo-sli-error-budget/tests	1.350s
 ```
 
 ## Demo
@@ -58,6 +62,10 @@ Deployment Allowed: false (Budget exhausted)
 
 [PHASE 3] Checking Multi-Window Burn Rate Alerts...
 >>> ALERT TRIGGERED: [TICKET] Slow Burn Alert (6.0x - 5% in 6h) | ShortBurn: 9.09x | LongBurn: 9.09x (Threshold: 6.00x)
+
+[PHASE 4] Endpoint Criticality Comparison (Payment 99.9% vs Reports 95.0%)...
+Reports Target SLO: 95.0% | Current SLI: 90.0% | Budget Remaining: -5.00
+Payment CanDeploy: false | Reports CanDeploy: false (Reports has wider 5% error tolerance)
 
 ================================================================
   DEMO COMPLETE
