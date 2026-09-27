@@ -1,7 +1,7 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/23-optimistic-vs-pessimistic-locking
-Audit Date: 2026-09-27
+Audit Date: Sun Sep 27 2026
 
 ## Summary
 
@@ -15,8 +15,8 @@ Tests Reviewed:
 - `tests/locking_test.go`
 
 Commands Executed:
-- `go test -v ./...`
-- `go test -race ./...`
+- `go test -v -count=1 ./...`
+- `go test -race -count=1 ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
