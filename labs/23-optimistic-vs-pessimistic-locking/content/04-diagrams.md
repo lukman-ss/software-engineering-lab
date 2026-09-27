@@ -1,35 +1,37 @@
 # Diagrams
 
-## Diagram 1 — Lost Update Anomaly Flow
+## Diagram 1 — Lost Update Anomaly Timeline
 
 ```
 Time →
-Thread-1:  [READ stock=100] → [CALC: 100-1=99] → [WRITE stock=99] → [COMMIT]
-Thread-2:  [READ stock=100] ————————→ [CALC: 100-1=99] → [WRITE stock=99] → [COMMIT]
+T1:  [READ stock=100] → [CALC: 100-1=99] → [WRITE stock=99] → [COMMIT]
+T2:  [READ stock=100] ————————→ [CALC: 100-1=99] → [WRITE stock=99] → [COMMIT]
 
-Result: stock=99, bukan 98
+Result: stock=99 ❌   Correct: stock=98 ❌
 ```
+
+The lost update occurs because T2 reads the value before T1 commits, then both write 99. T1's change is silently overwritten.
 
 ---
 
 ## Diagram 2 — Pessimistic Locking (SELECT ... FOR UPDATE)
 
 ```
-Thread-1:  [BEGIN] → [SELECT FOR UPDATE] → [LOCK ACQUIRED] → [READ stock=100] → [WRITE stock=99] → [COMMIT] → [LOCK RELEASED]
-Thread-2:  [BEGIN] → [SELECT FOR UPDATE] … BLOCKS … → [LOCK AVAILABLE] → [READ] → [WRITE] → …
+T1:  [BEGIN] → [SELECT ... FOR UPDATE] → [LOCK ACQUIRED] → [READ stock=100] → [WRITE stock=99] → [COMMIT] → [LOCK RELEASED]
+T2:  [BEGIN] → [SELECT ... FOR UPDATE] ……… BLOCKS ………→ [LOCK AVAILABLE] → [READ] → [WRITE] → [COMMIT]
 
-Hanya satu thread yang dapat hold lock pada satu waktu.
+Only one thread can hold a row lock at a time.
 ```
 
 ---
 
-## Diagram 3 — Optimistic Locking with Conflict
+## Diagram 3 — Optimistic Locking with Conflict Detection
 
 ```
-Thread-1:  [READ: stock=100, ver=5] → [CALC] → [UPDATE WHERE ver=5] → [COMMIT]
-Thread-2:  [READ: stock=100, ver=5] → [CALC] → [UPDATE WHERE ver=5] → [FAIL: 0 rows] → [RETRY/409]
+T1:  [READ: stock=100, ver=5] → [CALC] → [UPDATE WHERE id=1 AND version=5] → [1 row affected] → [COMMIT] (ver becomes 6)
+T2:  [READ: stock=100, ver=5] → [CALC] → [UPDATE WHERE id=1 AND version=5] → [0 rows affected] → [ABORT] → [RETRY] → success
 
-Thread-2 deteksi konflik lewat affected_rows = 0, lalu retry atau return error.
+Conflict detected when `affected_rows == 0`. T2 must retry or return an error.
 ```
 
 ---
@@ -37,10 +39,10 @@ Thread-2 deteksi konflik lewat affected_rows = 0, lalu retry atau return error.
 ## Diagram 4 — Atomic Update Flow
 
 ```
-Goroutine-1: [LOCK] → [CHECK stock>=1] → [stock -= 1] → [UNLOCK]
-Goroutine-2: […BLOCKED…LOCK…BLOCKED…] → [proses setelah unlock]
+G1:  [LOCK] → [CHECK stock>=1] → [stock -= 1] → [UNLOCK]
+G2:  […BLOCKED…LOCK…BLOCKED…] → [proceed after unlock]
 
-Setiap goroutine serial secara implicit lewat lock. Tidak ada jendela read-modify-write terpisah.
+Each goroutine is serialized by the lock. No separate read-modify-write window is exposed.
 ```
 
 ---
@@ -48,82 +50,91 @@ Setiap goroutine serial secara implicit lewat lock. Tidak ada jendela read-modif
 ## Diagram 5 — Retry Convergence
 
 ```
-Goroutine A:  [READ ver=1] → [UPDATE ver=1] → SUCCESS (ver=2)
-Goroutine B:  [READ ver=1] → [UPDATE ver=1] → CONFLICT → SLEEP(2ms) → [RETRY] → [READ ver=2] → [UPDATE ver=2] → SUCCESS
+G-A:  [READ ver=1] → [CALC] → [UPDATE ver=1] → [SUCCESS: ver=2]
+G-B:  [READ ver=1] → [CALC] → [UPDATE ver=1] → [0 rows → ERR] → [SLEEP 2ms] → [READ ver=2] → [UPDATE ver=2] → [SUCCESS]
+G-C:  [READ ver=1] → [CALC] → [UPDATE ver=1] → [0 rows → ERR] → [SLEEP 4ms] → [READ ver=2] … wait for A/B → [SUCCESS]
+G-D:  [READ ver=2] → [CALC] → [UPDATE ver=2] → [SUCCESS]
 
-Goroutine C:  [READ ver=1] → [UPDATE ver=1] → CONFLICT → SLEEP(4ms) → [RETRY] → …
-
-Semua goroutine akhirnya konvergen setelah beberapa percobaan.
+Jittered backoff staggers retries, preventing thundering-herd.
 ```
 
 ---
 
-## Diagram 6 — Store Architecture (Simulated DB Engine)
+## Diagram 6 — Store Architecture (Simulated Engine)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Store                                 │
+│                        Store                            │
 ├─────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │  mu (global) │  │  rowLocks    │  │   products   │ │
-│  │  sync.Mutex  │  │  map[id]Mutex│  │  map[id]Prod │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
-│                                                          │
-│  Get(id)     → baca product (global lock pendek)        │
-│  GetRowLock(id) → return mutex khusus baris            │
-│  Seed()      → buat product + row lock                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  mu (global) │  │  rowLocks    │  │   products   │  │
+│  │  sync.Mutex  │  │  map[id]Mutex│  │  map[id]Prod │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+│                                                         │
+│  Get(id)      → lock/unlock map briefly, copy product  │
+│  GetRowLock(id) → get or create per-row mutex         │
+│  Seed(id,name,s) → create product + row mutex          │
 └─────────────────────────────────────────────────────────┘
 ```
+
+The global `mu` protects map access. Each row has its own mutex in `rowLocks` for pessimistic-style serialization.
 
 ---
 
 ## Diagram 7 — Version Guard Pattern (Optimistic SQL)
 
 ```sql
--- Baca
+-- Initial read (snapshot)
 SELECT id, stock, version FROM products WHERE id = 1;
 -- => id=1, stock=100, version=5
 
--- Update dengan guard
-UPDATE products 
+-- Update with guard
+UPDATE products
 SET stock = 99, version = 6
 WHERE id = 1 AND version = 5;  -- key condition!
 
--- Jika satu baris terpengaruh → OK
--- Jika nol baris → ada yang lain mengubah version → konflik
+-- Interpretation:
+-- 1 row affected → version was 5, now updated
+-- 0 rows affected → version changed to something other than 5 → conflict
 ```
 
 ---
 
-## Diagram 8 — Service Layer Retry Loop
+## Diagram 8 — Service Retry Loop
 
 ```
-          ┌──────────────────┐
-          │ DeductOptimistic │
-          │ WithRetry(id,qty)│
-          └────────┬─────────┘
-                   │
-         ┌─────────┴─────────┐
-         │ attempt = 0       │
-         │   sleep = 0ms     │
-         └─────────┬─────────┘
-                   │
-         ┌─────────┴─────────┐  YES
-         │ OptimisticDeduct OK?├───────► RETURN nil
-         └─────────┬─────────┘
-                   │ NO
-         ┌─────────┴─────────┐
-         │ err == OptimisticLock?│
-         └─────────┬─────────┘
-            NO   │      YES
-         RETURN   │   ┌───┴──────┐
-         err      │   │ attempt < max?│
-                  │   └───┬──────┘
-                      NO │      YES
-               RETURN    │   ┌─────────────┐
-               ErrLocking│   │ attempt++   │
-                         │   │ backoff     │
-                         └───┴─────────────┘
+          ┌─────────────────────────┐
+          │ DeductOptimisticWithRetry │
+          │ (id, qty, maxRetries)    │
+          └────────────┬──────────────┘
+                       │
+              ┌────────┴────────┐  YES
+              │ attempt == 0?      ├───────┐
+              │ (sleep 0-5ms)     │       │
+              └────────┬──────────┘       │
+                       │ NO               │
+              ┌────────┴────────┐  SUCCESS?├──────► return nil
+              │ OptimisticDeduct OK?├─────┘
+              └────────┬────────┘
+                       │ FAIL
+              ┌────────┴────────┐
+              │ err == OptimisticLock?│
+              └────────┬────────┘
+         YES │        │ NO
+               │        │
+        ┌──────┴────┐   │      ┌───────────┐
+        │ attempt < max?│   │      │ return err│
+        └──────┬────┘   │      │ (non-retry) │
+               │ NO    │ YES  └───────────┘
+       ┌───────┴─────┐ │
+       │ return Err  │ │
+       │ Optimistic  │ │
+       │ Lock        │ │
+       └─────────────┘ │
+                       │
+                       │ increment attempt
+                       │ sleep (1<<attempt)ms + jitter
+                       └───── LOOP ──────►
 ```
 
 ---
@@ -131,31 +142,42 @@ WHERE id = 1 AND version = 5;  -- key condition!
 ## Diagram 9 — Error Flow
 
 ```
-            DeductNaive(id, qty)
-                    │
-           ┌────────┴────────┐
-           │ GET(id) fails?  │──YES──► ErrNotFound
-           └────────┬────────┘
-                    │ NO
-           ┌────────┴────────┐
-           │ STOCK < qty?    │──YES──► ErrInsufficientStock
-           └────────┬────────┘
-                    │ NO
-           ┌────────┴────────┐
-           │ Write stock     │
-           │ (stale value)   │
-           └─────────────────┘
-                    
-            DeductOptimistic(id, qty)
-                    │
-           ┌────────┴────────┐
-           │ Version match?  │──NO──► ErrOptimisticLock
-           └────────┬────────┘
-                    │ YES
-           ┌────────┴────────┐
-           │ Write & increment│
-           │ version          │
-           └──────────────────┘
+DeductNaive(id, qty)
+        │
+ ┌──────┴──────┐
+ │ GET(id) fail?│──YES──► ErrNotFound
+ └──────┬──────┘
+        │ NO
+ ┌──────┴──────┐
+ │ STOCK < qty?│──YES──► ErrInsufficientStock
+ └──────┬──────┘
+        │ NO
+ ┌──────┴──────┐
+ │ time.Sleep │ (widens race)
+ └──────┬──────┘
+        │
+    [WRITE stale stock]
+
+DeductOptimistic(id, qty)
+        │
+ ┌──────┴──────┐
+ │ Version match?│──NO──► ErrOptimisticLock
+ └──────┬──────┘
+        │ YES
+ ┌──────┴──────┐
+ │ WRITE & inc │
+ │ version     │
+ └─────────────┘
+
+DeductAtomic(id, qty)
+        │
+ ┌──────┴──────┐
+ │ STOCK < qty?│──YES──► ErrInsufficientStock
+ └──────┬──────┘
+        │ NO
+ ┌──────┴──────┐
+ │ STOCK -= qty│
+ └─────────────┘
 ```
 
 ---
@@ -163,17 +185,23 @@ WHERE id = 1 AND version = 5;  -- key condition!
 ## Diagram 10 — Counter Invariants
 
 ```
-Track counter:
-┌────────────────┬─────────────────────┐
-│ Field          │ Purpose             │
-├────────────────┼─────────────────────┤
-│ NaivelyDrawn   │ counter naive       │
-│ Pessimistically│ counter pessimistic │
-│ Optimistically │ counter optimistic  │
-│ OptimisticFails│ conflict counter    │
-│ Atomically     │ counter atomic      │
-└────────────────┴─────────────────────┘
+Store counters:
+┌────────────────┬─────────────────────────────┐
+│ Field           │ Purpose                     │
+├────────────────┼─────────────────────────────┤
+│ NaivelyDrawn    │ count of naive attempts     │
+│ Pessimistically │ count of pessimistic success│
+│ Optimistically  │ count of optimistic success │
+│ OptimisticFails │ count of optimistic conflicts│
+│ Atomically      │ count of atomic success     │
+└────────────────┴─────────────────────────────┘
 
-Invarian:
-InitialStock - TotalDrawn == FinalStock (atau accounting conflicts)
+Invariant definition:
+   FinalStock = InitialStock − TotalSuccessfulDeductions
+   = Initial − (Pessimistically + Optimistically + Atomically)
+
+For naive/optimistic without retry:
+   FinalStock = InitialStock − Optimistically
+   AND
+   OptimisticFails > 0 (conflicts existed)
 ```

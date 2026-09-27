@@ -21,9 +21,9 @@ type Product struct {
 ```
 
 Explanation:
-Definisi error domain spesifik: `ErrOptimisticLock` mewakili konflik optimistic, `ErrInsufficientStock` mewakili kondisi bisnis. `Product` memiliki `Version` field sebagai optimistic guard.
+Domain-specific error definitions: `ErrOptimisticLock` represents an optimistic concurrency conflict (equivalent to SQL `affected_rows == 0`), `ErrInsufficientStock` represents a business-rule rejection. `Product` includes a `Version` field as the optimistic guard.
 
-## Snippet 2 — Store Core
+## Snippet 2 — Store Core (Simulated Engine)
 
 Source File: `internal/inventory/store.go`
 
@@ -63,11 +63,11 @@ func (s *Store) Seed(id int, name string, stock int) {
 ```
 
 Explanation:
-`rowLocks` mensimulasikan `SELECT ... FOR UPDATE` per baris. Setiap `Product` memiliki `Version` yang dimulai dari 1 dan akan diincrement oleh operasi optimistic. Counter atomik (`atomic.AddInt64`) memungkinkan verifikasi invariant tanpa lock.
+`rowLocks` simulates `SELECT ... FOR UPDATE` per row. Each `Product` has a `Version` starting at 1, incremented by optimistic operations. Atomic counters (`atomic.AddInt64`) allow invariant verification without additional locking.
 
 ## Snippet 3 — Naive Read-Modify-Write (Lost Update)
 
-Source File: `internal/inventory/store.go`
+Source File: `internal/inventory/store.go` (lines 65-89)
 
 ```go
 func (s *Store) NaiveDeduct(id int, qty int) error {
@@ -92,11 +92,11 @@ func (s *Store) NaiveDeduct(id int, qty int) error {
 ```
 
 Explanation:
-Bug: nilai `p.Stock` dibaca, lalu `curr.Stock = p.Stock - qty` ditulis. Jika goroutine lain mengubah stock setelah `Get()` tapi sebelum `s.mu.Lock()`, nilai lama (stale) digunakan. `time.Sleep(100µs)` memperbesar jendela race.
+The bug: `p.Stock` is read, then `curr.Stock = p.Stock - qty` is written after a delay. If another goroutine modifies stock between `Get()` and the lock, the stale value overwrites the newer one. `time.Sleep(100µs)` widens the race window for reliable reproduction.
 
-## Snippet 4 — Pessimistic Locking
+## Snippet 4 — Pessimistic Locking (SELECT FOR UPDATE)
 
-Source File: `internal/inventory/store.go`
+Source File: `internal/inventory/store.go` (lines 93-116)
 
 ```go
 func (s *Store) PessimisticDeduct(id int, qty int) error {
@@ -126,11 +126,11 @@ func (s *Store) PessimisticDeduct(id int, qty int) error {
 ```
 
 Explanation:
-`rowLock.Lock()` memblokir semua goroutine lain yang mengakses row yang sama sampai `defer` mengunlock. `s.mu` hanya melindungi map, tidak perilaku bisnis. Lock ini eksklusif → tidak ada two-writers.
+`rowLock.Lock()` blocks all other goroutines accessing the same row until `defer Unlock()`. The global `s.mu` only protects the map structure; the row lock governs business logic. This is an exclusive lock — no two writers on the same row.
 
-## Snippet 5 — Optimistic Locking
+## Snippet 5 — Optimistic Locking (Version Guard)
 
-Source File: `internal/inventory/store.go`
+Source File: `internal/inventory/store.go` (lines 120-152)
 
 ```go
 func (s *Store) OptimisticDeduct(id int, qty int) error {
@@ -164,11 +164,11 @@ func (s *Store) OptimisticDeduct(id int, qty int) error {
 ```
 
 Explanation:
-`p.Version` dibaca (snapshot), lalu divalidasi di dalam `s.mu.Lock()`. Jika `curr.Version != p.Version`, berarti ada penulisan lain di antara — return `ErrOptimisticLock`. Analog SQL: `UPDATE ... WHERE id=? AND version=?`.
+`p.Version` is read as a snapshot, then validated inside `s.mu.Lock()`. If `curr.Version != p.Version`, another write occurred in between — return `ErrOptimisticLock`. Analogous to SQL: `UPDATE ... WHERE id=? AND version=?`.
 
-## Snippet 6 — Optimistic Locking with Retry & Backoff
+## Snippet 6 — Optimistic Locking with Retry & Jittered Backoff
 
-Source File: `internal/inventory/service.go`
+Source File: `internal/inventory/service.go` (lines 28-45)
 
 ```go
 func (svc *Service) DeductOptimisticWithRetry(id int, qty int, maxRetries int) error {
@@ -191,11 +191,11 @@ func (svc *Service) DeductOptimisticWithRetry(id int, qty int, maxRetries int) e
 ```
 
 Explanation:
-Retry loop dengan exponential backoff: attempt 0 = ~1-6ms, 1 = ~2-7ms, 2 = ~4-9ms, ... Jitter `rand.Intn(5)` mencegah thundering-herd. Jika kehabisan retry → kembalikan `ErrOptimisticLock` (analog HTTP 409).
+Retry loop with exponential backoff: attempt 0 ≈ 1-6ms, 1 ≈ 2-7ms, 2 ≈ 4-9ms, etc. Jitter (`rand.Intn(5)`) prevents thundering-herd. After `maxRetries`, returns `ErrOptimisticLock` (analogous to HTTP 409 Conflict).
 
 ## Snippet 7 — Atomic Single-Statement Update
 
-Source File: `internal/inventory/store.go`
+Source File: `internal/inventory/store.go` (lines 155-173)
 
 ```go
 func (s *Store) AtomicDeduct(id int, qty int) error {
@@ -219,11 +219,11 @@ func (s *Store) AtomicDeduct(id int, qty int) error {
 ```
 
 Explanation:
-Single lock + validate + update. Analog SQL `UPDATE products SET stock=stock-1 WHERE id=? AND stock>=1` — atoms pada tingkat pernyataan. Tidak ada read terpisah, tidak ada lock persisten melewati goroutine.
+Single lock + validate + update. Analogous to SQL `UPDATE products SET stock=stock-1 WHERE id=? AND stock>=1` — atomic at the statement level. No separate read phase, no persistent lock across goroutines.
 
 ## Snippet 8 — Test: Naive Lost Update Demonstration
 
-Source File: `tests/locking_test.go`
+Source File: `tests/locking_test.go` (lines 10-38)
 
 ```go
 func TestNaiveLostUpdate(t *testing.T) {
@@ -254,11 +254,11 @@ func TestNaiveLostUpdate(t *testing.T) {
 ```
 
 Explanation:
-Tes bukan mengecek `p.Stock == 50`, melainkan justru memverifikasi `p.Stock != 50`. Jika persis 50, anomaly tidak terjadi (race detector mungkin menyelamatkan). Dalam prakteknya, 49 goroutine overwrite, hasil = 99.
+The test does not assert `p.Stock == 50` — it asserts the anomaly by checking `p.Stock != 50`. If it were exactly 50, the race condition did not manifest (unlikely but possible). In practice, ~49 goroutines overwrite, yielding stock = 99.
 
 ## Snippet 9 — Test: Pessimistic Locking Invariant
 
-Source File: `tests/locking_test.go`
+Source File: `tests/locking_test.go` (lines 40-67)
 
 ```go
 func TestPessimisticLocking(t *testing.T) {
@@ -277,7 +277,7 @@ func TestPessimisticLocking(t *testing.T) {
             if err != nil {
                 t.Errorf("deduct failed: %v", err)
             }
-        }
+        }()
     }
     wg.Wait()
 
@@ -292,11 +292,11 @@ func TestPessimisticLocking(t *testing.T) {
 ```
 
 Explanation:
-Verifikasi invariant ketat: 100 - 50 = 50. Setiap goroutine berhasil tanpa conflict. `wg.Wait()` memastikan semua selesai sebelum asersi.
+Strict invariant verification: 100 − 50 = 50. All 50 goroutines succeed without conflicts. `wg.Wait()` ensures completion before assertion.
 
-## Snippet 10 — Test: Optimistic Conflict & Retry Convergence
+## Snippet 10 — Test: Optimistic Conflict Detection & Retry Convergence
 
-Source File: `tests/locking_test.go`
+Source File: `tests/locking_test.go` (lines 85-145)
 
 ```go
 func TestOptimisticLockingConflict(t *testing.T) {
@@ -335,14 +335,37 @@ func TestOptimisticLockingConflict(t *testing.T) {
         t.Fatalf("expected at least one optimistic lock conflict, got 0")
     }
 }
+
+func TestOptimisticLockingWithRetry(t *testing.T) {
+    store := inventory.NewStore()
+    store.Seed(4, "Item D", 100)
+    svc := inventory.NewService(store)
+
+    const goroutines = 20
+    var wg sync.WaitGroup
+    wg.Add(goroutines)
+
+    for i := 0; i < goroutines; i++ {
+        go func() {
+            defer wg.Done()
+            _ = svc.DeductOptimisticWithRetry(4, 1, 10)
+        }()
+    }
+    wg.Wait()
+
+    p, _ := store.Get(4)
+    if p.Stock != 100-int(store.Optimistically) {
+        t.Fatalf("inconsistent stock: expected %d, got %d", 100-int(store.Optimistically), p.Stock)
+    }
+}
 ```
 
 Explanation:
-Membuktikan: konflik terdeteksi (`conflictCount > 0`), dan invariant tetap terjaga (`successCount + p.Stock == 100`). Jika 19 konflik, hanya 1 yang berhasil, stok tetap 99 (100 - 1).
+Proves: conflicts are detected (`conflictCount > 0`), and the invariant holds (`successCount + p.Stock == 100`). With retry, all 20 eventually succeed (`p.Stock == 80`).
 
-## Snippet 11 — Demo CLI: Side-by-Side Scenarios
+## Snippet 11 — Demo CLI: Side-by-Side Comparison
 
-Source File: `cmd/demo/main.go`
+Source File: `cmd/demo/main.go` (lines 11-119)
 
 ```go
 func main() {
@@ -384,9 +407,68 @@ func main() {
     fmt.Printf("\n[2] Pessimistic Locking (SELECT ... FOR UPDATE):\n")
     fmt.Printf("    Actual Final Stock:   %d (SUCCESS)\n", p2.Stock)
 
-    // ... (Optimistic, Optimistic+Retry, Atomic sama polanya)
+    // 3. Optimistic direct
+    store3 := inventory.NewStore()
+    store3.Seed(3, "Wireless Headphones", 100)
+    svc3 := inventory.NewService(store3)
+    var wg3 sync.WaitGroup
+    for i := 0; i < 20; i++ {
+        wg3.Add(1)
+        go func() {
+            defer wg3.Done()
+            _ = svc3.DeductOptimisticDirect(3, 1)
+        }()
+    }
+    wg3.Wait()
+    p3, _ := store3.Get(3)
+    fmt.Printf("\n[3] Optimistic Locking Direct (20 concurrent, no retry):\n")
+    fmt.Printf("    Successful Deductions: %d\n", store3.Optimistically)
+    fmt.Printf("    Rejected Conflicts:   %d\n", store3.OptimisticFails)
+    fmt.Printf("    Actual Final Stock:   %d (State Guarded)\n", p3.Stock)
+
+    // 4. Optimistic with retry
+    store4 := inventory.NewStore()
+    store4.Seed(4, "Smartwatch", 100)
+    svc4 := inventory.NewService(store4)
+    start := time.Now()
+    var wg4 sync.WaitGroup
+    for i := 0; i < 20; i++ {
+        wg4.Add(1)
+        go func() {
+            defer wg4.Done()
+            _ = svc4.DeductOptimisticWithRetry(4, 1, 10)
+        }()
+    }
+    wg4.Wait()
+    p4, _ := store4.Get(4)
+    fmt.Printf("\n[4] Optimistic With Exponential Backoff Retry (20 requests):\n")
+    fmt.Printf("    Successful Deductions: %d\n", store4.Optimistically)
+    fmt.Printf("    Total Attempted Conflicts Retried: %d\n", store4.OptimisticFails)
+    fmt.Printf("    Actual Final Stock:   %d (All retries converged)\n", p4.Stock)
+    fmt.Printf("    Elapsed Time:         %v\n", time.Since(start))
+
+    // 5. Atomic
+    store5 := inventory.NewStore()
+    store5.Seed(5, "Tablet Air", 100)
+    svc5 := inventory.NewService(store5)
+    var wg5 sync.WaitGroup
+    for i := 0; i < 50; i++ {
+        wg5.Add(1)
+        go func() {
+            defer wg5.Done()
+            _ = svc5.DeductAtomic(5, 1)
+        }()
+    }
+    wg5.Wait()
+    p5, _ := store5.Get(5)
+    fmt.Printf("\n[5] Atomic Single-Statement Operation:\n")
+    fmt.Printf("    Actual Final Stock:   %d (Lockless Single Statement)\n", p5.Stock)
+
+    fmt.Println("\n==========================================================")
+    fmt.Println("  Lab Execution Completed Successfully                    ")
+    fmt.Println("==========================================================")
 }
 ```
 
 Explanation:
-Demo berjalan berurutan (bukan paralel) untuk output yang dapatdibaca. Setiap skenario fresh store, seed stock 100. Output langsung ke stdout.
+The demo runs sequentially (not in parallel) for readable output. Each scenario uses a fresh store seeded with stock = 100. Output is printed directly to stdout.

@@ -19,3 +19,7 @@
 9. **Race detector harus lulus** — `go test -race ./...` tidak boleh menghasilkan warning apapun. Lab ini pass tanpa peringatan.
 
 10. **Verifikasi invariant** — FinalStock = InitialStock - TotalDeductions (atau accounting conflicts). Ini adalah bukti utama korektif.
+
+11. **Simulasi dalam lab ≠ RDBMS nyata** — ini adalah pusat memori Go (`sync.Mutex`) yang meniru semantik `SELECT FOR UPDATE`, version guard, dan update atomik. MySQL 8.0 docs tidak diverifikasi langsung (403) — klaim MySQL didasarkan pada SQL standar.
+
+12. **Lab melewatkan beberapa path error** — engineering audit mencatat: `ErrInvalidQuantity`, `ErrNotFound`, kegagalan retry optimis (maxRetries tercapai), dan overdraft konkuren tidak diuji. Perilaku ini ada pada kode, tetapi tidak divisualisasikan lewat tes otomatis.
