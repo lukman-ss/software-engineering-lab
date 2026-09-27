@@ -1,22 +1,16 @@
-# Contradictions Audit
+# Contradiction Audit
 
-## Contradiction Analysis
+## Internal & Source Contradiction Analysis
 
 No material contradictions found.
 
-### Evaluation of Potential Nuances:
+### Detailed Evaluation:
+1. **Definition of Provider Contract Authority**:
+   - *Statement A*: Early Consumer-Driven Contracts literature (Robinson & Fowler, 2006) designates provider contracts as "singular and authoritative" regarding available system functionality.
+   - *Statement B*: Modern Pact documentation clarifies that the consumer-derived provider contract is "singular but non-authoritative", derived strictly from the union of active consumer expectations.
+   - *Assessment*: This difference represents an evolution in scope definition between broad provider specifications (e.g. OpenAPI) and active consumer-driven contracts (derived pacts), rather than an irreconcilable contradiction.
 
-1. **Scope of Contract Testing Applicability**:
-   - *Source 1 (Pact Intro)* vs *Source 3 (When to use Pact)*:
-   - Source 1 notes contract testing is applicable wherever two services integrate over a boundary. Source 3 specifies that Pact is not suited for public/uncontrolled external APIs with anonymous consumers.
-   - *Assessment*: Contextual clarification of tool vs pattern scope, not an internal contradiction.
-
-2. **Theoretical XML/XSD Framing vs Modern JSON CDC**:
-   - *Source 4 (Robinson 2006)* vs *Source 1, 2, 7 (Pact Docs)*:
-   - Source 4 framed CDC concepts using XML/XSD and Schematron assertions in 2006. Modern implementations use JSON payloads and DSL-generated pact artifacts.
-   - *Assessment*: Historical evolution of technology stack implementing the identical foundational CDC pattern.
-
-3. **End-to-End Test Replacement Ratio**:
-   - *05-report.md Finding 10* vs *Source 7 (Pact FAQ)*:
-   - Report correctly qualifies that contract testing replaces broad integration checking suites, but does not eliminate targeted E2E checks for end-user critical flows or provider unit tests for domain business logic.
-   - *Assessment*: Consistent with primary literature.
+2. **Schema vs Code-First Contract Enforcers**:
+   - *Statement A*: Schema-first tools (e.g. OpenAPI / JSON Schema) validate static payload structures for all potential fields.
+   - *Statement B*: Consumer-driven contract tools (e.g. Pact) enforce executable "contract by example" using only consumer-exercised fields.
+   - *Assessment*: Both sources clearly delineate the operational boundaries of schema validation vs consumer-driven contract testing. No contradiction exists.

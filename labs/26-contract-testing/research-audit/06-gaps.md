@@ -3,19 +3,19 @@
 ## Gap 1
 
 Type:
-OUTDATED_SOURCE
+WEAK_SOURCE
 
 Severity:
 LOW
 
 Location:
-`research/02-sources.md` — Source 10 & `research/06-open-questions.md`
+`02-sources.md` (Source 9), `05-report.md` (Finding 8)
 
 Problem:
-Spring Cloud Contract was archived in July 2026. While included for historical context as a provider-driven CDC alternative, it presents a deprecation risk for teams building new projects.
+The claim regarding rebalanced test pyramid economics and quantitative benefits of contract testing relies primarily on vendor marketing materials (`pactflow.io`) rather than peer-reviewed or independent empirical benchmarks.
 
 Required Revision:
-None required for research approval. The research agent explicitly noted this archival status and flagged it in open questions.
+None blocking. The research report already correctly flags this limitation in `05-report.md` (Limitations) and `06-open-questions.md`.
 
 Can Be Approved Without Fix:
 YES
@@ -25,19 +25,41 @@ YES
 ## Gap 2
 
 Type:
-WEAK_SOURCE
+OUTDATED_SOURCE
 
 Severity:
 LOW
 
 Location:
-`research/02-sources.md` — Source 11 & `research/06-open-questions.md`
+`02-sources.md` (Source 4)
 
 Problem:
-AsyncAPI documentation was inspected primarily for event-driven API specification concepts, but automated test-harness verification mechanics (Message Pact equivalent) were not deeply verified from AsyncAPI sources directly.
+Spring Cloud Contract is listed as an alternative CDC framework, but the repository under `spring-attic` is archived.
 
 Required Revision:
-None required for research approval. The research agent accurately flagged this limitation under Weak Evidence in `06-open-questions.md`.
+Ensure implementation design relies on active frameworks (e.g. Pact Go / Pact JS) rather than deprecated/archived toolsets.
+
+Can Be Approved Without Fix:
+YES
+
+---
+
+## Gap 3
+
+Type:
+SCOPE_ERROR
+
+Severity:
+LOW
+
+Location:
+`02-sources.md` (Source 3)
+
+Problem:
+The author of the landmark Thoughtworks article "Consumer-Driven Contracts" is Ian Robinson, with Martin Fowler acting as host/publisher on `martinfowler.com`. The source list titles it under Martin Fowler.
+
+Required Revision:
+Attribute Ian Robinson as primary author in future documentation references.
 
 Can Be Approved Without Fix:
 YES
