@@ -17,7 +17,7 @@ Main Concepts:
 2. Outbox table sebagai bagian dari transaksi bisnis
 3. Message relay: Polling Publisher (diimplementasikan lab ini) vs Transaction Log Tailing / CDC
 4. At-least-once delivery dan idempotent consumer via event ID tracking
-5. Outbox table design: kolom id, aggregatetype, aggregateid, type, payload
+5. Outbox table design: kolom id, aggregatetype, aggregateid, type, payload — **lab ini menyederhanakan**: struct `OutboxMessage` hanya memiliki `ID`, `EventType`, `Payload`, `Status`, `CreatedAt`. Kolom agregat (`aggregatetype`, `aggregateid`) ada di desain production/Debezium, bukan di implementasi lab ini.
 6. Operasional: cleanup processed events, monitoring unprocessed count dan oldest-event age
 
 Verified Behaviors:

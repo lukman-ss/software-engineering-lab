@@ -26,6 +26,8 @@ Tabel outbox biasanya memiliki kolom:
 - `type`: tipe peristiwa (mis: "OrderCreated")
 - `payload`: JSON bersifat event state (mis: Order lengkap sebagai JSON)
 
+> **Catatan Implementasi Lab**: Untuk kesederhanaan, `OutboxMessage` di lab ini hanya menyertakan `ID`, `EventType`, `Payload`, `Status`, dan `CreatedAt` (lihat `model.go:26-32`). Kolom `aggregatetype` dan `aggregateid` dihilangkan karena lab ini tidak mengimplementasikan pemartisian Kafka atau pemetaan aggregate — mereka ada di desain production/Debezium, bukan di demonstrasi lab ini.
+
 ### Implementasi Relay
 Lab ini menerapkan pola **Polling Publisher** untuk message relay:
 - Goroutine berjalan periodik (ticker) mengambil semua record dengan status `PENDING`

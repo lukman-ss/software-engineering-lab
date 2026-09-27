@@ -84,11 +84,11 @@ Tests: tests/outbox_test.go (all test functions as case studies)
 
 ## Checklist
 Derived from success criteria in engineering/01-design.md:21-27:
-- [ ] 100% atomicity between business state and outbox state
-- [ ] Zero lost events under broker network disconnect / relay retries
-- [ ] Zero duplicate processing by idempotent consumers despite at-least-once relay delivery
-- [ ] Cleanup worker successfully purges processed events
-- [ ] All unit and concurrency tests pass with zero data races (`go test -race ./...`)
+- [x] 100% atomicity between business state and outbox state
+- [x] Zero lost events under broker network disconnect / relay retries
+- [x] Zero duplicate processing by idempotent consumers despite at-least-once relay delivery
+- [x] Cleanup worker successfully purges processed events
+- [x] All unit and concurrency tests pass with zero data races (`go test -race ./...`)
 
 ## Key Takeaways
 See content/05-key-takeaways.md for final distilled list.
