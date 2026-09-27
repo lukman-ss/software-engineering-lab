@@ -1,4 +1,4 @@
-# Audit Plan
+# Audit Plan: Research Audit for Lab 15 (Load Testing)
 
 ## Target Lab
 `labs/15-load-testing`
@@ -12,25 +12,26 @@
 - `research/06-open-questions.md`
 
 ## Claims To Verify
-1. Six primary performance test types: Smoke, Average-Load, Stress, Soak/Endurance, Spike, Breakpoint.
-2. Key metrics to monitor: Percentiles (P50, P95, P99), Error Rate, Throughput (RPS), Resource Utilization (CPU, Memory, Disk I/O, Network).
-3. Tool comparison and positioning: k6 (JS/APIs), JMeter (GUI/Multi-protocol), Locust (Python/Greenlets), Gatling (Scala/JVM).
-4. Bottleneck identification methodology across Application, Database, and External dependencies via metric correlation and request phase breakdown.
-5. Common load testing pitfalls: testing `/health` only, unrealistic test data, unmonitored infrastructure, lack of predefined SLAs/thresholds, non-representative test environments.
-6. Timing of load testing across the SDLC (pre-release, post-major changes, architecture shifts, migrations).
+1. Six primary load test types (smoke, average-load, stress, soak, spike, breakpoint) are industry-standard definitions.
+2. Metrics (P50, P95, P99, RPS, error rate, CPU, memory, network/disk I/O) are backed by authoritative sources (k6, ISO/IEC 25010, Azure, Google SRE).
+3. Bottleneck identification methodology (`http_req_waiting`, `http_req_connecting`, third-party latency correlation) is accurate and supported.
+4. Concurrent user calculation formula `(Hourly sessions * session duration) / 3600` is accurate per source.
+5. Common pitfalls (health check testing only, small dummy data, laptop testing, lack of targets) are verified in sources.
+6. SDLC timing recommendations for load testing are backed by engineering frameworks.
+7. Tool comparison claims (k6, JMeter, Locust, Gatling) accurately reflect official tool documentation.
 
 ## Code To Execute
-None (Pipeline override: Audit research only).
+- PIPELINE OVERRIDE: Code execution and code/implementation auditing are skipped per pipeline override instructions. Only research artifacts will be audited.
 
 ## Primary Risks
-- Overgeneralized recommendations or numeric SLA targets presented as universal facts.
-- Outdated or unreachable tool documentation URLs.
-- Paywalled standards (e.g., ISO/IEC 25010) cited without disclaiming verification status.
-- Tool-specific nuances (e.g., k6 cloud evaluation latency vs local, elastic cloud limits in breakpoint tests) mischaracterized.
+- Inaccessible or dead URLs in source list.
+- Misrepresentation of source content or Tier misclassification.
+- Claiming standard compliance (e.g. ISO/IEC 25010) based only on Wikipedia without noting source limitations.
+- Overgeneralized claims presented as universal truths (e.g., specific percentage increase in stress testing, fixed threshold metrics).
 
 ## Audit Strategy
-1. Verify source URLs, tiers, publishers, and relevance.
-2. Cross-reference claims against citations in evidence and report files.
-3. Check for internal contradictions and unaddressed open questions.
-4. Document research gaps and assign appropriate severity.
-5. Emit verdict based strictly on research validity and evidentiary rigor.
+1. **Source Audit**: Verify 21 sources listed in `02-sources.md` for URL validity, publisher accuracy, tier classification, and relevance.
+2. **Claim Audit**: Audit findings in `05-report.md` and evidence entries in `03-evidence.md` against severity model and factual accuracy.
+3. **Contradiction Analysis**: Review `04-contradictions.md` for completeness and identify any unrecorded internal or external contradictions.
+4. **Gap Analysis**: Synthesize missing evidence, weak sources, open questions, and overgeneralizations into `06-gaps.md`.
+5. **Verdict Generation**: Render final evidence-based verdict in `07-verdict.md`.

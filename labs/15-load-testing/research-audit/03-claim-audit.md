@@ -1,83 +1,71 @@
-# Claim Audit
+# Claim Audit: Lab 15 (Load Testing)
 
 ## Claim 1
-Claim: Load testing encompasses six primary test types: smoke, average-load, stress, soak/endurance, spike, and breakpoint.
-Location: `research/05-report.md` (Finding 1), `research/03-evidence.md` (Evidence 1)
-Evidence Provided: Detailed breakdown of each test type with load patterns and objectives.
-Source: Grafana k6 docs (Sources 1-7), Microsoft Azure Well-Architected Framework (Source 11), Google SRE Book (Source 9).
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fully supported across multiple authoritative Tier 1 sources.
-
----
+Claim: Load testing encompasses six primary test types: smoke, average-load, stress, soak/endurance, spike, and breakpoint.  
+Location: `research/05-report.md: Finding 1`; `research/03-evidence.md: Evidence 1`  
+Evidence Provided: Detailed citation of k6 documentation guides (Sources 1-7), Azure Well-Architected Framework (Source 11), Google SRE Book (Source 9).  
+Source: Sources 1-7, 9, 11  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Solid consensus across primary cloud and testing vendor documentation.  
 
 ## Claim 2
-Claim: Standard performance evaluation relies on percentiles (P50, P95, P99), error rates, throughput (RPS), and system resource metrics (CPU, memory, disk, network) rather than arithmetic averages alone.
-Location: `research/05-report.md` (Finding 2), `research/03-evidence.md` (Evidence 2)
-Evidence Provided: k6 metric percentiles definition, Azure performance targets, ISO/IEC 25010 Quality Model subcharacteristics.
-Source: Grafana k6 Metrics Reference (Source 20), Azure Performance Testing (Source 11), ISO/IEC 25010 (Source 10).
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Soundly evidenced; correctly emphasizes percentile evaluation over unweighted averages to catch tail latency.
-
----
+Claim: Key metrics required for load test evaluation are P50, P95, P99 response times, error rate, throughput (RPS), and resource utilization (CPU, memory, disk I/O, network).  
+Location: `research/05-report.md: Finding 2`; `research/03-evidence.md: Evidence 2`  
+Evidence Provided: k6 metric reference & thresholds documentation, Azure Well-Architected Framework performance targets, ISO/IEC 25010 Quality Model.  
+Source: Sources 10, 11, 15, 20  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: The emphasis on percentiles rather than averages is well-substantiated by both theoretical standards (ISO/IEC 25010) and practical documentation (k6, Azure).  
 
 ## Claim 3
-Claim: Tools serve distinct operational contexts: k6 is specialized for API and script-driven testing in JS; Locust provides lightweight greenlet coroutines in Python; JMeter supports multi-protocol enterprise workflows via GUI/XML; Gatling offers high performance on the JVM.
-Location: `research/05-report.md` (Finding 3), `research/03-evidence.md` (Evidence 7)
-Evidence Provided: Architecture descriptions for Locust (gevent greenlets), k6 execution model, JMeter and Gatling capabilities.
-Source: Locust docs (Source 13), k6 docs (Source 1), Azure docs (Source 11).
-Source Actually Supports Claim: YES
-Classification: INTERPRETATION
-Severity: LOW
-Notes: Appropriately qualified with MEDIUM confidence where specific benchmark comparisons are absent.
-
----
+Claim: k6 is JS-based for APIs, JMeter is GUI/XML for multi-protocol enterprise, Locust is Python/greenlet-based, Gatling is Scala/JVM DSL.  
+Location: `research/05-report.md: Finding 3`; `research/03-evidence.md: Evidence 7`  
+Evidence Provided: k6 and Locust official docs; general architectural characteristics for JMeter and Gatling.  
+Source: Sources 1, 13, 14; general tool summaries  
+Source Actually Supports Claim: PARTIAL  
+Classification: FACT / INTERPRETATION  
+Severity: MEDIUM  
+Notes: k6 and Locust are supported by direct primary links. However, JMeter and Gatling were not backed by dedicated primary source entries in `02-sources.md` (only high-level website domain links given in `05-report.md`, and research report explicitly notes limitations in accessing their detailed documentation). Claim is technically accurate in the industry, but research citation depth is uneven.  
 
 ## Claim 4
-Claim: Bottlenecks across application, database, and external APIs can be isolated by decomposing the HTTP lifecycle (e.g. `http_req_waiting` vs `http_req_connecting`) and correlating latency shifts with component-level metrics.
-Location: `research/05-report.md` (Finding 4), `research/03-evidence.md` (Evidence 3)
-Evidence Provided: k6 metric component breakdown equation and Azure hypothesis-driven testing guidelines.
-Source: Azure Performance Testing (Source 11), k6 Built-in Metrics Reference (Source 20).
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Core diagnosis strategy is backed by standard request timeline decomposition principles.
-
----
+Claim: Bottleneck isolation is achieved by decomposing HTTP request durations (e.g. `http_req_waiting` vs `http_req_connecting`) and correlating with server-side metrics.  
+Location: `research/05-report.md: Finding 4`; `research/03-evidence.md: Evidence 3`  
+Evidence Provided: k6 metric lifecycle breakdown (`http_req_duration`, `waiting`, `connecting`, etc.) and Azure hypothesis-driven testing guidelines.  
+Source: Sources 11, 15, 20  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Accurate mapping of network/connection vs backend execution latency breakdown.  
 
 ## Claim 5
-Claim: Calculating virtual users for transactional scenarios uses peak sessions per second multiplied by average session duration (Little's Law application).
-Location: `research/03-evidence.md` (Evidence 4)
-Evidence Provided: k6 VU calculation guidelines and Azure throughput estimation formulas.
-Source: k6 VU calculation guide (Source 18), Azure Performance Testing (Source 11).
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Standard queuing theory and performance engineering calculation.
-
----
+Claim: Common pitfalls include testing only `/health`, inadequate test data volume, testing on local developer laptops instead of production-mirror environments, and testing without explicit pass/fail SLA targets.  
+Location: `research/05-report.md: Finding 5`; `research/03-evidence.md: Evidence 5`  
+Evidence Provided: Azure Well-Architected Framework antipatterns and k6 threshold best practices.  
+Source: Sources 9, 11, 15  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Well-documented industry failure modes accurately cited.  
 
 ## Claim 6
-Claim: Common performance testing anti-patterns include testing `/health` exclusively, using miniature data fixtures, running tests against unmonitored infrastructure, testing without strict SLO thresholds, and using developer laptops as production proxies.
-Location: `research/05-report.md` (Finding 5), `research/03-evidence.md` (Evidence 5)
-Evidence Provided: Azure anti-pattern documentation and Google SRE reliability principles.
-Source: Azure Performance Testing (Source 11), Google SRE Book (Source 9).
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Highly practical, directly cited from Azure Well-Architected and Google SRE guidance.
-
----
+Claim: Concurrent users should be calculated using the formula: `Concurrent users = Hourly sessions * Average session duration (in seconds) / 3600`.  
+Location: `research/03-evidence.md: Evidence 4`  
+Evidence Provided: k6 guide "Calculate concurrent users for load tests".  
+Source: Source 18  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: LOW  
+Notes: Exact formula matches Grafana k6 sizing documentation (Little's Law application to session concurrency).  
 
 ## Claim 7
-Claim: Load testing is a continuous SDLC activity required before go-live, ahead of major traffic events, and following major database, cloud, or architectural changes.
-Location: `research/05-report.md` (Finding 6), `research/03-evidence.md` (Evidence 6)
-Evidence Provided: Google SRE equivalence testing principles, Azure continuous testing guidance, CI/CD automated testing references.
-Source: Google SRE Book (Source 9), Azure Performance Testing (Source 11), k6 docs (Source 1).
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fully aligned with modern CI/CD and SRE practices.
+Claim: Target SLA baseline recommendations are P95 < 500ms, Error Rate < 1%, CPU < 75%, Memory < 80%.  
+Location: `research/01-plan.md: Objective item 6`  
+Evidence Provided: Stated as an objective in plan, but `06-open-questions.md` explicitly admits that no universal standard SLA thresholds exist and that these numbers are context/business specific.  
+Source: None provided as universal standard  
+Source Actually Supports Claim: NO (Recognized as context-dependent)  
+Classification: HYPOTHESIS / EXAMPLE  
+Severity: MEDIUM  
+Notes: The research correctly refrains from claiming these arbitrary numbers as universal truths in `05-report.md` and isolates the limitation in `06-open-questions.md` (Question 2). However, in `01-plan.md`, it was phrased without clear caveat.  

@@ -2,52 +2,43 @@
 
 Target Lab: labs/15-load-testing
 
-Audit Date: 2026-09-26
+Audit Date: 2026-09-27
 
 ## Summary
 
-Major Claims Reviewed: 7
-Sources Reviewed: 21
-Unsupported Claims: 0
-Contradictions: 0
-Code Issues: 0
-Test Failures: 0
-Research Gaps: 3
+Major Claims Reviewed: 7  
+Sources Reviewed: 21  
+Unsupported Claims: 0  
+Contradictions: 4 (resolved/analyzed)  
+Code Issues: 0 (pipeline override: research only)  
+Test Failures: 0 (pipeline override: research only)  
+Research Gaps: 4  
 
 ## Quality Gates
 
-Source Integrity:
-PASS
-
-Claim Support:
-PASS
-
-Internal Consistency:
-PASS
-
-Code Correctness:
-NOT_APPLICABLE
-
-Tests:
-NOT_APPLICABLE
-
-Documentation Accuracy:
-PASS
+Source Integrity: PASS  
+Claim Support: PASS  
+Internal Consistency: PASS  
+Code Correctness: NOT_APPLICABLE  
+Tests: NOT_APPLICABLE  
+Documentation Accuracy: PASS  
 
 ## Blocking Issues
 
-None. Core claims regarding performance test classifications, percentile monitoring, bottleneck isolation strategies, and tooling trade-offs are solidly grounded in Tier 1 sources (Grafana k6, Microsoft Azure Well-Architected Framework, Google SRE).
+None.
 
 ## Non-Blocking Issues
 
-1. Source 10 (ISO/IEC 25010) is paywalled and verified via secondary summary.
-2. Source 16 (Spring IoC) is an extraneous entry carried over from earlier research, though explicitly marked as excluded.
-3. Minor third-party API simulation scenarios remain documented in open questions for implementation phases.
+1. **Residual Out-of-Scope Entries**: Source 16 (Spring IoC) and Contradiction 6 (Service Locator) from Lab 16 remain in catalog files (explicitly marked as excluded in text, but should be removed during revision).
+2. **Wikipedia Citation for ISO/IEC Standard**: Source 10 references Wikipedia for ISO/IEC 25010 Quality Model. While summary is accurate, citing standard documentation directly is preferred.
+3. **Uneven Primary Source Coverage for JMeter/Gatling**: While k6 and Locust have dedicated primary URLs in `02-sources.md`, JMeter and Gatling lack individual entries in `02-sources.md`.
 
 ## Required Revisions
 
-None.
+1. Purge residual Lab 16 Spring IoC / Service Locator artifacts from `research/02-sources.md` and `research/04-contradictions.md`.
+2. Add dedicated primary documentation URLs for Apache JMeter and Gatling in `research/02-sources.md`.
+3. Clarify in `research/01-plan.md` that numeric SLA recommendations (P95 < 500ms, etc.) are contextual illustrative targets.
 
 ## Final Status
 
-APPROVED
+APPROVED_WITH_WARNINGS
