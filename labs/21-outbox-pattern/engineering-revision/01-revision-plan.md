@@ -1,24 +1,26 @@
 # Engineering Revision Plan
 
 Target Lab: labs/21-outbox-pattern
-Previous Verdict: APPROVED_WITH_WARNINGS
+Previous Verdict: APPROVED / APPROVED_WITH_WARNINGS
 
 ## Blocking Issues
 None.
 
 ## Non-Blocking Issues
-1. `Relay.Start()` / `Relay.Stop()` not lifecycle-safe: double-close of `stopChan` causes panic; multiple `Start()` leaks goroutines.
-2. Missing test exercising relay retry and eventual delivery after transient broker failure.
+1. Concurrency test in `tests/outbox_test.go` used identical order IDs and lacked assertions on published/processed counts.
+2. Consumer concurrency not exercised under `-race` test suite.
+3. Minor documentation discrepancy in `engineering/01-design.md` referencing SQLite DB schema diagram instead of custom in-memory transactional database.
 
 ## Files To Change
-- `internal/outbox/relay.go`: Add `sync.Once` guards to `Start()` and `Stop()`.
+- `tests/outbox_test.go`
+- `engineering/01-design.md`
 
 ## Tests To Add/Modify
-- `tests/outbox_test.go`: Add `TestTransactionalOutbox_RelayRetryAfterBrokerFailure` verifying transient broker failure retry and `Start()`/`Stop()` idempotency.
+- Modify `TestTransactionalOutbox_ConcurrentWrites`: Unique order IDs per worker/iteration, assert total messages published and pending messages queue drained.
+- Add `TestTransactionalOutbox_ConcurrentConsumers`: Test concurrent message handling across multiple goroutines with duplicate event IDs under `-race`.
 
 ## Validation Commands
 ```bash
-cd labs/21-outbox-pattern
 go test -v ./...
 go test -race ./...
 go run ./cmd/demo

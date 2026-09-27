@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -150,23 +151,46 @@ func TestTransactionalOutbox_ConcurrentWrites(t *testing.T) {
 	var wg sync.WaitGroup
 	workers := 10
 	ordersPerWorker := 10
+	totalExpected := workers * ordersPerWorker
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func(wID int) {
 			defer wg.Done()
 			for j := 0; j < ordersPerWorker; j++ {
-				_ = service.CreateOrderWithOutbox(
-					"o-concurrent-1", // Using same or different doesn't matter for race check
+				orderID := fmt.Sprintf("o-concurrent-%d-%d", wID, j)
+				err := service.CreateOrderWithOutbox(
+					orderID,
 					"c-multi",
 					float64(wID*100+j),
 				)
+				if err != nil {
+					t.Errorf("failed to create order: %v", err)
+				}
 			}
 		}(i)
 	}
 
 	wg.Wait()
-	time.Sleep(50 * time.Millisecond) // Let relay catch up
+
+	// Wait for relay to process all orders
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(broker.GetPublished()) == totalExpected {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	published := broker.GetPublished()
+	if len(published) != totalExpected {
+		t.Fatalf("expected %d messages published, got %d", totalExpected, len(published))
+	}
+
+	pending := db.GetPendingOutbox()
+	if len(pending) != 0 {
+		t.Fatalf("expected 0 pending messages, got %d", len(pending))
+	}
 }
 
 func TestTransactionalOutbox_PurgeProcessed(t *testing.T) {
@@ -236,5 +260,34 @@ func TestTransactionalOutbox_RelayRetryAfterBrokerFailure(t *testing.T) {
 
 	if !consumer.Handle(published[0]) {
 		t.Fatalf("expected consumer to process retried message")
+	}
+}
+
+func TestTransactionalOutbox_ConcurrentConsumers(t *testing.T) {
+	consumer := outbox.NewConsumer()
+	var wg sync.WaitGroup
+	workers := 10
+	messagesPerWorker := 20
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(wID int) {
+			defer wg.Done()
+			for j := 0; j < messagesPerWorker; j++ {
+				msg := outbox.OutboxMessage{
+					ID:        fmt.Sprintf("evt-shared-%d", j), // Overlapping IDs to test concurrent deduplication
+					EventType: "OrderCreated",
+					Payload:   "test-data",
+				}
+				consumer.Handle(msg)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Only messagesPerWorker unique IDs should have been accepted
+	if consumer.GetReceivedCount() != messagesPerWorker {
+		t.Fatalf("expected exactly %d unique messages processed, got %d", messagesPerWorker, consumer.GetReceivedCount())
 	}
 }

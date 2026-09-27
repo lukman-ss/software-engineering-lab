@@ -31,7 +31,7 @@ The Transactional Outbox pattern guarantees atomic persistence of business opera
                     |
                     v (Single DB Tx)
       +-----------------------------+
-      |  SQLite Database            |
+      |  In-Memory Tx DB            |
       |  - orders table             |
       |  - outbox_events table      |
       +-----------------------------+
@@ -47,7 +47,7 @@ The Transactional Outbox pattern guarantees atomic persistence of business opera
 ```
 
 ## Components
-- `SQLite DB`: Embedded SQL engine storing business data (`orders`) and outbox queue (`outbox_events`).
+- `In-Memory Tx DB`: Pure Go thread-safe transactional database storing business data (`orders`) and outbox queue (`outbox_events`).
 - `OrderService`: Business service performing atomic order creation + outbox insertion.
 - `OutboxRelay`: Background worker polling pending events, delivering to broker, marking processed, with retry / cleanup support.
 - `MessageBroker`: In-memory broker interface simulating async event transport with configurable fault injection (failures, latency, retries).

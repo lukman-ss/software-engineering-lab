@@ -1,28 +1,26 @@
-# Engineering Changes Made
-
-Target Lab: labs/21-outbox-pattern
-Previous Verdict: APPROVED_WITH_WARNINGS
-
 ## Revision 1
 
-Audit Issue: `Relay.Start()` and `Relay.Stop()` lifecycle safety (prevent multiple start goroutine leaks and double close panic).
-Severity: MEDIUM
-Files Changed:
-- `internal/outbox/relay.go`
-Action: Added `startOnce` and `stopOnce` `sync.Once` guards to `Relay.Start()` and `Relay.Stop()`.
-Verification:
-- `go test -v ./...` passed.
-- `go test -race ./...` passed without race or panic.
+Audit Issue: DOC_CODE_MISMATCH in design diagram (SQLite reference)
+Severity: LOW
+Files Changed: `engineering/01-design.md`
+Action: Updated architecture diagram and component description to reflect the in-memory transactional database implementation.
+Verification: Inspection of `engineering/01-design.md`.
 Status: RESOLVED
 
 ## Revision 2
 
-Audit Issue: Lack of test verifying relay retry and delivery after transient broker failure.
-Severity: LOW
-Files Changed:
-- `tests/outbox_test.go`
-Action: Added `TestTransactionalOutbox_RelayRetryAfterBrokerFailure` simulating broker failure on initial poll and asserting successful recovery, dispatch, and consumer processing on subsequent poll.
-Verification:
-- `go test -v -run TestTransactionalOutbox_RelayRetryAfterBrokerFailure ./...` passed.
-- `go test -race ./...` passed.
+Audit Issue: Weak concurrency testing in `TestTransactionalOutbox_ConcurrentWrites`
+Severity: MEDIUM
+Files Changed: `tests/outbox_test.go`
+Action: Refactored test to generate unique order IDs per goroutine iteration and added assertions for total published messages and zero pending outbox state.
+Verification: `go test -v ./...` & `go test -race ./...`
+Status: RESOLVED
+
+## Revision 3
+
+Audit Issue: Untested concurrent consumer handling
+Severity: MEDIUM
+Files Changed: `tests/outbox_test.go`
+Action: Added `TestTransactionalOutbox_ConcurrentConsumers` to stress consumer deduplication under race conditions.
+Verification: `go test -race ./...`
 Status: RESOLVED

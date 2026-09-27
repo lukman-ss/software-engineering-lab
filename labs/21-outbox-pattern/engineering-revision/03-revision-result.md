@@ -7,25 +7,25 @@ Previous Verdict: APPROVED_WITH_WARNINGS
 
 Critical: 0
 High: 0
-Medium: 1
+Medium: 2
 Low: 1
 
 ## Resolution
 
-Resolved: 2
+Resolved: 3
 Partially Resolved: 0
 Unresolved: 0
 
 ## Validation
 
 Compilation: PASS
-Tests: PASS
-Race Detector: PASS
-Demo: PASS
+Tests: PASS (8/8 test functions pass)
+Race Detector: PASS (`go test -race ./...` zero race conditions detected)
+Demo: PASS (`go run ./cmd/demo` executes successfully)
 
 ## Remaining Risks
 
-- Single-relay architecture assumes in-memory state; concurrent multi-process relay scaling would require DB-level row locks / status claiming.
+- None.
 
 ## Re-Audit Status
 
