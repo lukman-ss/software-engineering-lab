@@ -1,7 +1,7 @@
 # Engineering Audit Verdict
 
-Target Lab: `labs/23-optimistic-vs-pessimistic-locking`
-Audit Date: Sat Sep 26 2026
+Target Lab: labs/23-optimistic-vs-pessimistic-locking
+Audit Date: 2026-09-27
 
 ## Summary
 

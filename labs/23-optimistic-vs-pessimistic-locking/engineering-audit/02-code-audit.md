@@ -1,55 +1,39 @@
 # Code Audit
 
-## Finding 1
+Target Lab: labs/23-optimistic-vs-pessimistic-locking
 
-Location: `internal/inventory/store.go:53-61`
-Claimed Behavior: Safe concurrent reading of product state.
-Observed Implementation: `Get(id)` acquires `s.mu.Lock()` and returns a copy of `Product` (`*p`), ensuring thread-safe reads of the map and struct contents.
+## Finding 1: In-Memory Row Locking Simulation
+
+Location: `internal/inventory/store.go:42-51, 91-116`
+Claimed Behavior: Simulates `SELECT ... FOR UPDATE` row exclusivity with per-row locks.
+Observed Implementation: `Store` uses `map[int]*sync.Mutex` with synchronized retrieval and acquisition in `PessimisticDeduct`. Dedicated mutex per ID ensures no cross-product contention.
 Assessment: PASS
 Severity: LOW
-Notes: Correct map synchronization and return by value prevents callers from mutating internal store pointer state directly.
+Notes: Concurrency safe and properly separates row lock lifecycle from storage map mutex.
 
-## Finding 2
+## Finding 2: Optimistic Concurrency Control with Version Guard
 
-Location: `internal/inventory/store.go:65-89`
-Claimed Behavior: Replicate naive unsynchronized read-modify-write lost update anomaly.
-Observed Implementation: `NaiveDeduct` calls `Get(id)` to read state (releasing mutex), sleeps 100 microseconds to simulate calculation window, then acquires `s.mu.Lock()` to write updated stock based on stale read state (`p.Stock - qty`).
+Location: `internal/inventory/store.go:120-152` and `internal/inventory/service.go:28-45`
+Claimed Behavior: Simulates optimistic locking (`UPDATE ... WHERE id = ? AND version = ?`), detects conflicts when version deviates, and supports backoff retry.
+Observed Implementation: Version check `curr.Version != p.Version` inside critical section increments `OptimisticFails` counter and returns `ErrOptimisticLock`. `DeductOptimisticWithRetry` applies jittered exponential backoff `(1<<attempt)*time.Millisecond + rand(5)ms`.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately replicates lost update behavior seen in applications reading data outside atomic database locks.
+Notes: Correctly models SQL version check semantics and retry handling.
 
-## Finding 3
+## Finding 3: Atomic Conditional Update
 
-Location: `internal/inventory/store.go:93-116`
-Claimed Behavior: Pessimistic locking row-level exclusivity (`SELECT ... FOR UPDATE`).
-Observed Implementation: `GetRowLock(id)` retrieves/creates a row `sync.Mutex`. `PessimisticDeduct` acquires `rowLock.Lock()`, then inside `s.mu.Lock()` checks existence/stock and mutates `p.Stock`.
+Location: `internal/inventory/store.go:154-173`
+Claimed Behavior: Simulates single-statement atomic update (`UPDATE ... SET stock = stock - N WHERE stock >= N`).
+Observed Implementation: Checks stock condition and deducts in a single mutex block, simulating SQL database engine-level row-lock and single statement execution.
 Assessment: PASS
 Severity: LOW
-Notes: Granular row mutex ensures exclusive access across concurrently operating goroutines per product ID without global table locking.
+Notes: Correctly captures lock-free application level pattern that relies on DB atomic statement guarantees.
 
-## Finding 4
+## Finding 4: Input Validation and Error Propagation
 
-Location: `internal/inventory/store.go:120-152`
-Claimed Behavior: Optimistic locking version guard check (`UPDATE ... WHERE id = ? AND version = ?`).
-Observed Implementation: Reads product state via `Get(id)`, pauses 50 microseconds, acquires `s.mu.Lock()`, checks if `curr.Version != p.Version`. If modified, increments `OptimisticFails` counter and returns `ErrOptimisticLock`. Otherwise updates `Stock` and increments `Version`.
+Location: `internal/inventory/store.go:66, 94, 121, 156`
+Claimed Behavior: Validates input quantities and returns structured domain errors.
+Observed Implementation: Returns `ErrInvalidQuantity` for `qty <= 0`, `ErrNotFound` for non-existent products, and `ErrInsufficientStock` when balance is inadequate.
 Assessment: PASS
 Severity: LOW
-Notes: Version guard accurately simulates Optimistic Concurrency Control (OCC).
-
-## Finding 5
-
-Location: `internal/inventory/service.go:28-45`
-Claimed Behavior: Optimistic concurrency control retry loop with jittered exponential backoff.
-Observed Implementation: Retries up to `maxRetries` upon receiving `ErrOptimisticLock`. Calculates `(1<<attempt)*ms + rand(0..5ms)` backoff delay before re-attempting operation. Non-optimistic errors fail fast immediately.
-Assessment: PASS
-Severity: LOW
-Notes: Idiomatic retry loop prevents thundering herd problem.
-
-## Finding 6
-
-Location: `internal/inventory/store.go:155-173`
-Claimed Behavior: Atomic single-statement update (`UPDATE ... WHERE stock >= qty`).
-Observed Implementation: Checks stock and updates state within a single mutex-protected block (`s.mu.Lock()`), incrementing `Atomically` counter.
-Assessment: PASS
-Severity: LOW
-Notes: Effectively models database statement-level atomic execution where read and write occur in a single non-interleavable operation.
+Notes: Standard error handling follows idiomatic Go patterns.
