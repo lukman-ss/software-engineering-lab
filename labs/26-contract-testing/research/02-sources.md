@@ -1,113 +1,99 @@
-# Sources
-
-Research date: 2026-09-26. All sources opened and inspected via full fetch, not snippets.
-
 ## Source 1
 
-Title: Introduction - Pact Docs
+Title: Pact Documentation - Introduction
 Publisher: Pact Foundation
 URL: https://docs.pact.io/
-Published: Last updated Aug 25, 2026
-Accessed: 2026-09-26
-Source Tier: Tier 1 (official tool documentation)
-Relevance: Core definition of contract testing, consumer-driven contracts, Pact vs schema testing distinction.
+Published: Updated Aug 25, 2026 (as seen in page)
+Accessed: 2026-09-27
+Source Tier: Tier 1 (official documentation)
+Relevance: Provides definition of contract testing, how Pact works, consumer-driven contracts concept.
 
 ## Source 2
 
-Title: How Pact works
-Publisher: Pact Foundation
-URL: https://docs.pact.io/getting_started/how_pact_works
-Published: Last updated Dec 23, 2024
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Consumer test + provider verification mechanics, provider states, Message Pact for async systems.
+Title: Contract Test (bliki)
+Publisher: Martin Fowler
+URL: https://martinfowler.com/bliki/ContractTest.html
+Published: 12 January 2011 (with revision 2018-01-01)
+Accessed: 2026-09-27
+Source Tier: Tier 1 (authoritative expert)
+Relevance: Explains contract testing as a technique to test integration points by checking messages conform to a shared understanding.
 
 ## Source 3
 
-Title: When to use Pact
-Publisher: Pact Foundation
-URL: https://docs.pact.io/getting_started/what_is_pact_good_for
-Published: Last updated Apr 13, 2022
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Scope and limitations — when Pact is / is not appropriate (public APIs, pass-through APIs, performance).
+Title: Consumer-Driven Contracts: A Service Evolution Pattern
+Publisher: Martin Fowler
+URL: https://martinfowler.com/articles/consumerDrivenContracts.html
+Published: 12 June 2006
+Accessed: 2026-09-27
+Source Tier: Tier 1 (authoritative expert)
+Relevance: Discusses consumer-driven contracts pattern, provider vs consumer contracts, benefits and liabilities.
 
 ## Source 4
 
-Title: Consumer-Driven Contracts: A Service Evolution Pattern
-Publisher: martinfowler.com / Ian Robinson (ThoughtWorks)
-URL: https://martinfowler.com/articles/consumerDrivenContracts.html
-Published: 12 June 2006
-Accessed: 2026-09-26
-Source Tier: Tier 1 (pattern originator, primary historical evidence)
-Relevance: Foundational theory: provider vs consumer vs consumer-driven contracts, schema versioning, breaking changes, just-enough validation.
+Title: Spring Cloud Contract (archived repository)
+Publisher: Spring Attic (archived by Pivotal, now VMware)
+URL: https://github.com/spring-attic/spring-cloud-contract
+Published: Archived Jul 7, 2026
+Accessed: 2026-09-27
+Source Tier: Tier 1 (official documentation, though archived)
+Relevance: Provides another implementation of consumer-driven contracts for Spring applications.
 
 ## Source 5
 
-Title: ContractTest (bliki)
-Publisher: martinfowler.com / Martin Fowler
-URL: https://martinfowler.com/bliki/ContractTest.html
-Published: 12 January 2011 (revised 2018-01-01)
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Canonical contract test definition: test doubles vs real service, cadence, communication aspect.
+Title: Pact Getting Started Guide (5 minute guide)
+Publisher: Pact Foundation
+URL: https://docs.pact.io/getting_started/5_minute_getting_started_guide
+Published: Not explicitly stated, but part of Pact docs updated Aug 25, 2026
+Accessed: 2026-09-27
+Source Tier: Tier 1 (official documentation)
+Relevance: Practical steps to write contract tests with Pact.
 
 ## Source 6
 
-Title: Contract Tests vs Functional Tests
+Title: Pact - How Pact Works
 Publisher: Pact Foundation
-URL: https://docs.pact.io/consumer/contract_tests_not_functional_tests
-Published: Last updated Mar 2, 2022
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Boundary between contract and functional testing; over-specification anti-pattern (validation rules example).
+URL: https://docs.pact.io/getting_started/how_pact_works
+Published: Dec 23, 2024 (per page footer)
+Accessed: 2026-09-27
+Source Tier: Tier 1 (official documentation)
+Relevance: Detailed workflow for consumer testing, provider verification, provider states, and message pacts.
 
 ## Source 7
 
-Title: FAQ - Pact Docs
+Title: Pact - Contract Tests vs Functional Tests
 Publisher: Pact Foundation
-URL: https://docs.pact.io/faq
-Published: Last updated Oct 21, 2025
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Breaking-change workflow (expand/contract), versioning, E2E replacement guidance, DORA metrics, can-i-deploy, GraphQL/SOAP/Protobuf stance.
+URL: https://docs.pact.io/consumer/contract_tests_not_functional_tests
+Published: Mar 2, 2022
+Accessed: 2026-09-27
+Source Tier: Tier 1 (official documentation)
+Relevance: Best practices for avoiding over-specification; clear responsibility matrix between test types.
 
 ## Source 8
 
-Title: CI/CD Setup Guide (Pact Nirvana)
+Title: Pact Broker - Can I Deploy
 Publisher: Pact Foundation
-URL: https://docs.pact.io/pact_nirvana
-Published: Last updated Jan 13, 2025
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: CI integration stages (Bronze → Diamond), Pact Broker role, independent deployability goal.
+URL: https://docs.pact.io/pact_broker/can_i_deploy
+Published: Oct 5, 2022
+Accessed: 2026-09-27
+Source Tier: Tier 1 (official documentation)
+Relevance: CI/CD gate using Pact Matrix; can-i-deploy and record-deployment commands.
 
 ## Source 9
 
-Title: Parallel Change (expand and contract)
-Publisher: martinfowler.com / Danilo Sato
-URL: https://martinfowler.com/bliki/ParallelChange.html
-Published: 13 May 2014
-Accessed: 2026-09-26
-Source Tier: Tier 1
-Relevance: Three-phase pattern (expand → migrate → contract) for safe breaking changes; API evolution alternative to versioning.
+Title: Contract Testing Vs Integration Testing
+Publisher: Pactflow / SmartBear
+URL: https://pactflow.io/blog/contract-testing-vs-integration-testing/
+Published: Updated Jan 4, 2023
+Accessed: 2026-09-27
+Source Tier: Tier 2 (reputable vendor blog)
+Relevance: Comparison of test types, rebalanced test pyramid with contract testing, benefits/limitations table.
 
 ## Source 10
 
-Title: spring-cloud-contract (archived repository)
-Publisher: spring-attic / Spring (GitHub)
-URL: https://github.com/spring-attic/spring-cloud-contract
-Published: Archived by owner Jul 7, 2026; maintenance moved to Stubborn.sh
-Accessed: 2026-09-26
-Source Tier: Tier 1 (official company documentation, now historical)
-Relevance: Documents provider-driven CDC alternative in Spring ecosystem; confirms project end-of-life — freshness risk for labs recommending it.
-
-## Source 11
-
-Title: AsyncAPI Initiative — Docs (Concepts, Tutorials)
-Publisher: AsyncAPI Initiative (Linux Foundation project)
-URL: https://www.asyncapi.com/docs/tutorials and https://www.asyncapi.com/docs/concepts
-Published: Living docs (no single date); site self-describes as "Building the future of Event-Driven Architectures"
-Accessed: 2026-09-26
-Source Tier: Tier 1 (official specification community)
-Relevance: Event-driven contract analogue to OpenAPI; supports lab claim that contracts apply to Kafka/RabbitMQ/webhooks. Page bodies fetched were navigation-heavy; spec detail NOT VERIFIED beyond positioning.
+Title: Google AIP-185 - API Versioning
+Publisher: Google (API Improvement Proposals)
+URL: https://google.aip.dev/185
+Published: 2024-10-22
+Accessed: 2026-09-27
+Source Tier: Tier 1 (standards)
+Relevance: Authoritative versioning strategy: major version required for incompatible changes; concurrent version support; stability channels.

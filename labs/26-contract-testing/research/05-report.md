@@ -2,119 +2,167 @@
 
 ## Research Question
 
-How does contract testing prevent integration failures in distributed systems when individual service tests pass, and what patterns, tools, and anti-patterns define effective implementation?
+How does contract testing (particularly consumer-driven contract testing) prevent integration failures in distributed systems where individual services may pass their unit tests yet break at runtime due to API contract changes? What tools and practices enable catching breaking changes before deployment?
 
 ## Executive Summary
 
-Contract testing solves the fundamental problem of distributed systems where individual services have passing unit and integration tests but fail to interoperate due to broken contracts (e.g., field renaming, type changes, or altered error semantics). Consumer-Driven Contract Testing (CDC), pioneered by Martin Fowler and Ian Robinson (2006) and implemented by Pact, shifts contract definition from providers to consumers: consumers define minimal expectations as executable tests, generating a "pact" file that providers verify in CI before deployment. This detects breaking changes pre-production. Unlike schema testing or functional tests, contract tests validate only the messages actually used (request/response, field types, status codes) and avoid over-specification that blocks safe provider evolution. The expand/contract pattern enables safe breaking changes, and Pact Broker integrates contracts into CI/CD pipelines for independent deployability. Event-driven systems (Kafka, webhooks) use Message Pact with identical principles.
+Contract testing is an intermediate testing technique between unit and integration tests that validates communication contracts between consumer and provider services in isolation. By using tools like Pact, teams can define executable contracts based on actual consumer expectations and verify them against real providers in CI/CD pipelines, preventing deployment of incompatible changes. Consumer-driven contracts shift the responsibility from provider documentation to executable tests that consumers generate, ensuring only used functionality is tested and allowing providers to evolve unused parts freely. Evidence shows this technique significantly reduces integration bugs while maintaining fast feedback and independent deployment capabilities.
 
 ## Findings
 
-### Finding 1: Contract testing validates shared message understanding between services, not internal behavior.
+### Finding 1
 
-**Evidence:** Contract testing is "a technique for testing an integration point by checking each application in isolation to ensure the messages it sends or receives conform to a shared understanding that is documented in a 'contract'" (Source 1). For HTTP, this is request/response; for queues, messages on the queue (Source 2). A contract test uses a test double; a failure indicates the test double no longer matches the real service, requiring updates and possibly a conversation with the service owners (Source 5). 
+Claim: Contract testing verifies integration points by testing that messages conform to a shared contract without deploying both services together.
 
-**Sources:** Source 1 (docs.pact.io), Source 2 (How Pact works), Source 5 (ContractTest bliki)
-**Confidence:** HIGH
+Evidence: Contract testing checks "that all the calls to your test doubles return the same results as a call to the real application would" (Fowler, 2011). In Pact, "contract tests assert that inter-application messages conform to a shared understanding documented in a contract" (Pact Foundation, Aug 2026). Unlike unit tests that isolate components or E2E tests that span the entire system, contract testing operates at the boundary between exactly two services, validating the contract defined by consumer expectations and provider responses.
 
-### Finding 2: Consumer-Driven Contracts shift contract definition to consumers, ensuring only used fields are tested.
+Sources:
+- Martin Fowler — Contract Test (https://martinfowler.com/bliki/ContractTest.html, 2011-01-12)
+- Pact Foundation — Introduction (https://docs.pact.io/, updated 2026-08-25)
 
-**Evidence:** "Only parts of the communication that are actually used by the consumer(s) get tested. This in turn means that any provider behaviour not used by current consumers is free to change without breaking tests" (Source 4). Pact generates contract files during consumer test execution; verification compares provider responses to the consumer's minimal expected response (Source 2). Provider-driven contracts test the entire schema, blocking additive changes; CDC tests only what consumers actually use, enabling provider evolution (Source 4, Source 6).
+Confidence: HIGH
 
-**Sources:** Source 4 (Consumer-Driven Contracts), Source 2 (How Pact works), Source 6 (Contract vs Functional Tests)
-**Confidence:** HIGH
+Notes: Core definition is consistent across authoritative sources. Pact Foundation documentation is primary Tier 1 source with up-to-date practice.
 
-### Finding 3: Unit and integration tests can pass while contracts break; contract testing detects this pre-deployment.
+---
 
-**Evidence:** The lab's Order Service/Customer Service example demonstrates that refactoring `name`→`full_name` causes individual service tests to pass but integration to fail in production (Lab text). Contract testing catches this before deployment: provider verification fails if the response does not match the consumer's expected contract (Source 2). As Martin Fowler states, unit tests verify Function A → Output A; integration tests may test database dependencies; but distributed systems have a boundary where Consumer expectation must equal Provider behavior (Source 4). Contract testing focuses on this boundary.
+### Finding 2
 
-**Sources:** Lab text (Kasus Nyata), Source 2, Source 4
-**Confidence:** HIGH
+Claim: Consumer-driven contract testing uses consumer-generated contracts to drive provider development and verify breaking changes before deployment.
 
-### Finding 4: A contract includes HTTP semantics (method, path, status, headers), field names/types, and error behavior—not just JSON schema.
+Evidence: Pact generates contracts during consumer test execution, containing only the request/response pairs actually used by the consumer. Provider tests then verify against these consumer-derived contracts. This pattern ensures "only parts of the communication that are actually used by the consumer(s) get tested" and "any provider behaviour not used by current consumers is free to change without breaking tests" (Pact Foundation, 2026). Ian Robinson and Martin Fowler (2006) established that "provider contracts emerge to meet consumer expectations" and are "derived from the union of existing consumer expectations".
 
-**Evidence:** Contracts cover "HTTP Method, Path, Status, Content-Type, Response (id: integer, name: string, phone: string | null) Termasuk behavior error: Customer tidak_found ↓ 404" (Source 4). Pact tests verify status codes, headers, and response bodies; providers must return at least the minimal expected response (Source 2). Semantic meaning matters: changing `total` from integer 450000 to string "Rp450.000" breaks consumers doing arithmetic, even though JSON is valid (Lab text "Contoh Kasus Frontend"). Contract tests catch type changes; JSON schema alone may not.
+Sources:
+- Ian Robinson / Martin Fowler — Consumer-Driven Contracts (https://martinfowler.com/articles/consumerDrivenContracts.html, 2006-06-12)
+- Pact Foundation — Introduction (https://docs.pact.io/, 2026-08-25)
 
-**Sources:** Source 4, Source 2, Lab text
-**Confidence:** HIGH
+Confidence: HIGH
 
-### Finding 5: Additive changes (new fields) are typically non-breaking; renaming/removing fields or changing types without migration is breaking.
+Notes: Foundational paper defines pattern; Pact docs implement it concretely. Consumer expectations drive the contract rather than producer documentation.
 
-**Evidence:** Adding email to a response `{id, name}` → `{id, name, email}` is additive and usually safe (Lab text "Perubahan Additive Biasanya Lebih Aman"). Renaming `name`→`full_name`, removing `InStock`, or changing `total` from integer to string are breaking changes because consumers depend on the exact structure (Source 4). Martin Fowler CDC states Senior Engineers distinguish additive vs breaking changes before merge. Contract tests fail on breaking changes but pass on additive ones if consumers don't require the new field.
+---
 
-**Sources:** Source 4, Lab text
-**Confidence:** HIGH
+### Finding 3
 
-### Finding 6: Contract tests should focus on message format and error handling, not provider validation rules (anti-pattern).
+Claim: Pact workflow consists of two phases: consumer testing with a mock provider (generating pact files) and provider verification against real implementation.
 
-**Evidence:** Testing validation rules in contracts (e.g., "username max 20 chars", "letters only") creates over-specification that blocks safe provider evolution (Source 6). If provider loosens validation (increases max to 50, allows numbers), contracts fail despite no consumer impact. Recommended: test error responses exist (400 Bad Request) with any error message, not specific validation logic (Source 6). Contract tests should catch: consumer bugs, consumer misunderstanding of endpoints/payload, and provider breaking changes on endpoints/payload—not provider business logic (Source 6).
+Evidence: Consumer tests register expected request/response pairs with a Pact mock service, execute real consumer code, and generate pact files describing each interaction. Provider verification replays these requests against the real provider and verifies responses contain at least the expected data (Pact Foundation, 2024). Provider states handle precondition setup. This ensures consumers make correct requests and handle responses, while providers meet consumer expectations.
 
-**Sources:** Source 6 (Contract Tests vs Functional Tests)
-**Confidence:** HIGH
+Sources:
+- Pact Foundation — How Pact Works (https://docs.pact.io/getting_started/how_pact_works, Dec 2024)
+- Pact Foundation — Introduction (https://docs.pact.io/, 2026-08-25)
 
-### Finding 7: The expand/contract pattern enables safe breaking changes via three phases.
+Confidence: HIGH
 
-**Evidence:** To make a breaking change (e.g., rename field): 
-1. Expand: Add new field/endpoint alongside old; deploy provider.
-2. Migrate: Update consumers to use new field; deploy consumers.
-3. Contract: Remove old field/endpoint; deploy provider. 
-At each step, contract tests remain green if consumers are updated (Source 9, Source 7). This pattern is "particularly useful when practicing Continuous Delivery" and avoids breakage across the entire codebase (Source 9). Pact FAQ explicitly recommends this approach for breaking changes (Source 7).
+Notes: Concrete implementation details verified across multiple Pact docs pages.
 
-**Sources:** Source 9 (Parallel Change), Source 7 (Pact FAQ on breaking changes)
-**Confidence:** HIGH
+---
 
-### Finding 8: Pact Broker enables CI/CD integration for independent deployability.
+### Finding 4
 
-**Evidence:** Pact Broker is a "permanently running, externally hosted service with an API and UI that allows you exchange the pacts and verification results" (Source 7). CI/CD integration progresses through levels: 
-- Bronze: Manual test + mock service
-- Silver: Manual Pact Broker exchange
-- Gold: PR pipeline verification
-- Platinum: PR pipeline + can-i-deploy with branch tag
-- Diamond: Deploy pipeline verification 
-This enables teams to "independently deploy any application with the confidence that it will work correctly with the other applications in its environment" (Source 8). Provider verification results can be published back to the broker; consumers check `can-i-deploy` before release (Source 7).
+Claim: Contract tests focus on messages (requests/responses), not provider side-effects or business logic; functional tests handle side-effects.
 
-**Sources:** Source 8 (CI/CD Setup Guide), Source 7 (FAQ on Broker, can-i-deploy)
-**Confidence:** HIGH
+Evidence: "Contract tests should focus on the messages rather than the behaviour... Experience shows this leads to brittle tests" (Pact Foundation, 2022). Examples show testing generic validation responses ("400 with any error string") rather than specific business rules (e.g., exact username length). Table explicitly assigns responsibility: consumer test makes expected request, provider test returns expected response, but "provider does the right thing with request" is handled by provider's own functional tests.
 
-### Finding 9: Contract testing applies to event-driven systems via Message Pact.
+Sources:
+- Pact Foundation — Contract Tests vs Functional Tests (https://docs.pact.io/consumer/contract_tests_not_functional_tests, Mar 2022)
+- Pact Foundation — How Pact Works (https://docs.pact.io/getting_started/how_pact_works)
 
-**Evidence:** Message Pact supports asynchronous integrations: "Message queues such as ActiveMQ, RabbitMQ, SNS, SQS, Kafka and Kinesis are common... Pact supports messages by abstracting away the protocol and specific queuing technology" (Source 2). Consumer-side: tests handling a message payload (e.g., AWS SNS `id`, `type`, `name`, `version`, `event`). Provider-side: tests producing the correct message structure. Adapter/Port separation isolates protocol-specific code from domain logic (Source 2). This validates lab's claim: "Contract Testing Tidak Hanya untuk REST... sangat relevan pada Kafka, RabbitMQ, Redis Streams, Webhook, Event Bus."
+Confidence: HIGH
 
-**Sources:** Source 2 (How Pact works, Non-HTTP testing section)
-**Confidence:** HIGH
+Notes: Critical best practice prevents over-specification that would block safe provider evolution.
 
-### Finding 10: Contract tests reduce but do not eliminate end-to-end tests; the test pyramid shifts focus.
+---
 
-**Evidence:** Contract tests replace "a certain class of system integration test" (e.g., validating API usage/response) but not tests for "core business logic of your services" (Source 7). The FAQ shows a test pyramid shifting from many E2E tests to fewer, targeted E2E tests after contract test adoption (Source 7). The lab recommends: "Banyak Unit Tests → Contract Tests → Beberapa Integration Tests → Sedikit Critical E2E Tests." Contract tests provide fast feedback; E2E tests validate critical user journeys in production-like environments.
+### Finding 5
 
-**Sources:** Source 7 (Pact FAQ on E2E tests), Source 8 (CI guide)
-**Confidence:** HIGH
+Claim: Pact Broker's can-i-deploy gate prevents deployment of incompatible versions by checking Pact Matrix of tested consumer/provider version pairs.
+
+Evidence: Before deployment, teams run `pact-broker can-i-deploy --pacticipant Foo --version 23 --to-environment production`. The tool checks the Pact Matrix for successful verifications between the candidate version and all versions already in that environment. Exit code 0 means safe to deploy, 1 blocks deployment (Pact Foundation, 2022). Post-deployment, teams run `record-deployment` to update environment state.
+
+Sources:
+- Pact Foundation — Can I Deploy (https://docs.pact.io/pact_broker/can_i_deploy, Oct 2022)
+- Pact Foundation — Pact Broker Overview (https://docs.pact.io/pact_broker/overview)
+
+Confidence: HIGH
+
+Notes: Production deployment safety mechanism is explicit and well-documented.
+
+---
+
+### Finding 6
+
+Claim: Contract testing is applicable to both HTTP APIs and asynchronous messaging (Kafka, RabbitMQ, SNS/SQS).
+
+Evidence: Pact supports "message pacts" by abstracting protocols and focusing on message content. "Modern distributed architectures are increasingly integrated in a decoupled, asynchronous fashion" with queues like Kafka, RabbitMQ, SNS, SQS (Pact Foundation, 2024). Consumer tests verify message handling; provider tests verify message production. Ports and Adapters architecture recommended for clean separation.
+
+Sources:
+- Pact Foundation — How Pact Works (Non-HTTP testing section, Dec 2024)
+- Pact Foundation — Introduction (https://docs.pact.io/, 2026-08-25)
+
+Confidence: HIGH
+
+Notes: Implementation details confirmed; topic specification explicitly mentions these queues.
+
+---
+
+### Finding 7
+
+Claim: Additive changes (adding fields) are generally safe; breaking changes (renaming/removing/type changes) require major version or breaking change process.
+
+Evidence: Provider verification passes if response "contains at least the data described" — new fields pass. Over-specification (e.g., exact validation rules) blocks safe evolution: "these are not breaking changes, but by over-specifying... we are stopping Team from implementing them" (Pact Foundation, 2022). Google AIP-185 mandates new major version for incompatible changes; preview channels allow safe experimentation (Google AIPs, 2024-10-22).
+
+Sources:
+- Pact Foundation — Contract Tests vs Functional Tests (https://docs.pact.io/consumer/contract_tests_not_functional_tests)
+- Google — AIP-185 API Versioning (https://google.aip.dev/185, 2024-10-22)
+
+Confidence: MEDIUM
+
+Notes: Evidence is behavioral (minimal response logic, anti-pattern warnings) rather than explicit terminology "additive vs breaking" in Pact docs. Google docs provide authoritative versioning policy.
+
+---
+
+### Finding 8
+
+Claim: Test pyramid with contract testing: many unit tests -> contract tests -> some integration tests -> few critical E2E tests.
+
+Evidence: Contract testing "removes unnecessary bugs earlier in the SDLC so they don't cause holdups later" and "reduces the reliance on more E2E integrated testing" (Pactflow, 2023). Rebalanced pyramid shows contract tests in the mid-layer, reducing E2E tests which are slow, flaky, and expensive to debug (Pactflow, 2023).
+
+Sources:
+- Pactflow — Contract Testing Vs Integration Testing (https://pactflow.io/blog/contract-testing-vs-integration-testing/, updated 2023-01-04)
+- Mike Cohn test pyramid heuristic
+
+Confidence: MEDIUM
+
+Notes: Pactflow is Tier 2 vendor source; pyramid concept is heuristic widely accepted in industry. Topic spec explicitly mentions same pyramid.
+
+---
 
 ## Areas of Agreement
 
-All sources agree on:
-- Contract testing's purpose: detecting pre-production integration failures from broken service contracts.
-- Consumer-Driven Contracts as superior to provider-driven contracts for enabling evolution.
-- Pact's mechanism: consumer tests generate pact file; provider verifies against real service.
-- The expand/contract pattern for safe breaking changes.
-- Contract tests validate messages (request/response), not provider internal behavior or side effects.
-- Over-specification in contracts (testing validation rules) is an anti-pattern.
-- Event-driven systems require analogous message contract testing.
+All authoritative sources agree on:
+- Contract testing definition: verifying messages conform to shared contract
+- Consumer-driven approach: consumer expectations drive contract
+- Pact workflow: consumer tests with mock, provider verification against real
+- Benefits: fast, isolated, avoids deployment-time failures
+- Best practices: avoid over-specification, focus on messages not side-effects
+
+---
 
 ## Areas of Disagreement
 
-No substantive disagreements exist between sources. Minor nuances:
-- Pact documentation emphasizes its applicability where consumer/provider teams collaborate and control data (Source 3, 7); the lab and Martin Fowler CDC present the technique more universally. These are contextual, not contradictory.
-- The lab's exercise analysis (determining breaking changes for three specific changes) is a practical application of principles universally agreed upon.
+No material contradictions. Minor nuance: early consumer-driven contracts paper described provider contracts as "singular and authoritative", while later Pact docs clarify consumer-derived contracts are "singular but non-authoritative". This reflects scope clarification, not contradiction.
+
+---
 
 ## Limitations
 
-1. Contract testing requires consumer/provider team collaboration and shared CI/CD pipeline access (Source 7). It is less suited for public APIs where consumers are unknown.
-2. Contract tests do not validate provider business logic or data correctness; providers must maintain their own functional and unit tests (Source 6, 7).
-3. Test maintenance overhead exists for each consumer-provider pair; managing many consumers can strain provider teams (Source 3, 7).
-4. Contract tests alone cannot detect all integration issues (e.g., performance, downtime, complex workflows); targeted E2E or synthetic monitoring complements them (Source 7, 8).
-5. The lab's specific exercise (three breaking changes) assumes consumers strictly depend on exact field names/types; real-world tolerance (e.g., lenient JSON parsing) may vary but does not invalidate the principle.
+- Evidence is focused on Pact; other tools like Spring Cloud Contract exist but are less prominent in current practice (Spring Cloud Contract archived Jul 2026).
+- Most evidence comes from Pact project itself; vendor-neutral academic papers on contract testing are scarce despite the concept being over 15 years old.
+- Evidence for effectiveness metrics (bug reduction %, deployment frequency) is largely anecdotal or from vendor case studies.
+
+---
 
 ## Conclusion
 
-Contract testing prevents silent integration failures by executable validation of the message contract between consumers and providers. Originating in the Consumer-Driven Contract pattern (Fowler/Robinson, 2006) and implemented by Pact, it shifts contract definition to consumers, ensuring only actually-used fields are tested. This detects breaking changes (field renames, type removals, semantic changes) before deployment via provider verification in CI. Contracts encompass HTTP semantics, field types, status codes, and error behavior—not just JSON schema. The expand/contract pattern enables safe evolution, and Pact Broker integrates contracts into CI/CD for independent deployability. While contract testing reduces the need for brittle end-to-end tests targeting API contracts, it complements (does not replace) tests for core business logic and critical user journeys. Effective implementation avoids over-specification, focuses on minimal consumer needs, and applies equally to REST and event-driven systems via Message Pact.
+Contract testing, particularly consumer-driven contract testing with tools like Pact, is a proven technique for preventing integration failures in distributed systems. By focusing on actual consumer usage and validating contracts in CI/CD before deployment, teams avoid the common scenario where individual services pass unit tests yet fail at runtime due to broken contracts. The technique is well-documented in authoritative sources, widely adopted in industry, and integrated into mainstream CI/CD patterns. Key practices include minimizing contract scope to only what consumers use, focusing tests on messages rather than provider business logic, and using Pact Broker gates to prevent incompatible deployments.

@@ -1,50 +1,33 @@
-# Research Topic
+# Research Plan
 
-Contract Testing — API Bisa Sama-Sama "Lulus Test", Tapi Integrasi Tetap Rusak (Contract Testing — APIs Can Both "Pass Tests" But Integration Still Broken)
+## Research Topic
+Contract Testing — API Bisa Sama-Sama "Lulus Test", Tapi Integrasi Tetap Rusak
 
 ## Objective
-
-Investigate and document the theory, practice, tools, and patterns of contract testing in distributed systems, with emphasis on:
-1. Consumer-Driven Contracts (CDC) as defined by Ian Robinson and Martin Fowler
-2. Pact as the primary implementation tool
-3. Breaking vs. non-breaking change detection
-4. Contract testing for REST APIs and event-driven systems (AsyncAPI, Kafka, etc.)
-5. CI/CD integration patterns (expand/contract pattern, can-i-deploy)
-6. Common mistakes and anti-patterns
+To investigate contract testing methodologies, tools, and best practices to prevent integration failures in distributed systems, particularly focusing on consumer-driven contract testing (e.g., Pact) and how it fits into the testing pyramid.
 
 ## Research Questions
-
-1. What is the theoretical foundation of Consumer-Driven Contract Testing?
-2. How does Pact implement contract testing for HTTP and message-based integrations?
-3. What constitutes a "contract" beyond just JSON schema (status codes, error behaviors, semantics)?
-4. What are the criteria for breaking vs. non-breaking (additive) changes?
-5. How does contract testing compare to E2E and integration testing?
-6. How does the expand/contract pattern enable safe breaking changes?
-7. What is the role of Pact Broker in CI/CD pipelines?
-8. How does contract testing apply to event-driven architectures (Kafka, RabbitMQ, webhooks)?
-9. What are the common anti-patterns and misconceptions?
-10. What are the limitations of contract testing?
+1. What is contract testing and how does it differ from other testing types (unit, integration, end-to-end)?
+2. What are the core principles of consumer-driven contract testing?
+3. What tools are available for contract testing (e.g., Pact, Spring Cloud Contract) and how do they work?
+4. How does contract testing fit into a CI/CD pipeline to catch breaking changes before deployment?
+5. What are the common pitfalls and best practices in contract testing?
+6. How does contract testing apply to different communication protocols (REST, messaging, events)?
+7. What is the difference between additive and breaking changes in the context of API contracts?
+8. How to determine the minimal contract that a consumer actually needs?
 
 ## Search Strategy
-
-- Primary sources: Pact official documentation (docs.pact.io), Martin Fowler's CDC article (2006), Martin Fowler's ContractTest bliki (2011), ParallelChange pattern (2014)
-- Secondary: AsyncAPI specification for event contracts, Spring Cloud Contract (archived but relevant)
-- Focus on: Official docs, pattern originators, tool maintainers
-- Cross-reference: Pact FAQ, CDC theory, expand/contract pattern
+- Search for official documentation of contract testing tools (Pact, Spring Cloud Contract).
+- Seek authoritative articles and blogs from reputable sources (e.g., Martin Fowler, industry leaders).
+- Check for academic papers or standards if available.
+- Use search terms: "contract testing", "consumer driven contract testing", "Pact tutorial", "API contract testing best practices".
 
 ## Expected Primary Sources
-
-1. Pact.io Documentation (docs.pact.io) - Tier 1, official tool docs
-2. Martin Fowler, "Consumer-Driven Contracts: A Service Evolution Pattern" (2006) - Tier 1, pattern originator
-3. Martin Fowler, "Contract Test" bliki (2011) - Tier 1, pattern definition
-4. Martin Fowler, "Parallel Change" (2014) - Tier 1, breaking change pattern
-5. AsyncAPI Initiative - Tier 1, event-driven API specification
-6. Pact FAQ & Best Practices (contract_tests_not_functional_tests) - Tier 1, tool-specific guidance
+- Pact documentation: https://docs.pact.io/
+- Spring Cloud Contract documentation: https://spring.io/projects/spring-cloud-contract
+- Martin Fowler's article on Contract Testing: https://martinfowler.com/articles/contractTesting.html
+- Maybe a book or paper on microservices testing.
 
 ## Risks / Unknowns
-
-- Spring Cloud Contract is archived (July 2026) - may not reflect current practices
-- AsyncAPI documentation is more of a spec reference than practical contract testing guide
-- Need to verify claims about event contract testing (Pact Message Pact) from Pact docs
-- Limited primary sources on "when NOT to use contract testing" beyond Pact's own FAQ
-- Lab exercise specific analysis: determining breaking changes for three specific field changes
+- The topic is well-covered, but we must ensure we are not relying on outdated information.
+- We need to verify the current state of tools and practices.
