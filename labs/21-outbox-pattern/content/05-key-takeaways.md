@@ -1,19 +1,21 @@
-1. **Atomic persistence is guaranteed within a single transaction** — Order and outbox message are written to the same database transaction. Either both persist or neither does.
+# Key Takeaways
 
-2. **Rollback discards both records** — If any error occurs before commit, `Rollback()` ensures no order or outbox record is persisted.
+1. Dual-write (DB commit + broker publish in separate steps) can leave the system inconsistent when the broker fails after a successful DB commit — the lab proves this with `TestDualWriteProblem_Failure` and demo Scenario 1.
 
-3. **Relay provides asynchronous, decoupled dispatch** — A background worker periodically polls pending outbox messages and publishes them to the broker.
+2. The Transactional Outbox pattern moves the message write into the same database transaction as the business entity, so either both persist or neither does — verified by `CreateOrderWithOutbox` and `TestTransactionalOutbox_HappyPath`.
 
-4. **At-least-once delivery requires idempotent consumers** — Relay may publish the same message multiple times if it crashes before marking it processed. Consumer deduplication by event ID prevents duplicate processing.
+3. A rollback discards both the business entity and the outbox record at the staged level — nothing reaches the database, and no event is ever dispatched to the broker. Verified by `TestTransactionalOutbox_Rollback`.
 
-5. **Dual-write problem is real and demonstrable** — Writing to database then publishing outside the transaction leaves the system inconsistent when broker fails.
+4. The message relay implements the Polling Publisher strategy: it polls `PENDING` records, publishes to the broker, and only marks a record as `PROCESSED` after a successful publish. Failures leave the record retryable. Verified by `TestTransactionalOutbox_RelayRetryAfterBrokerFailure`.
 
-6. **In-memory simulation vs production realities** — The lab uses in-memory maps for clarity. Production requires persistent storage, cleanup, monitoring, and retry policies.
+5. The pattern provides at-least-once delivery, not exactly-once. A relay crash after publish but before marking processed causes a duplicate. The consumer must therefore be idempotent. Verified by `TestTransactionalOutbox_Idempotent_DuplicateDelivery`.
 
-7. **Polling publisher is simpler than CDC** — The implementation uses polling instead of transaction log tailing (Debezium-style). Polling has latency but works with any SQL database.
+6. Idempotent consumers deduplicate by event ID (`processedIDs` map). Duplicate delivery returns `false` and is ignored, leaving the received count unchanged. Verified by demo Scenario 3.
 
-8. **Thread-safe implementation verified** — Concurrent writes under `go test -race ./...` pass with zero race conditions detected.
+7. Cleanup is mandatory for correctness and performance — `PurgeProcessedOutbox` removes `PROCESSED` records while retaining `PENDING` ones. Outbox tables grow without bound otherwise. Verified by `TestTransactionalOutbox_PurgeProcessed`.
 
-9. **Status transitions are explicit** — Outbox messages start as `PENDING`, transition to `PROCESSED` only after successful broker publish.
+8. Concurrency is safe in this implementation — 10 concurrent worker goroutines producing 100 orders result in exactly 100 published messages with zero pending and no data races under `go test -race`.
 
-10. **No exactly-once semantics** — Outbox guarantees atomic persistence but does not eliminate at-least-once delivery. Idempotent consumers are mandatory.
+9. Monitoring the oldest unprocessed outbox event age is the leading indicator of relay or broker degradation. The lab's illustrative thresholds (~2 seconds normal, 47+ minutes abnormal) are examples, not universal constants — tune to your own SLOs.
+
+10. This lab is a simplified, in-memory model: it uses a transactional memory DB instead of PostgreSQL/MySQL, implements only Polling Publisher (not CDC/log-tailing), and has no dead-letter queue for non-retryable payloads.

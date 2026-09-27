@@ -1,133 +1,98 @@
-## Section: Problem
+# Source Map
 
-**Research**: `research/05-report.md` — "Finding 1: The Dual-Write Problem and Failed Transactions"
+## Problem
+Research: research/05-report.md:11-16, research/03-evidence.md:13-22
+Implementation: internal/outbox/service.go (dual-write naive function), internal/outbox/broker.go (fail simulation)
+Tests: tests/outbox_test.go:118-140 (TestDualWriteProblem_Failure)
 
-**Implementation**: `internal/outbox/service.go:55-90` — `CreateOrderDualWriteNaive`
+## Why This Matters
+Research: research/05-report.md:6-8 (Executive Summary)
+Implementation: README.md:3-4 (Lab description)
+Tests: Tests show inconsistency manifests in dual-write failure
 
-**Tests**: `tests/outbox_test.go:117-139` — `TestDualWriteProblem_Failure`
+## Mental Model
+Research: research/05-report.md:23-28 (Finding 2), research/03-evidence.md:23-38 (Evidence 3)
+Implementation: internal/outbox/service.go:17-53 (CreateOrderWithOutbox)
+Tests: tests/outbox_test.go:12-60 (TestTransactionalOutbox_HappyPath)
 
----
+## Core Concept
+Research: research/03-evidence.md:39-52 (Evidence 4: Outbox Table Structure)
+Implementation: internal/outbox/model.go:26-32 (OutboxMessage struct), internal/outbox/db.go:14-16 (orders, outbox maps)
 
-## Section: Why This Matters
+## Failure Scenario
+Research: research/05-report.md:13-16 (Finding 1)
+Implementation: internal/outbox/service.go:55-90 (CreateOrderDualWriteNaive), internal/outbox/broker.go:28-36 (Publish with failNext)
+Tests: tests/outbox_test.go:118-140
 
-**Research**: `research/05-report.md` — Executive Summary, Conclusion
+## How It Works
+Implementation: internal/outbox/db.go:25-31 (BeginTx), 92-129 (Tx methods: SaveOrder, SaveOutbox, Commit, Rollback)
+Implementation: internal/outbox/relay.go:50-67 (PollAndDispatch)
 
----
+## Architecture
+Research: research/05-report.md:60-72 (Finding 5: Outbox Table Structure and Payload Design), research/03-evidence.md:39-52 (Evidence 4: columns id, aggregatetype, aggregateid, type, payload)
+Implementation: internal/outbox/model.go (id, aggregateid, aggregatetype, type, payload fields)
+Implementation: internal/outbox/service.go:28-40 (payload marshal and message creation)
 
-## Section: Mental Model
+## Implementation
+All implementation files under internal/outbox/:
+- model.go (domain)
+- db.go (transactional in-memory DB)
+- service.go (business logic: atomic vs dual-write)
+- broker.go (mock broker with failure injection)
+- relay.go (polling publisher)
+- consumer.go (idempotent consumer)
+- cmd/demo/main.go (end-to-end demo)
+All tests under tests/outbox_test.go
 
-**Research**: `research/05-report.md` — "Finding 2: Outbox Pattern Guarantees Atomicity"
+## Code Walkthrough
+Atomic Write (Service): internal/outbox/service.go:17-53
+Dual-Write Naive (Service): internal/outbox/service.go:55-90
+Tx Staging (DB): internal/outbox/db.go:84-139
+Relay Loop: internal/outbox/relay.go:27-41 (Start goroutine), 50-67 (PollAndDispatch)
+Consumer Idempotency: internal/outbox/consumer.go:19-31
 
-**Implementation**: `internal/outbox/db.go:99-116` — `Commit()`
+## What the Tests Prove
+Test file: tests/outbox_test.go
+- Happy path & atomicity: lines 12-60
+- Rollback: lines 62-90
+- Idempotency: lines 93-115
+- Dual-write flaw: lines 118-140
+- Concurrent writes: lines 142-194
+- Purge: lines 196-216
+- Relay retry: lines 219-264
+- Concurrent consumers: lines 266-293
 
----
+## Recovery / Rollback
+Implementation: internal/outbox/db.go:131-139 (Tx.Rollback)
+Implementation: internal/outbox/service.go:29-32, 42-45, 47-50 (rollback on error paths)
+Tests: TestTransactionalOutbox_Rollback lines 62-90
 
-## Section: Core Concept
+## Production Considerations
+Research: research/05-report.md:74-86 (Finding 6: Cleanup and Monitoring)
+Implementation: internal/outbox/db.go:71-82 (PurgeProcessedOutbox)
+Implementation: internal/outbox/relay.go:50-67 (retry on publish failure)
+Research/evidence: research/03-evidence.md:100-118 (Evidence 9-10: Cleanup and Monitoring)
 
-### Atomicity in One Transaction
+## Common Mistakes
+Research: research/03-evidence.md:90-99 (Evidence 8: Payload Size Warning)
+Research: research/05-report.md:69-73 (Finding 5: thin vs fat events trade-offs)
+Implementation note: Avoid storing large objects in outbox.Payload
 
-**Research**: `research/05-report.md` — "Finding 2"
+## Case Study
+Demo walkthrough: cmd/demo/main.go (full file)
+Tests: tests/outbox_test.go (all test functions as case studies)
 
-**Implementation**: `internal/outbox/service.go:18-53` — `CreateOrderWithOutbox`, `internal/outbox/db.go:118-127` — `Rollback()`
+## Checklist
+Derived from success criteria in engineering/01-design.md:21-27:
+- [ ] 100% atomicity between business state and outbox state
+- [ ] Zero lost events under broker network disconnect / relay retries
+- [ ] Zero duplicate processing by idempotent consumers despite at-least-once relay delivery
+- [ ] Cleanup worker successfully purges processed events
+- [ ] All unit and concurrency tests pass with zero data races (`go test -race ./...`)
 
-### Message Relay (Polling Publisher)
+## Key Takeaways
+See content/05-key-takeaways.md for final distilled list.
 
-**Research**: `research/05-report.md` — "Finding 3: Message Relay Implementation Alternatives"
-
-**Implementation**: `internal/outbox/relay.go:24-59` — `Start()`, `PollAndDispatch()`
-
-### Idempotent Consumer
-
-**Research**: `research/05-report.md` — "Finding 4: Idempotent Consumer Requirement"
-
-**Implementation**: `internal/outbox/consumer.go:19-31` — `Handle()`
-
----
-
-## Section: Architecture
-
-**Engineering**: `engineering/01-design.md` — Architecture diagram, Components table
-
----
-
-## Section: Implementation
-
-**Engineering**: `engineering/02-implementation-notes.md` — Files Added, Core Design Decisions
-
----
-
-## Section: Code Walkthrough
-
-**Engineering**: `engineering/03-execution-result.md` — Demo execution output
-
-**Implementation**: `cmd/demo/main.go` — Full demo executable
-
----
-
-## Section: What the Tests Prove
-
-**Research**: `research/05-report.md` — Findings 1-5
-
-**Engineering**: `engineering-audit/03-test-audit.md` — Test coverage analysis
-
-**Tests**: `tests/outbox_test.go` — 5 test functions
-
----
-
-## Section: Recovery / Rollback
-
-**Research**: `research/05-report.md` — "Finding 6: Operational Requirements"
-
-**Implementation**: `internal/outbox/relay.go:43-59` — Retry on publish failure
-
----
-
-## Section: Common Mistakes
-
-**Research**: `research/06-open-questions.md` — Open questions about CDC, schema evolution
-
----
-
-## Section: Case Study: Demo End-to-End
-
-**Engineering**: `engineering/03-execution-result.md` — Demo command and output
-
-**Implementation**: `cmd/demo/main.go` — Demo executable
-
----
-
-## Section: Checklist
-
-**Engineering**: `engineering-audit/06-verdict.md` — Quality gates (APPROVED)
-
----
-
-## Section: Key Takeaways
-
-**Research**: `research/05-report.md` — Conclusion, Areas of Agreement
-
----
-
-## Section: Sources
-
-**Research**: `research/01-plan.md`, `research/02-sources.md`, `research/03-evidence.md`, `research/04-contradictions.md`, `research/05-report.md`, `research/06-open-questions.md`
-
-**Research Audit**: `research-audit/01-audit-plan.md`, `research-audit/02-source-audit.md`, `research-audit/03-claim-audit.md`, `research-audit/04-contradictions.md`, `research-audit/05-code-audit.md`, `research-audit/06-gaps.md`, `research-audit/07-verdict.md`
-
-**Engineering**: `engineering/01-design.md`, `engineering/02-implementation-notes.md`, `engineering/03-execution-result.md`
-
-**Engineering Audit**: `engineering-audit/01-audit-plan.md`, `engineering-audit/02-code-audit.md`, `engineering-audit/03-test-audit.md`, `engineering-audit/04-docs-vs-code.md`, `engineering-audit/05-gaps.md`, `engineering-audit/06-verdict.md`
-
-**Source Files**:
-- `internal/outbox/model.go`
-- `internal/outbox/db.go`
-- `internal/outbox/broker.go`
-- `internal/outbox/service.go`
-- `internal/outbox/relay.go`
-- `internal/outbox/consumer.go`
-
-**Tests**:
-- `tests/outbox_test.go`
-
-**Documentation**:
-- `README.md`
+## Sources
+Research sources list: research/02-sources.md (6 sources)
+Evidence mappings: research/03-evidence.md (each evidence block cites source and URL)

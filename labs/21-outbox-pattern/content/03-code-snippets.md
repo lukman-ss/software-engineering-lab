@@ -1,7 +1,10 @@
-## Snippet 1 — Transactional Order Creation
+# Code Snippets
 
-Source File: `internal/outbox/service.go:18-53`
-Purpose: Demonstrates atomic persistence of order and outbox message within a single transaction.
+## Snippet 1 — Atomic Order Creation with Outbox
+
+Source File: `internal/outbox/service.go:17-53`
+
+Purpose: Demonstrating that both the `Order` and the `OutboxMessage` are written within the same transactional boundary (`BeginTx`, `Commit`, `Rollback`). Rollback is triggered if `json.Marshal` fails or `SaveOrder`/`SaveOutbox` returns an error.
 
 ```go
 func (s *OrderService) CreateOrderWithOutbox(orderID string, customerID string, amount float64) error {
@@ -42,213 +45,13 @@ func (s *OrderService) CreateOrderWithOutbox(orderID string, customerID string, 
 }
 ```
 
-Explanation: Initiates a transaction, stages order and outbox message, then commits atomically. If any error occurs before commit, rollback discards all staged changes.
+---
 
-## Snippet 2 — Transaction Commit
-
-Source File: `internal/outbox/db.go:99-116`
-Purpose: Atomic write of both orders and outbox messages to the database.
-
-```go
-func (tx *Tx) Commit() error {
-	tx.mu.Lock()
-	defer tx.mu.Unlock()
-	if tx.closed {
-		return ErrTxClosed
-	}
-	tx.closed = true
-
-	tx.db.mu.Lock()
-	defer tx.db.mu.Unlock()
-	for k, v := range tx.stagedOrders {
-		tx.db.orders[k] = v
-	}
-	for k, v := range tx.stagedOutbox {
-		tx.db.outbox[k] = v
-	}
-	return nil
-}
-```
-
-Explanation: Under database mutex, all staged orders and outbox messages are written atomically. Both maps are updated together or not at all.
-
-## Snippet 3 — Transaction Rollback
-
-Source File: `internal/outbox/db.go:118-127`
-Purpose: Discards staged mutations without persisting any changes.
-
-```go
-func (tx *Tx) Rollback() error {
-	tx.mu.Lock()
-	defer tx.mu.Unlock()
-	if tx.closed {
-		return ErrTxClosed
-	}
-	tx.closed = true
-	// discard staged mutations
-	return nil
-}
-```
-
-Explanation: Marks transaction as closed and discards staged changes. No data is written to the database.
-
-## Snippet 4 — Message Relay Polling
-
-Source File: `internal/outbox/relay.go:43-60`
-Purpose: Polls pending outbox messages, publishes to broker, and marks as processed.
-
-```go
-func (r *Relay) PollAndDispatch() int {
-	pending := r.db.GetPendingOutbox()
-	dispatched := 0
-	for _, msg := range pending {
-		err := r.broker.Publish(msg)
-		if err == nil {
-			err = r.db.MarkOutboxProcessed(msg.ID)
-			if err != nil {
-				log.Printf("failed to mark outbox msg %s as processed: %v\n", msg.ID, err)
-			} else {
-				dispatched++
-			}
-		} else {
-			log.Printf("failed to publish outbox msg %s: %v\n", msg.ID, err)
-		}
-	}
-	return dispatched
-}
-```
-
-Explanation: Retrieves all pending messages, publishes each to broker, and updates status to PROCESSED on success. Failed publishes leave status as PENDING for retry.
-
-## Snippet 5 — Idempotent Consumer
-
-Source File: `internal/outbox/consumer.go:19-31`
-Purpose: Handles messages idempotently by tracking processed event IDs.
-
-```go
-func (c *Consumer) Handle(msg OutboxMessage) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.processedIDs[msg.ID] {
-		// Duplicate detected, ignore
-		return false
-	}
-
-	c.processedIDs[msg.ID] = true
-	c.received = append(c.received, msg)
-	return true
-}
-```
-
-Explanation: Returns `true` if message is new and processed, `false` if duplicate. This enables at-least-once delivery without side effects from duplicates.
-
-## Snippet 6 — Rollback Test
-
-Source File: `tests/outbox_test.go:61-90`
-Purpose: Verifies that rollback discards both order and outbox records.
-
-```go
-func TestTransactionalOutbox_Rollback(t *testing.T) {
-	db := outbox.NewDB()
-	broker := outbox.NewMockBroker()
-	relay := outbox.NewRelay(db, broker, 10*time.Millisecond)
-
-	relay.Start()
-	defer relay.Stop()
-
-	tx := db.BeginTx()
-	_ = tx.SaveOrder(outbox.Order{ID: "o-2", Amount: 50})
-	_ = tx.SaveOutbox(outbox.OutboxMessage{ID: "evt-o-2", Status: outbox.MessageStatusPending})
-
-	_ = tx.Rollback()
-
-	_, ok := db.GetOrder("o-2")
-	if ok {
-		t.Fatalf("expected order to not be saved")
-	}
-	_, ok = db.GetOutbox("evt-o-2")
-	if ok {
-		t.Fatalf("expected outbox to not be saved")
-	}
-
-	time.Sleep(30 * time.Millisecond)
-	if len(broker.GetPublished()) > 0 {
-		t.Fatalf("expected no messages sent to broker")
-	}
-}
-```
-
-Explanation: Creates a transaction, stages both order and outbox, then rolls back. Asserts that neither record exists in the database and no message was published.
-
-## Snippet 7 — Duplicate Delivery Test
-
-Source File: `tests/outbox_test.go:92-115`
-Purpose: Verifies consumer rejects duplicate message deliveries.
-
-```go
-func TestTransactionalOutbox_Idempotency_DuplicateDelivery(t *testing.T) {
-	consumer := outbox.NewConsumer()
-
-	msg := outbox.OutboxMessage{
-		ID:        "evt-duplicate",
-		EventType: "OrderCreated",
-		Payload:   "data",
-	}
-
-	p1 := consumer.Handle(msg)
-	if !p1 {
-		t.Fatalf("expected first delivery to be processed")
-	}
-
-	p2 := consumer.Handle(msg)
-	if p2 {
-		t.Fatalf("expected duplicate delivery to be rejected by consumer")
-	}
-
-	if consumer.GetReceivedCount() != 1 {
-		t.Fatalf("expected exactly 1 message processed despite duplicate delivery")
-	}
-}
-```
-
-Explanation: First call processes message, second call rejects it as duplicate. Consumer count remains 1, proving deduplication works.
-
-## Snippet 8 — Dual-Write Failure Demonstration
-
-Source File: `tests/outbox_test.go:117-139`
-Purpose: Demonstrates state inconsistency when dual-write fails.
-
-```go
-func TestDualWriteProblem_Failure(t *testing.T) {
-	db := outbox.NewDB()
-	broker := outbox.NewMockBroker()
-	service := outbox.NewOrderService(db)
-
-	broker.SetFailNext(true)
-
-	err := service.CreateOrderDualWriteNaive(broker, "o-bug", "c-2", 200)
-	if err == nil {
-		t.Fatalf("expected error from dual write naive approach")
-	}
-
-	_, ok := db.GetOrder("o-bug")
-	if !ok {
-		t.Fatalf("expected order to be saved in DB")
-	}
-
-	if len(broker.GetPublished()) != 0 {
-		t.Fatalf("expected no message published to broker")
-	}
-}
-```
-
-Explanation: Forces broker failure after DB commit. Result: order exists in DB, but no message was published to broker — proving the dual-write problem.
-
-## Snippet 9 — Dual-Write Naive Implementation
+## Snippet 2 — Naive Dual-Write (Failure-Prone)
 
 Source File: `internal/outbox/service.go:55-90`
-Purpose: Demonstrates the vulnerable dual-write approach (for comparison).
+
+Purpose: Demonstrating the dual-write problem by committing the database transaction first and then publishing to the broker outside the transaction boundary. When `broker.Publish` fails, the order persists in the database but the corresponding event is never delivered — the lab proves this inconsistency in `TestDualWriteProblem_Failure`.
 
 ```go
 func (s *OrderService) CreateOrderDualWriteNaive(broker Broker, orderID string, customerID string, amount float64) error {
@@ -279,6 +82,7 @@ func (s *OrderService) CreateOrderDualWriteNaive(broker Broker, orderID string, 
 	}
 
 	if err := broker.Publish(msg); err != nil {
+		// Failure here means DB has order, but message broker never received event!
 		return fmt.Errorf("failed to publish to broker after DB commit: %w", err)
 	}
 
@@ -286,38 +90,157 @@ func (s *OrderService) CreateOrderDualWriteNaive(broker Broker, orderID string, 
 }
 ```
 
-Explanation: Commits order to DB first, then attempts broker publish outside the transaction. If broker fails, DB has committed data but event is lost.
+---
 
-## Snippet 10 — Relay Startup with Goroutine
+## Snippet 3 — Transactional Commit and Rollback
 
-Source File: `internal/outbox/relay.go:24-37`
-Purpose: Starts the polling relay as a background goroutine.
+Source File: `internal/outbox/db.go:84-139`
+
+Purpose: Showing how staged order and outbox changes are accumulated and then flushed atomically to the live maps on `Commit`. `Rollback` simply discards the staged data and marks the transaction closed.
 
 ```go
-func (r *Relay) Start() {
-	go func() {
-		ticker := time.NewTicker(r.pollInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				r.PollAndDispatch()
-			case <-r.stopChan:
-				return
-			}
-		}
-	}()
+type Tx struct {
+	mu           sync.Mutex
+	db           *DB
+	stagedOrders map[string]Order
+	stagedOutbox map[string]OutboxMessage
+	closed       bool
+}
+
+func (tx *Tx) SaveOrder(order Order) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.closed {
+		return ErrTxClosed
+	}
+	tx.stagedOrders[order.ID] = order
+	return nil
+}
+
+func (tx *Tx) SaveOutbox(msg OutboxMessage) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.closed {
+		return ErrTxClosed
+	}
+	tx.stagedOutbox[msg.ID] = msg
+	return nil
+}
+
+func (tx *Tx) Commit() error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.closed {
+		return ErrTxClosed
+	}
+	tx.closed = true
+
+	tx.db.mu.Lock()
+	defer tx.db.mu.Unlock()
+	for k, v := range tx.stagedOrders {
+		tx.db.orders[k] = v
+	}
+	for k, v := range tx.stagedOutbox {
+		tx.db.outbox[k] = v
+	}
+	return nil
+}
+
+func (tx *Tx) Rollback() error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.closed {
+		return ErrTxClosed
+	}
+	tx.closed = true
+	// discard staged mutations
+	return nil
 }
 ```
 
-Explanation: Spawns a goroutine that polls at fixed interval and dispatches messages. Clean shutdown via stop channel.
+---
 
-## Snippet 11 — Outbox Message Model
+## Snippet 4 — Polling Relay Dispatch
 
-Source File: `internal/outbox/model.go:26-32`
-Purpose: Defines the outbox message data structure.
+Source File: `internal/outbox/relay.go:50-67`
+
+Purpose: Showing how the polling relay fetches all pending outbox records, attempts a publish to the broker for each one, and only marks a record as `PROCESSED` upon successful publish. If publish fails, the record remains `PENDING` until the next poll cycle.
 
 ```go
+func (r *Relay) PollAndDispatch() int {
+	pending := r.db.GetPendingOutbox()
+	dispatched := 0
+	for _, msg := range pending {
+		err := r.broker.Publish(msg)
+		if err == nil {
+			err = r.db.MarkOutboxProcessed(msg.ID)
+			if err != nil {
+				log.Printf("failed to mark outbox msg %s as processed: %v\n", msg.ID, err)
+			} else {
+				dispatched++
+			}
+		} else {
+			log.Printf("failed to publish outbox msg %s: %v\n", msg.ID, err)
+		}
+	}
+	return dispatched
+}
+```
+
+---
+
+## Snippet 5 — Idempotent Consumer
+
+Source File: `internal/outbox/consumer.go:19-31`
+
+Purpose: Demonstrating idempotency through event ID tracking. When `Handle` receives a message whose ID is already registered in `processedIDs`, it returns `false` (reject/ignore). Only the first delivery mutates state and returns `true`.
+
+```go
+func (c *Consumer) Handle(msg OutboxMessage) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.processedIDs[msg.ID] {
+		// Duplicate detected, ignore
+		return false
+	}
+
+	c.processedIDs[msg.ID] = true
+	c.received = append(c.received, msg)
+	return true
+}
+```
+
+---
+
+## Snippet 6 — Outbox Event Model
+
+Source File: `internal/outbox/model.go:12-32`
+
+Purpose: Defining the `Order` domain entity and the `OutboxMessage` event record, plus status enums `OrderStatus` and `MessageStatus`.
+
+```go
+type OrderStatus string
+
+const (
+	OrderStatusCreated   OrderStatus = "CREATED"
+	OrderStatusCancelled OrderStatus = "CANCELLED"
+)
+
+type Order struct {
+	ID         string
+	CustomerID string
+	Amount     float64
+	Status     OrderStatus
+}
+
+type MessageStatus string
+
+const (
+	MessageStatusPending   MessageStatus = "PENDING"
+	MessageStatusProcessed MessageStatus = "PROCESSED"
+)
+
 type OutboxMessage struct {
 	ID        string
 	EventType string
@@ -327,20 +250,66 @@ type OutboxMessage struct {
 }
 ```
 
-Explanation: Contains unique ID, event type, JSON payload, status (PENDING/PROCESSED), and creation timestamp.
+---
 
-## Snippet 12 — Order Model
+## Snippet 7 — Demo Orchestration
 
-Source File: `internal/outbox/model.go:12-17`
-Purpose: Defines the order domain model.
+Source File: `cmd/demo/main.go:10-63`
+
+Purpose: Orchestrating the three end-to-end scenarios the lab verifies: the dual-write flaw, the atomic outbox success path, and the duplicate-delivery idempotent consumer.
 
 ```go
-type Order struct {
-	ID         string
-	CustomerID string
-	Amount     float64
-	Status     OrderStatus
+func main() {
+	fmt.Println("=== Lab 21: Transactional Outbox Pattern Demo ===")
+
+	db := outbox.NewDB()
+	broker := outbox.NewMockBroker()
+	relay := outbox.NewRelay(db, broker, 50*time.Millisecond)
+	service := outbox.NewOrderService(db)
+	consumer := outbox.NewConsumer()
+
+	// 1. Demonstrate Dual-Write Flaw
+	fmt.Println("\n[Scenario 1: The Dual-Write Problem]")
+	broker.SetFailNext(true) // broker failure simulation
+	err := service.CreateOrderDualWriteNaive(broker, "order-dual-fail", "cust-1", 150.0)
+	if err != nil {
+		fmt.Printf("Direct write failed: %v\n", err)
+	}
+	_, dbFound := db.GetOrder("order-dual-fail")
+	fmt.Printf("State Inconsistency: Order in DB = %v, Broker Message Count = %d\n", dbFound, len(broker.GetPublished()))
+
+	// 2. Start Message Relay for Outbox
+	fmt.Println("\n[Scenario 2: Transactional Outbox Solution]")
+	relay.Start()
+	defer relay.Stop()
+
+	fmt.Println("Creating order with transactional outbox...")
+	err = service.CreateOrderWithOutbox("order-outbox-success", "cust-2", 300.0)
+	if err != nil {
+		fmt.Printf("Failed to create order: %v\n", err)
+		return
+	}
+	fmt.Println("Order and Outbox record atomically saved to DB.")
+
+	// Let relay poll and dispatch
+	time.Sleep(120 * time.Millisecond)
+
+	published := broker.GetPublished()
+	fmt.Printf("Broker received messages: %d\n", len(published))
+	for _, m := range published {
+		fmt.Printf(" - Event ID: %s, Type: %s, Payload: %s\n", m.ID, m.EventType, m.Payload)
+		accepted := consumer.Handle(m)
+		fmt.Printf(" - Consumer processing initial message: accepted=%v\n", accepted)
+	}
+
+	// 3. Demonstrate At-Least-Once & Idempotency
+	fmt.Println("\n[Scenario 3: At-Least-Once Delivery & Idempotent Consumer]")
+	duplicateMsg := published[0]
+	fmt.Println("Simulating duplicate delivery to consumer...")
+	acceptedAgain := consumer.Handle(duplicateMsg)
+	fmt.Printf("Consumer processing duplicate delivery: accepted=%v (Duplicate safely skipped!)\n", acceptedAgain)
+	fmt.Printf("Total events processed by consumer: %d\n", consumer.GetReceivedCount())
+
+	fmt.Println("\n=== Demo Complete ===")
 }
 ```
-
-Explanation: Simple order entity with ID, customer reference, amount, and status.
