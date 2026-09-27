@@ -1,17 +1,21 @@
 # Docs vs Code Audit
 
-## Documentation Comparison
+## Documentation Sources
 
-### 1. `README.md`
-- **Claims**: Describes in-memory transactional database, mock message broker, order service, polling relay, and idempotent consumer.
-- **Commands**: Lists `go test ./...`, `go test -race ./...`, and `go run ./cmd/demo`.
-- **Verdict**: PASS. All documented architecture files, packages, and commands match actual implementation exactly.
+- `README.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
 
-### 2. `engineering/01-design.md` vs `engineering/02-implementation-notes.md`
-- **Initial Design**: Contemplated SQLite or in-memory transactional database.
-- **Implementation Choice**: Explicitly scoped in `engineering/02-implementation-notes.md` as in-memory transactional database to avoid external CGO/driver dependencies while providing atomic staging/commit/rollback semantics.
-- **Verdict**: PASS. Decisions and trade-offs are accurately documented.
+## Comparison
 
-### 3. `engineering/03-execution-result.md` vs Live Execution
-- **Output Validation**: Verified identical execution output between recorded log in `03-execution-result.md` and live terminal executions of `go test -race ./...` and `go run ./cmd/demo`.
-- **Verdict**: PASS. Zero fabricated output or mismatch detected.
+### Architecture & Components
+- README lists `db.go`, `broker.go`, `service.go`, `relay.go`, `consumer.go`. Matches codebase exactly.
+- README describes in-memory transactional database simulating `BeginTx`, `Commit`, and `Rollback`. Matches `internal/outbox/db.go`.
+- `engineering/01-design.md` proposed SQLite (`modernc.org/sqlite` or mock DB driver), while implementation chose the in-memory mock DB driver to maintain zero-dependency pure Go. `engineering/02-implementation-notes.md` accurately documents this decision.
+
+### Execution Commands
+- README lists `go test ./...`, `go test -race ./...`, `go run ./cmd/demo`.
+- All commands execute cleanly with matching output.
+
+### Discrepancy Findings
+- DOC_CODE_MISMATCH: None between README and codebase. Minor divergence between initial design plan (SQLite) and final implementation (in-memory DB), acknowledged in implementation notes.

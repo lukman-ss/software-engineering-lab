@@ -1,78 +1,44 @@
 # Gap Analysis
 
-## Allowed Gap Types
-- MISSING_TEST
-- BROKEN_IMPLEMENTATION
-- DOC_CODE_MISMATCH
-- RACE_CONDITION
-- UNHANDLED_ERROR
-- MISSING_EDGE_CASE
-- IMPLEMENTATION_OVERCLAIM
-- RESEARCH_MISMATCH
-- FAKE_DEMO
-- FAKE_BENCHMARK
-- UNVERIFIED_RESULT
+MISSING_TEST
+- No test for relay double-start / multiple goroutine leak.
+- No test for Stop() called twice (panic on close of closed channel).
+- No test for PurgeProcessedOutbox called concurrently with relay polling.
+- No test for broker failure >1 time in relay loop (only SetFailNext used once in demo/test).
+- No test verifying that a crashed relay after Publish but before MarkOutbox results in message redelivery (at-least-once) and that consumer deduplicates (requires simulating crash — hard in unit test, but could assert state).
+- No test asserting message ordering (not required but worth noting nonexistent).
 
-## Gaps Identified
+BROKEN_IMPLEMENTATION
+- None: all core behavior compiles, tests pass, demo runs.
 
-### Gap 1
+DOC_CODE_MISMATCH
+- design.md claims SQLite table-based persistence; actual code uses in-memory maps (intentional per impl notes but not reflected in design).
+- design.md architecture diagram shows Broker -> Consumer delivery; actual code: consumer pulls from broker manually.
 
-Type: MISSING_TEST
-Location: `internal/outbox/relay.go` (PollAndDispatch) and `tests/outbox_test.go`
-Priority: HIGH
-Severity: HIGH
-Description: The relay's at-least-once delivery / retry behavior is core to the outbox pattern but untested. There is no test that sets broker publish failure while the relay is running and verifies that:
-- the outbox message stays PENDING,
-- the message is retried on the next poll when the broker recovers,
-- the message is eventually published and marked PROCESSED.
-The code appears correct, but the behavior is unproven.
-Rationale: "Core behavior unproven" per severity scale.
+TEST_CLAIM_MISMATCH
+- design.md test strategy claims "Broker failure retry mechanism" tested; no test injects broker failure into relay loop and asserts eventual success after recovery (SetFailNext not used in relay path).
 
-### Gap 2
+RACE_CONDITION
+- None detected by `go test -race`; however Relay Start/Stop race on channel close exists (but not exercised by tests).
 
-Type: MISSING_TEST
-Location: `tests/outbox_test.go` (TestTransactionalOutbox_ConcurrentWrites)
-Priority: MEDIUM
-Severity: MEDIUM
-Description: The concurrent-writes test uses a single shared orderID ("o-concurrent-1") across all 10 goroutines, causing write overwrites and providing no assertion that distinct concurrent orders are all persisted/dispatched. The test is effectively a race-detector smoke test, not a correctness test. It proves absence of data races (corroborated by `-race` passing) but not concurrent write correctness for distinct keys.
-Rationale: Incomplete coverage.
+UNHANDLED_ERROR
+- Relay.PollAndDispatch logs but does not propagate broker or DB mark errors upstream; caller ignores return value (dispatched count only). This could hide persistent failures.
 
-### Gap 3
+MISSING_EDGE_CASE
+- Very short poll interval (0 ns) not tested; could cause CPU spin.
+- Very long poll interval not tested; no context cancellation.
 
-Type: MISSING_TEST
-Location: `internal/outbox/relay.go` (Stop) and `cmd/demo/main.go`
-Priority: LOW
-Severity: LOW
-Description: Relay.Stop is not idempotent — double-close on stopChan would panic. Not exercised by tests/demo (Stop called once via defer). Also no goroutine-leak assertion for the relay worker goroutine.
-Rationale: Latent defect, low severity.
+IMPLEMENTATION_OVERCLAIM
+- README claims "decoupled polling relay dispatch to a message broker" (true) and "downstream consumer idempotency" (true) — no overclaim.
 
-### Gap 4
+RESEARCH_MISMATCH
+- Design doc describes SQLite; code is in-memory map DB. Override waived research audit but we note for completeness.
 
-Type: MISSING_TEST
-Location: `internal/outbox/service.go` (CreateOrderWithOutbox rollback path)
-Priority: LOW
-Severity: LOW
-Description: The rollback-on-error path in CreateOrderWithOutbox (triggered by json.Marshal or Save failures) is unreachable in practice because json.Marshal of the Order struct cannot fail and the in-memory DB Save methods never return errors. The path exists but is dead code for this mock implementation; not a correctness risk.
-Rationale: Dead/defensive path; low severity.
+FAKE_DEMO
+- Demo output genuine; matches observed state.
 
-### Gap 5
+FAKE_BENCHMARK
+- No benchmarks present.
 
-Type: MISSING_EDGE_CASE
-Location: `internal/outbox/relay.go` (PollAndDispatch)
-Priority: LOW
-Severity: LOW
-Description: When the broker fails to publish a message, the relay logs and skips it but leaves it PENDING. If all broker publishes keep failing, the outbox table grows unbounded (no backoff, retry limit, or dead-letter handling). Acceptable for a demonstration/lab but omitted from documented guarantees.
-Rationale: Minor; documented limits not claimed.
-
-## Gaps Not Present
-
-| Gap Type | Present? | Notes |
-|---|---|---|
-| BROKEN_IMPLEMENTATION | No | All implementation logic is correct (atomic commit, retry-leaves-pending, idempotency). |
-| DOC_CODE_MISMATCH | No | README matches code and demo results. |
-| IMPLEMENTATION_OVERCLAIM | No | README claims are bounded to the demo's in-memory simulation ("simulating BeginTx/Commit/Rollback"); no real DB claimed. |
-| FAKE_DEMO | No | Demo runs, exit code 0, output matches description. |
-| FAKE_BENCHMARK | No | No benchmarks referenced; none claimed. |
-| UNVERIFIED_RESULT | No | All runtime results (tests, race, demo) were actually executed and recorded. |
-| RACE_CONDITION | No | Confirmed absent via `go test -race` (PASS, 1.515s). |
-| UNHANDLED_ERROR | No | Errors are propagated (Publish err returned, MarkOutboxProcessed err logged; not silently dropped). |
+UNVERIFIED_RESULT
+- All results verified by re-running tests and demo.

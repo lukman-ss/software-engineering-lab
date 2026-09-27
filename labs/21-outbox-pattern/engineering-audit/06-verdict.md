@@ -1,29 +1,28 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/21-outbox-pattern
-Audit Date: 2026-09-26
+Audit Date: 2026-09-27
 
 ## Summary
 
 Code Files Reviewed:
-- `internal/outbox/model.go`
-- `internal/outbox/db.go`
-- `internal/outbox/broker.go`
-- `internal/outbox/service.go`
-- `internal/outbox/relay.go`
-- `internal/outbox/consumer.go`
-- `cmd/demo/main.go`
+- internal/outbox/model.go
+- internal/outbox/db.go
+- internal/outbox/broker.go
+- internal/outbox/service.go
+- internal/outbox/relay.go
+- internal/outbox/consumer.go
 
 Tests Reviewed:
-- `tests/outbox_test.go` (6 test cases)
+- tests/outbox_test.go
 
 Commands Executed:
-- `go test -v ./...`
-- `go test -race -v ./...`
+- `go test -v -count=1 ./...`
+- `go test -race -v -count=1 ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
-Warnings: 0
+Warnings: 1 (Concurrent relay polling lock warning - minor low risk)
 
 ## Quality Gates
 
@@ -38,7 +37,7 @@ Documentation Accuracy: PASS
 None.
 
 ## Non-Blocking Issues
-None.
+1. `GetPendingOutbox()` returns pending messages without status claiming/locking. Single relay instance works perfectly, but multi-relay scaling would cause redundant dispatches.
 
 ## Required Revisions
 None.
