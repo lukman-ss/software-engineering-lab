@@ -1,19 +1,18 @@
 # Claim Audit
 
-## Claim 1: The Dual-Write Problem and Non-Atomicity Across Heterogeneous Systems
+Target Lab: `labs/21-outbox-pattern`
 
-Claim:
-Updating a database and publishing a message cannot be made atomic using traditional distributed transactions (2PC) or database transactions alone.
+---
 
-Location:
-`research/05-report.md`: Section "Finding 1: The Dual-Write Problem and Failed Transactions"
-`research/03-evidence.md`: Evidence 1 & Evidence 2
+## Claim 1
 
-Evidence Provided:
-Traditional database transactions only control database operations, not external message brokers or HTTP endpoints. 2PC is often unsupported or impractical across brokers and datastores.
+Claim: Updating a database and publishing a message cannot be made atomic using traditional distributed transactions (2PC) or database transactions alone.
 
-Source:
-Microservices.io (`https://microservices.io/patterns/data/transactional-outbox.html`) & Debezium Blog (`https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/`)
+Location: `research/05-report.md` (Finding 1), `research/03-evidence.md` (Evidence 1, 2)
+
+Evidence Provided: Database transactions only rollback relational database mutations. External systems (message queues, Redis, HTTP endpoints) do not participate in local DB rollback. 2PC is often unsupported or causes tight operational coupling.
+
+Source: `https://microservices.io/patterns/data/transactional-outbox.html`, `https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/`
 
 Source Actually Supports Claim:
 YES
@@ -24,25 +23,19 @@ FACT
 Severity:
 LOW
 
-Notes:
-Both Richardson and Morling explicitly note that 2PC cannot span most brokers (like Kafka/RabbitMQ) and DB transactions do not roll back broker sends.
+Notes: Accurately reflects distributed systems constraints and dual-write mechanics.
 
 ---
 
-## Claim 2: Outbox Pattern Atomicity Guarantee
+## Claim 2
 
-Claim:
-The Outbox pattern guarantees that messages are sent if and only if the database transaction commits.
+Claim: The Outbox pattern guarantees that messages are sent if and only if the database transaction commits.
 
-Location:
-`research/05-report.md`: Section "Finding 2: Outbox Pattern Guarantees Atomicity"
-`research/03-evidence.md`: Evidence 3
+Location: `research/05-report.md` (Finding 2), `research/03-evidence.md` (Evidence 3)
 
-Evidence Provided:
-Both the business entity update and message record are inserted into the same database transaction. A separate relay process reads and delivers the message asynchronously.
+Evidence Provided: Storing the message in an outbox table within the same DB transaction boundary ensures both succeed or both abort. The separate message relay asynchronously guarantees eventual publication.
 
-Source:
-Microservices.io (`https://microservices.io/patterns/data/transactional-outbox.html`)
+Source: `https://microservices.io/patterns/data/transactional-outbox.html`, `https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/`
 
 Source Actually Supports Claim:
 YES
@@ -53,25 +46,19 @@ FACT
 Severity:
 LOW
 
-Notes:
-Accurately reflects the core mechanism and theoretical guarantees of the Transactional Outbox pattern.
+Notes: Well-documented canonical guarantee of the Transactional Outbox pattern.
 
 ---
 
-## Claim 3: Message Relay Implementation Patterns
+## Claim 3
 
-Claim:
-Two patterns exist for implementing the message relay: Transaction Log Tailing and Polling Publisher.
+Claim: Two patterns exist for implementing the message relay: Transaction Log Tailing (CDC) and Polling Publisher.
 
-Location:
-`research/05-report.md`: Section "Finding 3: Message Relay Implementation Alternatives"
-`research/03-evidence.md`: Evidence 5
+Location: `research/05-report.md` (Finding 3), `research/03-evidence.md` (Evidence 5)
 
-Evidence Provided:
-Log tailing captures outbox table writes via database transaction log (binlog/WAL), while Polling queries the outbox table periodically.
+Evidence Provided: Relay can either poll the outbox table or tail database transaction logs (WAL/binlog). Trade-offs regarding latency, database load, and portability are cited.
 
-Source:
-Microservices.io (`https://microservices.io/patterns/data/transaction-log-tailing.html`, `https://microservices.io/patterns/data/polling-publisher.html`) & Debezium Blog
+Source: `https://microservices.io/patterns/data/transaction-log-tailing.html`, `https://microservices.io/patterns/data/polling-publisher.html`, `https://debezium.io/documentation/reference/stable/architecture.html`
 
 Source Actually Supports Claim:
 YES
@@ -82,25 +69,19 @@ FACT
 Severity:
 LOW
 
-Notes:
-Canonical classification used across distributed systems literature and pattern catalogs.
+Notes: Accurately categorizes the relay mechanisms.
 
 ---
 
-## Claim 4: At-Least-Once Delivery and Consumer Idempotency
+## Claim 4
 
-Claim:
-Outbox pattern provides at-least-once delivery, requiring consumers to be idempotent to handle duplicate messages.
+Claim: Outbox pattern provides at-least-once delivery, requiring consumers to be idempotent to handle duplicate messages.
 
-Location:
-`research/05-report.md`: Section "Finding 4: Idempotent Consumer Requirement"
-`research/03-evidence.md`: Evidence 6
+Location: `research/05-report.md` (Finding 4), `research/03-evidence.md` (Evidence 6)
 
-Evidence Provided:
-Relay crashes or network retries after publishing but before marking processed result in re-delivery. Consumers track message UUIDs/eventIds to ignore duplicates.
+Evidence Provided: Relay crashes after publishing but before recording completion or offset commit cause redelivery. Consumers must track message/event UUIDs.
 
-Source:
-Microservices.io & Debezium Blog
+Source: `https://microservices.io/patterns/data/transactional-outbox.html`, `https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/`
 
 Source Actually Supports Claim:
 YES
@@ -111,54 +92,42 @@ FACT
 Severity:
 LOW
 
-Notes:
-Both sources explicitly stress that at-least-once is the real-world delivery semantic and consumer deduplication is mandatory.
+Notes: Critical nuance properly emphasized: outbox guarantees at-least-once, not magic exactly-once.
 
 ---
 
-## Claim 5: Outbox Table Structure and Payload Design (Thin vs Fat Events)
+## Claim 5
 
-Claim:
-Canonical outbox table design uses `id`, `aggregatetype`, `aggregateid`, `type`, `payload`. Thin events vs fat events represent trade-offs between RPC fetch overhead and storage/network bloat.
+Claim: Outbox table design typically uses columns `id`, `aggregateid`, `aggregatetype`, `type`, `payload`, supporting both thin and fat event payloads.
 
-Location:
-`research/05-report.md`: Section "Finding 5: Outbox Table Structure and Payload Design"
-`research/03-evidence.md`: Evidence 4 & Evidence 7 & Evidence 8
+Location: `research/05-report.md` (Finding 5), `research/03-evidence.md` (Evidence 4, 7, 8)
 
-Evidence Provided:
-Debezium Outbox SMT specification expects `id`, `aggregatetype`, `aggregateid`, `type`, `payload`. The Debezium blog demonstrates full order payload (fat events), while the lab spec highlights hazards of storing 500-field objects (thin events alternative).
+Evidence Provided: Debezium outbox event router specification and real-world implementations standardise on these columns. Thin vs fat tradeoffs (DB size vs consumer RPC call) documented.
 
-Source:
-Debezium Documentation (Outbox Event Router) & Debezium Blog
+Source: `https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html`, `https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/`
 
 Source Actually Supports Claim:
 YES
 
 Classification:
-INTERPRETATION
+IMPLEMENTATION-SPECIFIC
 
 Severity:
 LOW
 
-Notes:
-The report accurately frames thin vs fat events as design choices rather than universal rules.
+Notes: Appropriately identified as common/reference design rather than universal SQL standard.
 
 ---
 
-## Claim 6: Cleanup Strategy and Monitoring Metrics
+## Claim 6
 
-Claim:
-Outbox systems require operational cleanup (archival/deletion) to prevent unbounded table growth. Metrics such as unprocessed count and oldest event age are critical; numeric thresholds (e.g. 2s normal vs 47m abnormal) are illustrative SLO examples, not universal operational constants.
+Claim: Outbox systems require operational cleanup and monitoring of key metrics (unprocessed event count, oldest event age, publish failure rate).
 
-Location:
-`research/05-report.md`: Section "Finding 6: Operational Requirements: Cleanup and Monitoring"
-`research/03-evidence.md`: Evidence 9 & Evidence 10
+Location: `research/05-report.md` (Finding 6), `research/03-evidence.md` (Evidence 9, 10)
 
-Evidence Provided:
-Debezium CDC pattern deletes row immediately or requires compaction/deletion; polling publishers require periodic cleanup. Monitoring thresholds depend on service SLAs.
+Evidence Provided: Uncleaned tables grow indefinitely with high event volume. Oldest unprocessed event age is key latency/lag health indicator. Threshold numbers (2s normal vs 47m critical) are presented as illustrative SLA examples.
 
-Source:
-Topic Specification & Debezium Blog
+Source: Topic specification, operational best practices
 
 Source Actually Supports Claim:
 YES
@@ -169,5 +138,4 @@ EXAMPLE
 Severity:
 LOW
 
-Notes:
-The report explicitly qualifies the numbers as illustrative SLA examples and avoids presenting them as universal constants.
+Notes: The report explicitly qualifies numeric thresholds as illustrative SLO examples rather than universal operational constants.

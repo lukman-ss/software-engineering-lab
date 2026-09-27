@@ -1,41 +1,39 @@
-# Audit Plan: Research Audit for Lab 21 (Outbox Pattern)
+# Research Audit Plan: Outbox Pattern
 
-## Target Lab
-`labs/21-outbox-pattern`
+Target Lab: `labs/21-outbox-pattern`
+Audit Stage: Research Audit (Pipeline Override: Research Only)
 
-## Scope & Pipeline Override Notice
-Per pipeline instructions, this audit evaluates **research files only** located under `labs/21-outbox-pattern/research/`.
-- Implementation / code in `internal/`, `cmd/`, `tests/` is out of scope for this research audit stage.
-- Research files must NOT be modified.
-- Audit output location: `labs/21-outbox-pattern/research-audit/`
+## Target Lab Summary
+The target lab explores the **Transactional Outbox Pattern** to solve the dual-write problem in distributed systems and event-driven architectures.
 
-## Research Files Reviewed
-1. `research/01-plan.md` (Research Plan)
-2. `research/02-sources.md` (Sources List)
-3. `research/03-evidence.md` (Evidence Ledger)
-4. `research/04-contradictions.md` (Contradiction Log)
-5. `research/05-report.md` (Final Research Report)
-6. `research/06-open-questions.md` (Open Questions / Gaps)
+## Files Reviewed
+- `labs/21-outbox-pattern/research/01-plan.md`
+- `labs/21-outbox-pattern/research/02-sources.md`
+- `labs/21-outbox-pattern/research/03-evidence.md`
+- `labs/21-outbox-pattern/research/04-contradictions.md`
+- `labs/21-outbox-pattern/research/05-report.md`
+- `labs/21-outbox-pattern/research/06-open-questions.md`
 
-## Primary Sources Audited
-1. **Source 1**: Debezium Outbox Event Router Documentation (`https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html`)
-2. **Source 2**: Debezium Blog — Reliable Microservices Data Exchange With the Outbox Pattern (`https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/`)
-3. **Source 3**: Microservices.io — Pattern: Transactional Outbox (`https://microservices.io/patterns/data/transactional-outbox.html`)
-4. **Source 4**: Microservices.io — Pattern: Polling Publisher (`https://microservices.io/patterns/data/polling-publisher.html`)
-5. **Source 5**: Microservices.io — Pattern: Saga (`https://microservices.io/patterns/data/saga.html`)
-6. **Source 6**: Debezium Architecture (`https://debezium.io/documentation/reference/stable/architecture.html`)
+## Claims To Verify
+1. **Dual-write problem atomicity**: Standard database transactions (without 2PC) cannot atomically commit local DB updates and external message publishing (Redis, RabbitMQ, Kafka, HTTP).
+2. **Outbox pattern atomicity guarantee**: Writing messages to an outbox table within the same DB transaction guarantees that messages are persisted if and only if business data commits.
+3. **Message Relay alternatives**: Message relay can be implemented via Polling Publisher or Transaction Log Tailing (CDC).
+4. **Delivery semantics & Consumer Idempotency**: Outbox pattern provides at-least-once delivery; consumers must track processed event IDs to handle duplicate messages.
+5. **Outbox table schema**: Common columns are `id` (UUID), `aggregateid`, `aggregatetype`, `type`, `payload` (JSON/JSONB).
+6. **Fat vs Thin payload trade-offs**: Thin events reduce DB bloat but require consumer RPC callbacks; fat events avoid RPC but increase storage/network payload.
+7. **Operational requirements**: Outbox tables grow indefinitely without cleanup/archival (e.g. 1M events/day); monitoring must track oldest unprocessed event age and unprocessed count.
 
-## Major Technical Claims To Verify
-1. **Dual-write problem atomicity**: Standard DB transactions + message publishing cannot be made atomic using 2PC across heterogeneous stores.
-2. **Outbox Pattern Guarantee**: Storing messages in an outbox table in the same DB transaction guarantees atomicity (all-or-nothing).
-3. **Message Relay Mechanisms**: Two primary approaches exist — Polling Publisher and Transaction Log Tailing (CDC).
-4. **Delivery Semantics & Idempotency**: Outbox pattern yields at-least-once delivery, requiring consumers to be idempotent via event UUID/deduplication.
-5. **Outbox Table Structure & Payload Choices**: Canonical schema requires `id`, `aggregateid`, `aggregatetype`, `type`, `payload`. Thin vs fat event tradeoffs exist.
-6. **Operational Requirements**: Outbox events require cleanup strategies (deletion/archival) and health monitoring (oldest event age metric).
+## Code To Execute
+*Pipeline Override:* Code execution skipped for research-only audit.
+
+## Primary Risks
+- **Overgeneralization of SLAs/monitoring numbers**: Claiming specific metric thresholds (e.g. 2s normal vs 47min critical) as universal facts rather than contextual/illustrative examples.
+- **Source scope mismatch**: Using Debezium/CDC documentation as sole proof for general outbox mechanics.
+- **Citation integrity**: Claiming URLs exist or sources support claims when web fetching/inspection reveals discrepancies or unverified content.
 
 ## Audit Strategy
-1. **Source Verification**: Fetch live URLs or check official documentation to verify existence, publisher accuracy, titles, and topic relevance.
-2. **Claim Verification**: Compare each claim in `research/05-report.md` and `research/03-evidence.md` against cited sources to ensure accurate representation without misattribution or unsupported extensions.
-3. **Contradiction Identification**: Analyze internal consistency across research files and compare source claims.
-4. **Gap Analysis**: Check for missing citations, overgeneralizations, missing edge cases, or unverified numeric claims.
-5. **Verdict Generation**: Apply standard severity model to assign final status (`APPROVED`, `APPROVED_WITH_WARNINGS`, `NEEDS_REVISION`, `REJECTED`).
+1. Perform web fetch checks on all 6 cited URLs in `02-sources.md` and `03-evidence.md`.
+2. Inspect every finding in `05-report.md` against evidence items in `03-evidence.md` and primary sources.
+3. Evaluate classification (FACT / INTERPRETATION / EXAMPLE / HYPOTHESIS) and severity for each claim.
+4. Record research gaps, contradictions, and non-blocking vs blocking issues.
+5. Issue final verdict in `labs/21-outbox-pattern/research-audit/07-verdict.md`.

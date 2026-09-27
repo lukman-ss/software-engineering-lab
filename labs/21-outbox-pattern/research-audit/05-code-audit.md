@@ -1,9 +1,10 @@
-# Code Audit
+# Code Audit: Research Scope
 
-## Pipeline Override Notice
-Per pipeline instructions:
-- "Audit research only."
-- "Do not audit implementation/code in this stage."
+Target Lab: `labs/21-outbox-pattern`
+
+---
 
 ## Status
-NOT APPLICABLE for Research Audit phase. Code implementation and test audits are executed in downstream pipeline stages (`engineering-audit`).
+NOT_APPLICABLE (Pipeline Override: Research Only).
+
+Implementation and code verification are deferred to the engineering audit stage.

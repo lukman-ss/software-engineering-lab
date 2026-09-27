@@ -1,5 +1,9 @@
 # Source Audit
 
+Target Lab: `labs/21-outbox-pattern`
+
+---
+
 ## Source 1
 
 Claimed Title: Outbox Event Router (Debezium Documentation)
@@ -19,7 +23,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. URL is active, title and publisher match official documentation. Details match Debezium 3.6 SMT specs.
+- None. Documentation confirms expected table schema (`id`, `aggregatetype`, `aggregateid`, `type`, `payload`), SMT configuration options (`route.by.field`, `route.topic.replacement`), and behavior on UPDATE/DELETE.
 
 Assessment:
 PASS
@@ -45,7 +49,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Published date in `02-sources.md` is 2019-02-19 (correct). URL active, content directly addresses dual-write problem, outbox table schema, CDC, and consumer idempotency.
+- None. Article explicitly explains the dual-write problem, why distributed transactions (XA/2PC) are not feasible with systems like Kafka, outbox table schema, transaction log tailing with CDC, and consumer-side duplicate exclusion via `MessageLog` table.
 
 Assessment:
 PASS
@@ -71,7 +75,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative pattern definition by Chris Richardson. URL active.
+- None. Canonical architectural pattern definition. Verifies forces (no 2PC, commit atomicity, order preservation), solution structure (Sender, DB, Message Outbox, Message Relay), at-least-once delivery issues, and requirement for idempotent consumers.
 
 Assessment:
 PASS
@@ -97,7 +101,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. URL active and relevant to Polling Publisher relay pattern.
+- None. Confirms polling as alternative relay mechanism for SQL databases, along with trade-offs (polling overhead and ordering complexities).
 
 Assessment:
 PASS
@@ -123,7 +127,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. URL active and provides context for distributed transaction needs.
+- None. Provides context on why transactional messaging/outbox is essential when coordinating multi-service transactions without 2PC.
 
 Assessment:
 PASS
@@ -149,7 +153,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. URL active and describes CDC architecture.
+- None. Authoritative overview of Debezium connectors reading DBMS transaction logs (PostgreSQL WAL, MySQL binlog) via Kafka Connect / Debezium Server / Embedded Engine.
 
 Assessment:
 PASS

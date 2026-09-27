@@ -1,22 +1,22 @@
 # Contradiction Audit
 
-## Material Contradictions Analysis
+Target Lab: `labs/21-outbox-pattern`
 
-No material contradictions found across the audited research files (`01-plan.md`, `02-sources.md`, `03-evidence.md`, `04-contradictions.md`, `05-report.md`, `06-open-questions.md`) or between the research report and authoritative external sources.
+---
 
-### Evaluated Areas:
+## Internal & Source Consistency Analysis
 
-1. **Transaction Log Tailing vs Polling Publisher**:
-   - Both sources (Chris Richardson / Microservices.io and Gunnar Morling / Debezium) acknowledge log-tailing and polling as alternative implementations with distinct trade-offs (latency vs database portability). The research report reflects this consensus without conflicting assertions.
+### 1. Research Report vs Evidence Files
+- `research/05-report.md` matches `research/03-evidence.md` across all findings (Dual-write problem, Atomicity guarantees, Relay alternatives, Idempotency, Schema design, Monitoring).
 
-2. **Event Sizing (Thin vs Fat Events)**:
-   - The report synthesizes the Debezium recommendation (rich domain event payload for event-carried state transfer) and the practical operational constraint (avoiding massive payloads that degrade database performance). It appropriately designates this as an architectural trade-off rather than an absolute rule.
+### 2. Research Report vs Primary Sources
+- **CDC vs Polling**: `microservices.io` treats Polling Publisher and Transaction Log Tailing as separate options. Debezium docs focus heavily on log tailing via WAL. `05-report.md` correctly synthesizes both as valid implementations of the Message Relay component without presenting CDC as the only way.
+- **Idempotency Responsibility**: `microservices.io` places idempotency on the consumer. Debezium blog shows both consumer-side deduplication table (`MessageLog`) and immediate outbox row deletion (`persist` + `remove` in single DB transaction). `05-report.md` accurately notes that both mechanisms can coexist.
 
-3. **Cleanup Mechanisms**:
-   - The Debezium blog demonstrates an immediate `entityManager.remove()` pattern within the transaction for CDC log-tailing, whereas Polling Publisher requires batch deletion/archiving of rows where `processed_at IS NOT NULL`. The research accurately documents these differing requirements without presenting one as universally standard.
+### 3. Claimed Semantic Guarantees
+- No claims of "magical exactly-once delivery" without idempotent handling. The report explicitly specifies that outbox delivers **at-least-once** semantics.
 
-4. **Consistency Model**:
-   - All research files consistently state that transactional outbox provides database-event atomicity and eventual consistency downstream, requiring idempotent consumers due to at-least-once delivery semantics. No claims of "exactly-once delivery without consumer idempotency" exist.
+---
 
-Assessment:
-PASS (No material contradictions found).
+## Conclusion
+No material contradictions found.
