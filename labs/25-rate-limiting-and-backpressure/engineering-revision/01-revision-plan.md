@@ -4,20 +4,18 @@ Target Lab: `labs/25-rate-limiting-and-backpressure`
 Previous Verdict: APPROVED
 
 ## Blocking Issues
-None
+None.
 
 ## Non-Blocking Issues
-None
+None.
 
 ## Files To Change
-None (Audit verdict APPROVED with zero findings/defects).
+None required. All code and test components passed audit without defects.
 
 ## Tests To Add/Modify
-None
+None required.
 
 ## Validation Commands
-```bash
-go test ./...
-go test -race ./...
-go run ./cmd/demo
-```
+- `cd labs/25-rate-limiting-and-backpressure && go test ./...`
+- `cd labs/25-rate-limiting-and-backpressure && go test -race ./...`
+- `cd labs/25-rate-limiting-and-backpressure && go run ./cmd/demo`
