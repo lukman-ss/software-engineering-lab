@@ -1,37 +1,39 @@
-# Code Audit Findings
+# Code Audit
 
-## Finding 1
+Target Lab: `labs/24-slo-sli-error-budget`
 
-Location: `internal/metrics/tracker.go:46-104`
-Claimed Behavior: Thread-safe recording and bucket aggregation of events over rolling time windows, handling ordered and out-of-order timestamps.
-Observed Implementation: Protected by `sync.RWMutex` (`w.mu.Lock()` on `Record` and `Summary`). Handles sorted insertion and eviction of stale buckets based on `windowSize`.
+## Finding 1: In-Memory Sliding Window Bucket Aggregation and Eviction
+
+Location: `internal/metrics/tracker.go:46-115`
+Claimed Behavior: Thread-safe recording of events into time-bucketed slices, with out-of-order insertion and chronological eviction of stale windows.
+Observed Implementation: `Record` acquires `w.mu.Lock()`, calls `evictStaleLocked`, properly inserts or updates matching/earlier buckets, maintaining chronological order. `Summary` acquires `w.mu.Lock()`, evicts expired buckets, and calculates totals.
 Assessment: PASS
 Severity: LOW
-Notes: `Record` uses write lock; slice manipulation (`append(w.buckets[:i], ...)`) is bounded by window duration and bucket size.
+Notes: Synchronization is clean and out-of-order handling ensures data integrity.
 
-## Finding 2
+## Finding 2: SLI Ratio and Error Budget Depletion Policy
 
 Location: `internal/slo/evaluator.go:41-70`
-Claimed Behavior: Evaluates SLI ratio `good/total`, calculates error budget `(1 - TargetUptime) * total`, remaining budget, and release freeze policy `CanDeploy`.
-Observed Implementation: Evaluator handles `total == 0` without division by zero (defaults `CurrentSLI` to 1.0 and `CanDeploy` to `true`). Budget consumed directly equals `bad` events count. If `total > 0 && budgetRemaining <= 0`, flags `CanDeploy = false`.
+Claimed Behavior: Accurate calculation of SLI (`good / total`), allowed error budget (`(1 - SLO) * total`), remaining budget, and release freeze enforcement (`CanDeploy = false` when budget is negative or zero).
+Observed Implementation: Evaluates zero traffic gracefully (defaults SLI to 1.0, CanDeploy = true). When bad events exceed allowed failure threshold, `budgetRemaining <= 0` flips `canDeploy` to `false`.
 Assessment: PASS
 Severity: LOW
-Notes: Clean standard-library implementation adhering to Google SRE principles.
+Notes: Mathematical definitions match Google SRE Handbook principles.
 
-## Finding 3
+## Finding 3: Multi-Window Multi-Burn-Rate Calculation
 
 Location: `internal/alerting/engine.go:51-88`
-Claimed Behavior: Multi-window multi-burn-rate alerting requiring both short and long windows to breach burn rate factor before firing.
-Observed Implementation: `CalculateBurnRate` guards against `total == 0` and invalid `targetSLO >= 1.0`. `Check()` verifies `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor` simultaneously before triggering alerts.
+Claimed Behavior: Evaluates short and long windows against burn rate factors. Triggers alert only when both short and long burn rates exceed the configured threshold.
+Observed Implementation: `CalculateBurnRate` computes `actualErrorRate / allowedErrorRate` with division by zero safeguards. `Check` evaluates rules and verifies `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
 Assessment: PASS
 Severity: LOW
-Notes: Matches recommended Google SRE Workbook Chapter 5 multi-window multi-burn-rate alert architecture.
+Notes: Multi-window threshold logic prevents single transient spikes from firing critical alerts.
 
-## Finding 4
+## Finding 4: Concurrency and Thread Safety
 
-Location: `internal/metrics/tracker.go:106-115`
-Claimed Behavior: Evicts expired buckets beyond `windowSize`.
-Observed Implementation: Linear scan on sorted bucket timestamps (`b.StartTime.Before(cutoff)`), slices array efficiently (`w.buckets = w.buckets[idx:]`).
+Location: `internal/metrics/tracker.go:23,47,118`
+Claimed Behavior: Safe concurrent access during high-volume event recording and summary reads.
+Observed Implementation: Protected by `sync.RWMutex` with mutual exclusion across all state modifications and summary calculations.
 Assessment: PASS
 Severity: LOW
-Notes: Safe and simple for expected in-memory bucket counts.
+Notes: Validated via `go test -race ./...`. No data races detected.

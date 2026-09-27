@@ -4,15 +4,13 @@ Target Lab: `labs/24-slo-sli-error-budget`
 
 ## Comparison Matrix
 
-| Item | Documented Claim | Observed Implementation | Result |
-| :--- | :--- | :--- | :--- |
-| **SLI Definition** | Good requests divided by total valid requests | `sli = float64(good) / float64(total)` in `evaluator.go:46` | MATCH |
-| **Error Budget Definition** | `(1 - SLO) * total` events | `totalErrorBudget := (1.0 - TargetUptime) * float64(total)` in `evaluator.go:50` | MATCH |
-| **Deployment Freeze Policy** | Halts deployments when budget exhausted (`budgetRemaining <= 0`) | `canDeploy = false` when `budgetRemaining <= 0` in `evaluator.go:55` | MATCH |
-| **Burn Rate Alerting** | Multi-window burn rate alert fires only when short & long windows breach factor | `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor` in `engine.go:73` | MATCH |
-| **Endpoint Criticality** | Strict SLO on critical endpoints (e.g. 99.9% Payment) vs relaxed on non-critical (95.0% Reports) | Demonstrated in `cmd/demo/main.go:117-147` | MATCH |
-| **Demo Output Accuracy** | Demo output recorded in `engineering/03-execution-result.md` | Exact verbatim match with real `go run ./cmd/demo` execution output | MATCH |
+| Aspect | Claimed in README / Engineering Notes | Code & Demo Implementation | Assessment |
+|---|---|---|---|
+| Metrics Aggregation | Sliding-window time-bucketed event tracker in `internal/metrics` | `WindowTracker` in `internal/metrics/tracker.go` | PASS |
+| SLO & Error Budget | SLI ratio, Error Budget calculation, release freeze policy | `Evaluator` in `internal/slo/evaluator.go` returning `Status` with `CanDeploy` | PASS |
+| Burn Rate Alerting | Multi-window burn-rate alert calculator evaluating fast/slow burn | `AlertEngine` in `internal/alerting/engine.go` checking short & long trackers | PASS |
+| Demo Execution | `go run ./cmd/demo` produces real-time traffic phase breakdown and alert outputs | Executable script in `cmd/demo/main.go` runs phases 1-4 cleanly | PASS |
+| Testing Instructions | `go test ./...` and `go test -race ./...` | Unit & concurrency tests present in `tests/slo_test.go` and pass clean | PASS |
 
-## Discrepancies Found
-
-None. README, engineering design, implementation notes, and demo logs precisely mirror code behavior.
+## Discrepancies & Mismatches
+None. All claimed files, structs, functions, thresholds, and outputs match the actual codebase and test suites without exaggeration or missing components.
