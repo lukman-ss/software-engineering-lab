@@ -1,107 +1,391 @@
 # Evidence Gathered
 
-## 1. Constraint Fundamentals
+## 1. Race Condition in Check-Then-Act Pattern
 
-### UNIQUE Constraints
-- "By default, two null values are not considered equal in this comparison." [DDL Constraints: 5.5.3]
-- "NULLS NOT DISTINCT option modifies this and causes the index to treat nulls as equal" [Unique Indexes]
-- "Adding a unique constraint will automatically create a unique btree index on the column or group of columns used in the constraint." [DDL Constraints: 5.5.3]
-- For multi-column: "This specifies that the combination of values in the indicated columns is unique across the whole table" [DDL Constraints: 5.5.3]
+### Claim
+Application-level validation using `SELECT → exists() → INSERT` is vulnerable to race conditions under concurrent requests, leading to duplicate inserts.
 
-### NOT NULL Constraints
-- "A not-null constraint is functionally equivalent to creating a check constraint CHECK (column_name IS NOT NULL), but in PostgreSQL creating an explicit not-null constraint is more efficient." [DDL Constraints: 5.5.2]
-- "In most database designs the majority of columns should be marked not null." [Tip in 5.5.2]
+### Evidence
+```
+-- Without constraint (vulnerable):
+tx1: SELECT count(*) FROM items WHERE code = 'x' → 0
+tx2: SELECT count(*) FROM items WHERE code = 'x' → 0
+tx1: INSERT INTO items (code) VALUES ('x') → INSERT succeeds
+tx2: INSERT INTO items (code) VALUES ('x') → INSERT succeeds (BUG)
+```
 
-### FOREIGN KEY Constraints
-- "This controls whether the constraint can be deferred. A constraint that is not deferrable will be checked immediately after every command." [DDL Constraints: FK section]
-- Matching options:
-  - MATCH FULL: "will not allow one column of a multicolumn foreign key to be null unless all foreign key columns are null"
-  - MATCH SIMPLE: "allows any of the foreign key columns to be null; if any of them are null, the row is not required to have a match in the referenced table"
-  - MATCH PARTIAL: "is not yet implemented" [DDL Constraints: FK section]
-- Actions: NO ACTION (default), RESTRICT, CASCADE, SET NULL, SET DEFAULT
+### Source
+Topic specification itself demonstrates the race condition; verified by PostgreSQL documentation showing constraints enforce at INSERT time via atomic index update.
 
-### CHECK Constraints
-- "A check constraint can also refer to several columns." [DDL Constraints: 5.5.1]
-- "CHECK expressions cannot contain subqueries nor refer to variables other than columns of the current row" [DDL Constraints: 5.5.1 Note]
-- "PostgreSQL assumes that CHECK constraints' conditions are immutable" [DDL Constraints: 5.5.1 Note]
-- "If what you desire is a one-time check against other rows at row insertion, rather than a continuously-maintained consistency guarantee, a custom trigger can be used to implement that" [DDL Constraints: 5.5.1 Note]
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html  
+https://www.postgresql.org/docs/current/indexes-unique.html  
 
-### Primary Key
-- "Primary keys are useful both for documentation purposes and for client applications" [DDL Constraints: 5.5.4]
-- "Adding a primary key will automatically create a unique btree index on the column or group of columns listed in the primary key" [DDL Constraints: 5.5.4]
+### Confidence
+HIGH
 
-## 2. Race Condition Prevention
+### Corroborated By
+PostgreSQL docs (INSERT/UPDATE constraint checking), SQLite docs (constraint enforcement on INSERT/UPDATE), PostgreSQL locking docs (ROW EXCLUSIVE lock on INSERT)
 
-### Constraint Atomicity
-- Constraints are checked "when rows are inserted or updated" [DDL Constraints: 5.5.1 Note]
-- The assumption of immutability for CHECK constraints "justifies examining CHECK constraints only when rows are inserted or updated" [DDL Constraints: 5.5.1 Note]
-- For exclusion constraints: "Each exclude_element defines a column of the index" [DDL Constraints: Exclusion section]
-- UNIQUE constraints use B-tree indexes which provide "readers/writers lock semantics" at the index level
+### Notes
+The race occurs because two concurrent transactions both see zero existing rows before either inserts. Database constraint prevents this by checking uniqueness during the INSERT operation itself under row-level locks.
 
-### Row-Level Locks
-- "FOR UPDATE causes the rows retrieved by the SELECT statement to be locked as though for update. This prevents them from being locked, modified or deleted by other transactions until the current transaction ends." [Explicit Locking: 13.3.2]
-- "Within a REPEATABLE READ or SERIALIZABLE transaction, however, an error will be thrown if a row to be locked has changed since the transaction started." [Explicit Locking: 13.3.2]
+## 2. UNIQUE Constraint Prevents Race Conditions Atomically
 
-### Serializable Transactions
-- "Serializable transactions are just Repeatable Read transactions which add nonblocking monitoring for dangerous patterns of read/write conflicts." [App-Level Consistency: 13.4.1]
-- "When a pattern is detected which could cause a cycle in the apparent order of execution, one of the transactions involved is rolled back to break the cycle." [App-Level Consistency: 13.4.1]
+### Claim
+UNIQUE constraint prevents duplicate key insertion by atomically checking for duplicates during INSERT/UPDATE under row-level locks, ensuring only the first concurrent insert succeeds.
 
-## 3. Partial Unique Indexes
+### Evidence
+```
+-- With UNIQUE constraint (safe):
+tx1: INSERT INTO items (code) VALUES ('x') → INSERT succeeds
+tx2: INSERT INTO items (code) VALUES ('x') → ERROR 23505 unique_violation
+```
 
-### Syntax & Behavior
-- "A partial index is an index built over a subset of a table; the subset is defined by a conditional expression (called the predicate of the partial index)." [Partial Indexes: 11.8]
-- "To create a partial index that suits our example, use a command such as this: CREATE INDEX access_log_client_ip_ix ON access_log (client_ip) WHERE NOT (client_ip > inet '192.168.100.0' AND client_ip < inet '192.168.100.255');" [Partial Indexes: Example 11.1]
-- "The predicate must match the conditions used in the queries that are supposed to benefit from the index" [Partial Indexes: Note]
-- "PostgreSQL does not have a sophisticated theorem prover that can recognize mathematically equivalent expressions that are written in different forms" [Partial Indexes: Note]
+### Source
+PostgreSQL docs explain: UNIQUE constraints use B-tree indexes; concurrent inserts with same key conflict during index update under ROW EXCLUSIVE lock, with conflict detection raising unique_violation.
 
-### One-Active-Per-Key Pattern
-- "Suppose that we have a table describing test outcomes. We wish to ensure that there is only one 'successful' entry for a given subject and target combination, but there might be any number of 'unsuccessful' entries." [Partial Indexes: Example 11.3]
-- "CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target) WHERE success;" [Partial Indexes: Example 11.3]
-- "This is a particularly efficient approach when there are few successful tests and many unsuccessful ones." [Partial Indexes: Example 11.3]
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html  
+https://www.postgresql.org/docs/current/indexes-unique.html  
+https://www.postgresql.org/docs/current/explicit-locking.html  
 
-### Limitations
-- "Matchings takes place at query planning time, not at run time. As a result, parameterized query clauses do not work with a partial index." [Partial Indexes: Note]
-- "For example a prepared query with a parameter might specify 'x < ?' which will never imply 'x < 2' for all possible values of the parameter." [Partial Indexes: Note]
-- "Setting up a partial index indicates that you know at least as much as the query planner knows" [Partial Indexes: Note]
+### Confidence
+HIGH
 
-## 4. Constraint Validation & Error Handling
+### Corroborated By
+PostgreSQL docs (unique index auto-creation, B-tree locking), PostgreSQL locking docs (ROW EXCLUSIVE lock modes), SQLite docs (constraint enforcement on INSERT)
 
-### Error Codes
-- "23502: not_null_violation" [Error Codes: Class 23]
-- "23503: foreign_key_violation" [Error Codes: Class 23]
-- "23505: unique_violation" [Error Codes: Class 23]
-- "23514: check_violation" [Error Codes: Class 23]
-- "23P01: exclusion_violation" [Error Codes: Class 23]
+### Notes
+INSERT acquires ROW EXCLUSIVE lock; concurrent INSERT with same key value will block; conflict detected during B-tree index update; second INSERT fails with 23505 unique_violation.
 
-### Constraint Names
-- "If the constraint is violated, the constraint name is present in error messages, so constraint names like col must be positive can be used to communicate helpful constraint information to client applications" [CREATE TABLE: CONSTRAINT section]
-- "If you don't specify a constraint name in this way, the system chooses a name for you." [DDL Constraints: Check Constraints]
+## 3. UNIQUE Constraint Semantics: NULL Handling and Index Creation
 
-### Validation Timing
-- "Currently, CHECK expressions cannot contain subqueries nor refer to variables other than columns of the current row" [DDL Constraints: 5.5.1]
-- "The warning above about not referencing other table data is really a special case of this restriction" [DDL Constraints: 5.5.1]
+### Claim
+UNIQUE constraint prevents duplicate non-NULL values; by default treats NULLs as distinct (multiple NULLs allowed); NULLS NOT DISTINCT treats NULLs as equal; automatically creates unique B-tree index.
 
-## 5. When NOT to Use Constraints
+### Evidence
+"By default, two null values are not considered equal in this comparison"  
+"NULLS NOT DISTINCT option modifies this and causes the index to treat nulls as equal"  
+"Adding a unique constraint will automatically create a unique btree index on the column or group of columns used in the constraint"
 
-### Cross-Row/Mutable Data
-- "PostgreSQL does not support CHECK constraints that reference table data other than the new or updated row being checked. While a CHECK constraint that violates this rule may appear to work in simple tests, it cannot guarantee that the database will not reach a state in which the constraint condition is false" [DDL Constraints: 5.5.1 Note]
-- "If possible, use UNIQUE, EXCLUDE, or FOREIGN KEY constraints to express cross-row and cross-table restrictions" [DDL Constraints: 5.5.1 Note]
+### Source
+PostgreSQL DDL Constraints section 5.5.3 and Unique Indexes section 11.6
 
-### Performance & Locking
-- "Adding a unique constraint will automatically create a unique btree index" implies index maintenance overhead
-- Constraint checking requires lock acquisition similar to index updates
-- "Exclusion constraints are implemented using an index that has the same name as the constraint" [DDL Constraints: Exclusion section]
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-UNIQUE-CONSTRAINTS  
+https://www.postgresql.org/docs/current/indexes-unique.html  
 
-### Business Logic Complexity
-- "CHECK expressions cannot contain subqueries nor refer to variables other than columns of the current row" limits complex validations
-- "References to other tables are not allowed" for generated columns (similar restriction) [DDL Constraints: Generated Columns]
-- Alternatives: triggers, application validation, serializable transactions
+### Confidence
+HIGH
 
-## 6. Partitioning & Constraints
+### Corroborated By
+PostgreSQL docs (DDL Constraints + Unique Indexes), SQLite docs (NULLs distinct in UNIQUE constraints)
 
-### Unique Constraints on Partitioned Tables
-- "To create a unique or primary key constraint on a partitioned table, the partition keys must not include any expressions or function calls and the constraint's columns must include all of the partition key columns." [Partitioning: 5.12.2.3 Limitations]
-- "This limitation exists because the individual indexes making up the constraint can only directly enforce uniqueness within their own partitions; therefore, the partition structure itself must guarantee that there are not duplicates in different partitions." [Partitioning: 5.12.2.3 Limitations]
+### Notes
+Multi-column UNIQUE: combination of values must be unique. Index auto-creation means no manual index needed for constraint enforcement.
 
-### Exclusion Constraints on Partitioned Tables
-- "Similarly an exclusion constraint must include all the partition key columns. Furthermore the constraint must compare those columns for equality (not e.g. &&)" [Partitioning: 5.12.2.3 Limitations]
+## 4. NOT NULL Constraint: More Efficient Alternative to CHECK
+
+### Claim
+NOT NULL constraint is functionally equivalent to CHECK (col IS NOT NULL) but more efficient; majority of columns should be NOT NULL.
+
+### Evidence
+"A not-null constraint is functionally equivalent to creating a check constraint CHECK (column_name IS NOT NULL), but in PostgreSQL creating an explicit not-null constraint is more efficient"  
+"In most database designs the majority of columns should be marked not null"
+
+### Source
+PostgreSQL DDL Constraints section 5.5.2
+
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-NOT-NULL  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (functional equivalence + efficiency tip), SQLite docs (NOT NULL constraint verification on INSERT/UPDATE)
+
+### Notes
+NOT NULL verified during INSERT/UPDATE; SQLite shows attempts to insert NULL into NOT NULL column cause constraint violation.
+
+## 5. FOREIGN KEY Constraint: Referential Integrity Details
+
+### Claim
+FOREIGN KEY enforces referential integrity; MATCH FULL/SIMPLE determine NULL handling; ON DELETE actions include NO ACTION, RESTRICT, CASCADE, SET NULL, SET DEFAULT; does NOT automatically index referencing columns.
+
+### Evidence
+"MATCH FULL: will not allow one column of a multicolumn foreign key to be null unless all foreign key columns are null"  
+"MATCH SIMPLE: allows any of the foreign key columns to be null"  
+ON DELETE actions: NO ACTION (default), RESTRICT, CASCADE, SET NULL, SET DEFAULT  
+"A foreign key must reference columns that either are a primary key or form a unique constraint, or are columns from a non-partial unique index"  
+"Because this is not always needed, and there are many choices available on how to index, the declaration of a foreign key constraint does not automatically create an index on the referencing columns"
+
+### Source
+PostgreSQL DDL Constraints section 5.5.5
+
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-FK  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (all FK semantics), SQLite docs (FOREIGN KEY constraint enforcement)
+
+### Notes
+Referenced table columns must have PK/unique/index; referencing table does NOT get auto-index (important for performance with CASCADE).
+
+## 6. CHECK Constraint: Row-Scoped and Immutable Assumption
+
+### Claim
+CHECK enforces boolean expression on row values; cannot contain subqueries; satisfied if expression evaluates to TRUE or NULL; PostgreSQL assumes immutability; cross-row validation requires triggers.
+
+### Evidence
+"A check constraint can also refer to several columns"  
+"CHECK expressions cannot contain subqueries nor refer to variables other than columns of the current row"  
+"PostgreSQL assumes that CHECK constraints' conditions are immutable"  
+"PostgreSQL does not support CHECK constraints that reference table data other than the new or updated row being checked"  
+"If what you desire is a one-time check against other rows at row insertion... a custom trigger can be used"
+
+### Source
+PostgreSQL DDL Constraints section 5.5.1
+
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-CHECK-CONSTRAINTS  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (CHECK limitations), SQLite docs (CHECK only verified on INSERT/UPDATE)
+
+### Notes
+CHECK verification timing: only on INSERT/UPDATE, not on SELECT. Immutability assumption justifies skipping re-validation. Cross-row CHECK appears to work in simple tests but fails under concurrent load.
+
+## 7. Partial Unique Index for Soft-Delete Pattern
+
+### Claim
+CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL enforces uniqueness only for active records, allowing reuse of values after soft-delete.
+
+### Evidence
+"CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target) WHERE success"  
+"It is also possible to allow only one null in a column by creating a unique partial index with an IS NULL restriction"
+
+### Source
+PostgreSQL Partial Indexes section 11.8
+
+### URL
+https://www.postgresql.org/docs/current/indexes-partial.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (partial unique index examples), PostgreSQL locking docs (index update during INSERT)
+
+### Notes
+Example: `CREATE UNIQUE INDEX users_active_email_idx ON users (email) WHERE deleted_at IS NULL;` ensures only one active record per email.
+
+## 8. Partial Index Planner Implication Rules
+
+### Claim
+Partial index can be used only if query's WHERE clause mathematically implies the index's predicate; parameterized queries don't work; only simple inequality implications recognized.
+
+### Evidence
+"A partial index can be used in a query only if the system can recognize that the WHERE condition of the query mathematically implies the predicate of the index"  
+"PostgreSQL does not have a sophisticated theorem prover that can recognize mathematically equivalent expressions that are written in different forms"  
+"The system can recognize simple inequality implications, for example 'x < 1' implies 'x < 2'"  
+"Parameterized query clauses do not work with a partial index"
+
+### Source
+PostgreSQL Partial Indexes section 11.8
+
+### URL
+https://www.postgresql.org/docs/current/indexes-partial.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (predicate matching + parameterized query limitation)
+
+### Notes
+Example: Index `WHERE x < 2` can be used by query `WHERE x < 1` but NOT by `WHERE x < ?` (parameterized).
+
+## 9. Constraint Violation Error Codes and Structured Fields
+
+### Claim
+Constraint violations return specific SQLSTATE class 23 error codes; constraint names, table names, column names supplied in separate fields of error report; applications should test SQLSTATE, not error text.
+
+### Evidence
+Class 23 - Integrity Constraint Violation:  
+`23502` - not_null_violation  
+`23503` - foreign_key_violation  
+`23505` - unique_violation  
+`23514` - check_violation  
+`23P01` - exclusion_violation  
+`23001` - restrict_violation  
+"such names are supplied in separate fields of the error report message"
+
+### Source
+PostgreSQL Error Codes Appendix A
+
+### URL
+https://www.postgresql.org/docs/current/errcodes-appendix.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (error code definitions), PostgreSQL app-level consistency docs (error field availability)
+
+### Notes
+Error codes stable across versions and not localized; error text may vary by locale. Error detail fields provide structured access to constraint/table/column information.
+
+## 10. Serializable Isolation for Multi-Row Invariants
+
+### Claim
+SERIALIZABLE isolation prevents multi-row race conditions by detecting dangerous read/write conflict patterns and rolling back one transaction.
+
+### Evidence
+"Serializable transactions are just Repeatable Read transactions which add nonblocking monitoring for dangerous patterns of read/write conflicts"  
+"When a pattern is detected which could cause a cycle in the apparent order of execution, one of the transactions involved is rolled back to break the cycle"
+
+### Source
+PostgreSQL App-Level Consistency section 13.4.1
+
+### URL
+https://www.postgresql.org/docs/current/applevel-consistency.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (SERIALIZABLE definition + SSI), PostgreSQL error docs (40001 serialization_failure)
+
+### Notes
+Alternative to explicit locking (SELECT FOR UPDATE) for complex invariants; applications should retry on 40001 error.
+
+## 11. Production Constraint Migration: NOT VALID + VALIDATE
+
+### Claim
+Adding constraint to production table: use NOT VALID to skip initial table scan, then VALIDATE CONSTRAINT to verify existing data with minimal locking.
+
+### Evidence
+"ADD CONSTRAINT NOT VALID: skips table scan; constraint still enforced on inserts/updates"  
+"VALIDATE CONSTRAINT: acquires only SHARE UPDATE EXCLUSIVE lock on the table being altered"  
+"If the constraint is a foreign key then a ROW SHARE lock is also required on the table referenced by the constraint"
+
+### Source
+PostgreSQL ALTER TABLE documentation
+
+### URL
+https://www.postgresql.org/docs/current/sql-altertable.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (NOT VALID + VALIDATE CONSTRAINT behavior)
+
+### Notes
+NOT VALID allows immediate constraint enforcement on new data; VALIDATE CONSTRAINT can run later with low lock contention to verify existing rows.
+
+## 12. Cross-Database Verification: NULL Handling in UNIQUE Constraints
+
+### Claim
+PostgreSQL and SQLite both treat NULLs as distinct in UNIQUE constraints by default, allowing multiple NULLs; SQL Standard considers this implementation-defined.
+
+### Evidence
+PostgreSQL: "By default, two null values are not considered equal in this comparison"  
+SQLite: "For the purposes of UNIQUE constraints, NULL values are considered distinct from all other values, including other NULLs"
+
+### Source
+PostgreSQL DDL Constraints 5.5.3 + SQLite CREATE TABLE documentation
+
+### URL
+https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-UNIQUE-CONSTRAINTS  
+https://www.sqlite.org/lang_createtable.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs + SQLite docs (independent Tier 1 sources)
+
+### Notes
+Cross-verification shows consistent NULL handling between two major SQL implementations despite standard leaving it implementation-defined.
+
+## 13. Stripe Idempotency Pattern vs Database-Level Idempotency
+
+### Claim
+Stripe's idempotency saves first request result per key; database-level idempotency for webhook deduplication uses UNIQUE constraint on reference_number + transaction.
+
+### Evidence
+Stripe: "Stripe's idempotency works by saving the resulting status code and body of the first request made for any given idempotency key"  
+Database pattern: UNIQUE(reference_number) + transaction + idempotency key prevents duplicate webhook processing
+
+### Source
+Stripe API Documentation + Topic specification exercise
+
+### URL
+https://docs.stripe.com/api/idempotent_requests  
+
+### Confidence
+MEDIUM (Stripe verified, database pattern inferred from lab spec)
+
+### Corroborated By
+Stripe docs verified; database pattern logically follows from UNIQUE constraint atomicity
+
+### Notes
+Stripe is application-level idempotency; database UNIQUE provides storage-level deduplication. Combined pattern: idempotency key in application + UNIQUE constraint + transaction.
+
+## 14. Partitioned Table Unique Constraint Limitation
+
+### Claim
+Unique constraint on partitioned table must include ALL partition key columns; cannot enforce cross-partition uniqueness without full partition key in constraint.
+
+### Evidence
+"To create a unique or primary key constraint on a partitioned table, the partition keys must not include any expressions or function calls and the constraint's columns must include all of the partition key columns"  
+"This limitation exists because the individual indexes making up the constraint can only directly enforce uniqueness within their own partitions; therefore, the partition structure itself must guarantee that there are not duplicates in different partitions"
+
+### Source
+PostgreSQL Table Partitioning section 5.12.2.3
+
+### URL
+https://www.postgresql.org/docs/current/ddl-partitioning.html  
+
+### Confidence
+HIGH
+
+### Corroborated By
+PostgreSQL docs (partitioning limitations)
+
+### Notes
+Critical for partitioned table design: if partition key not in unique constraint, duplicates can exist across partitions even if each partition individually unique.
+
+## 15. Constraint Cannot Replace Application Validation for UX
+
+### Claim
+Application validation remains necessary for user-friendly error messages; database constraint provides last-line defense for correctness.
+
+### Evidence
+"Application validation is useful for UX: 'Email already used'"  
+"Database constraint is useful for correctness: 'Impossible to have two emails that are same'"  
+"Use both: Application Validation → Friendly error, Database Constraint → Absolute protection"
+
+### Source
+Topic specification (best practices section)
+
+### URL
+N/A (reasoning from lab spec)
+
+### Confidence
+HIGH
+
+### Corroborated By
+Topic specification + PostgreSQL error handling docs (mapping constraint violations to domain errors)
+
+### Notes
+Constraint violations should be mapped to HTTP 409 Conflict with business-meaningful messages, not exposed as raw 500 errors.
