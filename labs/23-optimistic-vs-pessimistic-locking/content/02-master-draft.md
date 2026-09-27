@@ -296,6 +296,7 @@ The demo (`go run ./cmd/demo`) runs five side-by-side scenarios, each starting f
 
 ```text
 [1] Naive Read-Modify-Write (50 concurrent requests):
+    Initial Stock: 100
     Expected Final Stock: 50
     Actual Final Stock:   99 (LOST UPDATE DETECTED!)
 
@@ -304,6 +305,7 @@ The demo (`go run ./cmd/demo`) runs five side-by-side scenarios, each starting f
     Actual Final Stock:   50 (SUCCESS - Fully Synchronized)
 
 [3] Optimistic Locking Direct (20 concurrent requests, no retry):
+    Initial Stock: 100
     Successful Deductions: 1
     Rejected Conflicts:   19
     Actual Final Stock:   99 (SUCCESS - State Guarded, Zero Corruption)
