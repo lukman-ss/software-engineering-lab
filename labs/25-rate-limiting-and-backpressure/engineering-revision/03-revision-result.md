@@ -1,6 +1,6 @@
 # Engineering Revision Result
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+Target Lab: labs/25-rate-limiting-and-backpressure
 Previous Verdict: APPROVED
 
 ## Issue Summary
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-None.
+- None
 
 ## Re-Audit Status
 
