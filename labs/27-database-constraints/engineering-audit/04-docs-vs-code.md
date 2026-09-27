@@ -1,17 +1,26 @@
-# Docs vs Code Audit
+# Documentation vs Code Audit
+
+Target Lab: labs/27-database-constraints
+
+## Documents Reviewed
+- `README.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
+- `research/05-report.md`
 
 ## Comparison Matrix
 
-| Subject | README Claim | Code & Test Implementation | Status |
-|---|---|---|---|
-| NOT NULL (`23502`) | Ensures required columns accept no null values | Implemented in `engine.go:50-56`, tested in `store_test.go:16-38`, demonstrated in `main.go:25-27` | MATCH |
-| CHECK (`23514`) | Evaluates boolean predicates (`age >= 18`, `status IN (...)`, `total_cents > 0`) | Implemented in `engine.go:58-68,132-135`, tested in `store_test.go:40-67`, demonstrated in `main.go:29-36` | MATCH |
-| UNIQUE (`23505`) | Prevents duplicate rows & race conditions | Implemented in `engine.go:78-83`, tested in `store_test.go:69-86,162-208`, demonstrated in `main.go:58-95` | MATCH |
-| FOREIGN KEY (`23503`) | Enforces referential integrity | Implemented in `engine.go:137-140`, tested in `store_test.go:88-112`, demonstrated in `main.go:37-41` | MATCH |
-| PARTIAL UNIQUE INDEX | Enables soft delete re-registration (`WHERE deleted_at IS NULL`) | Implemented in `engine.go:71-77,102-120`, tested in `store_test.go:114-160`, demonstrated in `main.go:42-57` | MATCH |
-| Test Commands | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | Executed and confirmed passing with zero race conditions | MATCH |
+| Claim / Specification | Documentation Source | Code Implementation | Status |
+|-----------------------|----------------------|---------------------|--------|
+| NOT NULL (SQLSTATE 23502) | README.md / Design.md | `internal/engine/engine.go:51-56` | MATCH |
+| CHECK Constraints (SQLSTATE 23514) | README.md / Design.md | `internal/engine/engine.go:58-69` | MATCH |
+| UNIQUE Constraints (SQLSTATE 23505) | README.md / Design.md | `internal/engine/engine.go:78-83` | MATCH |
+| FOREIGN KEY Constraints (SQLSTATE 23503) | README.md / Design.md | `internal/engine/engine.go:137-140` | MATCH |
+| PARTIAL UNIQUE INDEX (`WHERE deleted_at IS NULL`) | README.md / Design.md | `internal/engine/engine.go:71-77,101-120` | MATCH |
+| Concurrency Safe vs Unsafe Comparison | README.md / Design.md | `internal/store/store.go` / `store_test.go` | MATCH |
+| Demo Output & Commands | README.md | `cmd/demo/main.go` runs with identical steps | MATCH |
+| Package structure | Design.md | Packages implemented under `internal/{engine,store,dberr,model}` | MATCH |
 
-## Audit Discrepancy Findings
-- DOC_CODE_MISMATCH: None.
-- TEST_CLAIM_MISMATCH: None.
-- RESEARCH_IMPLEMENTATION_MISMATCH: None.
+## Discrepancies Found
+None. The code, test suite, and runnable CLI demo strictly align with all claims documented in `README.md` and `engineering/01-design.md`.

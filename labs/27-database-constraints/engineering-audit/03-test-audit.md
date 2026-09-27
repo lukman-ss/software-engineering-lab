@@ -1,40 +1,51 @@
 # Test Audit
 
-## Test Suite Execution Verification
+Target Lab: labs/27-database-constraints
 
-Command Executed:
-`go test -v ./...`
-Output:
-- `TestNotNullConstraints`: PASS
-- `TestCheckConstraints`: PASS
-- `TestUniqueConstraint`: PASS
-- `TestForeignKeyConstraint`: PASS
-- `TestPartialUniqueIndex`: PASS
-- `TestConcurrentRegistration_Safe_EnforcesUniqueness`: PASS
-- `TestConcurrentRegistration_Unsafe_SuffersRaceCondition`: PASS
-- `TestErrorClassification`: PASS
+## Coverage Summary
 
-Race Detector Command Executed:
-`go test -race -count=1 ./...`
-Output:
-- PASS (0 data races detected)
+1. **NOT NULL Constraints (`TestNotNullConstraints`)**
+   - Covered: Missing email on User, missing username on User, missing user_id on Order.
+   - Assessment: PASS
 
-## Coverage Assessment
+2. **CHECK Constraints (`TestCheckConstraints`)**
+   - Covered: Underage user (`age < 18`), invalid status (`banned`), order total zero/negative (`total_cents <= 0`).
+   - Assessment: PASS
 
-1. Happy Path:
-   - User creation with valid fields: Covered (`TestUniqueConstraint`, `TestForeignKeyConstraint`, `TestPartialUniqueIndex`).
-   - Order creation with valid FK: Covered (`TestForeignKeyConstraint`).
+3. **UNIQUE Constraints (`TestUniqueConstraint`)**
+   - Covered: First user insert succeeds, duplicate email insert fails with constraint violation.
+   - Assessment: PASS
 
-2. Failure Path:
-   - NOT NULL violations: Covered (`TestNotNullConstraints`).
-   - CHECK violations (age < 18, invalid status, total_cents <= 0): Covered (`TestCheckConstraints`).
-   - UNIQUE violations: Covered (`TestUniqueConstraint`).
-   - Foreign Key missing parent: Covered (`TestForeignKeyConstraint`).
+4. **FOREIGN KEY Constraints (`TestForeignKeyConstraint`)**
+   - Covered: Non-existent `user_id` insert rejected, existing `user_id` insert succeeds.
+   - Assessment: PASS
 
-3. Edge Cases & Advanced Scenarios:
-   - Soft-delete re-registration (Partial Unique Index): Covered (`TestPartialUniqueIndex`).
-   - Concurrent stress test (50 goroutines on safe store): Covered (`TestConcurrentRegistration_Safe_EnforcesUniqueness`).
-   - Concurrent race condition demonstration (unsafe store): Covered (`TestConcurrentRegistration_Unsafe_SuffersRaceCondition`).
-   - SQLSTATE classification helper: Covered (`TestErrorClassification`).
+5. **PARTIAL UNIQUE INDEX (`TestPartialUniqueIndex`)**
+   - Covered: Active insert succeeds -> Duplicate active insert rejected -> Soft delete active user -> Re-insert active user succeeds -> Duplicate active insert rejected again -> Soft-deleted direct insert allowed.
+   - Assessment: PASS
 
-Assessment: PASS. Test coverage is comprehensive across happy paths, failure boundaries, soft-delete edge cases, and concurrency guarantees.
+6. **Concurrency Stress Test — Safe Store (`TestConcurrentRegistration_Safe_EnforcesUniqueness`)**
+   - Covered: 20 concurrent goroutines attempting to register the exact same email.
+   - Verified: Exactly 1 success, 19 rejected with unique violation, database contains exactly 1 user row.
+   - Assessment: PASS
+
+7. **Concurrency Stress Test — Unsafe Store (`TestConcurrentRegistration_Unsafe_SuffersRaceCondition`)**
+   - Covered: 20 concurrent goroutines attempting to register the exact same email using application-level check.
+   - Verified: Proves race condition occurrence by resulting in >1 duplicate user entries.
+   - Assessment: PASS
+
+8. **Error Classification (`TestErrorClassification`)**
+   - Covered: Checks `dberr.IsConstraintViolation` against SQLSTATE constants (`23502`, `23503`, `23505`, `23514`).
+   - Assessment: PASS
+
+## Execution Results
+
+Command: `go test -count=1 -v ./...`
+Status: PASS
+Output: 8 passed in internal/store package.
+
+Command: `go test -count=1 -race ./...`
+Status: PASS (No data races detected).
+
+Command: `go run ./cmd/demo`
+Status: PASS (Exhibits expected demo output for all 5 constraint categories).

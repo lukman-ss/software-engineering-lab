@@ -11,14 +11,13 @@ Code Files Reviewed:
 - internal/engine/engine.go
 - internal/store/store.go
 - cmd/demo/main.go
-- README.md
 
 Tests Reviewed:
 - internal/store/store_test.go
 
 Commands Executed:
-- `go test -v ./...`
-- `go test -race -count=1 ./...`
+- `go test -count=1 -v ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
