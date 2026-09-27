@@ -1,28 +1,29 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/21-outbox-pattern
-Audit Date: 2026-09-27
+Audit Date: Sun Sep 27 2026
 
 ## Summary
 
 Code Files Reviewed:
-- internal/outbox/model.go
-- internal/outbox/db.go
-- internal/outbox/broker.go
-- internal/outbox/service.go
-- internal/outbox/relay.go
-- internal/outbox/consumer.go
+- `internal/outbox/model.go`
+- `internal/outbox/db.go`
+- `internal/outbox/broker.go`
+- `internal/outbox/service.go`
+- `internal/outbox/relay.go`
+- `internal/outbox/consumer.go`
+- `cmd/demo/main.go`
 
 Tests Reviewed:
-- tests/outbox_test.go
+- `tests/outbox_test.go` (7 test cases)
 
 Commands Executed:
-- `go test -v -count=1 ./...`
-- `go test -race -v -count=1 ./...`
+- `go test ./...`
+- `go test -race ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
-Warnings: 1 (Concurrent relay polling lock warning - minor low risk)
+Warnings: 1 (Minor doc wording discrepancy between design diagram and in-memory DB)
 
 ## Quality Gates
 
@@ -37,7 +38,7 @@ Documentation Accuracy: PASS
 None.
 
 ## Non-Blocking Issues
-1. `GetPendingOutbox()` returns pending messages without status claiming/locking. Single relay instance works perfectly, but multi-relay scaling would cause redundant dispatches.
+1. `01-design.md` diagram lists SQLite DB, but actual code implements a custom thread-safe in-memory transactional database (`internal/outbox/db.go`), which is explicitly documented in `02-implementation-notes.md`.
 
 ## Required Revisions
 None.

@@ -14,21 +14,17 @@ Executable/Demo:
 - cmd/demo/main.go
 Approved Research Inputs:
 - research/05-report.md
-- engineering/01-design.md
-- engineering/02-implementation-notes.md
 Main Claims To Verify:
-1. Atomicity of business record and outbox record commit in single transaction.
-2. Rollback discards both business and outbox records.
-3. Dual-write naive pattern leaves system inconsistent on broker failure.
-4. Polling relay asynchronously queries pending records and publishes to broker, marking records processed.
-5. Idempotent consumer discards duplicate deliveries safely.
-6. Processed outbox records can be purged.
-7. Concurrency safety under Go race detector.
+1. Dual-write vulnerability demonstrates state inconsistency (DB write succeeds, broker write fails).
+2. Transactional outbox pattern guarantees atomic write of business state and outbox record in a single database transaction.
+3. Outbox polling relay delivers messages from outbox table to broker and updates outbox status asynchronously.
+4. Downstream consumer handles messages idempotently via unique event ID tracking.
+5. Code compiles cleanly, tests pass with `-race`, demo executes as claimed.
 Commands To Run:
-- go test -v -count=1 ./...
-- go test -race -v -count=1 ./...
-- go run ./cmd/demo
+- `go test ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-- In-memory mock DB mimicking transaction semantics rather than real SQL engine (modernc.org/sqlite noted in 01-design.md).
-- Relay error handling and retry loop behavior under persistent broker failures.
-- Concurrency test asserting race safety rather than throughput or ordering consistency.
+- Memory DB simulation concurrency/race issues.
+- Mismatch between research/design (SQLite claimed in design vs In-Memory DB in code).
+- Incomplete failure/recovery path in relay worker.
