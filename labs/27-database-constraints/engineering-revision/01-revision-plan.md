@@ -10,15 +10,15 @@ None.
 None.
 
 ## Files To Change
-None required.
+None (all implementation files, tests, and documentation verified correct).
 
 ## Tests To Add/Modify
-None required.
+None.
 
 ## Validation Commands
 ```bash
 cd labs/27-database-constraints
-go test -v ./...
-go test -race ./...
+go test -count=1 -v ./...
+go test -count=1 -race ./...
 go run ./cmd/demo
 ```

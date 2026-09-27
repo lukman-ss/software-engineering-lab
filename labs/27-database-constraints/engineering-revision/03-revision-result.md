@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-None.
+- None.
 
 ## Re-Audit Status
 
