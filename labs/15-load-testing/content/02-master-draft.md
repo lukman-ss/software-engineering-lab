@@ -1,251 +1,170 @@
-# Load Testing dan Analisis Bottleneck Saturasi Sumber Daya
+# Load Testing: Menemukan Batas Sistem Sebelum Pengguna Menemukannya
 
 ## Problem
-Banyak tim rekayasa perangkat lunak mengandalkan metrik rata-rata waktu respons (*average response time*) untuk menilai performa sistem di bawah beban. Pendekatan ini menimbulkan ilusi stabilitas: rata-rata menyamarkan lonjakan latensi ekor (*tail latency outliers*). Ketika 95% request selesai dalam 20ms tetapi 5% sisanya tertahan selama 2000ms karena antrean sumber daya, rata-rata matematika tetap tampak dapat diterima. Akibatnya, degradasi sistem tidak terdeteksi hingga terjadi kegagalan fatal di lingkungan produksi.
+
+Tim sering menganggap aplikasi "siap produksi" hanya karena lolos functional test, tanpa memverifikasi perilaku saat banyak pengguna mengakses secara bersamaan. Ini menyebabkan degradasi performa tak terduga, timeout, atau kegagalan sistem pada saat kritis seperti promo besar, periode pembayaran gaji, atau go-live. Tanpa data nyata tentang bagaimana sistem berperilaku di bawah beban, keputusan deploy bersifat asumsi.
 
 ## Why This Matters
-Pengujian beban (*load testing*) bertujuan memetakan batas daya tahan sistem dan perilaku degradasinya, bukan sekadar membuktikan bahwa aplikasi berjalan cepat dalam kondisi ideal. Tanpa pengujian bertahap dan observasi persentil, tim tidak dapat memprediksi komponen downstream mana—seperti connection pool basis data atau thread pool aplikasi—yang pertama kali mencapai titik saturasi (*breaking point*).
+
+Load testing bukan sekadar proses tautologi — ia menjadi satu-satunya cara untuk memperkirakan dampak ekonomi dari kegagalan sistem. Sebuah aplikasi booking bengkel yang dapat menangani 99% permintaan dalam 50ms pada ragam normal, tapi mengalami 5 detik latency pada antrian 1000 permintaan sekaligus, dapat kehilangan ribuan pelanggan dan merusak reputasi. Persentil tinggi (P95, P99) memberi gambaran tentang pengalaman pengguna yang paling buruk, bukan rata-rata yang dapat menutupi masalah.
 
 ## Mental Model
-Model mental pengujian beban berpusat pada hubungan antara kapasitas sumber daya tetap dan pertumbuhan antrean konkuren:
-- **Smoke Stage**: Beban konkurensi berada jauh di bawah kapasitas penanganan paralel. Tidak ada antrean; latensi murni ditentukan oleh durasi komputasi dasar. Rata-rata dan P95 bernilai identik.
-- **Saturation Point**: Tingkat konkurensi menyamai batas penanganan sumber daya (misalnya ukuran koneksi basis data).
-- **Stress Stage**: Tingkat konkurensi melampaui batas penanganan. Kelebihan permintaan dipaksa mengantre. Waktu tunggu bertambah secara kumulatif, memicu lonjakan eksponensial pada P95 dan P99, sementara rata-rata hanya meningkat moderat.
+
+Fokus pada tiga tonggak: (1) Baseline: beban rendah, semua resource cukup, latency stabil. (2) Saturation: beban melebihi kapasitas resource terbatas (misalnya: koneksi database), request baru menunggu dalam antrian. (3) Failure: resource habis total, menghasilkan error atau timeout. Penting untuk membedakan antara beban yang mengisi antrian (menyebabkan P95 meningkat) dan beban yang benar-benar crash sistem (menyebabkan error rate meningkat).
 
 ## Core Concept
-1. **Inkremental Testing**: Pengujian wajib dimulai dari *smoke test* berkonkurensi rendah (2–5 Virtual Users) untuk memvalidasi integritas skrip dan konfigurasi, sebelum dielevasi ke beban normal (*load test*), beban puncak (*stress test*), lonjakan mendadak (*spike test*), atau durasi panjang (*soak test*).
-2. **Distribusi Persentil**:
-   - **P50 (Median)**: Pengalaman 50% pengguna tipikal.
-   - **P90 / P95**: Pengalaman pengguna pada kuartil teratas; indikator utama degradasi antrean.
-   - **P99**: Kasus ekstrem ekor distribusi; menunjukkan penumpukan antrean parah, garbage collection, atau locking.
-3. **Korelasi Metrik Sisi Klien vs Sisi Server**: Metrik latensi, RPS, dan error rate dari generator beban harus selalu dikorelasikan dengan utilisasi CPU, memori, I/O, serta saturasi pool koneksi pada server target.
 
-## Failure Scenario
-Ketika endpoint transaksional menerima beban konkuren yang melebihi kapasitas *connection pool* basis data:
-1. Slot koneksi terpakai penuh oleh sejumlah request pertama.
-2. Request berikutnya terhenti di memori menunggu slot dibebaskan.
-3. Waktu tunggu antrean terakumulasi ke total durasi pemrosesan.
-4. Latensi P95 melonjak tajam melampaui ambang batas toleransi (misalnya melompat dari 20ms ke >200ms).
-5. Jika waktu tunggu melampaui batas timeout klien, request gagal dengan error 5xx atau koneksi diputus.
+### Enam Jenis Performance Test
+
+Standar industri mengakui enam jenis utama performance test dengan definisi yang konsisten:
+
+1. **Smoke Test**: Tes beban minimal (2-20 VUs, detik hingga menit) dijalankan setiap kali script dibuat/diperbarui. Tujuannya memvalidasi kebenaran skrip dan mengumpulkan baseline metrics.
+2. **Load/Average Test**: Menyimulasikan traffic produksi normal dengan pola ramp-up/plateau/ramp-down. Mengukur kinerja sistem pada kondisi terduga sehari-hari.
+3. **Stress Test**: Beban di atas rata-rata untuk menguji batas sistem. Harus dijalankan setelah load test lolos. Level beban bergantung pada profil risiko sistem (rush hour, payday, akhir minggu), bukan persentase tetap seperti 50% atau 100%.
+4. **Spike Test**: Lonjakan tiba-tiba dengan minimal/no ramp-up. Digunakan untuk flash sale, peluncuran produk, atau kejutan musiman.
+5. **Soak/Endurance Test**: Load test rata-rata yang diperpanjang menghari-hari (3-72 jam) untuk mendeteksi memory leak, resource leak, atau kehabisan storage.
+6. **Breakpoint Test**: Peningkatan beban bertahap hingga sistem gagal untuk mengidentifikasi kapasitas maksimum dan titik kegagalan.
+
+### Metrics Kunci
+
+Senior engineer memantau kombinasi metrics berikut sebagai standar industri:
+
+- **Response Time Percentiles**: P50, P95, P99 (bukan rata-rata, karena rata-rata menutupi tail latency spike)
+- **Error Rate**: Persentase request yang gagal (HTTP 5xx, timeout, error aplikasi)
+- **Requests Per Second (RPS)**: Throughput yang dihasilkan sistem
+- **Resource Utilization**: CPU, memori, disk I/O, jaringan, serta koneksi database
+
+Azure Well-Architected Performance Efficiency Pillar menekankan definisi performance targets yang mencakup response time, throughput, resource usage, dan stability. ISO/IEC 25010 (Performance Efficiency subcharacteristics) mengonfirmasi Time behaviour dan Resource utilisation sebagai atribut kualitas perangkat lunak.
 
 ## How It Works
-Sistem pengujian beban pada lab ini mengimplementasikan dua bagian terpisah:
-1. **Mock Server (`internal/server`)**: Menyediakan endpoint `POST /booking`. Kapasitas koneksi basis data dimodelkan menggunakan buffered channel (semafor) berukuran tetap (default 5 koneksi), di mana setiap transaksi menahan slot selama durasi tertentu (default 20ms).
-2. **Load Runner (`internal/loadtest`)**: Mengorkestrasi *Virtual Users* (VUs) independen menggunakan goroutine, mengeksekusi request HTTP berulang kali selama durasi yang ditentukan, mengumpulkan durasi latensi **hanya untuk request berhasil (HTTP 2xx)** ke dalam slice privat per-VU guna menghindari overhead mutex, dan menghitung ringkasan statistik persentil setelah seluruh goroutine selesai. Request yang gagal (transport error atau HTTP >= 400) tidak direkam dalam metrik latensi, hanya dihitung sebagai error.
+
+### Identifikasi Bottleneck
+
+Untuk membedakan bottleneck aplikasi vs database vs external API, metode adalah memonitor component-level metrics secara paralel dan mencari korelasi dengan degradasi response time:
+
+- Peningkatan `http_req_waiting` (Time To First Byte) menunjukkan bottleneck pada server-side (aplikasi atau database)
+- Peningkatan `http_req_connecting` menunjukkan network atau connection issues
+- Latensi pada third-party API yang menunjukkan dependency eksternal
+
+k6 memecah `http_req_duration` menjadi komponen-mikro: blocked, connecting, TLS handshaking, sending, waiting, receiving. Analisis ini memungkinkan isolasi lapisan mana yang menjadi penanggung jawab degradasi.
+
+### Konfigurasi Semaphore untuk Simulasi Connection Pool
+
+Server mock menggunakan buffered channel (semaphore) untuk mensimulasikan batas koneksi database. Kapasitas ditentukan oleh ukuran channel; ketika penuh, request baru menunggu sampai slot melepaskan. Penambahan `time.Sleep` pada duration query DB mensimulasikan latency operasi database sebenarnya.
 
 ## Architecture
-Komponen lab dirancang tanpa dependensi eksternal:
 
-```text
-+-------------------------------------------------------------+
-|                     Load Test Runner                        |
-|                                                             |
-|  [VU 1] -----> HTTP POST /booking                           |
-|  [VU 2] -----> HTTP POST /booking                           |
-|  ...                                                        |
-|  [VU N] -----> HTTP POST /booking                           |
-|                                                             |
-|  (Tiap VU mencatat latensi ke memory slice independen)     |
-+------------------------------+------------------------------+
-                               |
-                               v
-+-------------------------------------------------------------+
-|                  HTTP Server (/booking)                     |
-|                                                             |
-|        +-------------------------------------------+        |
-|        | Semafor Penampung Koneksi (Max = 5 Slot)  |        |
-|        +-------------------------------------------+        |
-|            | Slot 1 | Slot 2 | Slot 3 | Slot 4 | Slot 5     |
-|                                                             |
-|   (Request ke-6 dan seterusnya tertahan mengantre)          |
-|   (Pemrosesan simulasi query memakan durasi 20ms)           |
-+-------------------------------------------------------------+
+```
+Booking Server (constrained connection pool)
+    ↓ POST /booking
+Load Tester (multiple VUs)
+    ↓ concurrent HTTP requests
+Result Aggregator (collects latencies per VU)
+    ↓ stats calculation
+Metrics Output (Min, Max, Avg, P50, P90, P95, P99, RPS)
 ```
 
+Komponen utama:
+1. `BookingServer`: HTTP handler dengan concurrency limit (semaphore) mensimulasikan database connection pool
+2. `LoadTester`: Concurrency orchestrator menghasilkan trafik HTTP dengan VUs yang ditentukan untuk durasi yang dipertimbangkan
+3. `MetricsAggregator`: Buffer latensi per-VU dikumpulkan ke `CalculateMetrics` untuk menghitung persentil tanpa lock
+
 ## Implementation
-Struktur modul lab terdiri dari:
-- `internal/server/server.go`: Mengimplementasikan server HTTP dengan semafor kanal Go.
-- `internal/loadtest/runner.go`: Mengimplementasikan runner beban konkuren dengan transport HTTP kustom (`MaxIdleConns: 1000`) untuk mencegah limitasi pooling sisi klien menyamarkan bottleneck server.
-- `internal/loadtest/metrics.go`: Mengimplementasikan fungsi penghitungan min, max, avg, P50, P90, P95, dan P99 dari slice latensi terurut (7 metrik total pada `Result`).
-- `cmd/demo/main.go`: Menjalankan perbandingan Smoke Test (2 VU) dan Stress Test (50 VU) melawan server berkapasitas 5 koneksi; `printResults` menampilkan subset ringkas P50/P95/P99 (P90 tetap dihitung di `Result.P90Latency` namun tidak dicetak di demo).
+
+Implementasi menggunakan standar library Go (`net/http`, `sync`, `time`) tanpa dependensi pihak ketiga. Pendekatan "ponytail" menggunakan exact sorting untuk persentil karena skala tes (kurang dari 10.000 sampel) masih terukur. Untuk benchmark ratusan ribu RPS atau durasi berjam-jam, histogram streaming seperti HdrHistogram lebih cocok.
+
+Server menerima konfigurasi `MaxDBConnections` (default 5) dan `DBQueryDuration` (default 10ms). Setiap request mengakuisisi slot pada semaphore sebagai gantinya koneksi database sebenaranya. Jika banyak request masuk sekaligus, yang terakhir menunggu sampai ada slot yang melepaskan (defer). Penambahan `time.Sleep` pada duration query DB mensimulasikan latency operasi database sebenarnya. Dalam server.go:74-78 terdapat peningkatan acak 10% pada durasi query untuk mencerminkan beban sistem.
+
+Load generator menggunakan `http.Transport` custom dengan `MaxIdleConns` dan `MaxIdleConnsPerHost` tinggi (1000) untuk memastikan bariknya bukanlah limit koneksi HTTP klien. Timeout klien ditetapkan 5 detik. Catatan: hanya request sukses (HTTP 2xx) yang merekam latency; request dengan error >= 400 ditulis sebagai error tanpa latency tercatat.
 
 ## Code Walkthrough
 
-### 1. Pembatasan Kapasitas Menggunakan Semafor (`internal/server/server.go`)
-```go
-func (s *Server) handleBooking(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+`internal/server/server.go`:
+- `New(cfg Config)` membuat server dengan semaphore berukuran `MaxDBConnections`
+- `handleBooking` mengakuisisi semaphore, menunggu konteks dibatalkan jika terlalu lama, kemudian menunggu `DBQueryDuration` sebagai simulasi query database
+- `ActiveConnections()` mengembalikan jumlah slot yang sedang digunakan untuk monitoring durasi live
 
-	atomic.AddInt64(&s.activeReq, 1)
-	defer atomic.AddInt64(&s.activeReq, -1)
+`internal/loadtest/runner.go`:
+- `Run(ctx)` membuat multiple goroutine sebanyak `VUs`, masing-masing mengirim request secara loop hingga konteks selesai
+- Setiap goroutine menyimpan latensi dalam slice terpisah untuk menghindari lock contention
+- Setelah semua selesai, semua latensi dikumpulkan dan diteruskan ke `CalculateMetrics`
 
-	// Acquire DB connection slot (simulates DB connection pool limit)
-	select {
-	case s.semaphore <- struct{}{}:
-	case <-r.Context().Done():
-		return
-	}
-	defer func() { <-s.semaphore }()
-
-	dur := s.cfg.DBQueryDuration
-	if atomic.LoadInt64(&s.activeReq) > int64(s.cfg.MaxDBConnections) {
-		if rand.Float32() < 0.10 {
-			dur = s.cfg.DBQueryDuration * 25
-		}
-	}
-	t := time.NewTimer(dur)
-	defer t.Stop()
-
-	select {
-	case <-t.C:
-	case <-r.Context().Done():
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(BookingResponse{
-		Status:    "confirmed",
-		BookingID: "BK-1001",
-	})
-}
-```
-Ketika 5 goroutine mengisi `s.semaphore`, goroutine berikutnya akan memblokir (*block*) pada baris `s.semaphore <- struct{}{}` sampai ada request sebelumnya yang membaca kanal pada baris `<-s.semaphore`.
-
-Context cancellation ditangani non-blocking menggunakan `select` agar request dibatalkan saat client timeout atau context dibatalkan.
-
-Saat request terakumulasi di atas kapasitas pool (`s.activeReq > MaxDBConnections`), server menambahkan 10% kemungkinan penundaan query 25x lebih lama (20ms → 500ms) untuk mensimulasikan varian latency real-world. Penundaan acak ini adalah *amplifier tambahan* di atas penundaan antrean (queuing delay) yang disebabkan semafor; bahkan tanpanya, stress test tetap menunjukkan degradasi P95 akibat penumpukan antrean murni.
-
-### 2. Eksekusi Beban Tanpa Kontensi Mutex (`internal/loadtest/runner.go`)
-```go
-for i := 0; i < r.cfg.VUs; i++ {
-	wg.Add(1)
-	go func(vuID int) {
-		defer wg.Done()
-		var lats []time.Duration
-		var errs int
-
-		for {
-			select {
-			case <-ctx.Done():
-				results[vuID] = vuResult{latencies: lats, errors: errs}
-				return
-			default:
-				req, err := http.NewRequestWithContext(ctx, r.cfg.Method, r.cfg.URL, bytes.NewReader(r.cfg.Body))
-				if err != nil {
-					if ctx.Err() == nil {
-						errs++
-					}
-					continue
-				}
-				if r.cfg.ContentType != "" {
-					req.Header.Set("Content-Type", r.cfg.ContentType)
-				}
-
-				reqStart := time.Now()
-				resp, err := r.client.Do(req)
-				if err != nil {
-					// Only count as error if not a context cancellation
-					if ctx.Err() == nil {
-						errs++
-					}
-					continue
-				}
-				_, _ = io.Copy(io.Discard, resp.Body)
-				_ = resp.Body.Close()
-				
-				if resp.StatusCode >= 400 {
-					errs++
-				} else {
-					lats = append(lats, time.Since(reqStart))
-				}
-			}
-		}
-	}(i)
-}
-```
-Setiap virtual user menulis data ke slice miliknya sendiri (`lats`). **Catatan**: Hanya request dengan status HTTP 2xx yang dicatat latensinya. Request yang gagal (transport error atau HTTP >= 400) tidak dimasukkan ke `lats`, tetapi dihitung sebagai `errs` secara terpisah. Agregasi metrik hanya dilakukan satu kali di thread utama setelah `wg.Wait()` selesai, memastikan eksekusi bebas dari kontensi kunci sinkronisasi.
-
-### 3. Perhitungan Persentil (`internal/loadtest/metrics.go`)
-```go
-sorted := make([]time.Duration, len(latencies))
-copy(sorted, latencies)
-sort.Slice(sorted, func(i, j int) bool {
-	return sorted[i] < sorted[j]
-})
-// ...
-res.P95Latency = percentile(sorted, 95)
-res.P99Latency = percentile(sorted, 99)
-```
-Data latensi disortir secara ascending, lalu indeks persentil diambil berdasarkan posisi peringkat:
-`idx := int(float64(len(sorted)-1) * (pct / 100.0))`.
+`internal/loadtest/metrics.go`:
+- `percentile(sorted, pct)` menghitung indeks aray yang dapatan persentil dengan rumus `len(sorted)-1 * pct/100`
+- `CalculateMetrics` mengembalikan struct dengan semua statistik yang dibutuhkan
 
 ## What the Tests Prove
-Pengujian otomatis pada `tests/loadtest_test.go` dan `internal/loadtest/metrics_test.go` membuktikan:
-1. **Akurasi Penghitungan Statistik**: `TestCalculateMetrics` memastikan kalkulasi Min, Max, Average, P50, P90, P95, dan P99 menghasilkan nilai eksak sesuai distribusi sampel yang diuji.
-2. **Degradasi P95 pada Kondisi Stres**: `TestLoadTest_SmokeVsStress` membuktikan secara deterministik bahwa latensi P95 saat stress test (50 VU) lebih besar daripada smoke test (2 VU) ketika berhadapan dengan limit 5 koneksi server (`assert stressRes.P95Latency > smokeRes.P95Latency`).
-3. **Keamanan Konkurensi**: Seluruh eksekusi lolos deteksi race detector (`go test -race ./...`).
 
-Hasil eksekusi riil dari `cmd/demo`:
-- **Smoke Test (2 VUs, kapasitas 5)**:
-  - Average: ~21.2ms
-  - P50: ~21.2ms
-  - P95: ~21.4ms
-  - P99: ~22.2ms
-  - Error: 0
-- **Stress Test (50 VUs, kapasitas 5)**:
-  - Average: ~504.8ms
-  - P50: ~609.0ms
-  - P95: ~981.6ms
-  - P99: ~1.175s
-  - Error: 0
+Tests memverifikasi tiga hal utama:
 
-Angka ini membuktikan bahwa saat beban melampaui kapasitas pool sebesar 10 kali lipat, waktu antrean melonjak tajam (naik ~46x lipat dari ~21ms ke ~982ms pada P95).
+1. **Akurasi persentil**: `TestCalculateMetrics` menggunakan 100 sampel terurut 1-100ms dan memverifikasi P50=50ms, P95=95ms, P99=99ms sesuai rumus index-based.
 
-## Recovery / Rollback
-Ketika hasil uji beban mengidentifikasi bottleneck connection pool:
-1. **Right-sizing Connection Pool**: Tingkatkan batas pool basis data sejauh memori dan CPU server database mendukung batas koneksi paralel tersebut.
-2. **Rate Limiting / Load Shedding**: Terapkan rate limiter di API gateway atau HTTP middleware untuk menolak request berlebih dengan respons `429 Too Many Requests` atau `503 Service Unavailable` daripada membiarkannya menumpuk di antrean tak terbatas.
-3. **Queue Timeouts**: Konfigurasikan batas timeout pengambilan koneksi (*pool acquire timeout*) pada driver basis data agar request lekas gagal daripada menyebabkan resource exhaustion menyeluruh.
+2. **Perbedaan smoke vs stress**: `TestLoadTest_SmokeVsStress` menunjukkan bahwa P95 stress test jauh lebih tinggi daripada P95 smoke test, membuktikan bahwa tail latency naik drastis ketika resource terebut.
+
+3. **Invarian statistik**: `TestCalculateMetrics_Invariants` memverifikasi bahwa Min ≤ P50 ≤ P90 ≤ P95 ≤ P99 ≤ Max selalu terpenuhi.
+
+4. **Tidak ada race condition**: Semua test lulus dengan `go test -race ./...` bersih, menunjukkan implementasi thread-safe.
+
+## Failure Scenario
+
+Di bawah beban ekstrem, antrian di kanal semaphore berpanjang, menghasilkan latency ekor (P95/P99) yang melonjak hampir seratus kali lipat dibanding rata-rata. Pada contoh demo: smoke test menghasilkan P95 ≈ 21ms, sedangkan stress test (50 VUs vs 5 koneksi) menghasilkan P95 ≈ 1.35s — kenaikan 64x. Error rate tetap nol karena server tidak crash; request hanya menunggu. Ini ilustrasi klasik bahwa "sistem masih berfungsi" tidak berarti "sistem berfungsi baik" bagi pengguna akhir.
 
 ## Production Considerations
-- **Memori Perhitungan Persentil**: Pendekatan sorting slice (`sort.Slice`) dalam implementasi lab membutuhkan memori linier terhadap jumlah request ($O(N)$). Di lingkungan produksi dengan jutaan request, gunakan algoritma histogram streaming seperti `HdrHistogram` atau `t-digest` untuk menghemat memori.
-- **Isolasi Lingkungan Uji**: Uji beban skala penuh tidak boleh dijalankan langsung di database produksi aktif tanpa isolasi data yang ketat.
-- **Kapasitas Generator Beban**: Pastikan mesin runner tidak mengalami saturasi CPU, network socket exhaustion, atau pembatasan client connection pool (`MaxIdleConnsPerHost`) yang dapat menimbulkan hasil uji palsu (*false bottleneck*).
-- **Rekam Latency untuk Semua Request**: Pada produksi, pastikan error response juga dicatat latensinya (bukan hanya error count). Latency error dapat mengungkapkan problem seperti timeout database atau dependency failure yang penting untuk diagnosis.
 
-## Common Mistakes
-1. **Mengabaikan Tahap Smoke Test**: Langsung menjalankan ratusan atau ribuan VU sehingga skrip yang salah konfigurasi memicu kegagalan tanpa mengetahui baseline yang benar.
-2. **Hanya Mengukur Average Response Time**: Menganggap sistem sehat karena rata-rata latensi rendah, padahal sebagian pengguna mengalami antrean ekstrem.
-3. **Mengabaikan Metrik Sisi Server**: Mencatat latensi tinggi dari sisi klien tanpa memantau metrik internal server (CPU, RAM, koneksi DB), sehingga penyebab pasti bottleneck tidak dapat didiagnosis.
-4. **Batas Idle Connection Client HTTP**: Menggunakan klien HTTP default yang membatasi konkurensi koneksi keluar (seperti default `DefaultTransport.MaxIdleConnsPerHost = 2` pada Go), sehingga antrean terjadi di sisi klien, bukan di server target.
+### Common Mistakes
 
-## Case Study
-Dalam skenario sistem transaksional seperti **Booking Bengkel**:
-- **Critical Endpoints**: Pengujian difokuskan pada endpoint yang memutasi status seperti `POST /booking`, `POST /payment`, dan `POST /invoice`, bukan hanya endpoint pembacaan data statis (`GET /branches`).
-- **Tahapan Beban**: Dimulai dari 5–10 VU untuk validasi fungsional (smoke), lalu naik ke 50–100 VU untuk beban tipikal, hingga 800 VU untuk pengujian stres.
-- **Diagnosis Lonjakan P95**: Jika latensi P95 melonjak tajam dari 300ms ke 2.5s pada 800 VU, investigasi dilakukan secara terstruktur:
-  1. Periksa APM/distributed tracing untuk melihat span pemrosesan yang membengkak.
-  2. Periksa apakah connection pool basis data telah mencapai kapasitas 100% atau mengalami table lock.
-  3. Periksa apakah dependensi eksternal (payment gateway atau WhatsApp webhook) mengalami perlambatan atau *rate limiting*.
+1. **Hanya menguji endpoint /health**: Endpoint init dsb tidak menyimulasikan beban transaksional nyata.
+2. **Data dummy terlalu sedikit**: Volume data yang tidak merepresentasikan produksi menghasilkan hasil yang tidak realistis.
+3. **Tidak memantau server**: Monitoring CPU, memori, database metrics dilakukan paralel untuk mengidentifikasi bottleneck.
+4. **Tidak menentukan target performa**: Tanpa thresholds yang didefinisikan (misal: P95 < 500ms), tidak ada kriteria kegagalan yang jelas.
+5. **Menguji di laptop**: Lingkungan dev tidak mencerminkan spesifikasi produksi (contoh: MacBook M4 vs server rack).
+6. **Workload tidak realistis**: Pola traffic tidak mencerminkan perilaku pengguna sebenar.
+
+### Timing dalam SDLC
+
+Load testing dilakukan pada titik-titik kritis:
+- Sebelum go-live
+- Sebelum promosi besar
+- Setelah optimasi apa pun (kode, konfigurasi, infrastruktur)
+- Setelah perubahan database
+- Setelah migrasi cloud
+- Setelah mengubah arsitektur penting
+
+Praktik terbaik adalah melakukan load testing secara konsisten sejak awal development hingga pre-go-live, bukan sekadar sebelum deploy.
 
 ## Checklist
-- [ ] Mulai pengujian dengan Smoke Test (2–5 VU).
-- [ ] Catat metrik persentil: P50, P90, P95, P99; jangan hanya mengandalkan rata-rata.
-- [ ] Amati metrik saturasi server (CPU, Memory, Connection Pool) bersamaan dengan metrik klien.
-- [ ] Pastikan generator beban memiliki kapasitas koneksi idle yang memadai (`MaxIdleConns`).
-- [ ] Hindari race conditions pada pengumpul metrik beban.
-- [ ] Tentukan ambang batas SLA/SLO berbasis persentil untuk kriteria lulus/gagal (*pass/fail threshold*).
+
+- [ ] Tentukan test type yang dibutuhkan (smoke, load, stress, spike, soak, atau breakpoint)
+- [ ] Kumpulkan baseline metrics pada load rendah (smoke test)
+- [ ] Identifikasi resource bottleneck utama (CPU, memori, koneksi database, API eksternal)
+- [ ] Tentukan thresholds pass/fail berdasarkan SLA bisnis (bukan angka standar universal)
+- [ ] Gunakan data volume dan pola traffic yang realistis
+- [ ] Jalankan tes di lingkungan yang mendekati production
+- [ ] Pantau server-side metrics secara paralel selama tes
+- [ ] Analisis korelasi antara penurunan performance dan resource usage
+- [ ] Dokumentasikan temuan dan rencanakan mitigasi
 
 ## Key Takeaways
-- Rata-rata latensi mengaburkan kegagalan ekor distribusi; persentil P95 dan P99 wajib digunakan untuk mengevaluasi performa riil.
-- Pengujian beban harus bertahap: mulai dari smoke test untuk verifikasi integritas, kemudian dinaikkan ke beban target.
-- Antrean pada sumber daya terbatas (seperti database connection pool) menyebabkan peningkatan latensi yang eksponensial.
-- Generator beban harus dirancang thread-safe tanpa kontensi lock internal yang dapat mengaburkan hasil pengukuran.
+
+1. Load testing mengungkap batas kapasitas sistem melalui enam jenis tes utama: smoke, load, stress, spike, soak, dan breakpoint.
+2. Persentil (P95, P99) lebih penting daripada rata-rata karena mengidentifikasi pengalaman pengguna yang buruk.
+3. Bottleneck terdeteksi dengan memonitor metrics tiap lapisan secara paralel dan mencari korelasi.
+4. Tool pilihan harus ditentukan oleh kebutuhan tim (k6 untuk JavaScript, Locust untuk Python, JMeter untuk GUI/XML, Gatling untuk JVM).
+5. Smoke test membuktikan baseline; stress test mengungkapkan efek queuing pada tail latency.
+6. Persentil (P50/P90/P95/P99) hanya mencakup request sukses (HTTP 2xx); request gagal dihitung sebagai error tanpa latency tercatat.
+7. Thresholds harus ditentukan upfront berdasarkan SLA bisnis. Contoh P95 < 500ms adalah ilustratif, bukan standar universal.
+8. Jangan uji endpoint /health atau data fixture kecil. Workload harus merepresentasikan trafik produksi nyata.
+9. Load test di lingkungan mirip production. Laptop dev tidak bisa merepresentasikan spesifikasi server.
+10. Demo mencetak subset P50/P95/P99, walaupun `Result` menghitung P90 juga.
+11. 10% peningkatan latency query di server adalah amplifier di atas antrean, bukan penyebab utama degradasi.
+12. Tidak ada keajaiban satu benchmark. Semua angka kontekstual tergantung arsitektur, workload, dan resource yang dikonsumsi.
 
 ## Sources
-- Types of load testing — Grafana Labs (k6 Documentation): https://k6.io/docs/test-types/
-- What is Azure Load Testing? — Microsoft Learn: https://learn.microsoft.com/en-us/azure/load-testing/overview-what-is-azure-load-testing
+
+- Grafana k6 Documentation: Load test types, Thresholds, Built-in metrics
+- Microsoft Azure Well-Architected Framework: Performance Efficiency Pillar
+- Google SRE Book: Testing for Reliability (Chapter 17)
+- ISO/IEC 25010: Software Quality Model (Performance Efficiency)
+- Apache JMeter User Manual
+- Locust Official Documentation
+- Gatling Documentation

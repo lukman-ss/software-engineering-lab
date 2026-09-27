@@ -1,9 +1,14 @@
-# Key Takeaways
+## Key Takeaways
 
-1. **Rata-rata Menipu**: Metrik rata-rata waktu respons menyembunyikan lonjakan latensi ekor (*tail latency*). Analisis performa wajib menggunakan persentil (P50, P90, P95, P99).
-2. **Pengujian Bertahap**: Load testing wajib dimulai dengan Smoke Test (konkurensi rendah, 2–5 VU) untuk memvalidasi integritas pengujian sebelum menjalankan Stress Test skala penuh.
-3. **Saturasi Sumber Daya Membentuk Antrean**: Ketika konkurensi melebihi kapasitas sumber daya hilir (seperti connection pool basis data), request terpaksa mengantre sehingga latensi P95 melonjak tajam secara non-linier.
-4. **Korelasi Klien-Server**: Mengukur latensi sisi klien saja tidak cukup untuk menemukan akar masalah; metrik engine harus dikorelasikan dengan metrik server (CPU, RAM, utilisasi connection pool).
-5. **Generator Beban Bebas Lock**: Runner pengujian beban harus dirancang thread-safe tanpa kontensi kunci internal agar generator itu sendiri tidak menjadi penghambat pengukuran. Demo mencetak P50/P95/P99 (subset dari 7 metrik yang dihitung, termasuk P90).
-6. **Optimasi Algoritma Statistik**: Pengurutan slice in-memory cocok untuk pengujian berskala kecil, namun pengujian berskala jutaan metrik memerlukan histogram streaming untuk menghemat memori.
-7. **Metrik Latensi Hanya untuk Request Berhasil**: P50/P95/P99 hanya mencerminkan request dengan response 2xx. Request gagal (error transport atau HTTP >= 400) tidak memiliki latency yang terukur—hanya dihitung sebagai error count. Ini dapat menyimpangkan analisis jika komponen downstream mengalami latency tinggi pada saat gagal.
+1. Load testing menemukan batas sistem sebelum pengguna menembukannya. Tanpa data nyata, deployment adalah asumsi.
+2. Gunakan persentil (P95, P99), bukan rata-rata. Rata-rata 21ms tidak menutupi P95 1,5 detik dibawah saturation.
+3. Jenis tes menentukan tujuan. Smoke untuk validasi skrip; spike untuk lonjakan trafik; soak untuk memory leak selama jam-hari.
+4. Bottleneck terdeteksi dengan memonitor semua lapisan secara paralel. Tunggu `http_req_waiting` tinggi berarti app/DB, bukan jaringan.
+5. Connection pool yang terebut menghasilkan antrian + degradasi tail. Ini non-linear: dari 21ms (2 VUs) menjadi 1,35s (50 VUs).
+6. Tool pilihan kontekstual, bukan vendor-driven. k6 untuk JS/API, Locust untuk Python, JMeter untuk GUI/XML, Gatling untuk JVM.
+7. Persentil (P50/P90/P95/P99) hanya mencakup request sukses (HTTP 2xx); request gagal dihitung sebagai error tanpa latensi tercatat.
+8. Thresholds harus ditentukan upfront berdasarkan SLA bisnis. Contoh P95 < 200ms adalah ilustratif, bukan standar universal.
+9. Jangan uji endpoint /health atau data fixture kecil. Workload harus merepresentasikan trafik produksi nyata.
+10. Load test di lingkungan mirip production. Laptop dev tidak bisa merepresentasikan spesifikasi server.
+11. Demo mencetak subset P50/P95/P99, walau `Result` menghitung P90 juga.
+12. Tidak ada keajaiban satu benchmark. Semua angka kontekstual tergantung arsitektur, workload, dan resource yang disponibilitas.

@@ -1,24 +1,33 @@
 # Content Brief
 
-Topic: Load Testing, Analisis Persentil Latensi, dan Deteksi Bottleneck Saturasi Sumber Daya
-Target Reader: Software Engineer, Backend Engineer, Platform / DevOps Engineer
-Problem: Rata-rata latency (average response time) menyamarkan degradasi performa pada ekor distribusi (tail latency). Di bawah beban tinggi atau keterbatasan connection pool, antrean request menyebabkan lonjakan P95/P99 yang fatal bagi sebagian pengguna meski angka rata-rata tampak normal.
-Core Mental Model: Beban konkurensi bertahap (Smoke vs Stress) memetakan batas saturasi sumber daya downstream (database connection pool); persentil latensi (P95, P99) mengekspos degradasi antrean tak linier yang disamarkan oleh rata-rata.
-Approved Research Status: APPROVED
-Approved Engineering Status: APPROVED
+Topic: Load testing untuk aplikasi Booking Bengkel — praktik terbaik, tools, metrics, dan strategi identifikasi bottleneck pada aplikasi software.
+Target Reader: Software engineer yang bertanggung jawab untuk performa sistem, SRE, dan tim QA yang perlu memastikan aplikasi tetap stabil di bawah beban nyata.
+Problem: Tim sering menganggap aplikasi "siap produksi" hanya karena lolos functional test, tanpa memverifikasi perilaku saat banyak pengguna mengakses secara bersamaan. Ini menghasilkan degradasi performa, timeout, atau kegagalan sistem pada saat kritis seperti promo besar atau go-live.
+Core Mental Model: Load testing bukan sekadar memastikan server tidak crash; ia mengekspos bagaimana resource terbatas (koneksi database, thread, memori) membuat latensi meningkat secara non-linear — rata-rata menutupi lonjakan ekstrim pada persentil tinggi (P95, P99) karena antrian di balik batas kapasitas.
+Approved Research Status: APPROVED (research-audit/07-verdict.md)
+Approved Engineering Status: APPROVED (engineering-audit/06-verdict.md)
 Main Concepts:
-- Perbedaan pengujian inkremental: Smoke Test vs Stress Test
-- Kegagalan metrik rata-rata (average dilution) vs keandalan persentil (P50, P90, P95, P99)
-- Peniruan saturasi connection pool basis data menggunakan semafor
-- Korelasi metrik sisi klien (latency, RPS, error rate) dengan metrik sisi server (utilisasi connection pool)
+- Enam jenis tes performa: smoke, load (average-load), stress, spike, soak/endurance, breakpoint
+- Metrics kunci: P50/P95/P99 response time, error rate, RPS, resource utilization (CPU, memory, koneksi database)
+- Metodologi identifikasi bottleneck: monitoring metrics tiap layer (aplikasi, database, eksternal API) dan korelasikan dengan penurunan response time
+- Tool pilihan: k6 (JavaScript), JMeter (GUI/XML), Locust (Python), Gatling (Scala/JVM) — pilih sesuai kebutuhan tim
+- Pitfall umum: hanya menguji endpoint /health, data dummy terlalu sedikit, tidak memantau server, tidak menentukan target performa
+- Timing SDLC: sebelum go-live, sebelum promosi besar, setelah optimasi besar, setelah perubahan infrastruktur penting
 Verified Behaviors:
-- Pada smoke test (2 VU vs 5 DB connections), request diproses tanpa antrean dengan P95 mendekati rata-rata (~22ms).
-- Pada stress test (50 VU vs 5 DB connections), request mengantre di balik semafor, menyebabkan lonjakan P95/P99 signifikan (>200ms) dan membuktikan degradasi tail latency non-linier.
-- Runner konkurensi mengukur metrik thread-safe tanpa race conditions (`go test -race ./...` lolos).
+- Pada beban rendah (VUs < kapasitas koneksi database), semua metrik latensi (min, avg, P50, P95, P99) berada di kisaran normal dan berkisar dekat satu sama lain.
+- Pada beban tinggi (VUs >> kapasitas), P95 dan P99 latency naik jauh lebih drastis dibanding rata-rata karena antrian pembatasan resource (misalnya: koneksi database habis).
+- Calculator metrik mengukur persentil secara akurat melalui pengurutan latensi (menggunakan sort standar library Go).
+- Harness beban menggenerate trafik konkuren tanpa bottleneck sendiri melalui custom HTTP transport dengan MaxIdleConns tinggi.
+- Implementasi server mensimulasikan batas koneksi database dengan buffered channel (semaphore) sehingga ketika slot habis, request baru menunggu dalam antrian.
+- Semua integrasi test lolos tanpa race condition (`go test -race ./...` bersih).
 Available Case Studies:
-- Sistem "Booking Bengkel" (`POST /booking`) dengan simulasi saturasi pool koneksi database 5 koneksi dan durasi kueri 20ms.
+- Demo aplikasi Booking Bengkel dalam `cmd/demo/main.go`: menunjukkan kontras jelas antara smoke test (2 VUs) dan stress test (50 VUs) terhadap server dengan kapasitas koneksi 5.
+- Laporan eksekusi engineering mencatat contoh output demo: pada smoke test P95 ≈ 21ms, pada stress test P95 ≈ 1.35s (naik 64x) walaupun rata-rata hanya naik 35x.
 Warnings:
-- Penghitungan persentil menggunakan sorting slice (`sort.Slice`), cocok untuk dataset lab (<10.000 sampel), namun butuh histogram streaming (misal HdrHistogram) untuk beban jutaan sampel jangka panjang.
-- Penundaan kueri disimulasikan menggunakan `time.Timer` dan semafor in-memory, bukan engine database nyata dengan lock contention sebenarnya.
-- Server menambahkan 10% kemungkinan penundaan query 25x lebih lama saat request terakumulasi di atas kapasitas pool.
-- Metrik persentil (P50/P95/P99) hanya mencakup request berhasil (HTTP 201), bukan request gagal; error latency tidak diukur.
+- Metrik dalam demo bersifat ilustratif; nilai aktual tergantung pada hardware host, jadwal CPU, dan pause GC.
+- Formula hitung pengguna konkuren (sessions per jam × durasi rata-rata sesi / 3600) membutuhkan adaptasi think-time untuk alur kerja multistep seperti Booking Bengkel (login → pilih cabang → bayar → konfirmasi WhatsApp).
+- Tidak ada ambang batas universal untuk P95 atau error rate; target harus diturunkan dari SLA bisnis dan penelitian pengalaman pengguna.
+- Implementasi lab disederhanakan: menggunakan `time.Sleep` dan buffered channel sebagai pengganti kontensi database nyata atau degradasi CPU.
+- Dokumentasi resmi JMeter (Source 16) mengalami timeout saat verifikasi jaringan, meskipun charakteristik arsitekturnya secara luas dikenal.
+- Metrik persentil (P50/P90/P95/P99) hanya mencakup request sukses (HTTP 2xx); request gagal dihitung sebagai error tanpa latensi tercatat.
+- Demo mencetak subset P50/P95/P99, walau `Result` menghitung P90 juga.
