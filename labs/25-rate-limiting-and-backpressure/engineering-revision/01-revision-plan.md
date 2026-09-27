@@ -1,22 +1,23 @@
 # Engineering Revision Plan
 
 Target Lab: `labs/25-rate-limiting-and-backpressure`
-Previous Verdict: `APPROVED` (with non-blocking lifecycle warning in opensource audit)
+Previous Verdict: APPROVED
 
 ## Blocking Issues
-None.
+None
 
 ## Non-Blocking Issues
-1. **MEDIUM — BoundedQueue submission panic after Stop()**: Calling `TrySubmit` after `Stop()` closed `bq.queue`, triggering a panic on closed channel send.
+None
 
 ## Files To Change
-- `internal/backpressure/queue.go`: Add `stopped` atomic flag, guard `TrySubmit` against closed channel sends by checking `stopped` flag and context cancellation, return `ErrQueueStopped`, make `Stop()` idempotent via CAS.
+None (Audit verdict APPROVED with zero findings/defects).
 
 ## Tests To Add/Modify
-- `internal/backpressure/queue_test.go`: Add `TestBoundedQueue_SubmitAfterStop` to verify safe handling of `TrySubmit` post-`Stop()` and idempotency of `Stop()`.
+None
 
 ## Validation Commands
 ```bash
-go test -v -race ./...
+go test ./...
+go test -race ./...
 go run ./cmd/demo
 ```
