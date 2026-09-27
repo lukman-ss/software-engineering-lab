@@ -1,87 +1,47 @@
-# Research Gaps: Optimistic vs Pessimistic Locking
+# Research Gap Analysis: Optimistic vs Pessimistic Locking
 
 ## Gap 1
 
-Type:
-WEAK_SOURCE
+Type: UNVERIFIED_CLAIM / MISSING_SOURCE
 
-Severity:
-LOW
+Severity: MEDIUM
 
-Location:
-`research/02-sources.md`, Source 7, 8, 9
+Location: `research/03-evidence.md:31-38`, `research/04-contradictions.md:20-27`, `research/06-open-questions.md:5-10`
 
-Problem:
-Direct access to `dev.mysql.com` returned HTTP 403 (bot blocking) during automated fetch. Verification was completed via official Oracle CDN documentation mirrors (`docs.oracle.com/cd/E17952_01/mysql-8.0-en/...`).
+Problem: MySQL/InnoDB documentation was not directly accessible during the initial research session due to HTTP 403. While behavior is widely known, official vendor reference was not directly captured.
 
-Required Revision:
-None required for approval; content was verified on official Oracle CDN.
+Required Revision: Keep transparently documented or consult accessible MySQL mirrors if vendor-specific locking quirks (e.g. Next-Key locks / gap locks) are critical to subsequent engineering benchmarks.
 
-Can Be Approved Without Fix:
-YES
+Can Be Approved Without Fix: YES
 
 ---
 
 ## Gap 2
 
-Type:
-SCOPE_ERROR
+Type: MISSING_CASE / OVERGENERALIZATION
 
-Severity:
-LOW
+Severity: LOW
 
-Location:
-`research/06-open-questions.md`, OQ-3
+Location: `research/05-report.md:83-95`
 
-Problem:
-Potential integer overflow of 32-bit version counters in long-lived optimistic locking systems is noted but not deeply explored in vendor documentation.
+Problem: Stating that atomic `UPDATE ... WHERE condition` eliminates race conditions is valid for single-row updates, but should explicitly note limitations when business invariants span multiple tables or aggregate constraints (e.g. account transfer or bank-wide balance limits).
 
-Required Revision:
-Include 64-bit integer (`BIGINT`) or timestamp-based versioning recommendations in future iterations if high update rates are expected.
+Required Revision: Ensure downstream engineering content notes that single-row atomic updates do not replace multi-row transactions when invariants span multiple entities.
 
-Can Be Approved Without Fix:
-YES
+Can Be Approved Without Fix: YES
 
 ---
 
 ## Gap 3
 
-Type:
-UNVERIFIED_CLAIM
+Type: WEAK_SOURCE
 
-Severity:
-LOW
+Severity: LOW
 
-Location:
-`research/06-open-questions.md`, OQ-4
+Location: `research/06-open-questions.md:51-54`
 
-Problem:
-Quantitative empirical performance comparison (latency/throughput numbers under high contention) between pessimistic locking, optimistic retries, and atomic single-statement updates is described qualitatively without benchmark numbers.
+Problem: Absence of quantitative benchmarks (throughput, latency, conflict rates) in primary theoretical literature.
 
-Required Revision:
-Perform TPC-C style benchmark testing during lab execution phase to capture concrete performance graphs.
+Required Revision: Acknowledge that empirical performance figures will be measured directly in the runnable implementation/benchmarking phase.
 
-Can Be Approved Without Fix:
-YES
-
----
-
-## Gap 4
-
-Type:
-UNVERIFIED_CLAIM
-
-Severity:
-MEDIUM
-
-Location:
-`research/05-report.md`, Finding 9; `research/06-open-questions.md`, OQ-2
-
-Problem:
-Asserting that using distributed locks (Redis) when data lives in a single database is an anti-pattern relies on architectural best-practice inference rather than an explicit Tier 1 benchmark source.
-
-Required Revision:
-Explicitly document boundary conditions (e.g., cross-service coordination vs single relational DB bounds) in content creation stage.
-
-Can Be Approved Without Fix:
-YES
+Can Be Approved Without Fix: YES

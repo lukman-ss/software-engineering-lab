@@ -2,194 +2,198 @@
 
 ## Claim 1
 
-Claim:
-The "lost update" anomaly occurs under default database isolation (READ COMMITTED in PostgreSQL/Oracle) when concurrent transactions execute uncoordinated read-modify-write sequences.
+Claim: A lost update occurs when two transactions read the same data, both modify it based on the old value, and the second commit overwrites the first.
 
-Location:
-`research/05-report.md`, Finding 1; `research/03-evidence.md`, Evidence 01, 02
+Location: `research/03-evidence.md:3-11`, `research/05-report.md:9`
 
-Evidence Provided:
-Wikipedia lost update definition citing Bernstein et al. 1987; Oracle 19c Concepts Table 10-2 Banda salary scenario; PostgreSQL 13.2 Read Committed re-evaluation semantics.
+Evidence Provided: Wikipedia "Write-write conflict", PostgreSQL docs 13.2, Oracle 19c Table 10-2.
 
-Source:
-Sources 1, 2, 3, 10
+Source: Wikipedia, PostgreSQL docs, Oracle docs.
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Solidly supported across multiple database engines and standard textbook definitions.
+Notes: Standard definition in database literature.
 
 ---
 
 ## Claim 2
 
-Claim:
-Pessimistic locking via `SELECT ... FOR UPDATE` acquires row-level exclusive locks held until commit/rollback, preventing concurrent UPDATE/DELETE/locking reads on the targeted rows while plain SELECT remains unblocked.
+Claim: Default READ COMMITTED isolation level in PostgreSQL and Oracle does not prevent lost updates.
 
-Location:
-`research/05-report.md`, Finding 2; `research/03-evidence.md`, Evidence 03, 04
+Location: `research/03-evidence.md:57-73`, `research/05-report.md:20-30`
 
-Evidence Provided:
-PostgreSQL 13.3.2 row-level lock documentation; MySQL 8.0 locking reads documentation; Oracle TX row lock semantics.
+Evidence Provided: PostgreSQL docs explain that subsequent statements re-evaluate against latest committed row versions; Oracle Table 10-2 shows Session 2 overwriting Session 1's committed change.
 
-Source:
-Sources 1, 7, 10, 16
+Source: PostgreSQL Docs 13.2, Oracle 19c Data Concurrency and Consistency.
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: HIGH (Critical insight that counters naive assumption)
 
-Notes:
-Fully verified against PostgreSQL, MySQL/InnoDB, and Oracle documentation.
+Notes: Verified against primary sources.
 
 ---
 
 ## Claim 3
 
-Claim:
-Pessimistic locking increases lock wait time, reduces concurrency, and introduces deadlock risk; holding locks across external HTTP/gateway calls is an anti-pattern.
+Claim: Pessimistic locking via `SELECT ... FOR UPDATE` acquires an exclusive row lock that blocks concurrent writers until transaction completion.
 
-Location:
-`research/05-report.md`, Finding 3, Finding 9; `research/03-evidence.md`, Evidence 05, 06, 13
+Location: `research/03-evidence.md:13-29`, `research/05-report.md:32-48`
 
-Evidence Provided:
-PostgreSQL 13.3.4 deadlocks section ("applications should not hold transactions open for long periods waiting for user input / external events"); Wikipedia 2PL deadlock discussion.
+Evidence Provided: PostgreSQL 13.3 explicitly describes row-level `FOR UPDATE` blocking `UPDATE`, `DELETE`, and locking queries; Oracle TX locks behave identically.
 
-Source:
-Sources 1, 3, 5
+Source: PostgreSQL Docs 13.3, Oracle 19c Concepts.
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT / BEST_PRACTICE
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Consistently warned against in all primary database documentation.
+Notes: Verified directly.
 
 ---
 
 ## Claim 4
 
-Claim:
-Optimistic locking detects conflicts at commit/update time by including the read version/timestamp in the `WHERE` clause (`UPDATE ... WHERE id = ? AND version = ?`), where zero affected rows signals a conflict requiring application-level handling (retry or 409).
+Claim: Explicit pessimistic locking increases the risk of deadlocks, which databases detect automatically and resolve by aborting one transaction.
 
-Location:
-`research/05-report.md`, Finding 4; `research/03-evidence.md`, Evidence 07, 16
+Location: `research/03-evidence.md:93-100`, `research/05-report.md:41-44`
 
-Evidence Provided:
-Martin Fowler (Optimistic Offline Lock); Oracle 19c WHERE-clause original value recommendation; Hibernate/JPA OptimisticLockException behavior.
+Evidence Provided: PostgreSQL 13.3.4 explicitly documents lock inversion deadlocks and automated deadlock resolution via transaction abort.
 
-Source:
-Sources 4, 10, 12, 14
+Source: PostgreSQL Docs 13.3.4.
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT / DESIGN_PATTERN
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Standard implementation pattern supported by enterprise architecture literature and vendor guides.
+Notes: Verified directly.
 
 ---
 
 ## Claim 5
 
-Claim:
-Atomic single-statement updates (`UPDATE products SET stock = stock - N WHERE id = ? AND stock >= N` with `affected_rows == 1` check) eliminate read-modify-write race windows without requiring explicit multi-statement locks.
+Claim: Optimistic concurrency control (OCC) operates across Begin, Modify, Validate, Commit phases, detecting conflicts before committing without holding locks during data processing.
 
-Location:
-`research/05-report.md`, Finding 6; `research/03-evidence.md`, Evidence 10
+Location: `research/03-evidence.md:39-46`, `research/05-report.md:50-58`
 
-Evidence Provided:
-PostgreSQL 13.4.2 statement-level consistency ("must actually update the row"); SQL statement-level ACID atomicity from Oracle/PostgreSQL/MySQL.
+Evidence Provided: Kung & Robinson (1981) cited via Wikipedia OCC.
 
-Source:
-Sources 11, 15, 16
+Source: Wikipedia Optimistic Concurrency Control.
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Statement atomicity and predicate evaluation in SQL engines guarantee atomic execution of single DML statements.
+Notes: Theoretical basis accurately reflected.
 
 ---
 
 ## Claim 6
 
-Claim:
-Default transaction isolation levels vary across database engines (PostgreSQL and Oracle default to READ COMMITTED; MySQL/InnoDB defaults to REPEATABLE READ) and do not uniformly eliminate lost updates.
+Claim: In application systems, optimistic locking is implemented using `UPDATE ... SET ..., version = version + 1 WHERE id = ? AND version = ?`, detecting conflicts when affected rows equal 0.
 
-Location:
-`research/05-report.md`, Finding 8; `research/03-evidence.md`, Evidence 11, 12
+Location: `research/03-evidence.md:48-56`, `research/05-report.md:51-57`
 
-Evidence Provided:
-PostgreSQL 13.2 isolation levels; MySQL 15.7.2.1 isolation levels; Oracle 19c Concepts 9.
+Evidence Provided: Microsoft EF Core documentation details concurrency token check and `DbUpdateConcurrencyException`.
 
-Source:
-Sources 2, 9, 10
+Source: Microsoft Learn EF Core Concurrency.
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: IMPLEMENTATION-SPECIFIC
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Accurately reflects differences in vendor defaults and MVCC/2PL implementations.
+Notes: Accurate description of application-level OCC pattern.
 
 ---
 
 ## Claim 7
 
-Claim:
-Using distributed locks (e.g. Redis) when the resource lives entirely in a single relational database is an anti-pattern.
+Claim: Under PostgreSQL REPEATABLE READ, concurrent updates to rows modified by another transaction raise `ERROR: could not serialize access due to concurrent update`.
 
-Location:
-`research/05-report.md`, Finding 9; `research/06-open-questions.md`, OQ-2
+Location: `research/03-evidence.md:57-65`, `research/05-report.md:71-76`
 
-Evidence Provided:
-Inference from PostgreSQL advisory locks and database-native capabilities.
+Evidence Provided: PostgreSQL docs 13.2.2.
 
-Source:
-Source 1, Source 13
+Source: PostgreSQL Docs 13.2.2.
 
-Source Actually Supports Claim:
-PARTIAL
+Source Actually Supports Claim: YES
 
-Classification:
-INTERPRETATION / BEST_PRACTICE
+Classification: FACT
 
-Severity:
-MEDIUM
+Severity: LOW
 
-Notes:
-While single-DB native locks are universally recommended before introducing Redis/Redlock overhead, the boundary conditions (e.g. high-throughput rate-limiting vs transactional state) require careful architectural nuance. Properly flagged in Open Questions (OQ-2).
+Notes: Verbatim match with PostgreSQL documentation.
+
+---
+
+## Claim 8
+
+Claim: Under Oracle SERIALIZABLE, modifying rows changed by another transaction after transaction start raises `ORA-08177: Cannot serialize access for this transaction`.
+
+Location: `research/03-evidence.md:66-74`, `research/05-report.md:76`
+
+Evidence Provided: Oracle 19c Concepts Chapter 10 Table 10-3.
+
+Source: Oracle 19c Concepts.
+
+Source Actually Supports Claim: YES
+
+Classification: FACT
+
+Severity: LOW
+
+Notes: Verbatim match with Oracle documentation.
+
+---
+
+## Claim 9
+
+Claim: Atomic database operations (`UPDATE ... SET stock = stock - N WHERE id = ? AND stock >= N`) eliminate the race window for counter/decrement operations without explicit locking.
+
+Location: `research/03-evidence.md:120-127`, `research/05-report.md:83-94`
+
+Evidence Provided: PostgreSQL documentation and standard SQL single-statement atomicity semantics.
+
+Source: PostgreSQL Docs 13.2; SQL Standard.
+
+Source Actually Supports Claim: PARTIAL
+
+Classification: INTERPRETATION
+
+Severity: MEDIUM
+
+Notes: While single-row conditional updates are atomic and eliminate the read-modify-write anomaly on that row, multi-row business constraints or complex predicates require explicit locking or higher isolation levels. The research correctly acknowledges this boundary in `research/06-open-questions.md:67`.
+
+---
+
+## Claim 10
+
+Claim: MySQL/InnoDB implements `SELECT ... FOR UPDATE` and gap locking in REPEATABLE READ.
+
+Location: `research/03-evidence.md:31-38`, `research/04-contradictions.md:20-27`
+
+Evidence Provided: Secondary references; primary MySQL documentation was inaccessible (HTTP 403).
+
+Source: Secondary sources / SQL Standard.
+
+Source Actually Supports Claim: PARTIAL
+
+Classification: HYPOTHESIS / UNVERIFIED_PRIMARY
+
+Severity: MEDIUM
+
+Notes: The research author transparently disclosed that MySQL docs returned 403 and marked confidence as MEDIUM. This is honest research practice, but the primary source remains unverified.

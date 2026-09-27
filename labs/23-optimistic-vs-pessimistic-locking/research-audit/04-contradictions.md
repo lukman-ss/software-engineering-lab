@@ -1,54 +1,38 @@
-# Contradictions Audit: Optimistic vs Pessimistic Locking
+# Contradiction Audit: Optimistic vs Pessimistic Locking
 
-## Contradiction 1: Meaning and Semantics of "Repeatable Read" Across Databases
+## Summary
+No material contradictions found across Tier 1 and Tier 2 sources.
 
-Statement A:
-PostgreSQL documentation states that `REPEATABLE READ` implements Snapshot Isolation (SI), preventing both non-repeatable reads and phantom reads without gap locks, but raising serialization failures on concurrent row modification.
+The research maintains internal consistency across definitions, database behaviors, and trade-offs.
 
-Location:
-`research/04-contradictions.md`, Contradiction 1; PostgreSQL Docs 13.2
+## Noted Implementation Nuances (Non-Contradictory)
 
-Statement B:
-MySQL/InnoDB documentation states that `REPEATABLE READ` (its default level) uses consistent read snapshots for plain SELECTs and 2PL with gap locks / next-key locks for locking reads.
+### Nuance 1: Isolation Level Semantics Across Vendors
 
-Location:
-`research/04-contradictions.md`, Contradiction 1; MySQL Docs 15.7.2.1
+**Statement A (PostgreSQL REPEATABLE READ)**:
+Implemented via Snapshot Isolation; prevents phantom reads; raises `could not serialize access due to concurrent update` on concurrent row modification (`research/03-evidence.md:59-62`).
 
-Type:
-SOURCE_CONFLICT / IMPLEMENTATION_DIFFERENCE
+**Statement B (Oracle Isolation Levels)**:
+Does not offer an ANSI REPEATABLE READ level; implements READ COMMITTED, SERIALIZABLE (which raises `ORA-08177`), and READ ONLY (`research/03-evidence.md:68-71`).
 
-Impact:
-Applications written expecting PostgreSQL snapshot isolation error semantics will behave differently under MySQL gap-locking blocking behavior.
+**Type**: INTERNAL / SYSTEM_SPECIFIC_VARIATION
 
-Assessment:
-Properly identified and resolved as an implementation-specific divergence. Research report correctly warns developers that isolation levels are not uniform across database engines.
+**Impact**: None. Accurately highlights that standard SQL isolation names have vendor-specific behavioral implementations.
+
+**Assessment**: PASS
 
 ---
 
-## Contradiction 2: READ UNCOMMITTED Implementation
+### Nuance 2: Concurrency Enforcement Location (Database Engine vs Application Code)
 
-Statement A:
-PostgreSQL treats `READ UNCOMMITTED` as identical to `READ COMMITTED` because MVCC does not allow dirty reads.
+**Statement A (Database-level Concurrency)**:
+PostgreSQL SSI / Repeatable Read and Oracle Serializable track read/write dependencies at the storage/transaction engine level and abort on serialization conflicts (`research/05-report.md:71-78`).
 
-Location:
-`research/04-contradictions.md`, Contradiction 2; PostgreSQL Docs 13.2
+**Statement B (Application-level Concurrency)**:
+Optimistic locking via version column (`UPDATE ... WHERE version = ?`) is executed at the application layer by checking affected rows (`research/05-report.md:51-64`).
 
-Statement B:
-ANSI SQL standard and traditional lock-based engines allow dirty reads under `READ UNCOMMITTED`.
+**Type**: INTERNAL / SYSTEM_SPECIFIC_VARIATION
 
-Location:
-`research/04-contradictions.md`, Contradiction 2; Wikipedia Concurrency Control
+**Impact**: None. Both mechanisms represent distinct architectural layers for achieving concurrency control.
 
-Type:
-SOURCE_CONFLICT / IMPLEMENTATION_DIFFERENCE
-
-Impact:
-Developer performance optimizations relying on dirty reads in other systems provide zero benefit in PostgreSQL.
-
-Assessment:
-Accurately documented and resolved as an engine-specific limitation of PostgreSQL MVCC.
-
----
-
-## Summary Assessment of Contradictions
-No internal contradictions exist between the research plan, evidence, and report. All identified cross-vendor discrepancies reflect genuine differences in database architectures (MVCC snapshot isolation vs 2PL gap locks) and are documented transparently.
+**Assessment**: PASS

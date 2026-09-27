@@ -1,10 +1,7 @@
-# Audit Plan: Optimistic vs Pessimistic Locking Research
+# Audit Plan: Optimistic vs Pessimistic Locking (Research Stage)
 
 ## Target Lab
 `labs/23-optimistic-vs-pessimistic-locking`
-
-## Scope
-Pipeline Override: Research Only. Implementation/code audit is out of scope for this stage and handled under code audit placeholder rules.
 
 ## Files Reviewed
 - `labs/23-optimistic-vs-pessimistic-locking/research/01-plan.md`
@@ -15,30 +12,27 @@ Pipeline Override: Research Only. Implementation/code audit is out of scope for 
 - `labs/23-optimistic-vs-pessimistic-locking/research/06-open-questions.md`
 
 ## Claims To Verify
-1. Lost update occurs under default isolation levels (READ COMMITTED in PostgreSQL/Oracle) during concurrent read-modify-write cycles.
-2. `SELECT ... FOR UPDATE` acquires row-level exclusive locks blocking concurrent writers until commit/rollback.
-3. Pessimistic locking induces deadlocks and concurrency bottlenecks when transactions are long-running.
-4. Optimistic locking validates version/timestamp guards at commit, detecting conflicts via zero affected rows without holding database locks.
-5. Selection heuristic: Pessimistic prevents conflicts (high contention/critical data); Optimistic detects conflicts (low contention/read-heavy/long-lived transactions).
-6. Single-statement atomic conditional updates (`UPDATE ... SET stock = stock - N WHERE stock >= N`) remove read-modify-write race windows.
-7. Plain database transactions alone without explicit locking or conditional guards do not prevent lost updates.
-8. Default isolation levels differ significantly across vendors (PostgreSQL/Oracle: READ COMMITTED; MySQL: REPEATABLE READ).
-9. Common anti-patterns: premature distributed locks (Redis), holding pessimistic locks across network calls, ignoring 0-rows-affected.
+1. Lost update definition and non-serializability under concurrent execution.
+2. Read Committed isolation level in PostgreSQL and Oracle does NOT prevent lost updates.
+3. Pessimistic locking semantics via `SELECT ... FOR UPDATE` (row-level exclusive lock, blocking writers).
+4. Deadlock risks and mitigation via lock ordering in pessimistic locking.
+5. Optimistic locking mechanisms (version checking at commit time, Kung & Robinson 1981, 0-rows-affected conflict detection).
+6. Application-level vs database-level optimistic concurrency patterns (Martin Fowler, EF Core).
+7. Database isolation level variations: PostgreSQL REPEATABLE READ (Snapshot Isolation) vs Oracle SERIALIZABLE (ORA-08177).
+8. Atomic `UPDATE ... WHERE condition` as an alternative to explicit locking.
+9. MVCC as the underlying architecture enabling non-blocking reads.
 
 ## Code To Execute
-None. Per pipeline override instructions:
-`PIPELINE OVERRIDE: Audit research only. Do not audit implementation/code in this stage.`
+*Pipeline override*: Research audit only. No code or implementation execution required in this stage.
 
 ## Primary Risks
-1. Verification gaps for vendor-specific documentation (e.g. dev.mysql.com returning HTTP 403, requiring verification via Oracle CDN mirror).
-2. Unverified performance quantification claims (e.g. concrete latency/throughput numbers vs qualitative assertions).
-3. Over-generalization of distributed lock trade-offs (asserting Redis is an anti-pattern without explicit boundary conditions).
-4. Version counter integer overflow risks in optimistic locking implementations.
+1. **Unverified Primary Source**: MySQL 8.0 documentation was inaccessible (HTTP 403) during research; claims regarding MySQL locking reads and gap locks rely on secondary attribution.
+2. **Overgeneralization of "Atomic UPDATE is always safe"**: Atomic updates avoid lost updates for single-row updates, but predicate/range integrity or multi-entity invariants still require explicit locking or higher isolation.
+3. **Integer Counter Overflow**: Practical limitations of integer version columns in optimistic locking are flagged as open questions but need clear qualification.
+4. **Distinction between Database OCC and Application OCC**: Clarifying differences between engine-level OCC (e.g., Kung-Robinson validate phase, MVCC snapshot serializability) and application-level OCC (version column with `UPDATE ... WHERE version = ?`).
 
 ## Audit Strategy
-1. Cross-reference all 16 listed sources in `research/02-sources.md` against claims in `research/03-evidence.md` and `research/05-report.md`.
-2. Verify reachability, relevance, and fidelity of cited citations against primary documentation.
-3. Validate claim classification (FACT vs INTERPRETATION vs IMPLEMENTATION-SPECIFIC) and ensure unsupported claims are flagged.
-4. Examine internal and cross-database contradictions identified in `research/04-contradictions.md`.
-5. Map documented research gaps and unresolved open questions in `research/06-open-questions.md`.
-6. Issue formal verdict in `research-audit/07-verdict.md`.
+1. Independently fetch and verify all 9 cited URLs from primary and secondary sources.
+2. Cross-examine claims in `03-evidence.md` and `05-report.md` against extracted source text.
+3. Assess factual accuracy, severity of gaps, and validity of conclusions.
+4. Generate the full suite of research audit markdown reports (`01-audit-plan.md` to `07-verdict.md`).
