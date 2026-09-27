@@ -2,28 +2,70 @@
 
 Target Lab: labs/21-outbox-pattern
 
-## Coverage Evaluation
+## Test Suite Overview
 
-| Test Name | File | Scenarios Covered | Assessment |
-| --- | --- | --- | --- |
-| `TestTransactionalOutbox_HappyPath` | `tests/outbox_test.go:12` | Atomic write, background polling relay dispatch, outbox state update to `PROCESSED`, consumer handling | PASS |
-| `TestTransactionalOutbox_Rollback` | `tests/outbox_test.go:62` | DB transaction rollback discarding both domain entity and outbox log | PASS |
-| `TestTransactionalOutbox_Idempotency_DuplicateDelivery` | `tests/outbox_test.go:93` | Duplicate delivery rejection by consumer via ID tracking | PASS |
-| `TestDualWriteProblem_Failure` | `tests/outbox_test.go:118` | Naive dual-write failure creating state inconsistency (DB created, broker lost) | PASS |
-| `TestTransactionalOutbox_ConcurrentWrites` | `tests/outbox_test.go:142` | 10 concurrent goroutines writing 100 total orders while background relay polls | PASS |
-| `TestTransactionalOutbox_PurgeProcessed` | `tests/outbox_test.go:196` | Outbox maintenance worker deleting processed records while retaining pending ones | PASS |
-| `TestTransactionalOutbox_RelayRetryAfterBrokerFailure` | `tests/outbox_test.go:219` | Temporary broker outage, relay retry behavior, `Start()`/`Stop()` idempotency | PASS |
-| `TestTransactionalOutbox_ConcurrentConsumers` | `tests/outbox_test.go:266` | 10 concurrent consumer workers delivering duplicate & overlapping message IDs | PASS |
+Test file: `tests/outbox_test.go`
+Framework: standard Go `testing`
 
-## Execution Results
+## Test Coverage Breakdown
 
-- Command: `go test -v ./...`
-  - Result: PASS (8/8 tests passed)
-- Command: `go test -race ./...`
-  - Result: PASS (0 race conditions detected across concurrent DB, relay, broker, and consumer tests)
-- Command: `go run ./cmd/demo`
-  - Result: PASS (Scenario 1 Dual-Write Flaw, Scenario 2 Outbox Solution, Scenario 3 Consumer Idempotency executed cleanly)
+1. `TestTransactionalOutbox_HappyPath`:
+   - Covers: atomic DB write, relay dispatch, broker reception, DB outbox status marked PROCESSED, consumer receipt.
+   - Result: PASS.
+2. `TestTransactionalOutbox_Rollback`:
+   - Covers: explicit tx rollback leaves DB empty, no messages published.
+   - Result: PASS.
+3. `TestTransactionalOutbox_Idempotency_DuplicateDelivery`:
+   - Covers: duplicate message redelivery handled idempotently by consumer (`accepted=false`).
+   - Result: PASS.
+4. `TestDualWriteProblem_Failure`:
+   - Covers: naive dual-write failure reproducing out-of-sync state (order in DB, 0 in broker).
+   - Result: PASS.
+5. `TestTransactionalOutbox_ConcurrentWrites`:
+   - Covers: 10 concurrent goroutines writing 10 orders each (100 total), relay dispatching all 100 to broker, 0 pending left.
+   - Result: PASS.
+6. `TestTransactionalOutbox_PurgeProcessed`:
+   - Covers: purging processed outbox messages while preserving pending ones.
+   - Result: PASS.
+7. `TestTransactionalOutbox_RelayRetryAfterBrokerFailure`:
+   - Covers: broker transient failure, retry on subsequent poll, idempotent start/stop.
+   - Result: PASS.
+8. `TestTransactionalOutbox_ConcurrentConsumers`:
+   - Covers: 10 concurrent worker goroutines submitting duplicate event IDs to consumer, proving thread-safe deduplication.
+   - Result: PASS.
 
-## Assessment Summary
+## Execution Verification
 
-The test suite covers happy path, transaction rollback, failure retries, duplicate handling, consumer idempotency, concurrent generation & dispatch, and outbox record purging. Race detector execution confirms concurrency safety.
+### Command: `go test -v ./...`
+```text
+=== RUN   TestTransactionalOutbox_HappyPath
+--- PASS: TestTransactionalOutbox_HappyPath (0.05s)
+=== RUN   TestTransactionalOutbox_Rollback
+--- PASS: TestTransactionalOutbox_Rollback (0.03s)
+=== RUN   TestTransactionalOutbox_Idempotency_DuplicateDelivery
+--- PASS: TestTransactionalOutbox_Idempotency_DuplicateDelivery (0.00s)
+=== RUN   TestDualWriteProblem_Failure
+--- PASS: TestDualWriteProblem_Failure (0.00s)
+=== RUN   TestTransactionalOutbox_ConcurrentWrites
+--- PASS: TestTransactionalOutbox_ConcurrentWrites (0.01s)
+=== RUN   TestTransactionalOutbox_PurgeProcessed
+--- PASS: TestTransactionalOutbox_PurgeProcessed (0.00s)
+=== RUN   TestTransactionalOutbox_RelayRetryAfterBrokerFailure
+2026/09/27 19:51:52 failed to publish outbox msg evt-o-retry: broker unavailable
+--- PASS: TestTransactionalOutbox_RelayRetryAfterBrokerFailure (0.08s)
+=== RUN   TestTransactionalOutbox_ConcurrentConsumers
+--- PASS: TestTransactionalOutbox_ConcurrentConsumers (0.00s)
+PASS
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	0.480s
+```
+
+### Command: `go test -race ./...`
+```text
+PASS
+ok  	github.com/software-engineering-lab/labs/21-outbox-pattern/tests	1.500s
+```
+Result: 0 data races detected.
+
+## Assessment
+
+All claimed failure modes, transactional guarantees, concurrency safety, and retry paths have dedicated assertions. Tests prove claimed behavior.

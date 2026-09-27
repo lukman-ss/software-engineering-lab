@@ -4,20 +4,21 @@ Target Lab: labs/21-outbox-pattern
 
 ## Identified Gaps
 
-No blocking or non-blocking gaps found during the audit.
+No blocking or non-blocking implementation gaps were identified during this audit.
 
-- `MISSING_TEST`: None. Standard, edge, rollback, retry, concurrent, and maintenance cases are tested.
+- `MISSING_TEST`: None. (Happy path, rollback, dual-write failure, idempotency, concurrent writes, concurrent consumer deduplication, purge, and relay retry after broker failure are all tested).
 - `BROKEN_IMPLEMENTATION`: None.
 - `DOC_CODE_MISMATCH`: None.
-- `RACE_CONDITION`: None. Verified clean under `go test -race ./...`.
+- `RACE_CONDITION`: None detected by `go test -race ./...`.
 - `UNHANDLED_ERROR`: None.
 - `MISSING_EDGE_CASE`: None.
-- `IMPLEMENTATION_OVERCLAIM`: None. Limitations (such as polling vs CDC log tailing) are clearly disclosed in implementation notes.
+- `IMPLEMENTATION_OVERCLAIM`: None.
 - `RESEARCH_MISMATCH`: None.
-- `FAKE_DEMO`: None. Real executable demonstrating live failure and recovery.
-- `FAKE_BENCHMARK`: None.
+- `FAKE_DEMO`: None. Real executable demo in `cmd/demo/main.go`.
+- `FAKE_BENCHMARK`: None present or claimed.
 - `UNVERIFIED_RESULT`: None.
 
-## Summary
+## Verdict Impact
 
-The target lab is fully verified and ready for downstream technical writing.
+Total Blocking Issues: 0
+Total Non-Blocking Issues: 0

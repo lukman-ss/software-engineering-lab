@@ -1,66 +1,57 @@
-# Code Audit
+# Engineering Code Audit
 
 Target Lab: labs/21-outbox-pattern
 
 ## Finding 1
 
-Location: internal/outbox/db.go:84-140
-Claimed Behavior: Atomic staging, commit, and rollback across multiple tables (`orders`, `outbox`) within a transaction.
-Observed Implementation: `Tx` maintains `stagedOrders` and `stagedOutbox` maps under mutex protection. On `Commit()`, staged entries are flushed into DB under `db.mu.Lock()`. On `Rollback()`, staged entries are dropped. Subsequent mutations after close return `ErrTxClosed`.
+Location: `internal/outbox/db.go:25-31`, `internal/outbox/db.go:112-140`
+Claimed Behavior: Atomic persistence across orders and outbox messages within single transaction boundary (`BeginTx`, `Commit`, `Rollback`).
+Observed Implementation: `Tx` maintains local staging maps (`stagedOrders`, `stagedOutbox`) protected by a mutex. On `Commit()`, holding the DB write lock, all staged mutations are flushed into DB state atomically. On `Rollback()`, staged mutations are discarded without touching DB state.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly models atomic single-transaction boundaries in memory.
+Notes: Clean in-memory transaction simulation matching isolated state transition semantics.
 
 ## Finding 2
 
-Location: internal/outbox/service.go:18-53
-Claimed Behavior: Order entity and Outbox message are generated and written atomically within a single transaction.
-Observed Implementation: `CreateOrderWithOutbox` begins `tx`, validates payload serialization, writes both `SaveOrder` and `SaveOutbox`, rolling back on any failure before committing.
+Location: `internal/outbox/service.go:18-53`
+Claimed Behavior: Atomic persistence of order and outbox records in `CreateOrderWithOutbox`.
+Observed Implementation: Creates an order, marshals payload, stages both order and `OutboxMessage` within transaction, and commits atomically. Any failure rolls back the transaction.
 Assessment: PASS
 Severity: LOW
-Notes: Atomicity is guaranteed at transaction boundary.
+Notes: Properly sets `Status: MessageStatusPending` and formats outbox ID consistently (`evt-%s`).
 
 ## Finding 3
 
-Location: internal/outbox/service.go:57-90
-Claimed Behavior: Demonstrates dual-write inconsistency when publishing directly outside the transaction.
-Observed Implementation: `CreateOrderDualWriteNaive` commits the DB transaction first, then attempts broker publication. If broker fails, DB contains uncommunicated state, demonstrating the dual-write flaw.
+Location: `internal/outbox/service.go:57-90`
+Claimed Behavior: Naive dual write commits DB first and then publishes to broker, exposing inconsistency if broker fails.
+Observed Implementation: Commits order to DB first, then invokes `broker.Publish(msg)`. If broker fails, DB contains order while broker received nothing.
 Assessment: PASS
 Severity: LOW
-Notes: Faithfully models the dual-write anti-pattern and resulting state divergence.
+Notes: Accurately replicates dual-write hazard scenario.
 
 ## Finding 4
 
-Location: internal/outbox/relay.go:27-67
-Claimed Behavior: Asynchronous polling relay periodically polls pending outbox entries, publishes to broker, and transitions status to processed. Supports safe start/stop and retries on broker error.
-Observed Implementation: `Relay.Start()` and `Stop()` use `sync.Once` and channel closure. `PollAndDispatch()` queries `GetPendingOutbox()`, publishes to broker, and only marks processed upon successful broker acknowledgment.
+Location: `internal/outbox/relay.go:27-48`, `internal/outbox/relay.go:50-67`
+Claimed Behavior: Asynchronous polling relay reads pending outbox messages and dispatches them to broker, marking them processed.
+Observed Implementation: Polling loop runs in separate goroutine using `time.Ticker` and clean shutdown via `stopChan` and `sync.Once`. `PollAndDispatch()` queries `GetPendingOutbox()`, publishes each message, and marks processed in DB upon success.
 Assessment: PASS
 Severity: LOW
-Notes: At-least-once delivery semantics preserved; failed broker dispatches remain pending for subsequent poll cycles.
+Notes: Graceful start/stop protected against double calls with `sync.Once`.
 
 ## Finding 5
 
-Location: internal/outbox/consumer.go:19-43
-Claimed Behavior: Downstream consumer idempotency using message ID deduplication registry.
-Observed Implementation: `Consumer` guards `processedIDs` map with `sync.Mutex`. `Handle()` checks whether `msg.ID` has already been recorded; if seen, returns `false` and skips; if new, records ID and stores message.
+Location: `internal/outbox/consumer.go:18-31`
+Claimed Behavior: Idempotent message consumption by deduplicating event IDs.
+Observed Implementation: `Consumer.Handle()` checks `processedIDs` map under mutex. If already present, skips execution and returns `false`. If new, records ID and returns `true`.
 Assessment: PASS
 Severity: LOW
-Notes: Thread-safe idempotent consumer implementation correctly handles duplicate deliveries.
+Notes: Concurrency-safe deduplication implementation.
 
 ## Finding 6
 
-Location: internal/outbox/broker.go:10-53
-Claimed Behavior: Thread-safe mock broker with controllable failure simulation (`SetFailNext`).
-Observed Implementation: `MockBroker` utilizes `sync.RWMutex`, returns copy of slice in `GetPublished()` to prevent slice race conditions, and consumes `failNext` flag on publish.
+Location: `internal/outbox/db.go:71-82`
+Claimed Behavior: Ability to purge processed outbox records to prevent unbounded table growth.
+Observed Implementation: `PurgeProcessedOutbox()` safely acquires DB lock and deletes entries where status is `MessageStatusProcessed`, returning the purged count.
 Assessment: PASS
 Severity: LOW
-Notes: Thread-safe and properly isolated for concurrent test execution.
-
-## Finding 7
-
-Location: internal/outbox/db.go:71-82
-Claimed Behavior: Outbox cleanup routine purges processed messages.
-Observed Implementation: `PurgeProcessedOutbox()` safely acquires write lock on DB and deletes entries marked `MessageStatusProcessed`, returning count of removed items.
-Assessment: PASS
-Severity: LOW
-Notes: Simple and effective retention cleanup mechanism.
+Notes: Good implementation of outbox table retention/cleanup requirement.
