@@ -6,42 +6,37 @@ Previous Audit Status: APPROVED_WITH_WARNINGS
 
 ## Issues
 
-Critical: 0
-High: 1 (overgeneralization about real API calls)
-Medium: 2 (ISO paywalled, JMeter component ref timeout)
-Low: 0
+**Critical:** 0
+**High:** 0
+**Medium:** 1 (missing primary sources for JMeter/Gatling)
+**Low:** 4 (residual lab artifacts, Wikipedia citation, unverified SLA numbers)
 
 ## Resolution
 
-Resolved: 3
-Partially Resolved: 0
-Unresolved: 0
+**Resolved:** 5
+**Partially Resolved:** 0
+**Unresolved:** 0
 
 ## Validation
 
-Build: N/A (PIPELINE OVERRIDE: research only)
-Tests: N/A
-Race Detector: N/A
-Demo: N/A
+**Research Consistency Check:**
+- ✅ Source 16 fully replaced with JMeter User Guide (no Spring IoC references remain)
+- ✅ Contradiction 6 removed (now 5 contradictions, all domain-relevant)
+- ✅ Source 21 added for Gatling primary documentation
+- ✅ Source 10 reclassified as Tier 2 (community summary)
+- ✅ Objective 6 in plan marks SLA values as illustrative examples
+- ✅ Report Finding 3 cites all four primary tool sources
 
-Research Validation:
-- Overgeneralization claim narrowed with proper qualification
-- ISO/IEC 25010 documented as DISCLAIMED (paywalled)
-- JMeter component ref documented as DISCLAIMED (timeout)
-- All other claims maintain appropriate confidence levels
+**Build:** N/A (research-only revision, no code touched)
+**Tests:** N/A (research-only revision)
+**Race Detector:** N/A
+**Demo:** N/A
 
 ## Remaining Risks
 
-- ISO/IEC 25010 still paywalled; referenced sub-characteristics unverified
-- JMeter component reference still inaccessible directly
-- Gatling primary docs remain 403; vendor page provides MEDIUM confidence
+- JMeter usermanual deep-page granularity: Source 16 covers Getting Started page; specific component references (Thread Groups, CSV Data Set Config) remain in report's general architectural characterization. Report's tool-selection claims stay appropriately high-level to avoid overclaiming.
+- Gatling source verified at entry level only: Docs site confirmed reachable (HTTP 200) but full manual not audited line-by-line. Report acknowledges this by keeping Confidence at MEDIUM for Finding 3.
 
 ## Ready For Re-Audit
 
-READY_FOR_RESEARCH_REAUDIT
-
-Rationale: All audit-identified issues addressed:
-1. Overgeneralization about real third-party API calls resolved with qualification
-2. ISO/IEC 25010 disclaimed per audit recommendation
-3. JMeter component reference disclaimed per audit recommendation
-4. All confidence levels accurately reflect verified scope
+**READY_FOR_RESEARCH_REAUDIT**

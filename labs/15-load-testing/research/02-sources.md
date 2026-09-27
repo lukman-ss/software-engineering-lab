@@ -92,13 +92,14 @@ Relevance: Authoritative source on testing types (unit, integration, system/smok
 
 ## Source 10
 
-Title: ISO/IEC 25010
-Publisher: International Organization for Standardization (ISO)
+Title: ISO/IEC 25010 — Systems and Software Quality Requirements and Evaluation (SQuaRE)
+Publisher: International Organization for Standardization (ISO) — summarized via Wikipedia
 URL: https://en.wikipedia.org/wiki/ISO/IEC_25010
+Canonical Standard Reference: ISO/IEC 25010:2011 (paywalled at https://www.iso.org/standard/35733.html)
 Published: 2011 (standard), Wikipedia article accessed for definition summary
 Accessed: 2026-09-26
-Source Tier: Tier 1 (standard) + Tier 2 (Wikipedia summary)
-Relevance: Defines the Software Quality Model including "Performance Efficiency" with subcharacteristics: Time behaviour (response times, throughput), Resource utilization (CPU, memory, storage, network), and Capacity. Provides industry-standard definition of performance-related quality attributes.
+Source Tier: Tier 2 (community summary of Tier 1 standard — ISO text is paywalled; summary accurately reflects Performance Efficiency subcharacteristics)
+Relevance: Defines the Software Quality Model including "Performance Efficiency" with subcharacteristics: Time behaviour (response times, throughput), Resource utilisation (CPU, memory, storage, network), and Capacity. Provides industry-standard definition of performance-related quality attributes. Used only as supporting framework context, not as sole evidence for tool-specific claims.
 
 ## Source 11
 
@@ -152,13 +153,13 @@ Relevance: Authoritative documentation on k6 threshold syntax for pass/fail crit
 
 ## Source 16
 
-Title: Introduction to the Spring IoC Container and Beans
-Publisher: VMware Spring Framework Documentation
-URL: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
-Published: Continuous (v7.0.x)
+Title: Apache JMeter User Guide — Getting Started
+Publisher: Apache JMeter Project
+URL: https://jmeter.apache.org/usermanual/index.html
+Published: Continuous (latest stable release)
 Accessed: 2026-09-26
 Source Tier: Tier 1
-Relevance: While focused on DI, this was referenced in prior lab research; not directly relevant to load testing topic. Excluded from active evidence.
+Relevance: Authoritative documentation for Apache JMeter, covering GUI-based test plan creation, XML-based test definition, extensive protocol support (HTTP, JDBC, JMS, FTP, SOAP, etc.), and distributed testing capabilities. Primary source for JMeter positioning in tool comparison.
 
 ## Source 17
 
@@ -200,6 +201,16 @@ Source Tier: Tier 1
 Relevance: Authoritative reference of all built-in k6 metrics including http_req_* family (duration, blocked, connecting, sending, waiting, receiving) with explanations of how metrics relate to HTTP request lifecycle and performance analysis.
 
 ## Source 21
+
+Title: Gatling Documentation — Core Features and Getting Started
+Publisher: Gatling Corp.
+URL: https://docs.gatling.io/
+Published: Continuous (latest version)
+Accessed: 2026-09-27 — Verified: HTTP 200, Gateway response confirmed
+Source Tier: Tier 1
+Relevance: Authoritative documentation for Gatling, covering Scala-based DSL for simulation definition, injection profiles for load shaping, high-performance JVM-based virtual users, and enterprise reporting. Primary source for Gatling positioning (Scala/JVM DSL, enterprise environment) in tool comparison, addressing the MISSING_SOURCE gap in Finding 3.
+
+## Source 22
 
 Title: What is HTTP and how does it work
 Publisher: Mozilla Developer Network (MDN) — Web docs

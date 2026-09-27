@@ -40,12 +40,6 @@ SOURCE B: The original lab specification advises: "Load test sebaiknya dilakukan
 
 ASSESSMENT: Azure's guidance is more nuanced — it distinguishes between staging/prod-like environments for different test types and includes the option of controlled production testing. The lab's advice to avoid laptop testing aligns with Azure's "mirror your production environment" recommendation. Both agree that non-production environments should mirror production as closely as possible. The apparent tension (test in staging vs. test in production) is resolved by Azure's framework: use staging for most tests, production only with control measures.
 
-## Contradiction 6: Service Locator vs. DI Pattern (from related lab context)
-
-SOURCES: These sources are from the Dependency Injection lab (labs/16), not directly load testing, but referenced in this lab's prior research. Martin Fowler notes that Service Locator "hides class dependencies" (Source from DI lab).
-
-ASSESSMENT: Not applicable to load testing research. Excluded from scope.
-
 ## Summary
 
 No material contradictions discovered in the load testing domain itself. The differences between sources are primarily:

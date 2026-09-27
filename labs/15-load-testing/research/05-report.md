@@ -36,7 +36,7 @@ Load testing adalah praktik memastikan sistem tetap berfungsi dengan baik saat m
 - k6 built-in metrics reference shows http_req_duration Trend metric supports p(N) percentiles where N is between 0.0 and 100, with common thresholds like "p(95)<200" (Source 20)
 - k6 Thresholds documentation provides concrete example: "95% of requests have a response time below 200ms" and shows how to configure p(95) and p(99) thresholds (Source 15)
 - Google SRE Book states performance testing ensures "system doesn't degrade or become too expensive" by monitoring resource usage (Source 9)
-- ISO/IEC 25010 Performance Efficiency subcharacteristics include Time behaviour (response times, throughput) and Resource utilisation (CPU, memory, storage, network) (Source 10)
+- ISO/IEC 25010 (via Wikipedia summary; ISO/IEC 25010:2011 original is paywalled) Performance Efficiency subcharacteristics include Time behaviour (response times, throughput) and Resource utilisation (CPU, memory, storage, network) (Source 10)
 - Azure documentation defines "Performance targets" including response time and throughput, emphasizing percentile-based targets (Source 11)
 
 **Sources:**
@@ -57,18 +57,18 @@ Load testing adalah praktik memastikan sistem tetap berfungsi dengan baik saat m
 **Evidence:**
 - k6: "lightweight, JavaScript-based, very suitable for API testing" with stages-based load configuration. Supports VUs and arrival-rate executors for different load patterns (Source 1)
 - Locust: "open source performance/load testing tool for HTTP and other protocols. Write test scenarios in plain old Python. Runs every user inside its own greenlet (lightweight process/coroutine via gevent), supporting hundreds of thousands of concurrent users" (Source 13)
-- JMeter: Apache project with GUI, XML-based test plans, extensive protocol support (HTTP, JDBC, JMS, FTP, etc.). Industry standard for complex enterprise testing.
-- Gatling: Scala-based DSL, high performance for JVM environments, popular in enterprise settings. Uses simulation descriptions with injection profiles (Source 4, Gatling docs)
+- JMeter: Apache project with GUI, XML-based test plans, extensive protocol support (HTTP, JDBC, JMS, FTP, etc.). Industry standard for complex enterprise testing. (Source 16)
+- Gatling: Scala-based DSL, high performance for JVM environments, popular in enterprise settings. Uses simulation descriptions with injection profiles. (Source 21)
 
 **Sources:**
 - https://grafana.com/docs/k6/latest/testing-guides/test-types/
 - https://docs.locust.io/en/stable/what-is-locust.html
-- https://jmeter.apache.org/
-- https://gatling.io/docs/
+- https://jmeter.apache.org/usermanual/index.html
+- https://docs.gatling.io/
 
 **Confidence:** MEDIUM
 
-**Corroborated By:** k6 and Locust documentation provide clear positioning. JMeter and Gatling sources partially accessible. The evidence supports tool selection based on team expertise and use case.
+**Corroborated By:** All four tools now have dedicated primary documentation entries (k6 Source 1, Locust Source 13, JMeter Source 16, Gatling Source 21). Tool-specific depth remains uneven (k6/Locust verified in detail; JMeter/Gatling verified at entry level), so selection guidance stays context-dependent on team expertise and use case.
 
 ### Finding 4: Strategi Identifikasi Bottleneck
 

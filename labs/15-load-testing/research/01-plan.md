@@ -10,7 +10,7 @@ Mengumpulkan bukti empiris dan best practice mengenai load testing berdasarkan s
 3. Tools populer dan karakteristiknya (k6, JMeter, Locust, Gatling) — kekuatan, kelemahan, dan rekomendasi penggunaan
 4. Strategi identifikasi bottleneck (aplikasi vs database vs external API) — metode isolation dan correlation metrics
 5. Common pitfalls dan best practices dari senior engineer
-6. Best practice untuk menentukan dan memvalidasi target SLA (P95 < 500ms, Error Rate < 1%, CPU < 75%, Memory < 80%)
+6. Best practice untuk menentukan dan memvalidasi target SLA (contoh ilustratif: P95 < 500ms, Error Rate < 1%, CPU < 75%, Memory < 80% — angka-angka ini bersifat kontekstual tergantung domain/aplikasi, bukan standar universal)
 7. Kapan seharusnya load testing dilakukan dalam SDLC
 
 ## Research Questions
