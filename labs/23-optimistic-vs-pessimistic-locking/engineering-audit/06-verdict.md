@@ -6,18 +6,18 @@ Audit Date: Sun Sep 27 2026
 ## Summary
 
 Code Files Reviewed:
-- `internal/inventory/model.go`
-- `internal/inventory/store.go`
-- `internal/inventory/service.go`
-- `cmd/demo/main.go`
+- `labs/23-optimistic-vs-pessimistic-locking/internal/inventory/model.go`
+- `labs/23-optimistic-vs-pessimistic-locking/internal/inventory/store.go`
+- `labs/23-optimistic-vs-pessimistic-locking/internal/inventory/service.go`
+- `labs/23-optimistic-vs-pessimistic-locking/cmd/demo/main.go`
 
 Tests Reviewed:
-- `tests/locking_test.go`
+- `labs/23-optimistic-vs-pessimistic-locking/tests/locking_test.go`
 
 Commands Executed:
-- `go test -v -count=1 ./...`
-- `go test -race -count=1 ./...`
-- `go run ./cmd/demo`
+- `go test -v -count=1 ./...` (PASS)
+- `go test -race -count=1 ./...` (PASS)
+- `go run ./cmd/demo` (PASS)
 
 Failures: 0
 Warnings: 0
