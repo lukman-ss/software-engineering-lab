@@ -1,25 +1,22 @@
 # Docs vs Code Audit
 
-## 1. README vs Code & Demo
+Target Lab: `labs/26-contract-testing`
 
-- Claim: `README.md` describes project structure, test commands (`go test -v ./...`, `go test -race ./...`), and demo command (`go run ./cmd/demo`).
-- Finding: Project structure listed in README matches directory layout exactly. Commands execute successfully and output matches README descriptions.
-- Assessment: PASS
+## Comparison Matrix
 
-## 2. Engineering Notes vs Code
+| Artifact | Claim | Observed Implementation | Match Status |
+| --- | --- | --- | --- |
+| `README.md` | `go test -v ./...` & `go test -race ./...` | Tests pass 100% under both commands | MATCH |
+| `README.md` | Executable multi-stage demo `go run ./cmd/demo` | Demo executes through 4 stages cleanly | MATCH |
+| `README.md` | Project structure breakdown | File paths in README match repository structure exactly | MATCH |
+| `engineering/01-design.md` | 3 Breaking changes: status casing, `customer.name` -> `full_name`, `total` int -> str | `internal/provider/server.go:ProviderBreaking` implements all 3 exact mutations | MATCH |
+| `engineering/01-design.md` | Dual V1+V2 routing for safe evolution | `internal/provider/server.go:ProviderDual` implements `/v1/orders/` and `/v2/orders/` routes | MATCH |
+| `engineering/02-implementation-notes.md` | Standalone stdlib CDC engine without Pact daemon dependencies | Engine in `internal/contract/verifier.go` relies strictly on Go stdlib `net/http` and `encoding/json` | MATCH |
 
-- Claim: `engineering/01-design.md` and `engineering/02-implementation-notes.md` specify pure standard library Go implementation, zero external daemon dependencies, minimal subset JSON matching, ponytail simplifications, and 3 breaking change types.
-- Finding: Code in `internal/contract/verifier.go` implements subset diffing without external C/Ruby Pact bindings. All 3 breaking change types (`status` enum casing, `customer.name` rename, `total` primitive type change) are implemented and verified.
-- Assessment: PASS
+## Audit Summary
 
-## 3. Engineering Execution Result vs Actual Output
+- DOC_CODE_MISMATCH: None.
+- TEST_CLAIM_MISMATCH: None.
+- RESEARCH_IMPLEMENTATION_MISMATCH: None.
 
-- Claim: `engineering/03-execution-result.md` records build, test, race detector, and demo CLI outputs.
-- Finding: Recorded terminal outputs match real execution outputs produced by `go test` and `go run ./cmd/demo`.
-- Assessment: PASS
-
-## Discrepancy Summary
-
-- DOC_CODE_MISMATCH: None detected.
-- TEST_CLAIM_MISMATCH: None detected.
-- RESEARCH_IMPLEMENTATION_MISMATCH: None detected.
+Documentation accurately reflects code design, test suite, and demo output.

@@ -2,10 +2,11 @@
 
 Target Lab: `labs/26-contract-testing`
 Implementation Files:
+- `internal/consumer/client.go`
 - `internal/contract/verifier.go`
 - `internal/model/order.go`
 - `internal/provider/server.go`
-- `internal/consumer/client.go`
+- `cmd/demo/main.go`
 
 Tests:
 - `tests/contract_test.go`
@@ -14,24 +15,28 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- `research/01-plan.md`
 - `research/05-report.md`
-- `research-audit/07-verdict.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. Consumer-Driven Contract (CDC) generation defines minimal consumer expectations.
-2. Provider V1 passes contract verification and CI gate checks.
-3. Breaking changes (enum casing mismatch, missing renamed field, primitive type mutation) fail verification with detailed error reporting.
-4. Dual Provider (V1 + V2) maintains backward compatibility while enabling schema evolution.
-5. All tests run cleanly under race detector without concurrency issues or memory leaks.
-6. Documentation in `README.md` and `engineering/` accurately reflects implementation and demo output.
+1. Implementation matches Consumer-Driven Contract (CDC) testing and CI deployment gate principles.
+2. Code compiles cleanly without external runtime/C-binding dependencies.
+3. Tests run and pass 100% including race detection (`go test -race ./...`).
+4. Contract verifier correctly flags provider breaking changes (enum mismatch, field rename, primitive type change).
+5. Dual provider maintains backward compatibility for V1 while supporting V2.
+6. Demo output is authentic, reproducible, and reflects actual code execution.
+7. README accurately describes project structure, test commands, and execution instructions.
 
 Commands To Run:
-- `cd labs/26-contract-testing && go test -v ./...`
-- `cd labs/26-contract-testing && go test -race ./...`
-- `cd labs/26-contract-testing && go run ./cmd/demo`
+```bash
+cd labs/26-contract-testing
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo
+```
 
 Primary Risks:
-- Incomplete JSON diff recursion or loose type assertions leading to false passes.
-- Data race or state pollution during concurrent contract verifications.
-- Mismatch between documented claims/demo logs and actual runtime behavior.
+- Type mismatch detection when JSON numbers vs strings or floats are decoded in standard Go map representations.
+- Concurrency race conditions in HTTP client or server verification loops.
+- Inconsistency between README commands/structure and actual repository layout.
