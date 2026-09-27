@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"log"
+	"sync"
 	"time"
 )
 
@@ -10,6 +11,8 @@ type Relay struct {
 	broker       Broker
 	pollInterval time.Duration
 	stopChan     chan struct{}
+	startOnce    sync.Once
+	stopOnce     sync.Once
 }
 
 func NewRelay(db *DB, broker Broker, pollInterval time.Duration) *Relay {
@@ -22,22 +25,26 @@ func NewRelay(db *DB, broker Broker, pollInterval time.Duration) *Relay {
 }
 
 func (r *Relay) Start() {
-	go func() {
-		ticker := time.NewTicker(r.pollInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				r.PollAndDispatch()
-			case <-r.stopChan:
-				return
+	r.startOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(r.pollInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					r.PollAndDispatch()
+				case <-r.stopChan:
+					return
+				}
 			}
-		}
-	}()
+		}()
+	})
 }
 
 func (r *Relay) Stop() {
-	close(r.stopChan)
+	r.stopOnce.Do(func() {
+		close(r.stopChan)
+	})
 }
 
 func (r *Relay) PollAndDispatch() int {

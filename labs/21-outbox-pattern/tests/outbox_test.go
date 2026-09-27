@@ -191,3 +191,50 @@ func TestTransactionalOutbox_PurgeProcessed(t *testing.T) {
 		t.Fatalf("expected processed message to be purged")
 	}
 }
+
+func TestTransactionalOutbox_RelayRetryAfterBrokerFailure(t *testing.T) {
+	db := outbox.NewDB()
+	broker := outbox.NewMockBroker()
+	relay := outbox.NewRelay(db, broker, 10*time.Millisecond)
+	service := outbox.NewOrderService(db)
+	consumer := outbox.NewConsumer()
+
+	broker.SetFailNext(true)
+
+	err := service.CreateOrderWithOutbox("o-retry", "c-retry", 55.0)
+	if err != nil {
+		t.Fatalf("expected order creation to succeed: %v", err)
+	}
+
+	relay.Start()
+	relay.Start() // verify idempotency of Start()
+	defer func() {
+		relay.Stop()
+		relay.Stop() // verify idempotency of Stop()
+	}()
+
+	// First poll fails due to SetFailNext
+	time.Sleep(25 * time.Millisecond)
+
+	msg, ok := db.GetOutbox("evt-o-retry")
+	if !ok {
+		t.Fatalf("expected outbox message to exist")
+	}
+
+	// Wait for subsequent successful poll
+	time.Sleep(50 * time.Millisecond)
+
+	published := broker.GetPublished()
+	if len(published) != 1 {
+		t.Fatalf("expected 1 message published after retry, got %d", len(published))
+	}
+
+	msg, ok = db.GetOutbox("evt-o-retry")
+	if !ok || msg.Status != outbox.MessageStatusProcessed {
+		t.Fatalf("expected message to be marked processed after retry")
+	}
+
+	if !consumer.Handle(published[0]) {
+		t.Fatalf("expected consumer to process retried message")
+	}
+}

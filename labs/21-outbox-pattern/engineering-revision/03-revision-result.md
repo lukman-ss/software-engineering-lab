@@ -1,18 +1,18 @@
 # Engineering Revision Result
 
 Target Lab: labs/21-outbox-pattern
-Previous Verdict: APPROVED
+Previous Verdict: APPROVED_WITH_WARNINGS
 
 ## Issue Summary
 
 Critical: 0
 High: 0
-Medium: 0
-Low: 0
+Medium: 1
+Low: 1
 
 ## Resolution
 
-Resolved: 0
+Resolved: 2
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None.
+- Single-relay architecture assumes in-memory state; concurrent multi-process relay scaling would require DB-level row locks / status claiming.
 
 ## Re-Audit Status
 
