@@ -1,18 +1,13 @@
-# Code Audit: Rate Limiting & Backpressure
+# Code Audit
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`  
-Audit Scope: Code & Implementation Execution  
-Audit Date: 2026-09-26  
+## Pipeline Override Notice
 
----
+As per PIPELINE OVERRIDE instructions:
+- This audit stage evaluates **research only** (`labs/25-rate-limiting-and-backpressure/research/`).
+- Code audit, compilation, execution of `go test`, and demo verification are explicitly excluded from this audit stage.
 
-## Pipeline Override Status
+## Code Audit Status
 
-**Scope Waiver Applied**: Per user instruction:
-- "Audit research only."
-- "Do not audit implementation/code in this stage."
-- "Do not modify research files."
+Status: **NOT_APPLICABLE**
 
-## Assessment
-
-Code execution, Go unit tests, Go race detector checks, and demo runs are waived and marked **NOT_APPLICABLE** for this research-only audit phase.
+Reason: Research stage audit only. Implementation/code audit is conducted in subsequent pipeline stages.

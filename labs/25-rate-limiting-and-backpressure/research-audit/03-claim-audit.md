@@ -1,193 +1,251 @@
-# Claim Audit: Rate Limiting & Backpressure
-
-Target Lab: `labs/25-rate-limiting-and-backpressure`  
-Audit Scope: Major Research Claims Verification  
-Audit Date: 2026-09-26  
-
----
+# Claim Audit
 
 ## Claim 1
 
-Claim: The token bucket algorithm allows burst traffic up to the bucket capacity while maintaining a long-term average rate limit.
+Claim:
+The Token Bucket algorithm allows burst traffic up to the bucket capacity while maintaining a long-term average rate limit. Leaky Bucket as a meter is mathematically equivalent.
 
-Location: `research/03-evidence.md:3-15` & `research/05-report.md:26-44`
+Location:
+`research/03-evidence.md`: Evidence 1 & 2; `research/05-report.md`: Finding 1
 
-Evidence Provided: Direct quote from Wikipedia Token bucket page and corroborated by NGINX & Redis docs.
+Evidence Provided:
+Wikipedia Token Bucket and Leaky Bucket definitions; NGINX limit_req module leaky bucket implementation.
 
-Source: Source 1 (Wikipedia: Token bucket), Source 5 (NGINX), Source 11 (Redis)
+Source:
+Source 1 (Wikipedia Token bucket), Source 5 (NGINX docs), Source 12 (Wikipedia Leaky bucket)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Fully supported by all primary and secondary references.
+Notes:
+Accurately reflects the dual-viewpoint relationship between token bucket and leaky bucket as a meter.
 
 ---
 
 ## Claim 2
 
-Claim: Adding jitter to exponential backoff significantly reduces the thundering herd problem and improves time to completion during contention.
+Claim:
+Rate limiting typically operates at the entry point to a system (external traffic control), whereas backpressure is a broader feedback mechanism that propagates pressure signals backward when downstream components are overwhelmed.
 
-Location: `research/03-evidence.md:16-28` & `research/05-report.md:67-86`
+Location:
+`research/03-evidence.md`: Evidence 9; `research/05-report.md`: Finding 2
 
-Evidence Provided: AWS Architecture blog benchmark data showing >50% call count reduction with full jitter.
+Evidence Provided:
+Google SRE Chapter 21: "Rate limiting usually works at the entrance to a system. Backpressure is more general: When downstream is unable to keep up with work from upstream, upstream must slow down."
 
-Source: Source 8 (AWS Architecture Blog), Source 9 (AWS SDK Documentation)
+Source:
+Source 10 (Google SRE: Handling Overload)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Supported by AWS benchmarks and queuing theory literature. In `research/05-report.md`, default values (50ms/1000ms/20s) were properly contextualized as AWS SDK defaults rather than universal rules.
+Notes:
+Distinguishes perimeter traffic policing from end-to-end downstream/upstream flow control.
 
 ---
 
 ## Claim 3
 
-Claim: HTTP 429 Too Many Requests is the standard status code for rate limiting and MUST NOT be cached by intermediaries.
+Claim:
+Adding full jitter to exponential backoff reduces the thundering herd problem and cuts call contention by more than half for 100 contending clients. AWS SDK standardized the formula: `delay = random(0, 1) * min(20000 ms, base_delay * 2^retry)` with 50 ms base for transient errors (25 ms DynamoDB) and 1,000 ms base for throttling errors.
 
-Location: `research/03-evidence.md:29-41` & `research/05-report.md:89-106`
+Location:
+`research/03-evidence.md`: Evidence 6 & 7; `research/05-report.md`: Finding 3
 
-Evidence Provided: RFC 6585 Section 4 text on 429 status code definition.
+Evidence Provided:
+AWS Architecture blog simulation results; AWS SDK Retry Behavior specification table and formulas.
 
-Source: Source 6 (RFC 6585)
+Source:
+Source 8 (AWS Architecture Blog), Source 9 (AWS SDK Retry Behavior)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Standard RFC requirement. Report correctly notes 503 as alternative for backend server overload vs 429 for client quota excess.
+Notes:
+Verified directly against AWS SDK documentation and Marc Brooker's architectural research.
 
 ---
 
 ## Claim 4
 
-Claim: Little's Law ($L = \lambda W$) applies to queueing systems, enabling mathematical calculation of queue age and backlog time ($5,000,000 / 2,000 = 2,500\text{s} \approx 41\text{m } 40\text{s}$).
+Claim:
+HTTP 429 Too Many Requests is the standard status code indicating rate limiting per RFC 6585, responses MUST NOT be stored by caches, and SHOULD include a Retry-After header.
 
-Location: `research/03-evidence.md:42-54` & `research/05-report.md:109-126`
+Location:
+`research/03-evidence.md`: Evidence 4; `research/05-report.md`: Finding 4
 
-Evidence Provided: Definition of Little's Law formula and verification of backlog processing time.
+Evidence Provided:
+RFC 6585 Section 4 text on HTTP 429 semantics and cache restrictions.
 
-Source: Source 4 (Wikipedia: Little's Law), Source 10 (Google SRE Workbook)
+Source:
+Source 6 (RFC 6585)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Mathematically exact and verified.
+Notes:
+Accurate standard citation.
 
 ---
 
 ## Claim 5
 
-Claim: NGINX implements rate limiting using the leaky bucket algorithm via `ngx_http_limit_req_module`.
+Claim:
+Little's Law ($L = \lambda W$) provides the mathematical foundation for queue sizing and backlog growth. A queue backlog of 5,000,000 items processing at 2,000 items/sec requires 2,500 seconds ($\approx 41$ minutes 40 seconds) to clear.
 
-Location: `research/03-evidence.md:55-67` & `research/05-report.md:33-35`
+Location:
+`research/03-evidence.md`: Evidence 10 & 11; `research/05-report.md`: Finding 5
 
-Evidence Provided: Official NGINX documentation stating limitation is done using leaky bucket method.
+Evidence Provided:
+Little's Law definition ($L = \lambda W$) and arithmetic calculation ($5,000,000 / 2,000 = 2,500\text{ s} = 41\text{m } 40\text{s}$).
 
-Source: Source 5 (NGINX Documentation)
+Source:
+Source 3 (Wikipedia Little's Law)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Directly supported by vendor documentation.
+Notes:
+Calculation is mathematically verified and correctly assumes steady-state departure rate with no net incoming rate during drainage.
 
 ---
 
 ## Claim 6
 
-Claim: Stripe operates 4 different types of limiters: Request rate limiter, Concurrent requests limiter, Fleet usage load shedder, and Worker utilization load shedder.
+Claim:
+Stripe operates four distinct limiter/load-shedder layers in production: Request Rate Limiter (per-user RPS), Concurrent Requests Limiter (in-flight CPU limits), Fleet Usage Load Shedder (reserves capacity for critical traffic), and Worker Utilization Load Shedder (sheds traffic in stages: test mode, GETs, POSTs).
 
-Location: `research/03-evidence.md:68-80` & `research/05-report.md:129-150`
+Location:
+`research/03-evidence.md`: Evidence 5; `research/05-report.md`: Finding 6
 
-Evidence Provided: Quotation from Stripe Engineering Blog explaining production load-shedding architecture.
+Evidence Provided:
+Stripe engineering blog post detailing their 4 limiters and production rationale.
 
-Source: Source 7 (Stripe Engineering Blog)
+Source:
+Source 7 (Stripe Engineering Blog)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: EXAMPLE / IMPLEMENTATION-SPECIFIC
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Classified as implementation example. Accurately reflects Stripe's engineering practice.
+Notes:
+Accurately cites Stripe's production architecture.
 
 ---
 
 ## Claim 7
 
-Claim: Cost-based rate limiting throttles requests based on estimated resource/computational cost rather than raw request counts.
+Claim:
+Redis provides atomic primitives (`INCR`, `EXPIRE`, sorted sets, Lua scripts) suitable for implementing fixed-window, sliding-window, and token bucket distributed rate limiters with sub-millisecond overhead.
 
-Location: `research/03-evidence.md:173-184` & `research/06-open-questions.md:7-8`
+Location:
+`research/03-evidence.md`: Evidence 12; `research/05-report.md`: Finding 7
 
-Evidence Provided: Referenced Stripe's Concurrent Requests Limiter and API Gateway cost-based policies.
+Evidence Provided:
+Redis documentation use cases and Stripe architecture blog.
 
-Source: Source 7 (Stripe Engineering Blog)
+Source:
+Source 7 (Stripe Blog), Source 11 (Redis Docs)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Cites external primary source (Stripe blog) after revision replaced internal specification citation.
+Notes:
+Supported by official Redis documentation and industry implementations.
 
 ---
 
 ## Claim 8
 
-Claim: Multi-tenant systems require per-tenant rate limiting / fair queueing to prevent noisy neighbors from starving other tenants.
+Claim:
+Multi-tenant systems require per-customer resource quotas (e.g. CPU seconds/sec) and request criticality classification (`CRITICAL_PLUS`, `CRITICAL`, `SHEDDABLE_PLUS`, `SHEDDABLE`) to prevent noisy neighbors and enable graceful tiered load shedding.
 
-Location: `research/03-evidence.md:185-196` & `research/06-open-questions.md:5-6`
+Location:
+`research/03-evidence.md`: Evidence 13 & 15; `research/05-report.md`: Finding 8
 
-Evidence Provided: Stripe load shedders and AWS Well-Architected multi-tenancy isolation guidance.
+Evidence Provided:
+Google SRE Book Chapter 21 sections on "Per-Customer Limits" and "Criticality".
 
-Source: Source 7 (Stripe Blog), Source 8 (AWS Architecture)
+Source:
+Source 10 (Google SRE: Handling Overload)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Supported by cloud reference architectures and multi-tenant design patterns.
+Notes:
+Faithful representation of Google SRE overload management practices.
 
 ---
 
 ## Claim 9
 
-Claim: Redis is well-suited for distributed rate limiting due to atomic operations (INCR, EXPIRE, Lua scripts).
+Claim:
+Client-side adaptive throttling and retry budgets (per-request budget of max 3 attempts, per-client retry budget ratio $< 10\%$, and token bucket retry quotas) are necessary to prevent cascading retry storms.
 
-Location: `research/03-evidence.md:107-119` & `research/05-report.md:153-170`
+Location:
+`research/03-evidence.md`: Evidence 8, 14, 17, 18; `research/05-report.md`: Finding 9
 
-Evidence Provided: Redis official rate limiter pattern documentation.
+Evidence Provided:
+Google SRE Chapter 21 client-side throttling math ($P_{\text{drop}} = \max(0, \frac{\text{requests} - K \cdot \text{accepts}}{\text{requests} + 1})$), Google retry budget rules, and AWS SDK token bucket retry quota (500 tokens).
 
-Source: Source 11 (Redis Documentation)
+Source:
+Source 9 (AWS SDK Retry Behavior), Source 10 (Google SRE: Handling Overload)
 
-Source Actually Supports Claim: YES
+Source Actually Supports Claim:
+YES
 
-Classification: FACT / EXAMPLE
+Classification:
+FACT
 
-Severity: LOW
+Severity:
+LOW
 
-Notes: Supported by official Redis documentation.
-
----
-
-## Unsupported Claims Analysis
-
-No major claims in the research report or evidence file are unsupported. All 9 key technical claims have direct external citations from standards bodies (IETF), academic/reference works (Wikipedia), vendor docs (NGINX, Redis, AWS, RabbitMQ), or engineering blogs (Stripe, AWS Architecture).
-
-Prior circular citation issues (Evidences 14 & 15 citing topic prompt) were resolved in `research-revision/`.
+Notes:
+All mechanisms and numbers correspond directly to published authoritative documentation.

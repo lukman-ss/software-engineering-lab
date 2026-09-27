@@ -1,10 +1,4 @@
-# Source Audit: Rate Limiting & Backpressure
-
-Target Lab: `labs/25-rate-limiting-and-backpressure`  
-Audit Scope: Research Sources Verification  
-Audit Date: 2026-09-26  
-
----
+# Source Audit
 
 ## Source 1
 
@@ -12,15 +6,24 @@ Claimed Title: Token bucket - Wikipedia
 Claimed Publisher: Wikimedia Foundation  
 URL: https://en.wikipedia.org/wiki/Token_bucket  
 
-Reachable: YES (HTTP 200)  
-Source Type: SECONDARY (Tier 2 - Reference Work)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+SECONDARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Authoritative community encyclopedia reference for Token Bucket algorithm properties.
+- Secondary reference; citing primary networking RFCs/papers (e.g. Turner 1986) is preferred for formal standards.
+- Content accurately describes algorithm mechanics and relationship to leaky bucket.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
@@ -30,51 +33,75 @@ Claimed Title: Exponential backoff - Wikipedia
 Claimed Publisher: Wikimedia Foundation  
 URL: https://en.wikipedia.org/wiki/Exponential_backoff  
 
-Reachable: YES (HTTP 200)  
-Source Type: SECONDARY (Tier 2 - Reference Work)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+SECONDARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Accurately explains exponential backoff and jitter algorithms.
+- Secondary reference, but provides broad comparative context across networking and transport protocols.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 3
 
-Claimed Title: Rate limiting - Wikipedia  
+Claimed Title: Little's law - Wikipedia  
 Claimed Publisher: Wikimedia Foundation  
-URL: https://en.wikipedia.org/wiki/Rate_limiting  
+URL: https://en.wikipedia.org/wiki/Little%27s_law  
 
-Reachable: YES (HTTP 200)  
-Source Type: SECONDARY (Tier 2 - Reference Work)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+SECONDARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Covers rate limiting principles and algorithms across networks/web services.
+- None. Accurately describes $L = \lambda W$ queueing theory theorem.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 4
 
-Claimed Title: Little's law - Wikipedia  
+Claimed Title: Rate limiting - Wikipedia  
 Claimed Publisher: Wikimedia Foundation  
-URL: https://en.wikipedia.org/wiki/Little%27s_law  
+URL: https://en.wikipedia.org/wiki/Rate_limiting  
 
-Reachable: YES (HTTP 200)  
-Source Type: SECONDARY (Tier 2 - Reference Work)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+SECONDARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Accurately defines queuing theorem $L = \lambda W$.
+- General overview encyclopedia entry.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
@@ -84,69 +111,101 @@ Claimed Title: Module ngx_http_limit_req_module
 Claimed Publisher: NGINX (F5)  
 URL: https://nginx.org/en/docs/http/ngx_http_limit_req_module.html  
 
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY (Tier 1 - Official Documentation)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Primary source for leaky bucket algorithm implementation in a production web server/reverse proxy.
+- None. Authoritative official documentation for NGINX rate limiting implementation.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 6
 
-Claimed Title: HTTP/1.1 429 Too Many Requests - RFC 6585  
+Claimed Title: RFC 6585: Additional HTTP Status Codes  
 Claimed Publisher: IETF  
 URL: https://www.rfc-editor.org/rfc/rfc6585#section-4  
 
-Reachable: YES (HTTP 302/200 redirect to canonical RFC entry)  
-Source Type: PRIMARY (Tier 1 - Standards Document)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Canonical internet standard specifying HTTP 429 status code semantics and caching rules.
+- None. Authoritative IETF RFC standard defining HTTP 429 Too Many Requests.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 7
 
 Claimed Title: Scaling your API with rate limiters  
-Claimed Publisher: Stripe Engineering Blog  
+Claimed Publisher: Stripe Engineering Blog (Paul Tarjan)  
 URL: https://stripe.com/blog/rate-limiters  
 
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY (Tier 2 - Reputable Technical Publication)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Highly cited industry reference detailing Stripe's 4-tier limiter architecture.
+- None. Real-world architecture and production case study from Stripe.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 8
 
 Claimed Title: Exponential Backoff And Jitter  
-Claimed Publisher: AWS Architecture Blog  
+Claimed Publisher: AWS Architecture Blog (Marc Brooker)  
 URL: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/  
 
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY (Tier 2 - Reputable Technical Publication)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Seminal blog post by Marc Brooker analyzing Full Jitter, Equal Jitter, and Decorrelated Jitter.
+- None. Foundational industry blog post detailing Full Jitter, Equal Jitter, and Decorrelated Jitter.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
@@ -156,51 +215,75 @@ Claimed Title: Retry behavior
 Claimed Publisher: AWS SDK Documentation  
 URL: https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html  
 
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY (Tier 1 - Official Documentation)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Primary source for standard AWS SDK retry modes, retry token bucket quota, and jitter formula.
+- None. Official specification for standard/adaptive retry modes, full jitter backoff formula, and token bucket retry quota.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 10
 
 Claimed Title: Handling Overload  
-Claimed Publisher: Google SRE Workbook  
+Claimed Publisher: Google SRE Workbook (Alejandro Forero Cuervo)  
 URL: https://landing.google.com/sre/sre-book/chapters/handling-overload/  
 
-Reachable: YES (HTTP 301 redirect to canonical https://sre.google/sre-book/handling-overload/ - HTTP 200)  
-Source Type: PRIMARY (Tier 1 - Authoritative Systems Engineering Reference)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Canonical text on backpressure, load shedding, criticalities, and cascading failure prevention.
+- Cited URL points to Chapter 21 of the Google SRE Book (O'Reilly 2016). Research correctly cites and extracts the relevant sections.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
 ## Source 11
 
-Claimed Title: Redis Rate Limiter Pattern Documentation  
+Claimed Title: Redis rate limiter documentation  
 Claimed Publisher: Redis Documentation  
 URL: https://redis.io/docs/latest/develop/use-cases/rate-limiter/  
 
-Reachable: YES (HTTP 200)  
-Source Type: PRIMARY (Tier 1 - Official Documentation)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- Prior title mismatch ("Cloudflare...") was successfully resolved in revision. Now matches Redis documentation exactly.
+- None. Official Redis developer guide on rate limiter patterns (fixed window, sliding window, token bucket).
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
@@ -210,15 +293,23 @@ Claimed Title: Leaky bucket - Wikipedia
 Claimed Publisher: Wikimedia Foundation  
 URL: https://en.wikipedia.org/wiki/Leaky_bucket  
 
-Reachable: YES (HTTP 200)  
-Source Type: SECONDARY (Tier 2 - Reference Work)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+SECONDARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- None. Documents leaky bucket as meter vs queue variants.
+- None. Explains distinction between leaky bucket as meter vs leaky bucket as queue.
 
-Assessment: PASS
+Assessment:
+PASS
 
 ---
 
@@ -228,22 +319,20 @@ Claimed Title: Consumer Prefetch & Queue Flow Control
 Claimed Publisher: RabbitMQ (Broadcom)  
 URL: https://www.rabbitmq.com/docs/consumer-prefetch  
 
-Reachable: YES (HTTP 200 with standard user agent)  
-Source Type: PRIMARY (Tier 1 - Official Documentation)  
-Relevant: YES  
-Supports Claimed Topic: YES  
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
 
 Problems:
-- Prior generic URL (`/tutorials`) was corrected to specific prefetch documentation in revision.
+- None. Relevant official docs for queue-based consumer backpressure.
 
-Assessment: PASS
-
----
-
-## Overall Source Assessment
-
-- **Total Sources Checked**: 13
-- **PASS**: 13
-- **WARNING**: 0
-- **FAIL**: 0
-- **Integrity Status**: PASS. All sources are legitimate, reachable, correctly categorized, and directly relevant to the claims made.
+Assessment:
+PASS

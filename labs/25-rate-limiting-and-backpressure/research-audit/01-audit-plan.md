@@ -1,58 +1,50 @@
-# Audit Plan: Rate Limiting & Backpressure
+# Audit Plan: Rate Limiting & Backpressure Research
 
 Target Lab: `labs/25-rate-limiting-and-backpressure`  
-Audit Scope: Research Audit (Pipeline Override Active - Research Only)  
-Audit Date: 2026-09-26  
+Audit Scope: Research artifacts only (Pipeline Override active)
 
----
+## Target Lab Summary
+- **Directory**: `labs/25-rate-limiting-and-backpressure`
+- **Research Artifacts Reviewed**:
+  - `research/01-plan.md`
+  - `research/02-sources.md`
+  - `research/03-evidence.md`
+  - `research/04-contradictions.md`
+  - `research/05-report.md`
+  - `research/06-open-questions.md`
 
-## 1. Target Lab Overview
+## Files Reviewed
+- Research Plan (`01-plan.md`): Evaluated overall research objectives, methodology, and scope.
+- Research Sources (`02-sources.md`): Evaluated 13 cited sources across standards, official docs, and industry publications.
+- Research Evidence (`03-evidence.md`): Evaluated 18 discrete evidence entries linking claims to sources.
+- Research Contradictions (`04-contradictions.md`): Evaluated 9 analyzed areas of potential disagreement.
+- Research Report (`05-report.md`): Evaluated 9 major findings, conclusions, and mathematical verifications.
+- Open Questions (`06-open-questions.md`): Evaluated identified research gaps, weak evidence, and future directions.
 
-The target lab provides technical research on rate limiting and backpressure mechanisms in distributed systems. It includes documentation on token bucket/leaky bucket algorithms, exponential backoff with jitter, HTTP status codes, queue theory (Little's Law), and multi-layer limiting strategies.
+## Claims To Verify
+1. Token Bucket & Leaky Bucket algorithm equivalence and burst properties.
+2. Backpressure vs. Rate Limiting operational boundary distinction (entrance vs. system propagation).
+3. Exponential Backoff with Full Jitter effectiveness and AWS SDK delay formula: `delay = random(0, 1) * min(20000, base_delay * 2^retry)`.
+4. HTTP 429 status code standard specification in RFC 6585 and non-cacheability requirement.
+5. Little's Law ($L = \lambda W$) mathematical foundation and queue backlog calculation ($5,000,000 / 2,000 = 2,500\text{ s} \approx 41\text{m } 40\text{s}$).
+6. Stripe's multi-layered 4-limiter rate limiting approach.
+7. Redis suitability for distributed rate limiters using `INCR`, `EXPIRE`, sorted sets, and Lua scripts.
+8. Google SRE per-customer limits, client-side adaptive throttling, and 4-level request criticality model.
+9. Google SRE retry budgets (3 per-request max attempts, 10% per-client retry ratio).
 
-## 2. Files Reviewed
+## Code To Execute
+- **Pipeline Override**: Code execution and code audit skipped for this research-only audit stage.
 
-- `research/01-plan.md`
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/04-contradictions.md`
-- `research/05-report.md`
-- `research/06-open-questions.md`
-- `research-revision/01-revision-plan.md`
-- `research-revision/02-changes-made.md`
-- `research-revision/03-revision-result.md`
+## Primary Risks
+- Reliance on Wikipedia secondary sources for core algorithm properties (Sources 1, 2, 3, 4, 12).
+- Source publication/access date accuracy (future dates like September 2026 recorded in research sources).
+- Over-generalization of implementation specifics (e.g. AWS SDK parameters applied universally).
+- Distinctions between server overload response (HTTP 503) and client rate limiting response (HTTP 429).
 
-*(Note: Per PIPELINE OVERRIDE, implementation code, tests, and demo programs in `internal/`, `cmd/`, and `README.md` are excluded from this audit stage).*
-
-## 3. Claims To Verify
-
-1. **Token Bucket Properties**: Token bucket allows bursts up to capacity while limiting average rate.
-2. **Exponential Backoff with Jitter**: Adding full jitter reduces retry collisions/thundering herd.
-3. **HTTP 429 Standard**: RFC 6585 section 4 establishes HTTP 429 Too Many Requests for rate limiting.
-4. **Little's Law Calculation**: $L = \lambda W$ applies to queue systems ($5,000,000 / 2,000 = 2,500\text{s} \approx 41\text{m } 40\text{s}$).
-5. **NGINX Leaky Bucket**: NGINX `ngx_http_limit_req_module` uses leaky bucket algorithm.
-6. **Stripe Multi-Layer Architecture**: Stripe operates 4 limiters (Request rate, Concurrent requests, Fleet usage, Worker utilization).
-7. **AWS SDK Retry Quota & Formula**: AWS SDK uses token bucket retry quota and full jitter formula `random(0,1) * min(20000, base * 2^retry)`.
-8. **Google SRE Overload Principles**: Backpressure propagates pressure signals when downstream is overloaded.
-9. **Redis as Rate Limiting Backend**: Redis atomic operations (INCR, EXPIRE, Lua) suit rate limiting.
-
-## 4. Code To Execute
-
-None. Per PIPELINE OVERRIDE, code execution/audit is skipped in this stage. Source URLs will be verified via HTTP checks.
-
-## 5. Primary Risks
-
-- **Source unreachable/broken links**: Cited RFC, vendor, or Wikipedia links may be outdated or incorrect.
-- **Citation circularity / specification reliance**: Evidence relying solely on internal prompt/spec rather than external literature.
-- **Overgeneralization**: Applying vendor-specific defaults (e.g., AWS SDK retry timings) as universal distributed systems laws.
-- **Source title/publisher mismatches**: Inaccuracies in metadata attribution in `02-sources.md`.
-
-## 6. Audit Strategy
-
-1. **Step 1 — Inventory & Audit Plan**: Define scope and verify file inventory (Current step).
-2. **Step 2 — Source Audit**: Validate all 13 external URLs, publishers, titles, tiers, and relevance.
-3. **Step 3 — Claim Audit**: Audit major claims across research files for accuracy, severity, and classification.
-4. **Step 4 — Contradiction Audit**: Check for internal or source-level contradictions.
-5. **Step 5 — Code Audit**: Record PIPELINE OVERRIDE scope waiver for implementation audit.
-6. **Step 6 — Research Gap Analysis**: Identify remaining gaps, overgeneralizations, or unverified claims.
-7. **Step 7 — Final Verdict**: Issue final decision (`07-verdict.md`) based on evidence quality rules.
+## Audit Strategy
+1. Live WebFetch verification of external URLs cited in `02-sources.md`.
+2. Textual and structural claim extraction from `03-evidence.md` and `05-report.md`.
+3. Verification of claim-to-source mapping accuracy.
+4. Evaluation of internal consistency across all research files.
+5. Classification of research gaps, missing nuances, and severity levels.
+6. Execution of evidence-based final verdict generation.

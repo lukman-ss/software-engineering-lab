@@ -1,66 +1,65 @@
-# Research Gap Analysis: Rate Limiting & Backpressure
-
-Target Lab: `labs/25-rate-limiting-and-backpressure`  
-Audit Scope: Research Gaps & Remaining Risks Assessment  
-Audit Date: 2026-09-26  
-
----
+# Research Gap Analysis
 
 ## Gap 1
 
-Type: SCOPE_ERROR (Resolved)  
-Severity: LOW  
-Location: `research/02-sources.md:105`  
-Problem: Source 11 title previously contained a mismatch ("Cloudflare...").  
-Required Revision: Correct title to match publisher (Redis Documentation).  
-Can Be Approved Without Fix: YES (Already fixed in revision).  
+Type:
+WEAK_SOURCE
+
+Severity:
+LOW
+
+Location:
+`research/02-sources.md`: Sources 1, 2, 3, 4, 12
+
+Problem:
+Multiple algorithmic foundations (Token Bucket, Leaky Bucket, Exponential Backoff, Little's Law) rely on Wikipedia pages rather than original academic papers or network RFCs. While Wikipedia articles here are mathematically accurate and link to primary works (e.g. John Little 1961, Turner 1986), citing the primary literature directly strengthens academic rigor.
+
+Required Revision:
+Include direct citations to John D.C. Little (1961) for Little's Law and Jonathan Turner (1986) for Token Bucket in future reference iterations.
+
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 2
 
-Type: WEAK_SOURCE (Resolved)  
-Severity: LOW  
-Location: `research/02-sources.md:125-127`  
-Problem: Source 13 previously linked to a generic index page (`rabbitmq.com/tutorials`).  
-Required Revision: Update URL to specific consumer prefetch documentation (`rabbitmq.com/docs/consumer-prefetch`).  
-Can Be Approved Without Fix: YES (Already fixed in revision).  
+Type:
+MISSING_CASE
+
+Severity:
+LOW
+
+Location:
+`research/05-report.md`: Finding 7 (Distributed Rate Limiting)
+
+Problem:
+Redis-based distributed rate limiting documentation notes Lua scripts and sorted sets, but does not deeply analyze race conditions, Redis cluster multi-key partitioning limitations (hash tags `{user_id}` requirement), or local memory cache fallback when Redis is unreachable (fail-open vs fail-closed strategies).
+
+Required Revision:
+Document fail-open vs. fail-closed trade-offs for distributed limiters (noted in Stripe blog: catch exceptions and fail-open to preserve API availability).
+
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 3
 
-Type: UNVERIFIED_CLAIM (Resolved)  
-Severity: MEDIUM  
-Location: `research/03-evidence.md:172-196`  
-Problem: Evidences 14 & 15 previously cited prompt/topic specification as their sole evidentiary foundation.  
-Required Revision: Re-attribute claims to external primary sources (Stripe Engineering Blog & AWS Well-Architected Framework).  
-Can Be Approved Without Fix: YES (Already fixed in revision).  
+Type:
+OVERGENERALIZATION
 
----
+Severity:
+LOW
 
-## Gap 4
+Location:
+`research/05-report.md`: Finding 3 & 9
 
-Type: OVERGENERALIZATION (Resolved)  
-Severity: LOW  
-Location: `research/05-report.md:80-85`  
-Problem: AWS SDK default values (50ms base delay, 20s max cap) were presented without explicit context that they are vendor defaults requiring SLA calibration.  
-Required Revision: Add contextual notes clarifying AWS SDK specificity.  
-Can Be Approved Without Fix: YES (Already fixed in revision).  
+Problem:
+AWS SDK's full jitter parameters (50 ms base, 1,000 ms throttling base, 20 s cap) and Google SRE's retry budget ratio (< 10%) are specific engineering choices calibrated for their infrastructure scale, not universal constants for every application domain.
 
----
+Required Revision:
+Clearly label AWS SDK parameters and Google SRE retry budgets as reference production configurations rather than universal rules.
 
-## Gap 5
-
-Type: SCOPE_ERROR (Open Question / Future Lab Scope)  
-Severity: LOW  
-Location: `research/06-open-questions.md:5-14`  
-Problem: Dynamic real-time calculation of cost-based limits and exact fair-queueing weighted algorithms are identified as open research questions.  
-Required Revision: None for base lab research; explicitly recorded in open questions.  
-Can Be Approved Without Fix: YES  
-
----
-
-## Summary Assessment
-
-All previously flagged critical, high, or medium gaps have been resolved. The remaining open questions in `06-open-questions.md` are accurately documented as future research directions and do not impair the validity or accuracy of the core research findings.
+Can Be Approved Without Fix:
+YES
