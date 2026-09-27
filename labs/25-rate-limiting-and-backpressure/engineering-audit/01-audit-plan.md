@@ -18,25 +18,29 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
+- `research/01-plan.md`
+- `research/02-sources.md`
+- `research/03-evidence.md`
+- `research/04-contradictions.md`
 - `research/05-report.md`
-- `research-audit/07-verdict.md` (APPROVED)
-- `engineering/01-design.md`
+- `research/06-open-questions.md`
 
 Main Claims To Verify:
-1. Token Bucket supports burst capacity up to limit and continuous refill rate.
-2. Leaky Bucket smooths request rates and limits peak burst capacity.
-3. Multi-tenant key registry isolates quotas between distinct tenants.
-4. BoundedQueue implements fast drop / backpressure without blocking callers when capacity is reached.
-5. AWS retry backoff jitter formulas (Full Jitter, Equal Jitter, No Jitter, Decorrelated Jitter) conform to Marc Brooker specifications.
-6. HTTP middleware correctly returns RFC 6585 status 429 and `Retry-After` header.
-7. Concurrency safety under multi-goroutine access verified with `-race`.
+1. Token bucket allows burst up to capacity $B$ and continuously refills at rate $R$.
+2. Leaky bucket smooths flow to leak rate $R$, rejecting immediate bursts when water reaches capacity.
+3. Multi-tenant registry isolates rate limit buckets by tenant key / API key to avoid CGNAT IP collisions (RFC 6598).
+4. Bounded queue backpressure sheds excess jobs fast (`ErrQueueFull`) using non-blocking submission without unbounded latency or memory growth.
+5. AWS retry backoff strategies (NoJitter, FullJitter, EqualJitter, DecorrelatedJitter) adhere to AWS Architecture specifications.
+6. HTTP middleware returns RFC 6585 status `429 Too Many Requests` with standard `Retry-After` header.
+7. Concurrency safety across token buckets, registries, and bounded queue workers without data races.
 
 Commands To Run:
 - `go test -count=1 -v ./...`
-- `go test -count=1 -race ./...`
+- `go test -race -count=1 ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions during concurrent token consumption or queue operations.
-- Flaky tests due to wall-clock timing in bucket refill tests.
-- Divergence between demo console output and claimed execution logs.
+- Race conditions during concurrent token refill or queue submission.
+- Flaky tests dependent on real-time sleep.
+- Mismatch between README documentation and actual implementation behavior.
+- Deviation from standard AWS retry formulas or RFC 6585 specifications.
