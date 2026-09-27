@@ -19,27 +19,24 @@ Executable/Demo:
 
 Approved Research Inputs:
 - `research/05-report.md`
-- `research-audit/07-verdict.md`
+- `research-audit/07-verdict.md` (APPROVED)
 - `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. Token Bucket allows burst up to capacity $B$ and continuously refills at rate $R$.
-2. Leaky Bucket smooths traffic to leak rate $R$, rejecting immediate bursts exceeding capacity.
-3. Multi-tenant key registry isolates quotas per tenant to avoid CGNAT IP collisions (RFC 6598).
-4. Bounded Queue provides immediate backpressure rejection (`ErrQueueFull`) when capacity is full without blocking or memory leaks.
-5. AWS retry backoff strategies (NoJitter, FullJitter, EqualJitter, DecorrelatedJitter) accurately adhere to Marc Brooker / AWS Architecture formulas.
-6. HTTP middleware implements RFC 6585 compliance (`429 Too Many Requests` status, `Retry-After` header, structured JSON response).
-7. Thread safety across all concurrent operations with Go race detector verification.
+1. Token Bucket supports burst capacity up to limit and continuous refill rate.
+2. Leaky Bucket smooths request rates and limits peak burst capacity.
+3. Multi-tenant key registry isolates quotas between distinct tenants.
+4. BoundedQueue implements fast drop / backpressure without blocking callers when capacity is reached.
+5. AWS retry backoff jitter formulas (Full Jitter, Equal Jitter, No Jitter, Decorrelated Jitter) conform to Marc Brooker specifications.
+6. HTTP middleware correctly returns RFC 6585 status 429 and `Retry-After` header.
+7. Concurrency safety under multi-goroutine access verified with `-race`.
 
 Commands To Run:
-- `go test ./...`
-- `go test -v -count=1 ./...`
-- `go test -race ./...`
+- `go test -count=1 -v ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Floating point inaccuracies or negative tokens/water levels in bucket algorithms.
-- Deadlocks, goroutine leaks, or race conditions during bounded queue teardown (`Stop()`).
-- Flaky unit tests relying on real wall-clock sleeps.
-- Discrepancy between README claims, design notes, and actual code implementation.
+- Race conditions during concurrent token consumption or queue operations.
+- Flaky tests due to wall-clock timing in bucket refill tests.
+- Divergence between demo console output and claimed execution logs.
