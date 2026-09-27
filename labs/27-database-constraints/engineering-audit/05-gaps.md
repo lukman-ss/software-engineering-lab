@@ -1,19 +1,23 @@
-# Gap Analysis
+# Engineering Gap Analysis
 
-## Gaps Identified
+Target Lab: labs/27-database-constraints
 
-No critical, high, or medium gaps detected during audit.
+## Findings Summary
 
-| Gap Identifier | Severity | Category | Status | Details |
-|---|---|---|---|---|
-| None | N/A | N/A | CLOSED | All implementation targets and test proofs match research and design specifications. |
+| Gap Type | Description | Severity | Status |
+|---|---|---|---|
+| None | All claims verified with runnable tests, demo, and race detector passing cleanly | None | CLOSED |
 
-## Verification Checklist
+## Detailed Breakdown
 
-- [x] Compilation succeeds (`go build ./...`)
-- [x] All unit and concurrency tests pass (`go test -v ./...`)
-- [x] Race detector reports zero races (`go test -race ./...`)
-- [x] Demo executable runs cleanly (`go run ./cmd/demo`)
-- [x] SQLSTATE codes strictly match standard Class 23 error definitions
-- [x] Soft delete partial index lifecycle accurately demonstrated
-- [x] Application race conditions vs database constraint safety proven with concurrent tests
+- `MISSING_TEST`: None. All constraint types (NOT NULL, CHECK, UNIQUE, FK, Partial Index) and concurrency scenarios have unit tests.
+- `BROKEN_IMPLEMENTATION`: None. Code builds and runs with zero failures.
+- `DOC_CODE_MISMATCH`: None. README and execution records match code.
+- `RACE_CONDITION`: None. Go race detector (`-race`) confirms safe concurrent execution.
+- `UNHANDLED_ERROR`: None. Errors return structured `ConstraintError` instances.
+- `MISSING_EDGE_CASE`: None. Soft delete bypass, multi-active rejection, boundary numbers covered.
+- `IMPLEMENTATION_OVERCLAIM`: None. Limitations documented in engineering notes.
+- `RESEARCH_MISMATCH`: None. Conforms to approved research findings.
+- `FAKE_DEMO`: None. Real executable reproducing live constraint validations.
+- `FAKE_BENCHMARK`: None. No fabricated metrics.
+- `UNVERIFIED_RESULT`: None. Real output validated.

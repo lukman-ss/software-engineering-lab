@@ -1,27 +1,20 @@
-# Docs vs Code Analysis
+# Docs vs Code Audit
 
-## Comparisons
+Target Lab: labs/27-database-constraints
 
-1. README.md vs Code
-   - README specifies 5 implemented constraints: NOT NULL (`23502`), CHECK (`23514`), UNIQUE (`23505`), FOREIGN KEY (`23503`), PARTIAL UNIQUE INDEX (`WHERE deleted_at IS NULL`).
-   - Implementation in `internal/engine/engine.go` implements all 5 constraints with matching SQLSTATE codes.
-   - Result: MATCH.
+## Comparison Matrix
 
-2. Engineering Design vs Implementation
-   - Design specified safe vs unsafe stores, in-memory ACID simulation, domain error mapping, and concurrency tests.
-   - All modules (`internal/model`, `internal/dberr`, `internal/engine`, `internal/store`, `cmd/demo`) are present and implemented as designed.
-   - Result: MATCH.
+| Documented Claim / Element | Code / Test Implementation | Alignment Status | Notes |
+|---|---|---|---|
+| NOT NULL (`23502`) | `internal/engine/engine.go:51-56`, `TestNotNullConstraints` | MATCH | Implemented and verified |
+| CHECK (`23514`) | `internal/engine/engine.go:58-69`, `TestCheckConstraints` | MATCH | Verified for age, status, order total |
+| UNIQUE (`23505`) | `internal/engine/engine.go:79-83`, `TestUniqueConstraint`, `TestConcurrentRegistration_Safe_EnforcesUniqueness` | MATCH | Full full-table unique index |
+| FOREIGN KEY (`23503`) | `internal/engine/engine.go:127-148`, `TestForeignKeyConstraint` | MATCH | Verified referential check against users table |
+| PARTIAL UNIQUE INDEX (`WHERE deleted_at IS NULL`) | `internal/engine/engine.go:71-77`, `TestPartialUniqueIndex` | MATCH | Re-registration after soft deletion validated |
+| Concurrency Stress Demo | `cmd/demo/main.go:59-95` | MATCH | Real 50-worker test in demo and 20-worker in tests |
+| SQLSTATE Error Mapping | `internal/dberr/errors.go:83-99` | MATCH | Verified error code checks and domain translations |
 
-3. Research Claims vs Code Demonstration
-   - Research Finding 1 & 2 (Application check-then-act fails; UNIQUE constraint succeeds atomically) -> verified by `TestConcurrentRegistration_Unsafe_SuffersRaceCondition` and `TestConcurrentRegistration_Safe_EnforcesUniqueness`.
-   - Research Finding 3 (NOT NULL) -> verified by `TestNotNullConstraints`.
-   - Research Finding 4 (FOREIGN KEY) -> verified by `TestForeignKeyConstraint`.
-   - Research Finding 5 (CHECK constraints row-scoped) -> verified by `TestCheckConstraints`.
-   - Research Finding 6 (Partial Unique Index for soft-delete) -> verified by `TestPartialUniqueIndex`.
-   - Research Finding 7 (SQLSTATE Class 23 error taxonomy) -> verified by `TestErrorClassification`.
-   - Result: MATCH.
-
-## Findings Summary
-- DOC_CODE_MISMATCH: None.
-- TEST_CLAIM_MISMATCH: None.
-- RESEARCH_IMPLEMENTATION_MISMATCH: None.
+## Discrepancy Findings
+- `DOC_CODE_MISMATCH`: None observed.
+- `TEST_CLAIM_MISMATCH`: None observed.
+- `RESEARCH_IMPLEMENTATION_MISMATCH`: None observed.
