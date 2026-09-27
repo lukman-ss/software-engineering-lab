@@ -1,9 +1,12 @@
-# Code Audit: Lab 15 (Load Testing)
-
-## Pipeline Override Notice
-Per user prompt instructions:
-- "PIPELINE OVERRIDE: Audit research only."
-- "Do not audit implementation/code in this stage."
+# Code Audit
 
 ## Status
-NOT_APPLICABLE (Deferred to engineering-audit stage).
+SKIPPED / NOT_APPLICABLE
+
+## Reason
+Pipeline Override invoked for this audit session:
+- "Audit research only."
+- "Do not audit implementation/code in this stage."
+- "Do not modify research files."
+
+Code verification, unit testing, benchmark execution, and implementation checks will be conducted during the dedicated engineering audit phase.

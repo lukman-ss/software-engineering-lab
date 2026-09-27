@@ -1,7 +1,10 @@
-# Audit Plan: Research Audit for Lab 15 (Load Testing)
+# Audit Plan
 
 ## Target Lab
 `labs/15-load-testing`
+
+## Scope
+Pipeline Override: Audit research only. Implementation and code audit are deferred to engineering stages. Research files will remain unmodified.
 
 ## Files Reviewed
 - `research/01-plan.md`
@@ -10,28 +13,31 @@
 - `research/04-contradictions.md`
 - `research/05-report.md`
 - `research/06-open-questions.md`
+- `research-revision/01-revision-plan.md`
+- `research-revision/02-changes-made.md`
+- `research-revision/03-revision-result.md`
 
 ## Claims To Verify
-1. Six primary load test types (smoke, average-load, stress, soak, spike, breakpoint) are industry-standard definitions.
-2. Metrics (P50, P95, P99, RPS, error rate, CPU, memory, network/disk I/O) are backed by authoritative sources (k6, ISO/IEC 25010, Azure, Google SRE).
-3. Bottleneck identification methodology (`http_req_waiting`, `http_req_connecting`, third-party latency correlation) is accurate and supported.
-4. Concurrent user calculation formula `(Hourly sessions * session duration) / 3600` is accurate per source.
-5. Common pitfalls (health check testing only, small dummy data, laptop testing, lack of targets) are verified in sources.
-6. SDLC timing recommendations for load testing are backed by engineering frameworks.
-7. Tool comparison claims (k6, JMeter, Locust, Gatling) accurately reflect official tool documentation.
+1. Standard performance test classifications cover six primary types: Smoke, Average-Load, Stress, Soak/Endurance, Spike, Breakpoint.
+2. Core metrics to monitor: Percentile latency (P50, P95, P99), Error Rate, Throughput (RPS), and Resource Utilization (CPU, Memory, Disk, Network).
+3. Tool characteristics: k6 (JS/API focus), Locust (Python/gevent greenlets), JMeter (GUI/multi-protocol/XML), Gatling (Scala DSL/JVM high-throughput).
+4. Bottleneck isolation strategy: Component metrics breakdown (e.g. `http_req_waiting` / TTFB vs `http_req_connecting`), hypothesis-driven experimentation, and layer budgeting.
+5. Common pitfalls: Testing `/health` only, unrealistic data volume, lack of server-side monitoring, undefined thresholds, testing on non-representative local hardware.
+6. Concurrent user sizing methodology: Formula `Concurrent Users = Hourly Sessions * Average Session Duration (s) / 3600`.
+7. SDLC timing: Pre-go-live, pre-promotions, post-architectural/database changes, continuous CI/CD automated gates.
 
 ## Code To Execute
-- PIPELINE OVERRIDE: Code execution and code/implementation auditing are skipped per pipeline override instructions. Only research artifacts will be audited.
+None (Pipeline override: Audit research only).
 
 ## Primary Risks
-- Inaccessible or dead URLs in source list.
-- Misrepresentation of source content or Tier misclassification.
-- Claiming standard compliance (e.g. ISO/IEC 25010) based only on Wikipedia without noting source limitations.
-- Overgeneralized claims presented as universal truths (e.g., specific percentage increase in stress testing, fixed threshold metrics).
+- Duplicate sources listed as separate entries (Source 11 vs Source 19, Source 7 vs Source 17).
+- Apache JMeter site connectivity timeout from current environment.
+- Numeric recommendations presented without application domain context.
+- General formulas applied to stateful multi-step booking flows without accounting for session think-times.
 
 ## Audit Strategy
-1. **Source Audit**: Verify 21 sources listed in `02-sources.md` for URL validity, publisher accuracy, tier classification, and relevance.
-2. **Claim Audit**: Audit findings in `05-report.md` and evidence entries in `03-evidence.md` against severity model and factual accuracy.
-3. **Contradiction Analysis**: Review `04-contradictions.md` for completeness and identify any unrecorded internal or external contradictions.
-4. **Gap Analysis**: Synthesize missing evidence, weak sources, open questions, and overgeneralizations into `06-gaps.md`.
-5. **Verdict Generation**: Render final evidence-based verdict in `07-verdict.md`.
+1. Live network verification for all cited source URLs.
+2. Claim-by-claim verification against cited source materials.
+3. Verification of internal consistency and contradiction handling across research reports.
+4. Categorization of gaps and severity mapping.
+5. Final verdict formulation per audit quality gates.
