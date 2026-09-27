@@ -1,48 +1,39 @@
-# Code Audit
+# Engineering Code Audit
 
 Target Lab: labs/26-contract-testing
 
 ## Finding 1
 
-Location: `internal/contract/verifier.go:58-115`
-Claimed Behavior: Pure Go contract verifier testing HTTP interactions against baseURL with strict diff validation on status code, response headers, and response payload types/values.
-Observed Implementation: Verifier handles request dispatch, status code checks, JSON decoding using `json.Number`, and deep diff recursion for map keys, types, and numbers.
+Location: internal/contract/verifier.go:58-115
+Claimed Behavior: Verifier issues HTTP requests, validates status code, decodes JSON with `UseNumber()`, and performs recursive subset comparison against consumer expectations.
+Observed Implementation: `Verify` checks status code, checks response body JSON formatting, and calls `diffValues` to verify that all fields expected by the consumer match both type and value.
 Assessment: PASS
 Severity: LOW
-Notes: `diffValues` correctly handles nested object traversal, type assertion comparison, and number formatting checks.
+Notes: Correctly handles nested JSON objects, primitive mismatches, and numeric representations via `json.Number`.
 
 ## Finding 2
 
-Location: `internal/model/order.go:13-53`
-Claimed Behavior: Models support original schema (V1), breaking modification schema (enum casing, rename, type change), and evolutionary dual schema (V2).
-Observed Implementation: Struct tags and fields explicitly define `OrderResponseV1`, `OrderResponseBreaking`, and `OrderResponseV2` aligning with failure scenario specifications.
+Location: internal/contract/verifier.go:117-176
+Claimed Behavior: Verification diff detects missing expected fields, type mismatches, and value mismatches while ignoring extra fields produced by provider.
+Observed Implementation: `diffValues` iterates over keys in expected map; extra keys present in `actMap` but absent from `expMap` are ignored, satisfying the consumer-driven contract principle.
 Assessment: PASS
 Severity: LOW
-Notes: Clear separation of models cleanly models breaking changes.
+Notes: Correctly identifies case changes (`IN_PROGRESS` vs `in_progress`), type changes (`number` vs `string`), and missing objects (`customer.name`).
 
 ## Finding 3
 
-Location: `internal/consumer/client.go:34-110`
-Claimed Behavior: Consumer implements client fetching order subset and generates minimal CDC contract specification.
-Observed Implementation: `FetchOrder` unmarshals into minimal struct (`id`, `status`, `customer.name`, `total`) and verifies validation rules. `GenerateMobileContract` produces expected interaction JSON data structure.
+Location: internal/provider/server.go:1-68
+Claimed Behavior: HTTP server handlers provide V1 baseline, Breaking provider, and backwards-compatible Dual provider implementations.
+Observed Implementation: Clean standard library `net/http` implementations. Uses `http.Handler` routing for `/v1/orders/` and `/v2/orders/`.
 Assessment: PASS
 Severity: LOW
-Notes: Demonstrates consumer-driven specification pattern accurately.
+Notes: No unneeded dependencies; conforms strictly to Go standard library conventions.
 
 ## Finding 4
 
-Location: `internal/provider/server.go:11-131`
-Claimed Behavior: Provider servers implement V1, Breaking, and Dual (V1 + V2) HTTP routes.
-Observed Implementation: Handlers return respective model DTOs with JSON serialization and handle 404/405 conditions.
+Location: internal/consumer/client.go:1-73
+Claimed Behavior: Mobile consumer defines contract schema and provides client implementation consuming provider responses.
+Observed Implementation: `BuildContract` explicitly declares required fields (`id`, `status`, `total`, `customer.name`). `GetOrder` parses response into `MobileOrderDetail`.
 Assessment: PASS
 Severity: LOW
-Notes: Handlers are stateless and safe for concurrent requests.
-
-## Finding 5
-
-Location: `internal/contract/verifier.go:47-55`
-Claimed Behavior: Concurrency safety during verification runs.
-Observed Implementation: `Verifier` uses `http.Client` which is goroutine-safe. `Verify` creates new requests and local verification state per invocation without shared mutable state.
-Assessment: PASS
-Severity: LOW
-Notes: Concurrency test confirms race-free execution under `go test -race`.
+Notes: Correct implementation demonstrating consumer-driven schema definition.

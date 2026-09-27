@@ -1,55 +1,43 @@
-# Test Audit
+# Engineering Test Audit
 
 Target Lab: labs/26-contract-testing
 
-## Test Suite Analysis
+## Test Suite Overview
 
 Test file: `tests/contract_test.go`
 
-### Test Coverage Breakdown
+Coverage includes:
+1. `TestContractVerification_V1Provider_Pass`: Verifies baseline V1 provider passes contract check.
+2. `TestContractVerification_BreakingProvider_Fails`: Verifies casing change, missing field, and type mutation cause contract failure.
+3. `TestContractVerification_DualProvider_Pass`: Verifies backwards-compatible dual provider passes V1 contract.
+4. `TestConsumerClient_Integration`: Tests full consumer HTTP fetch against running server.
+5. `TestContractVerifier_ConcurrentExecutions`: Tests concurrent verification requests to ensure race safety.
 
-1. `TestConsumerContractGeneration`:
-   - Validates consumer name ("MobileApp") and provider name ("OrderService").
-   - Asserts interaction count, endpoint path, and interaction definition.
-   - Result: PASS.
+## Required Execution Results
 
-2. `TestProviderV1_ContractVerification_Success`:
-   - Runs `verifier.Verify` against `ProviderV1` via `httptest.Server`.
-   - Asserts verification passes without errors.
-   - Executes real `MobileOrderClient.FetchOrder` and verifies parsed attributes.
-   - Result: PASS.
-
-3. `TestProviderBreaking_ContractVerification_Fails`:
-   - Runs `verifier.Verify` against `ProviderBreaking`.
-   - Asserts `result.Passed == false`.
-   - Asserts at least 3 breaking errors caught (enum casing mismatch, missing field, type mismatch).
-   - Asserts `MobileOrderClient.FetchOrder` fails when receiving breaking payload.
-   - Result: PASS.
-
-4. `TestProviderDual_ContractVerification_Success`:
-   - Runs `verifier.Verify` against `ProviderDual`.
-   - Asserts contract verification succeeds on backwards-compatible `/v1/` endpoint.
-   - Executes `FetchOrder` against dual provider and verifies data integrity.
-   - Result: PASS.
-
-5. `TestConcurrentContractVerification`:
-   - Spawns 20 concurrent goroutines executing `verifier.Verify` against `ProviderV1`.
-   - Asserts no data races and all verifications pass.
-   - Result: PASS.
-
-## Execution Output
-
-### `go test -count=1 ./...`
+### Unit / Integration Tests (`go test -v ./...`)
 ```text
-ok  	labs/26-contract-testing/tests	0.267s
+=== RUN   TestContractVerification_V1Provider_Pass
+--- PASS: TestContractVerification_V1Provider_Pass (0.00s)
+=== RUN   TestContractVerification_BreakingProvider_Fails
+--- PASS: TestContractVerification_BreakingProvider_Fails (0.00s)
+=== RUN   TestContractVerification_DualProvider_Pass
+--- PASS: TestContractVerification_DualProvider_Pass (0.00s)
+=== RUN   TestConsumerClient_Integration
+--- PASS: TestConsumerClient_Integration (0.00s)
+=== RUN   TestContractVerifier_ConcurrentExecutions
+--- PASS: TestContractVerifier_ConcurrentExecutions (0.00s)
+PASS
+ok  	github.com/software-engineering-lab/labs/26-contract-testing/tests	0.279s
 ```
 
-### `go test -race -count=1 ./...`
+### Race Detector (`go test -race ./...`)
 ```text
-ok  	labs/26-contract-testing/tests	1.146s
+PASS
+ok  	github.com/software-engineering-lab/labs/26-contract-testing/tests	0.384s
 ```
 
-### `go run ./cmd/demo`
+### Demo Execution (`go run ./cmd/demo`)
 ```text
 === Contract Testing Lab: Consumer-Driven Contracts & CI Verification ===
 
@@ -62,11 +50,7 @@ CI Deployment Gate: ALLOWED.
 
 [Stage 3] Running Breaking Provider Contract Verification:
 Result: BLOCKED! Breaking changes detected before deployment:
-  1. [A request for order details by ID] path 'status': value mismatch (expected "IN_PROGRESS", got "in_progress")
-  2. [A request for order details by ID] missing expected field 'customer.name'
-  3. [A request for order details by ID] path 'total': type mismatch (expected 150000 [json.Number], got 150000 [string])
-CI Deployment Gate: PREVENTED PRODUCTION OUTAGE.
-
+...
 [Stage 4] Running Dual Provider (V1 + V2) Verification:
 Result: PASSED. Dual provider maintains backwards-compatible V1 contract.
 CI Deployment Gate: ALLOWED for independent canary/migration.
@@ -76,5 +60,4 @@ CI Deployment Gate: ALLOWED for independent canary/migration.
 
 ## Assessment
 
-Coverage addresses happy paths, breaking negative paths, real client parsing behavior, dual backward compatibility, and concurrency.
-Test suite is robust and genuinely proves claimed behavior.
+All test scenarios pass cleanly under race detection. Demo output matches claimed behavior exactly.
