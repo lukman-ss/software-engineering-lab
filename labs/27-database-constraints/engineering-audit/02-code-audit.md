@@ -1,46 +1,37 @@
-# Code Audit Report
+# Code Audit
 
 ## Finding 1
 
-Location: `internal/engine/engine.go:46-99` (`InsertUser`)
-Claimed Behavior: Evaluates NOT NULL, CHECK, UNIQUE, and PARTIAL UNIQUE constraints atomically under mutex protection.
-Observed Implementation: Locks write mutex `e.mu.Lock()` for duration of validations, PK allocation via atomic counter `e.userSeq.Add(1)`, map updates, and index updates. Returns structured `ConstraintError` mapped to PostgreSQL SQLSTATE codes (`23502`, `23514`, `23505`).
+Location: `internal/engine/engine.go:46-99`
+Claimed Behavior: Enforces NOT NULL, CHECK, UNIQUE, and PARTIAL UNIQUE constraints atomically under concurrent writes.
+Observed Implementation: Locks engine mutex (`e.mu.Lock()`), validates fields, checks index maps (`emailIndex`, `activeEmails`), assigns auto-increment ID (`e.userSeq`), and inserts row/indexes atomically.
 Assessment: PASS
 Severity: LOW
-Notes: Atomic mutex locking guarantees serializable execution of constraints, eliminating concurrency windows inside storage engine.
+Notes: Synchronization via `RWMutex` correctly guarantees thread-safety and atomic constraint evaluation.
 
 ## Finding 2
 
-Location: `internal/engine/engine.go:102-120` (`SoftDeleteUser`)
-Claimed Behavior: Updates `DeletedAt` timestamp and updates partial index (`activeEmails`).
-Observed Implementation: Locks mutex `e.mu.Lock()`, verifies user existence, verifies non-nil `deletedAt.DeletedAt`, deletes entry from `e.activeEmails`, updates user record.
+Location: `internal/store/store.go:23-47`
+Claimed Behavior: UnsafeStore demonstrates application-level check vulnerability to read-then-write race conditions.
+Observed Implementation: Reads user count, iterates user table to find duplicate email, sleeps 1ms to exaggerate race window, then inserts bypassing engine constraints.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately reflects PostgreSQL partial unique index behavior `WHERE deleted_at IS NULL` where soft-deleted rows are removed from index.
+Notes: Accurately simulates why application-level validation without database constraints fails under concurrency.
 
 ## Finding 3
 
-Location: `internal/engine/engine.go:123-148` (`InsertOrder`)
-Claimed Behavior: Evaluates NOT NULL (`user_id`), CHECK (`total_cents > 0`), and FOREIGN KEY (`users(id)`) constraints.
-Observed Implementation: Verifies non-zero `o.UserID` (SQLSTATE `23502`), positive `o.TotalCents` (SQLSTATE `23514`), and verifies presence of `o.UserID` in `e.users` (SQLSTATE `23503`).
+Location: `internal/dberr/errors.go:83-100`
+Claimed Behavior: Maps SQLState errors to domain errors preserving constraint rules.
+Observed Implementation: Uses `errors.As` to inspect `ConstraintError` and maps `23505`, `23502`, `23514`, `23503` to structured domain error messages.
 Assessment: PASS
 Severity: LOW
-Notes: FK checking correctly enforces referential integrity against parent entity store.
+Notes: Mapping is clean, idiomatic Go, and correctly retains constraint names.
 
 ## Finding 4
 
-Location: `internal/store/store.go:24-47` (`UnsafeStore.RegisterUser`) vs `internal/store/store.go:59-66` (`SafeStore.RegisterUser`)
-Claimed Behavior: Demonstrates vulnerability of application-level check vs safety of database constraint enforcement.
-Observed Implementation: `UnsafeStore` iterates through users without mutex isolation across check-and-insert steps, adding artificial delay `time.Sleep(1 * time.Millisecond)` to demonstrate read-then-write race condition window. `SafeStore` delegates atomic insertion directly to `Engine.InsertUser`.
+Location: `internal/engine/engine.go:102-120`
+Claimed Behavior: SoftDeleteUser updates `DeletedAt` and updates partial index (`activeEmails`).
+Observed Implementation: Verifies user exists, checks `deletedAt.DeletedAt != nil`, deletes email key from `e.activeEmails`, and updates user in map.
 Assessment: PASS
 Severity: LOW
-Notes: Clearly isolates architectural pattern difference between database-enforced constraints and app-level checks.
-
-## Finding 5
-
-Location: `internal/dberr/errors.go:75-100` (`IsConstraintViolation` and `MapToDomainError`)
-Claimed Behavior: Maps SQLSTATE constraint errors to human-readable domain errors and provides type check helpers.
-Observed Implementation: `errors.As` cleanly unwraps `ConstraintError` and maps SQLSTATE codes (`23505`, `23502`, `23514`, `23503`) to domain error messages with rule annotations.
-Assessment: PASS
-Severity: LOW
-Notes: Error taxonomy adheres to PostgreSQL error classification standards.
+Notes: Properly maintains partial index state when rows are soft-deleted.
