@@ -1,90 +1,37 @@
 # Contradictions: Optimistic vs Pessimistic Locking
 
-Research date: 2026-09-26
+## No material contradictions discovered between Tier 1 sources.
 
----
+All major claims about the mechanisms of optimistic and pessimistic locking, isolation levels, and atomic operations are consistent across PostgreSQL docs, Oracle docs, Wikipedia references, Martin Fowler's patterns, and Microsoft EF Core documentation.
 
-## Contradiction 1: Repeatable Read Implementation Differs Across Databases
+## Minor Observations
 
-**SOURCE A:** PostgreSQL Documentation - Transaction Isolation (13.2)
-> "Repeatable Read uses Snapshot Isolation... Serializable adds predicate locking (Serializable Snapshot Isolation) on top of Snapshot Isolation, detecting serialization anomalies."
+### Observation 1: Lost Update Prevention Under Default Isolation
 
-**SOURCE B:** MySQL Documentation - Transaction Isolation Levels (15.7.2.1)
-> "REPEATABLE READ (default): Consistent reads use snapshot from first read. Gap locks / next-key locks prevent phantom rows for locking reads."
+**SOURCE A (PostgreSQL)**:
+Under Read Committed (default), an UPDATE in a long-running transaction CAN cause a lost update. PostgreSQL docs describe: "Because Read Committed mode starts each command with a new snapshot that includes all transactions committed up to that instant, subsequent commands in the same transaction will see the effects of the committed concurrent transaction in any case." This means two UPDATE statements in the same transaction may each see a different snapshot, allowing a lost update.
 
-**SOURCE C:** ANSI SQL Isolation Level Definition (Wikipedia Concurrency Control)
-> Repeatable Read: "Not possible" for non-repeatable read, "Possible" for phantom read
+**SOURCE B (Oracle)**:
+Under Read Committed (default), Oracle explicitly shows a lost update scenario in Table 10-2 where Transaction 1 updates a row, Transaction 2 waits, then Transaction 2 overwrites. Oracle documentation clearly states: "Devising a strategy to handle lost updates is an important part of application development."
 
-**ASSESSMENT:** The term "Repeatable Read" means different things across implementations. PostgreSQL implements it as true Snapshot Isolation (SI) which prevents both non-repeatable reads AND write skews, but implements SERIALIZABLE as a separate level (SSI). MySQL uses a form of Strict 2PL with gap/next-key locks that prevent phantoms in "REPEATABLE READ" but the ANSI standard does not require this. Oracle implements neither as distinct levels. This creates confusion: code written for PostgreSQL's REPEATABLE READ is not equivalent to MySQL's REPEATABLE READ. The semantic gap means developers cannot assume "REPEATABLE READ prevents all anomalies" across all databases.
+**ASSESSMENT**:
+Both agree that default Read Committed isolation level does NOT prevent lost updates. This is consistent. The "lost update" anomaly is NOT prevented by Read Committed in either PostgreSQL or Oracle. This is an important finding that contradicts a common misconception.
 
----
+### Observation 2: MySQL Behavior (Not Directly Verified)
 
-## Contradiction 2: READ UNCOMMITTED Behavior Varies
+**SOURCE C (MySQL)**:
+MySQL/InnoDB documentation was inaccessible (403) during this research session. The plan mentioned that MySQL REPEATABLE READ behavior under gap locking and 2PL may differ from PostgreSQL's snapshot isolation at the same named isolation level.
 
-**SOURCE A:** PostgreSQL Documentation
-> "Read Uncommitted behaves identically to Read Committed (prevents dirty reads via MVCC)."
+**ASSESSMENT**:
+This remains unverified from the primary source. The behavioral difference between PostgreSQL REPEATABLE READ and MySQL/InnoDB REPEATABLE READ is known in the industry but needs verification from MySQL official docs. PostgreSQL's REPEATABLE READ is actually Snapshot Isolation; MySQL/InnoDB REPEATABLE READ uses gap locking which behaves differently. This is an area of uncertainty, not a contradiction.
 
-**SOURCE B:** Other traditional databases (inferred from Wikipedia)
-> READ UNCOMMITTED typically allows dirty reads (reading uncommitted data).
+### Observation 3: Serializable Implementation Differences
 
-**ASSESSMENT:** PostgreSQL's MVCC architecture does not support true dirty reads, making READ UNCOMMITTED a no-op that behaves like READ COMMITTED. Other database systems (SQL Server, Oracle in some modes) can support dirty reads. This is a technical limitation of MVCC, not a design choice, causing applications that rely on READ UNCOMMITTED for performance in other databases to get no benefit in PostgreSQL.
+**SOURCE A (PostgreSQL)**:
+PostgreSQL implements Serializable via Serializable Snapshot Isolation (SSI) with predicate locking. It does not use traditional 2PL for serialization.
 
----
+**SOURCE B (Oracle)**:
+Oracle implements Serializable by providing transaction-level read consistency and raising ORA-08177 when a row is modified by another committed transaction after the serializable transaction began.
 
-## Contradiction 3: How Lost Update Manifests Under Different Isolation Levels
-
-**SOURCE A:** PostgreSQL Transaction Isolation
-Under READ COMMITTED: re-reads WHERE clause after concurrent commit can silently overwrite
-
-**SOURCE B:** Oracle Lost Update Example (Table 10-2)
-Under READ COMMITTED (default): Lost update occurs when Session 2 uses stale snapshot to update
-
-**SOURCE C:** MySQL Transaction Isolation Levels under READ COMMITTED
-> "Semi-consistent reads: For UPDATE, InnoDB returns latest committed version to evaluate WHERE condition"
-
-**ASSESSMENT:** All three databases can exhibit lost update under READ COMMITTED, but the mechanism differs:
-- PostgreSQL: each statement re-evaluates with latest committed data
-- Oracle: read-consistent snapshot is taken at statement start, but the lost update anomaly occurs when overwriting with old value
-- MySQL: uses semi-consistent reads to reduce deadlocks, still vulnerable if app doesn't check affected_rows
-
-All three require explicit locking or WHERE-guard patterns. This is NOT a contradiction in outcomes but reveals different concurrency models.
-
----
-
-## Contradiction 4: Transaction-Level Lock Release Semantics
-
-**SOURCE A:** PostgreSQL Explicit Locking
-> "Once acquired, a lock is normally held until the end of the transaction. But if a lock is acquired after establishing a savepoint, the lock is released immediately if the savepoint is rolled back to."
-
-**SOURCE B:** MySQL InnoDB Documentation
-> "All locks are released when the transaction is committed or rolled back."
-
-**ASSESSMENT:** Both agree locks release at transaction end, but PostgreSQL has additional semantics for savepoint rollback releasing locks. This matters for long-running transactions with error handling. MySQL's lock duration across savepoints is less documented in the sources fetched.
-
----
-
-## No Material Contradictions Discovered
-
-The following areas show expected variation but not contradictions:
-
-### 4.1 Oracle vs PostgreSQL Isolation Levels
-- Oracle: READ COMMITTED, SERIALIZABLE, READ ONLY (no READ UNCOMMITTED, no REPEATABLE READ)
-- PostgreSQL: READ COMMITTED, REPEATABLE READ, SERIALIZABLE (no READ UNCOMMITTED effect)
-
-This is a difference in available options, not contradictory guidance. The core concurrency control principles remain the same.
-
-### 4.2 Advisory Lock Variants
-- PostgreSQL: session-level vs transaction-level advisory locks with different lifetime semantics
-- Other databases: similar concepts (SQL Server sp_getapplock, MySQL GET_LOCK) but different APIs
-
-Same pattern, different implementations.
-
----
-
-## Resolution for Research Report
-
-The identified contradictions are implementation-specific semantic differences under the same concurrency control model. They should be reported as:
-1. "Repeatable Read" is not consistently defined across databases
-2. PostgreSQL's MVCC does not support dirty reads (READ UNCOMMITTED is a no-op)
-3. Each database's locking/release semantics have nuances relevant for edge cases
-4. Lost update prevention requires explicit action (locking or WHERE-guard) in all systems under their default isolation levels
+**ASSESSMENT**:
+Different implementation strategies, but both achieve the same guarantee: concurrent serializable transactions produce results equivalent to some serial order. No contradiction — just different mechanisms.

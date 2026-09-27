@@ -1,91 +1,91 @@
 # Open Questions: Optimistic vs Pessimistic Locking
 
-Research date: 2026-09-26
-
----
-
 ## Unanswered Questions
 
-### OQ-1: Atomic Decrement Recipe — Which Database Docs State It Explicitly?
+### 1. MySQL/InnoDB Specific Behavior
+**Question**: How exactly does MySQL/InnoDB REPEATABLE READ handle lost updates compared to PostgreSQL's Snapshot Isolation?
+- Known: MySQL uses next-key locks (gap + record locks) in REPEATABLE READ, which prevents phantom reads but behaves differently from PostgreSQL's MVCC-based snapshot.
+- Need: Official MySQL documentation verification (was inaccessible during research).
+- Impact: Applications porting between PostgreSQL and MySQL may encounter different concurrency behavior at the same named isolation level.
 
-Status: RESOLVED — PostgreSQL 13.4.2 (applevel-consistency.html, directly fetched 2026-09-26) explicitly states: "SELECT FOR UPDATE does not ensure that a concurrent transaction will not update or delete a selected row. To do that in PostgreSQL you must actually update the row, even if no values need to be changed." This confirms that an actual UPDATE is the authoritative conflict-resolution action. A single conditional UPDATE (`SET stock = stock - N WHERE stock >= N`) is both atomic at statement level and eliminates the read-modify-write window. Component guarantees (statement atomicity, conditional WHERE) are additionally documented across MySQL, Oracle, and PostgreSQL.
+### 2. SQL Server Snapshot Isolation vs Serializable
+**Question**: Does SQL Server's SNAPSHOT isolation level (enabled by `ALLOW_SNAPSHOT_ISOLATION`) provide the same lost-update prevention as PostgreSQL's REPEATABLE READ?
+- EF Core docs mention: "SQL Server snapshot isolation level, as well as by the PostgreSQL repeatable reads isolation level" both implement a form of optimistic locking via serialization errors.
+- Need: Direct verification from SQL Server documentation.
 
-Evidence: PostgreSQL 18 Documentation - 13.4 Data Consistency Checks at the Application Level (direct fetch), MySQL 8.0 Reference Manual - 15.7.2.4 Locking Reads (counter increment example), Oracle Database Concepts 19c - 10 Transactions (ACID atomicity), Oracle 19c Concepts 9 Data Concurrency and Consistency (WHERE-guard pattern).
+### 3. Version Counter Overflow in Optimistic Locking
+**Question**: What is the practical impact of integer version counter overflow in high-throughput systems?
+- An int32 version column overflows at ~2.1B updates.
+- Need: Real-world data or best practices for handling (e.g., use BIGINT, timestamp, or GUID).
+- Not addressed in primary sources consulted.
 
-Confidence: UPGRADED to HIGH (2026-09-26).
+### 4. NOWAIT / SKIP LOCKED Behavior Under Contention
+**Question**: How do `FOR UPDATE NOWAIT` and `FOR UPDATE SKIP LOCKED` behave differently from blocking `FOR UPDATE` in high-contention scenarios?
+- PostgreSQL docs mention NOWAIT/SKIP LOCKED as non-blocking variants.
+- Need: Detailed behavior and use cases (e.g., work queue patterns with SKIP LOCKED).
+- Not fully explored in this research.
 
-Next step: None — atomic decrement recipe now has direct Tier 1 vendor verification.
+### 5. Advisory Locks vs Row Locks for Application-Level Coordination
+**Question**: When should PostgreSQL advisory locks be used instead of row-level locks?
+- Docs: "Advisory locks can be useful for locking strategies that are an awkward fit for the MVCC model."
+- Need: Concrete examples where advisory locks outperform row locks.
 
----
+### 6. Merge Strategies for Optimistic Conflict Resolution
+**Question**: What are the recommended merge algorithms for different data types when optimistic locking detects a conflict?
+- EF Core shows manual merge with "TODO: decide which value should be written to database."
+- Need: Patterns for last-writer-wins, field-level merge, operational transform, CRDTs.
+- Not covered in database docs; this is application-level design.
 
-### OQ-2: Distributed Locking (Redis) When Is It Justified?
+### 7. Optimistic Locking with Composite Entities
+**Question**: How to implement optimistic locking when a business entity spans multiple tables/rows?
+- Version column on one row doesn't protect related rows.
+- Need: Patterns for multi-table optimistic locking (e.g., root entity version, separate lock table).
 
-Status: LOW evidence
+### 8. Distributed Lock Necessity Threshold
+**Question**: At what scale/architecture does a distributed lock (Redis, etcd) become necessary vs database-level locking?
+- Topic spec says: "Using distributed lock for problems that can be solved by database is an anti-pattern."
+- Need: Concrete criteria (multi-database, cross-service, single-database with connection pooling limits).
 
-The topic specification asserts that using distributed locks (Redis) for problems solvable within a single database is an anti-pattern. The research confirmed database-native locking as the first option, but did not find a authoritative Tier 1 source stating explicit criteria for when distributed locking is the right choice.
+## Weak Evidence Areas
 
-Next step: Research Redis Redlock algorithm discussions (Antirez's original Redlock post + Martin Kleppmann's critique); document the actual boundary conditions for when a single database cannot solve the concurrency problem (multi-database, cross-region, microservices with separate DBs).
+### 1. Quantitative Performance Comparisons
+- No benchmark data found in official docs comparing pessimistic vs optimistic vs atomic operations under load.
+- All sources qualitative; no throughput/latency numbers.
 
----
+### 2. Deadlock Probability in Practice
+- PostgreSQL docs state deadlocks "typically low" likelihood but can occur.
+- No data on how lock ordering, transaction duration, or isolation level affects probability.
 
-### OQ-3: Optimistic Locking Version Counter Overflow
-
-Status: NOT VERIFIED
-
-In long-lived systems, a 32-bit integer version counter will eventually overflow. This is a practical concern for optimistic locking deployments. No Tier 1 source in this research discussed overflow behavior or recommended mitigation (64-bit counter, timestamp-based versions, etc.).
-
-Next step: Search Hibernate documentation for timestamp-based versioning recommendation; search production incident reports related to version overflow.
-
----
-
-### OQ-4: Snapshot Isolation vs SERIALIZABLE — Performance Penalty Quantification
-
-Status: NOT VERIFIED
-
-No quantitative performance benchmarks comparing READ COMMITTED, REPEATABLE READ (snapshot isolation), and SERIALIZABLE throughput under various contention levels were found. Only qualitative claims ("performance reduction") exist in current sources.
-
-Next step: Search for TPC-C benchmarks or academic papers with empirical measurements; PostgreSQL SSI implementation paper (Ports et al. 2012) may contain relevant data.
-
----
-
-### OQ-5: NOWAIT and SKIP LOCKED Behavior Under Contention
-
-Status: LOW evidence
-
-MySQL supports NOWAIT and SKIP LOCKED options on SELECT ... FOR UPDATE. PostgreSQL also supports both. Behavior when a lock cannot be acquired (NOWAIT immediately errors vs SKIP LOCKED skips locked rows) is documented but the performance characteristics under high contention (flash-sale scenarios like the lab's voucher exercise) were not sourced.
-
-Next step: Search for PostgreSQL SKIP LOCKED benchmark data; compare to MySQL behavior under concurrent queue access patterns.
-
----
-
-### OQ-6: Idempotency in Optimistic Locking Retry Logic
-
-Status: LOW evidence
-
-The research confirms optimistic locking conflict detection and retry, but does not address idempotency guarantees during retry. If the retrying client has already partially executed side effects (sent email, triggered webhook), the retry may cause duplicate effects. This is outside database-level locking scope but critical for production systems.
-
-Next step: Research idempotency key patterns, exactly-once processing semantics, and how this interacts with optimistic locking retry.
-
----
+### 3. Optimistic Locking Retry Storm Behavior
+- Under high contention, optimistic locking can cause retry storms (thundering herd).
+- No official guidance on backoff strategies, max retries, or circuit breaker patterns.
 
 ## Claims Needing Deeper Research
 
-| Claim | Current Confidence | Upgrade Path |
-|-------|-------------------|--------------|
-| `SET stock = stock - N WHERE stock >= N` is the recommended atomic pattern | HIGH (upgraded 2026-09-26 via direct fetch of PostgreSQL 13.4.2) | Verified — atomic UPDATE confirmed by PG 13.4.2 ("must actually update the row") |
-| Distributed locks (Redis) are inappropriate when resource is in one database | MEDIUM | Find Kleppmann/Antirez Redlock debate for explicit criteria |
-| Versionless optimistic locking (ALL/DIRTY fields in WHERE) works in practice | LOW | Verify Hibernate @OptimisticLock annotation behavior in practice |
-
----
+| Claim | Current Evidence | Needed |
+|-------|------------------|--------|
+| "Atomic UPDATE always safe" | Strong for single row; depends on WHERE clause design | Verify under SERIALIZABLE with predicate locks |
+| "Optimistic better for low conflict" | Theoretical (Kung & Robinson 1981) | Empirical threshold definitions |
+| "Pessimistic causes deadlocks" | Documented possibility | Frequency under realistic workloads |
+| "MVCC prevents dirty reads" | Both PG & Oracle confirm | Verify edge cases (deferred inserts, etc.) |
 
 ## Possible Next Research Directions
 
-1. **Voucher flash-sale design (topic spec exercise):** Combine atomic decrement + unique constraint + idempotency key; formalize proof that 1000 concurrent requests cannot exceed quota. Requires research on PostgreSQL's `SERIALIZABLE` vs `INSERT ... ON CONFLICT` (UPSERT) atomicity guarantees.
+1. **MySQL/InnoDB Deep Dive**: Fetch official docs on locking reads, gap locks, next-key locks, and isolation level behavior.
 
-2. **Cross-database concurrency patterns:** How to implement consistent optimistic locking across PostgreSQL + MySQL + Oracle in a multi-database system; version column naming conventions across ORMs (Laravel Eloquent vs Hibernate vs SQLAlchemy).
+2. **ORM Comparison**: Compare Laravel `lockForUpdate()`, Hibernate `@Version`, SQLAlchemy `with_for_update()` — verify they generate correct SQL and handle edge cases.
 
-3. **Pessimistic lock timeout behavior:** What happens when `SELECT FOR UPDATE` waits indefinitely vs MySQL's `innodb_lock_wait_timeout` vs PostgreSQL's `lock_timeout` configuration. Practical tuning guidance.
+3. **Distributed Concurrency**: Research when database locks aren't enough (sharding, microservices, saga patterns).
 
-4. **MVCC internals impact on locking:** How PostgreSQL's "tuple visibility" mechanism affects row-lock storage (dead tuple creation, VACUUM implications) vs MySQL InnoDB's "lock on index entry" approach — different performance profiles under write-heavy loads.
+4. **Real-World Case Studies**: Analyze concurrency bugs from production incidents (e.g., GitHub, Shopify, Uber engineering blogs).
 
-5. **Optimistic locking in REST API design:** Conflict detection via `ETag` / `If-Match` headers as HTTP-level optimistic locking; how this maps to database version columns. (Relevant for the SaaS/CRM use case in topic spec.)
+5. **Benchmark Suite**: Design reproducible benchmarks for:
+   - Atomic UPDATE vs SELECT+UPDATE
+   - Optimistic (version) vs Pessimistic (FOR UPDATE) vs SERIALIZABLE
+   - Varying conflict rates (1%, 10%, 50%)
+   - Varying transaction durations
+
+6. **Advanced Patterns**: Research:
+   - Semantic locking (lock by business key, not row ID)
+   - Escrow locking (for aggregate constraints like "sum of balances")
+   - Conflict-free replicated data types (CRDTs) for eventually consistent systems
