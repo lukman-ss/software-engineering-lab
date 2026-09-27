@@ -1,24 +1,32 @@
-# Test Audit
+# Engineering Test Audit
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+## Overview
+
+The test suite covers unit behavior, concurrency races, error handling, and standard compliance across all four internal packages.
 
 ## Test Execution Results
 
-Command: `go test -count=1 -v ./...`
+Command:
+```bash
+go test -v -count=1 ./...
+```
+
+Output:
 ```text
-?   	labs/25-rate-limiting-and-backpressure/cmd/demo	[no test files]
 === RUN   TestBoundedQueue_RejectionUnderLoad
 --- PASS: TestBoundedQueue_RejectionUnderLoad (0.00s)
 === RUN   TestBoundedQueue_ConcurrencySafety
---- PASS: TestBoundedQueue_ConcurrencySafety (0.00s)
+--- PASS: TestBoundedQueue_ConcurrencySafety (0.02s)
 === RUN   TestBoundedQueue_SubmitAfterStop
 --- PASS: TestBoundedQueue_SubmitAfterStop (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	0.085s
+ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	0.379s
+
 === RUN   TestRateLimitMiddleware_RFC6585
 --- PASS: TestRateLimitMiddleware_RFC6585 (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	0.117s
+ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	0.787s
+
 === RUN   TestTokenBucket_BurstAndRefill
 --- PASS: TestTokenBucket_BurstAndRefill (0.20s)
 === RUN   TestLeakyBucket_LeakRate
@@ -30,49 +38,52 @@ ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	0.117s
 === RUN   TestTokenBucket_ConcurrencyRace
 --- PASS: TestTokenBucket_ConcurrencyRace (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	1.129s
+ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	1.359s
+
 === RUN   TestComputeBackoff_Bounds
 --- PASS: TestComputeBackoff_Bounds (0.00s)
 === RUN   TestDecorrelatedJitter_Bounds
 --- PASS: TestDecorrelatedJitter_Bounds (0.00s)
 PASS
-ok  	labs/25-rate-limiting-and-backpressure/internal/retry	0.084s
+ok  	labs/25-rate-limiting-and-backpressure/internal/retry	0.307s
 ```
 
-Command: `go test -race -count=1 ./...`
+## Race Detector Execution Results
+
+Command:
+```bash
+go test -count=1 -race ./...
+```
+
+Output:
 ```text
-?   	labs/25-rate-limiting-and-backpressure/cmd/demo	[no test files]
-ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	1.106s
-ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	1.114s
-ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	2.150s
-ok  	labs/25-rate-limiting-and-backpressure/internal/retry	1.092s
+ok  	labs/25-rate-limiting-and-backpressure/internal/backpressure	1.344s
+ok  	labs/25-rate-limiting-and-backpressure/internal/httputil	1.843s
+ok  	labs/25-rate-limiting-and-backpressure/internal/ratelimit	2.391s
+ok  	labs/25-rate-limiting-and-backpressure/internal/retry	1.335s
 ```
 
-## Test Coverage Analysis
+All packages passed without any race condition detections.
 
-### 1. Happy Path Coverage
-- Token Bucket: initial burst capacity accepted (`TestTokenBucket_BurstAndRefill`).
-- Leaky Bucket: gradual flow accepted up to capacity (`TestLeakyBucket_LeakRate`).
-- Registry: independent tenant allocation and retrieval (`TestRegistry_TenantIsolation`).
-- Bounded Queue: jobs submitted and executed (`TestBoundedQueue_ConcurrencySafety`).
-- HTTP Middleware: valid request allowed through with `200 OK` (`TestRateLimitMiddleware_RFC6585`).
-- Retry Backoff: calculates durations across attempts (`TestComputeBackoff_Bounds`, `TestDecorrelatedJitter_Bounds`).
+## Test Coverage Evaluation
 
-### 2. Failure Path Coverage
-- Rate Limit Exceeded: 4th request rejected when token bucket exhausted (`TestTokenBucket_BurstAndRefill`).
-- Leaky Bucket Overflow: bursts exceeding capacity rejected (`TestLeakyBucket_LeakRate`).
-- Bounded Queue Overflow: `ErrQueueFull` returned on capacity overflow (`TestBoundedQueue_RejectionUnderLoad`).
-- Closed Queue: `ErrQueueStopped` returned when submitting to stopped queue (`TestBoundedQueue_SubmitAfterStop`).
-- HTTP 429: Rate limit exceeded yields HTTP 429 + `Retry-After` header (`TestRateLimitMiddleware_RFC6585`).
+1. `ratelimit`:
+   - Happy path burst: COVERED (`TestTokenBucket_BurstAndRefill`)
+   - Refill rate over time: COVERED (`TestTokenBucket_BurstAndRefill`, `TestTokenBucket_RetryAfterSeconds`)
+   - Leaky bucket drain rate: COVERED (`TestLeakyBucket_LeakRate`)
+   - Tenant isolation (RFC 6598): COVERED (`TestRegistry_TenantIsolation`)
+   - Concurrency stress test: COVERED (`TestTokenBucket_ConcurrencyRace` with 50 goroutines)
+2. `backpressure`:
+   - Rejection under load: COVERED (`TestBoundedQueue_RejectionUnderLoad`)
+   - Concurrency safety: COVERED (`TestBoundedQueue_ConcurrencySafety`)
+   - Shutdown / submission rejection: COVERED (`TestBoundedQueue_SubmitAfterStop`)
+   - Idempotent stop: COVERED (`TestBoundedQueue_SubmitAfterStop`)
+3. `retry`:
+   - Bound constraints for FullJitter, EqualJitter, NoJitter: COVERED (`TestComputeBackoff_Bounds`)
+   - Bound constraints for DecorrelatedJitter: COVERED (`TestDecorrelatedJitter_Bounds`)
+4. `httputil`:
+   - Status 200 on allowed request: COVERED (`TestRateLimitMiddleware_RFC6585`)
+   - Status 429 on rate limit exceeded: COVERED (`TestRateLimitMiddleware_RFC6585`)
+   - RFC 6585 `Retry-After` header presence: COVERED (`TestRateLimitMiddleware_RFC6585`)
 
-### 3. Edge Cases & Boundary Verification
-- `RetryAfterSeconds`: verified when empty (> 0) and when refilled (= 0) (`TestTokenBucket_RetryAfterSeconds`).
-- Backoff bounds: lower and upper bounds checked across multiple attempts (`TestComputeBackoff_Bounds`, `TestDecorrelatedJitter_Bounds`).
-- Queue stop idempotency: multiple calls to `Stop()` checked without panic or deadlock (`TestBoundedQueue_SubmitAfterStop`).
-
-### 4. Concurrency Safety
-- `TestTokenBucket_ConcurrencyRace`: 50 concurrent goroutines executing `Allow()` calls simultaneously. Clean with Go race detector.
-- `TestBoundedQueue_ConcurrencySafety`: 30 concurrent submitters to bounded queue with worker pool. Clean with Go race detector.
-
-## Assessment
-PASS. All claimed behaviors have direct test assertions. Test suite runs in under 3 seconds total and passes race detector cleanly.
+Assessment: PASS

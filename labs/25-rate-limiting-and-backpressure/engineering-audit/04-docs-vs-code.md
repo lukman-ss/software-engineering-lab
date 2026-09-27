@@ -1,26 +1,22 @@
-# Documentation vs Code Verification
+# Docs vs Code Audit
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+## Overview
 
-## Consistency Matrix
+This audit compares the claims made in `README.md`, `engineering/01-design.md`, and `engineering/02-implementation-notes.md` against the actual Go codebase and executable output.
 
-| Item | README / Doc Claim | Implementation / Code Reality | Status |
-|---|---|---|---|
-| Module Name | `labs/25-rate-limiting-and-backpressure` | Defined in `go.mod` line 1 | MATCH |
-| Directory Structure | Maps `cmd/demo/`, `internal/backpressure/`, `internal/httputil/`, `internal/ratelimit/`, `internal/retry/`, `engineering/` | Files exist exactly as documented in `README.md` lines 11-36 | MATCH |
-| Rate Limit Algorithms | Token Bucket & Leaky Bucket with continuous refill / drain | `internal/ratelimit/bucket.go` (`TokenBucket`, `LeakyBucket`) | MATCH |
-| Multi-tenant Registry | Per-tenant rate limiters via key to avoid CGNAT IP collisions (RFC 6598) | `internal/ratelimit/registry.go` (`Registry`) | MATCH |
-| Bounded Queue Backpressure | Fast rejection (`ErrQueueFull`) when buffer capacity is reached | `internal/backpressure/queue.go` (`TrySubmit`) | MATCH |
-| AWS Jitter Strategies | Full Jitter, Equal Jitter, No Jitter, Decorrelated Jitter algorithms | `internal/retry/backoff.go` (`ComputeBackoff`) | MATCH |
-| HTTP 429 Middleware | Returns RFC 6585 standard `429 Too Many Requests` + `Retry-After` header | `internal/httputil/middleware.go` (`RateLimitMiddleware`) | MATCH |
-| Commands | `go test ./...`, `go test -race ./...`, `go run ./cmd/demo` | Executed and confirmed functional as specified in README | MATCH |
-| Execution Output | Demo outputs 4 sections matching execution result | `cmd/demo/main.go` produces output matching `03-execution-result.md` | MATCH |
+## Comparison Table
 
-## Audit Flags
+| Feature / Claim | Documented Claim | Code Implementation | Status |
+| --- | --- | --- | --- |
+| Token Bucket | Bursts up to $B$, continuous refill rate $R$ | `TokenBucket` in `internal/ratelimit/bucket.go` | PASS |
+| Leaky Bucket | Constant drain rate $R$, rejects bursts when full | `LeakyBucket` in `internal/ratelimit/bucket.go` | PASS |
+| Multi-tenant Isolation | Per-tenant key registry to avoid CGNAT IP collision (RFC 6598) | `Registry` in `internal/ratelimit/registry.go` | PASS |
+| Bounded Queue Backpressure | Non-blocking `TrySubmit` returning fast `ErrQueueFull` | `BoundedQueue.TrySubmit` in `internal/backpressure/queue.go` | PASS |
+| AWS Jitter Retries | Full, Equal, No, and Decorrelated Jitter (Marc Brooker) | `ComputeBackoff` in `internal/retry/backoff.go` | PASS |
+| HTTP 429 Middleware | Standard RFC 6585 response with `Retry-After` header | `RateLimitMiddleware` in `internal/httputil/middleware.go` | PASS |
+| Clean Race Execution | Zero race condition warnings | `go test -race ./...` passes cleanly | PASS |
+| Demo Output | Shows rate limits, backpressure drops, and retry jitter | `cmd/demo/main.go` runs without errors | PASS |
 
-- `DOC_CODE_MISMATCH`: NONE.
-- `TEST_CLAIM_MISMATCH`: NONE.
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: NONE.
+## Discrepancies Found
 
-## Assessment
-PASS. The documentation accurately reflects the codebase structure, design decisions, APIs, and runtime outputs without exaggeration or stale references.
+None. README and design document accurately describe all implemented structures, package locations, execution commands, and behavior.

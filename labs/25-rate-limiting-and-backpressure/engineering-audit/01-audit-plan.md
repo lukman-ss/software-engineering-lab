@@ -1,6 +1,6 @@
 # Engineering Audit Plan
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+Target Lab: labs/25-rate-limiting-and-backpressure
 Implementation Files:
 - `internal/ratelimit/bucket.go`
 - `internal/ratelimit/registry.go`
@@ -18,29 +18,34 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- `research/01-plan.md`
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/04-contradictions.md`
-- `research/05-report.md`
-- `research/06-open-questions.md`
+- Token Bucket & Leaky Bucket algorithm specifications
+- RFC 6585 (429 Too Many Requests, Retry-After header)
+- RFC 6598 (Carrier-Grade NAT / tenant key isolation)
+- AWS Architecture Exponential Backoff and Jitter strategies (Marc Brooker)
+- Bounded Queue Backpressure and load shedding mechanics
 
 Main Claims To Verify:
-1. Token bucket allows burst up to capacity $B$ and continuously refills at rate $R$.
-2. Leaky bucket smooths flow to leak rate $R$, rejecting immediate bursts when water reaches capacity.
-3. Multi-tenant registry isolates rate limit buckets by tenant key / API key to avoid CGNAT IP collisions (RFC 6598).
-4. Bounded queue backpressure sheds excess jobs fast (`ErrQueueFull`) using non-blocking submission without unbounded latency or memory growth.
-5. AWS retry backoff strategies (NoJitter, FullJitter, EqualJitter, DecorrelatedJitter) adhere to AWS Architecture specifications.
-6. HTTP middleware returns RFC 6585 status `429 Too Many Requests` with standard `Retry-After` header.
-7. Concurrency safety across token buckets, registries, and bounded queue workers without data races.
+1. `TokenBucket` burst allowance up to capacity and fractional refill rate tracking.
+2. `LeakyBucket` traffic smoothing and leak rate enforcement.
+3. Multi-tenant key registry isolating tenant rate quotas (RFC 6598).
+4. `BoundedQueue` non-blocking `TrySubmit` shedding excess load with `ErrQueueFull`.
+5. Bounded queue lifecycle stop and shutdown behavior.
+6. Exponential backoff jitter algorithms (NoJitter, FullJitter, EqualJitter, DecorrelatedJitter) honoring bounds.
+7. HTTP 429 response formatting with RFC 6585 compliant `Retry-After` header.
+8. Thread safety across rate limiters and queues under concurrent execution with Go race detector clean.
+9. Demo executable runs cleanly and outputs real execution results matching claims.
 
 Commands To Run:
-- `go test -count=1 -v ./...`
-- `go test -race -count=1 ./...`
-- `go run ./cmd/demo`
+```bash
+cd labs/25-rate-limiting-and-backpressure
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo
+```
 
 Primary Risks:
-- Race conditions during concurrent token refill or queue submission.
-- Flaky tests dependent on real-time sleep.
-- Mismatch between README documentation and actual implementation behavior.
-- Deviation from standard AWS retry formulas or RFC 6585 specifications.
+- Race conditions or data races on shared state (token updates, channel submission, map access).
+- Clock skew or non-monotonic time handling during token refill calculations.
+- Blocking or goroutine leaks on queue shutdown / worker lifecycle.
+- Unbounded memory growth in registry or queue buffers.
+- Discrepancy between code behavior and README documentation.

@@ -1,6 +1,6 @@
 # Engineering Audit Verdict
 
-Target Lab: `labs/25-rate-limiting-and-backpressure`
+Target Lab: labs/25-rate-limiting-and-backpressure
 Audit Date: 2026-09-27
 
 ## Summary
@@ -20,8 +20,8 @@ Tests Reviewed:
 - `internal/httputil/middleware_test.go`
 
 Commands Executed:
-- `go test -count=1 -v ./...`
-- `go test -race -count=1 ./...`
+- `go test -v -count=1 ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
