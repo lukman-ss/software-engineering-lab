@@ -6,20 +6,20 @@ Target Lab: `labs/24-slo-sli-error-budget`
 
 No blocking gaps found.
 
-| Gap Type | Description | Severity | Status |
-| :--- | :--- | :--- | :--- |
-| `MISSING_TEST` | None | - | NONE |
-| `BROKEN_IMPLEMENTATION` | None | - | NONE |
-| `DOC_CODE_MISMATCH` | None | - | NONE |
-| `RACE_CONDITION` | None (verified via `go test -race ./...`) | - | NONE |
-| `UNHANDLED_ERROR` | None | - | NONE |
-| `MISSING_EDGE_CASE` | None | - | NONE |
-| `IMPLEMENTATION_OVERCLAIM` | None | - | NONE |
-| `RESEARCH_MISMATCH` | None | - | NONE |
-| `FAKE_DEMO` | None | - | NONE |
-| `FAKE_BENCHMARK` | None | - | NONE |
-| `UNVERIFIED_RESULT` | None | - | NONE |
+| Gap ID | Category | Description | Severity | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| GAP-01 | LIMITATION | In-memory metric store lacks persistence across process restarts | LOW | ACCEPTED (by design in standalone lab) |
+| GAP-02 | LIMITATION | External TSDB export (Prometheus/OpenTelemetry) omitted | LOW | ACCEPTED (scoped to core algorithm) |
 
-## Minor Observations (Non-Blocking)
-
-- **In-Memory Volatility**: As explicitly documented in `engineering/02-implementation-notes.md`, metrics are stored in-memory in `WindowTracker`. This is an intentional design boundary appropriate for this lab scope.
+## Assessment Summary
+- MISSING_TEST: None
+- BROKEN_IMPLEMENTATION: None
+- DOC_CODE_MISMATCH: None
+- RACE_CONDITION: None
+- UNHANDLED_ERROR: None
+- MISSING_EDGE_CASE: None
+- IMPLEMENTATION_OVERCLAIM: None
+- RESEARCH_MISMATCH: None
+- FAKE_DEMO: None
+- FAKE_BENCHMARK: None
+- UNVERIFIED_RESULT: None
