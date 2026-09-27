@@ -4,17 +4,17 @@ import "sync"
 
 // Registry maintains per-tenant rate limiters to avoid shared IP / CGNAT degradation (RFC 6598).
 type Registry struct {
-	mu          sync.RWMutex
-	buckets     map[string]*TokenBucket
-	capacity    float64
-	refillRate  float64
+	mu         sync.RWMutex
+	buckets    map[string]*TokenBucket
+	capacity   float64
+	refillRate float64
 }
 
 func NewRegistry(defaultCapacity, defaultRefillRate float64) *Registry {
 	return &Registry{
-		buckets:     make(map[string]*TokenBucket),
-		capacity:    defaultCapacity,
-		refillRate:  defaultRefillRate,
+		buckets:    make(map[string]*TokenBucket),
+		capacity:   defaultCapacity,
+		refillRate: defaultRefillRate,
 	}
 }
 

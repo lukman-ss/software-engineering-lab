@@ -79,11 +79,11 @@ func (tb *TokenBucket) RetryAfterSeconds(n float64) int {
 }
 
 type LeakyBucket struct {
-	mu         sync.Mutex
-	capacity   float64
-	water      float64
-	leakRate   float64 // units leaked per second
-	lastLeak   time.Time
+	mu       sync.Mutex
+	capacity float64
+	water    float64
+	leakRate float64 // units leaked per second
+	lastLeak time.Time
 }
 
 func NewLeakyBucket(capacity float64, leakRate float64) *LeakyBucket {

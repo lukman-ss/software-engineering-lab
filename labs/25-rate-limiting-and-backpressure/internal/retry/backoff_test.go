@@ -47,3 +47,16 @@ func TestDecorrelatedJitter_Bounds(t *testing.T) {
 		prev = sleep
 	}
 }
+
+func TestComputeBackoff_UnknownStrategy(t *testing.T) {
+	cfg := Config{
+		Base: 100 * time.Millisecond,
+		Cap:  2 * time.Second,
+	}
+
+	sleep := ComputeBackoff(BackoffStrategy("Unknown"), 1, cfg, 0)
+	expected := 200 * time.Millisecond
+	if sleep != expected {
+		t.Fatalf("expected unknown strategy default fallback to %v, got %v", expected, sleep)
+	}
+}

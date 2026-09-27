@@ -31,6 +31,10 @@ labs/25-rate-limiting-and-backpressure/
 │   ├── 01-design.md
 │   ├── 02-implementation-notes.md
 │   └── 03-execution-result.md
+├── engineering-revision/
+│   ├── 01-revision-plan.md
+│   ├── 02-changes-made.md
+│   └── 03-revision-result.md
 ├── go.mod
 └── README.md
 ```

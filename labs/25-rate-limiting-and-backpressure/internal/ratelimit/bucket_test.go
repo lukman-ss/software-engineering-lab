@@ -96,3 +96,55 @@ func TestTokenBucket_ConcurrencyRace(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestLeakyBucket_ConcurrencyRace(t *testing.T) {
+	lb := NewLeakyBucket(100, 100)
+	var wg sync.WaitGroup
+
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				_ = lb.Allow()
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+func TestRegistry_ConcurrentSameKeyGet(t *testing.T) {
+	reg := NewRegistry(10, 10)
+	var wg sync.WaitGroup
+	buckets := make([]*TokenBucket, 50)
+
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			buckets[idx] = reg.Get("same-tenant")
+		}(i)
+	}
+
+	wg.Wait()
+
+	first := buckets[0]
+	for i := 1; i < 50; i++ {
+		if buckets[i] != first {
+			t.Fatalf("expected all concurrent Get calls for same key to return identical pointer")
+		}
+	}
+}
+
+func TestTokenBucket_EdgeCases(t *testing.T) {
+	tb := NewTokenBucket(5, 10)
+
+	// AllowN > 1
+	if !tb.AllowN(3) {
+		t.Fatal("expected AllowN(3) to succeed")
+	}
+	if tb.AllowN(3) {
+		t.Fatal("expected AllowN(3) to fail when only 2 tokens left")
+	}
+}

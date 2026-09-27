@@ -79,3 +79,28 @@ func TestBoundedQueue_SubmitAfterStop(t *testing.T) {
 		t.Fatalf("expected ErrQueueStopped, got %v", err)
 	}
 }
+
+func TestBoundedQueue_ConcurrentStopAndSubmit(t *testing.T) {
+	bq := NewBoundedQueue(10, 2)
+
+	var wg sync.WaitGroup
+	// Launch 20 goroutines attempting to submit continuously
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				_ = bq.TrySubmit(func(ctx context.Context) error {
+					time.Sleep(time.Millisecond)
+					return nil
+				})
+			}
+		}()
+	}
+
+	// Stop concurrent with submits
+	time.Sleep(5 * time.Millisecond)
+	bq.Stop()
+
+	wg.Wait()
+}
