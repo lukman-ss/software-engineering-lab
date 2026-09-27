@@ -7,32 +7,27 @@ Implementation Files:
 - internal/engine/engine.go
 - internal/store/store.go
 - cmd/demo/main.go
-
 Tests:
 - internal/store/store_test.go
-
 Executable/Demo:
 - cmd/demo/main.go
-
 Approved Research Inputs:
 - research/05-report.md
-- research-audit/07-verdict.md
-
+- research/01-plan.md
+- research-audit/07-verdict.md (Status: APPROVED)
 Main Claims To Verify:
-1. Declarative database constraints (NOT NULL 23502, CHECK 23514, UNIQUE 23505, FOREIGN KEY 23503, PARTIAL UNIQUE INDEX) are correctly implemented and enforced in the engine layer.
-2. Concurrency race condition prevention: UnsafeStore (app-level check) fails under concurrent registration with race condition duplicates, while SafeStore (DB constraints) guarantees exactly 1 success and 23505 unique violations for remaining concurrent operations.
-3. Partial unique index mechanics permit soft-deleted duplicates while strictly enforcing single active record (`WHERE deleted_at IS NULL`).
-4. SQLSTATE error taxonomy (`23502`, `23503`, `23505`, `23514`) correctly maps database errors to domain errors.
-5. README and engineering notes match code structure, CLI demo, and test execution.
-
+1. Application-only validation without database constraints fails under concurrent requests (read-then-write race condition creates duplicates).
+2. Database-level UNIQUE constraints atomically prevent duplicates under concurrency, returning SQLSTATE 23505 (unique_violation).
+3. NOT NULL constraints reject missing mandatory attributes (SQLSTATE 23502).
+4. CHECK constraints enforce row-scoped boolean invariants (SQLSTATE 23514).
+5. FOREIGN KEY constraints prevent orphan records referring to non-existent parents (SQLSTATE 23503).
+6. Partial Unique Indexes (`WHERE deleted_at IS NULL`) allow reuse of unique keys after soft-deletion while maintaining uniqueness among active records.
+7. Error mapping translates low-level SQLSTATE codes into structured domain-layer errors.
 Commands To Run:
 - `go test -v ./...`
 - `go test -race ./...`
-- `go test -count=1 -v ./...`
-- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
-
 Primary Risks:
-- Thread-safety bugs or data races in memory storage engine under high concurrency.
-- Inconsistencies between error codes mapped in `dberr` vs SQLSTATE definitions.
-- Discrepancy between README documentation claims and actual code package locations.
+- Race conditions or deadlocks inside the simulated engine mutex hierarchy.
+- In-memory simulation deviating from declared SQLSTATE codes or relational constraint semantics.
+- Weak test assertions failing to actually reproduce concurrency collisions in `UnsafeStore`.

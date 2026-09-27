@@ -1,7 +1,7 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/27-database-constraints
-Audit Date: 2026-09-27
+Audit Date: Sun Sep 27 2026
 
 ## Summary
 
@@ -16,8 +16,8 @@ Tests Reviewed:
 - internal/store/store_test.go
 
 Commands Executed:
-- `go test -count=1 -v ./...`
-- `go test -count=1 -race ./...`
+- `go test -v ./...`
+- `go test -race ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
