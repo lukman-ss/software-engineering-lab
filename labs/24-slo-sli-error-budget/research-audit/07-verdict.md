@@ -1,26 +1,27 @@
 # Audit Verdict
 
-Target Lab: labs/24-slo-sli-error-budget
-Audit Date: 2026-09-26
+Target Lab: `labs/24-slo-sli-error-budget`
+
+Audit Date: 2026-09-27
 
 ## Summary
 
-Major Claims Reviewed: 9
-Sources Reviewed: 6
-Unsupported Claims: 0
-Contradictions: 0
-Code Issues: NOT_APPLICABLE (Pipeline Override: Research only)
-Test Failures: NOT_APPLICABLE (Pipeline Override: Research only)
-Research Gaps: 2 (both LOW, documented with clear scope boundaries)
+Major Claims Reviewed: 14  
+Sources Reviewed: 9 (8 Tier 1, 1 Tier 2)  
+Unsupported Claims: 0  
+Contradictions: 4 (all resolved with clear root causes)  
+Code Issues: N/A (Pipeline Override — Research Audit only)  
+Test Failures: N/A (Pipeline Override — Research Audit only)  
+Research Gaps: 4 (documented and mitigated)  
 
 ## Quality Gates
 
-Source Integrity: PASS
-Claim Support: PASS
-Internal Consistency: PASS
-Code Correctness: NOT_APPLICABLE
-Tests: NOT_APPLICABLE
-Documentation Accuracy: PASS
+Source Integrity: PASS  
+Claim Support: PASS  
+Internal Consistency: PASS  
+Code Correctness: NOT_APPLICABLE  
+Tests: NOT_APPLICABLE  
+Documentation Accuracy: PASS  
 
 ## Blocking Issues
 
@@ -28,12 +29,13 @@ None.
 
 ## Non-Blocking Issues
 
-1. Datadog burn rate threshold numbers (1-6 elevated, >6 critical) are vendor-specific; research properly classified this limitation.
-2. 100x cost per additional nine is an illustrative heuristic from Google SRE literature, noted as such in research open questions.
+1. **Vendor Concentration**: Primary sources are heavily dominated by Google SRE literature (Book & Workbook). Mitigated by corroborating definitions against Datadog and Prometheus practices.
+2. **Empirical Generalizations**: The "70% outages caused by changes" statistic is an internal Google observation without external empirical backing. Properly annotated with LOW confidence in the evidence file and report.
+3. **Monthly Downtime Calculation Discrepancy**: Minor 6-minute discrepancy between strict 30-day month (Google Appendix A) and Gregorian average 30.44-day month. Fully explained and resolved in contradictions.
 
 ## Required Revisions
 
-None. Research meets all quality criteria for grounding downstream implementation.
+None. All claims are supported by authentic, reachable primary/secondary sources, and limitations are explicitly declared.
 
 ## Final Status
 

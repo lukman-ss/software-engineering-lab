@@ -1,7 +1,13 @@
-# Code Audit: Research Stage Excluded
+# 05 — Code Audit
 
-Per PIPELINE OVERRIDE instructions for this audit:
-- Stage scope: Research artifacts only (`labs/24-slo-sli-error-budget/research/`).
-- Code audit: Excluded. Implementation files under `internal/`, `cmd/`, and `tests/` were not audited in this research phase.
+## Status: NOT APPLICABLE (Pipeline Override)
 
-Status: NOT_APPLICABLE
+### Note on Scope
+Under the instructions of the Pipeline Override for this stage:
+- This audit cycle is strictly dedicated to verifying technical research (`research/`).
+- Source code, tests, and engineering implementations are not evaluated in this document.
+- Engineering implementation and runnable test suites will be evaluated in the dedicated engineering audit phase (`engineering-audit/`).
+
+### Quality Gate Check
+- Code Correctness: NOT_APPLICABLE
+- Tests Execution: NOT_APPLICABLE

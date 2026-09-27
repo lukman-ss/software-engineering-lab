@@ -1,9 +1,13 @@
-# Source Audit: Research for 24-slo-sli-error-budget
+# 02 — Source Audit
+
+Audit of all external sources cited in `labs/24-slo-sli-error-budget/research/02-sources.md`.
+
+---
 
 ## Source 1
 
-Claimed Title: Service Level Objectives (Google SRE Book)
-Claimed Publisher: Google, Inc. / O'Reilly Media
+Claimed Title: Chapter 4 - Service Level Objectives
+Claimed Publisher: Google SRE Book (Google Inc., O'Reilly Media)
 URL: https://sre.google/sre-book/service-level-objectives/
 
 Reachable:
@@ -19,7 +23,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Canonical chapter by Chris Jones, John Wilkes, Niall Murphy, et al. defining SLI, SLO, SLA, target selection, and multi-dimensional SLOs.
+- None. Authoritative primary source for SLI/SLO/SLA definitions, percentiles vs averages, and user-facing metrics.
 
 Assessment:
 PASS
@@ -28,8 +32,8 @@ PASS
 
 ## Source 2
 
-Claimed Title: Embracing Risk (Google SRE Book)
-Claimed Publisher: Google, Inc. / O'Reilly Media
+Claimed Title: Chapter 3 - Embracing Risk
+Claimed Publisher: Google SRE Book (Google Inc., O'Reilly Media)
 URL: https://sre.google/sre-book/embracing-risk/
 
 Reachable:
@@ -45,7 +49,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Canonical chapter by Marc Alvidrez defining error budget concept, risk tolerance, availability calculation modes, and non-linear cost curves.
+- "Cost increases 100x per nine" cited inside text is a qualitative rule of thumb / internal heuristic without published empirical dataset.
 
 Assessment:
 PASS
@@ -54,34 +58,8 @@ PASS
 
 ## Source 3
 
-Claimed Title: Monitoring Distributed Systems (Google SRE Book)
-Claimed Publisher: Google, Inc. / O'Reilly Media
-URL: https://sre.google/sre-book/monitoring-distributed-systems/
-
-Reachable:
-YES
-
-Source Type:
-PRIMARY
-
-Relevant:
-YES
-
-Supports Claimed Topic:
-YES
-
-Problems:
-- None. Canonical chapter by Rob Ewaschuk introducing the four golden signals and symptom-based alerting.
-
-Assessment:
-PASS
-
----
-
-## Source 4
-
-Claimed Title: Availability Table (Google SRE Book Appendix)
-Claimed Publisher: Google, Inc. / O'Reilly Media
+Claimed Title: Appendix A - Availability Table
+Claimed Publisher: Google SRE Book (Google Inc., O'Reilly Media)
 URL: https://sre.google/sre-book/availability-table/
 
 Reachable:
@@ -97,7 +75,33 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Canonical appendix tabulating allowed downtime for 90% through 99.999% availability targets.
+- Basis is strict 30-day month (43,200 min), leading to a 6-minute discrepancy when comparing with average Gregorian month calculations (30.44 days = 43,833.6 min).
+
+Assessment:
+PASS
+
+---
+
+## Source 4
+
+Claimed Title: Chapter 2 - Implementing SLOs
+Claimed Publisher: Google SRE Workbook (Google Inc.)
+URL: https://sre.google/workbook/implementing-slos/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Primary source establishing good/total event ratios, rolling 4-week windows, and reasons 100% reliability is wrong.
 
 Assessment:
 PASS
@@ -106,7 +110,85 @@ PASS
 
 ## Source 5
 
-Claimed Title: Alerting (Prometheus Documentation)
+Claimed Title: Chapter 5 - Alerting on SLOs
+Claimed Publisher: Google SRE Workbook (Google Inc.)
+URL: https://sre.google/workbook/alerting-on-slos/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- Multi-burn-rate parameters (14.4x/1h, 6x/6h, 1x/3d, short window = 1/12) are specific Google operational recommendations, not formal mathematical standards.
+
+Assessment:
+PASS
+
+---
+
+## Source 6
+
+Claimed Title: Appendix B - Example Error Budget Policy
+Claimed Publisher: Google SRE Workbook (Google Inc.)
+URL: https://sre.google/workbook/error-budget-policy/
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- Contains claim "Changes are a major source of instability, representing roughly 70% of our outages" which is an internal Google retrospective observation without external corroboration.
+
+Assessment:
+WARNING
+
+---
+
+## Source 7
+
+Claimed Title: Concepts in Service Monitoring
+Claimed Publisher: Google Cloud Documentation (Google Inc.)
+URL: https://cloud.google.com/stackdriver/docs/solutions/slo-monitoring
+
+Reachable:
+YES
+
+Source Type:
+PRIMARY
+
+Relevant:
+YES
+
+Supports Claimed Topic:
+YES
+
+Problems:
+- None. Official Cloud documentation explaining metric-based and request-based SLO monitoring.
+
+Assessment:
+PASS
+
+---
+
+## Source 8
+
+Claimed Title: Alerting | Prometheus
 Claimed Publisher: Prometheus Authors / The Linux Foundation
 URL: https://prometheus.io/docs/practices/alerting/
 
@@ -123,16 +205,16 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Official Prometheus practices documentation on symptom-based alerting and alert volume minimization.
+- None. Canonical documentation on symptom-based alerting and golden signals.
 
 Assessment:
 PASS
 
 ---
 
-## Source 6
+## Source 9
 
-Claimed Title: Service Level Objectives (Datadog Documentation)
+Claimed Title: Service Level Objectives
 Claimed Publisher: Datadog
 URL: https://docs.datadoghq.com/service_level_objectives/
 
@@ -140,7 +222,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY
+SECONDARY (Platform Documentation)
 
 Relevant:
 YES
@@ -149,7 +231,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Contains vendor-specific formulas and threshold values (e.g. burn rate 1-6 / 6+ indicator icon rules) that apply specifically to Datadog's product rather than universal SRE standards. Properly classified as Tier 2 in research.
+- Error budget remaining formula `100 * (current_status - target) / (100 - target)` and burn rate thresholds (1-6 elevated, >6 critical over 2h) are Datadog-specific SaaS implementations.
 
 Assessment:
 PASS
