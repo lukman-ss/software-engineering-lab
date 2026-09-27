@@ -20,6 +20,7 @@ All diagrams derived from the actual implementation of `labs/26-contract-testing
 [3]           ┌──────────────────────────────┐
               │   Contract Verifier (CI gate)   │
               │   verifier.Verify(baseURL, c)   │
+              │   validates: status + body only │
               └──────────────────────────────┘
                         │
        ┌────────────────┼──────────────┐
@@ -153,3 +154,5 @@ TestConcurrent_* ────────┤  ✓           │ 20 goroutine ver
 ```
 
 **Note:** The 6 non-blocking engineering gaps (GAP-01 through GAP-06, engineering-audit-opensource/06-verdict.md) are explicitly out of the verified coverage set.
+
+**Verification scope disclaimer:** The current implementation validates HTTP status code and response body fields only. Response header validation is a planned enhancement (see GAP-01). Verifier error ordering depends on map iteration; order may vary between runs (see GAP-06). The `/v2` endpoint exists in ProviderDual but has no associated consumer contract or verification test (see GAP-02). Production Pact implementations include header validation and deterministic ordering.

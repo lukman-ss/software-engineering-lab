@@ -18,7 +18,7 @@ Bayangkan kontrak seperti *spec dokumen pengiriman*: consumer (pengirim paket) m
 
 Tiga prinsip kunci:
 1. **Consumer yang menentukan** ekspektasi minimal — hanya field yang benar-benar dipakai yang diverifikasi. Field tambahan di provider tidak memengaruhi verifikasi.
-2. **Kontrak bukan schema JSON** — ia mencakup semantik HTTP (method, path, status, header, tipe, casing enum, error behavior).
+2. **Kontrak bukan schema JSON** — ia mencakup semantik HTTP (method, path, status, header, tipe, casing enum, error behavior). Header dideklarasikan dalam kontrak untuk dokumentasi, tetapi *verifier saat ini hanya memvalidasi status code dan body* (header validation adalah enhancement mendatang; lihat GAP-01 di `engineering-audit-opensource/06-verdict.md`).
 3. **Breaking change terdeteksi sebelum production** — provider verification gagal di CI, deployment dicegah.
 
 ## Core Concept
@@ -49,7 +49,7 @@ Alur kontrak dalam laboratorium:
 1. **Consumer test** menjalankan mock server, menyatakan ekspektasi minimal, dan menghasilkan contract JSON.
 2. **Contract file** disimpan sebagai artefak yang merepresentasikan kebutuhan consumer.
 3. **Provider CI** mengambil contract tersebut dan menjalankan verifikasi terhadap provider server yang sesungguhnya (via `httptest.Server` dalam laboratorium, atau instance produksi dalam pipeline nyata).
-4. **Verifier** mengirim request sesuai kontrak ke provider, menerima response, membandingkan status, header, dan body secara *subset*: hanya field yang dideklarasikan consumer yang diperiksa.
+4. **Verifier** mengirim request sesuai kontrak ke provider, menerima response, membandingkan **status code dan body** secara *subset*: hanya field yang dideklarasikan consumer yang diperiksa. **Response header validation belum diimplementasikan** (lihat GAP-01 di `engineering-audit-opensource/06-verdict.md`).
 5. **Hasil**: pass → deployment diizinkan; fail → deployment diblokir dengan daftar error terperinci.
 
 Mekanisme verifikasi inti menggunakan *recursive map comparison* dengan `json.Number` untuk menjaga presisi tipe numerik, dan `reflect` untuk membandingkan tipe primitif non-numerik.
@@ -150,7 +150,7 @@ func (p *ProviderBreaking) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-`ProviderDual` mendukung routing `/v1/orders/{id}` (respons V1 compliant) dan `/v2/orders/{id}` (respons V2 dengan field tambahan `currency`). V1 route tetap lolos verifikasi consumer.
+`ProviderDual` mendukung routing `/v1/orders/{id}` (respons V1 compliant) dan `/v2/orders/{id}` (respons V2 dengan field tambahan `currency`). V1 route tetap lolos verifikasi consumer. **Catatan**: Endpoint V2 belum memiliki consumer contract atau verifikasi test — hanya route V1 yang diuji dalam lab (lihat GAP-02 di `engineering-audit-opensource/06-verdict.md`).
 
 ### Verifier Engine
 
@@ -201,7 +201,7 @@ Laboratorium menggunakan `httptest.Server` sebagai provider — dalam pipeline n
 - **Provider state management**: Dalam lab, provider state ditangani melalui routing deterministik. Dalam produksi, provider perlu menyiapkan state tertentu (misalnya "order ORD-123 exists") sebelum verifikasi — ini biasanya dilakukan melalui API state-setup atau fixture database.
 - **Contract Broker**: Dalam lab, kontrak dipertukarkan secara in-memory. Dalam produksi, Pact Broker (atau implementasi sejenis) menyimpan kontrak dan hasil verifikasi, memungkinkan `can-i-deploy` check lintas pasangan consumer-provider.
 - **Timeout dan konektivitas**: Verifier laboratorium menggunakan `http.Client` tanpa timeout — sesuai untuk `httptest`. Dalam pipeline produksi, client harus memiliki timeout dan mekanisme retry yang sesuai.
-- **Header assertion**: Dalam lab, Content-Type header dideklarasikan dalam kontrak tetapi tidak diassert secara eksplisit oleh verifier. Gate produksi sebaiknya menambahkan assertion header.
+- **Header assertion**: Dalam lab, Content-Type header dideklarasikan dalam kontrak tetapi tidak diassert secara eksplisit oleh verifier. Gate produksi sebaiknya menambahkan assertion header. *Verifier saat ini hanya memvalidasi status code dan body* (response header validation adalah enhancement mendatang; lihat GAP-01 di `engineering-audit-opensource/06-verdict.md`).
 - **Asynchronous systems**: Lab membatasi cakupan ke REST HTTP. Sistem event-driven (Kafka, RabbitMQ, webhooks) memerlukan Message Pact dengan prinsip serupa namun di level message payload.
 
 ## Common Mistakes

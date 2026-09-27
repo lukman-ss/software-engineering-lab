@@ -200,7 +200,7 @@ func (p *ProviderDual) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Explanation: `/v1/orders/{id}` continues to serve the compliant V1 schema (`IN_PROGRESS`, `customer.name`, integer `total`). `/v2/orders/{id}` introduces the evolved schema (`in_progress`, `customer.full_name`, string `total`, added `currency`) as a parallel, opt-in endpoint — the expand phase of expand/contract.
+Explanation: `/v1/orders/{id}` continues to serve the compliant V1 schema (`IN_PROGRESS`, `customer.name`, integer `total`). `/v2/orders/{id}` introduces the evolved schema (`in_progress`, `customer.full_name`, string `total`, added `currency`) as a parallel, opt-in endpoint — the expand phase of expand/contract. **Note:** V2 endpoint exists but has no associated verification test; only V1 contract verification is exercised in the lab (see GAP-02 in `engineering-audit-opensource/06-verdict.md`).
 
 ---
 
