@@ -1,16 +1,15 @@
-# Docs vs Code Audit
+# Documentation vs Code Verification
 
-Target Lab: `labs/24-slo-sli-error-budget`
+## Artifact Comparison
 
-## Comparison Matrix
+| Claim / Section | Documented Location | Code / Reality | Status |
+| :--- | :--- | :--- | :--- |
+| SLI Ratio Definition | `README.md`, `engineering/01-design.md`, `research/05-report.md` | `internal/slo/evaluator.go:44-47` (`good / total`) | MATCH |
+| Error Budget Formula | `README.md`, `engineering/01-design.md`, `research/05-report.md` | `internal/slo/evaluator.go:49-52` (`(1 - target) * total`) | MATCH |
+| Release Freeze Behavior | `README.md`, `engineering/01-design.md` | `internal/slo/evaluator.go:54-57` (`budgetRemaining <= 0 -> CanDeploy = false`) | MATCH |
+| Multi-Window Alerting | `engineering/01-design.md`, `engineering/02-implementation-notes.md` | `internal/alerting/engine.go:73` (`shortBurn >= factor && longBurn >= factor`) | MATCH |
+| Test Commands | `README.md:15-18` | `go test ./...` and `go test -race ./...` run and pass directly | MATCH |
+| Demo Execution Output | `engineering/03-execution-result.md:48-73` | Output of `go run ./cmd/demo` matches verbatim | MATCH |
 
-| Aspect | Claimed in README / Engineering Notes | Code & Demo Implementation | Assessment |
-|---|---|---|---|
-| Metrics Aggregation | Sliding-window time-bucketed event tracker in `internal/metrics` | `WindowTracker` in `internal/metrics/tracker.go` | PASS |
-| SLO & Error Budget | SLI ratio, Error Budget calculation, release freeze policy | `Evaluator` in `internal/slo/evaluator.go` returning `Status` with `CanDeploy` | PASS |
-| Burn Rate Alerting | Multi-window burn-rate alert calculator evaluating fast/slow burn | `AlertEngine` in `internal/alerting/engine.go` checking short & long trackers | PASS |
-| Demo Execution | `go run ./cmd/demo` produces real-time traffic phase breakdown and alert outputs | Executable script in `cmd/demo/main.go` runs phases 1-4 cleanly | PASS |
-| Testing Instructions | `go test ./...` and `go test -race ./...` | Unit & concurrency tests present in `tests/slo_test.go` and pass clean | PASS |
-
-## Discrepancies & Mismatches
-None. All claimed files, structs, functions, thresholds, and outputs match the actual codebase and test suites without exaggeration or missing components.
+## Discrepancies Found
+- None. No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH` identified.

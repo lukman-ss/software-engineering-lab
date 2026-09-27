@@ -5,24 +5,32 @@ Implementation Files:
 - `internal/metrics/tracker.go`
 - `internal/slo/evaluator.go`
 - `internal/alerting/engine.go`
+
 Tests:
 - `tests/slo_test.go`
+
 Executable/Demo:
 - `cmd/demo/main.go`
+
 Approved Research Inputs:
 - `research/05-report.md`
-- `research/runs/2026-09-27-slo-sli-error-budget/05-report.md`
+- `research-audit/07-verdict.md`
+
 Main Claims To Verify:
-1. SLI quantitative measurement as `good_events / total_events` ratio over sliding windows.
-2. Error Budget calculation (`1 - SLO`) with release freeze policy enforcement (`CanDeploy = false` when exhausted).
-3. Multi-window multi-burn-rate alerting logic triggering based on short and long window burn rates exceeding thresholds.
-4. Endpoint criticality differentiation (e.g. 99.9% critical vs 95.0% non-critical).
-5. Thread-safe concurrent event recording and metric evaluation.
+1. SLI calculation implements the `good_events / total_events` ratio over sliding windows correctly.
+2. Error Budget calculation adheres to `(1.0 - target_slo) * total_events` and properly tracks consumed/remaining budget.
+3. Release freeze policy (`CanDeploy`) correctly evaluates to `false` when remaining budget is exhausted (`budgetRemaining <= 0`).
+4. Multi-window burn rate alert engine checks both short and long windows against specified burn rate factors (`shortBurn >= factor && longBurn >= factor`).
+5. Window tracker is concurrency safe and handles out-of-order timestamp events without panicking or corrupting state.
+6. Documentation (`README.md`, `engineering/*.md`) accurately matches actual implementation and test commands.
+
 Commands To Run:
-- `go test -count=1 ./...`
-- `go test -count=1 -race ./...`
+- `go test ./...`
+- `go test -race ./...`
+- `go test -count=1 -v -race ./...`
 - `go run ./cmd/demo`
+
 Primary Risks:
-- Race conditions in sliding-window bucket updates or eviction.
-- Numerical inaccuracy/rounding errors in error budget and burn rate calculations.
-- Discrepancy between demo output, engineering notes, and codebase implementation.
+- Floating point precision rounding in `math.Round` causing boundary calculation anomalies for `CanDeploy`.
+- Out-of-order slice insertion logic in `WindowTracker` causing slice corruption or improper time sorting during eviction.
+- Divergence between demo output claims and actual runtime execution results.

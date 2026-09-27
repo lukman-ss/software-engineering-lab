@@ -2,23 +2,18 @@
 
 Target Lab: `labs/24-slo-sli-error-budget`
 
-## Gap Inventory
+## Identified Gaps
 
-No blocking or non-blocking technical gaps identified.
+No blocking or high severity gaps identified.
 
-- `MISSING_TEST`: 0
-- `BROKEN_IMPLEMENTATION`: 0
-- `DOC_CODE_MISMATCH`: 0
-- `RACE_CONDITION`: 0
-- `UNHANDLED_ERROR`: 0
-- `MISSING_EDGE_CASE`: 0
-- `IMPLEMENTATION_OVERCLAIM`: 0
-- `RESEARCH_MISMATCH`: 0
-- `FAKE_DEMO`: 0
-- `FAKE_BENCHMARK`: 0
-- `UNVERIFIED_RESULT`: 0
+### Minor Observations
 
-## Findings Summary
-1. Implementation is clean, strictly scoped to Go standard library, and executes deterministically.
-2. Multi-window burn rate alert algorithm and error budget release freeze logic are thoroughly tested across edge cases (concurrency, transient spikes, out-of-order timestamps, zero traffic).
-3. The demo outputs match recorded logs identically.
+| Gap ID | Gap Type | Severity | Description | Mitigation / Status |
+| :--- | :--- | :---: | :--- | :--- |
+| GAP-01 | IMPLEMENTATION_SCOPE | LOW | In-memory metric storage resets on process termination. | Documented as an intended design decision in `engineering/02-implementation-notes.md`. Not a defect for this lab scope. |
+| GAP-02 | EDGE_CASE_GRANULARITY | LOW | Sub-millisecond latency distribution is not modeled as full histogram buckets. | Basic boolean `isGoodEvent(e)` predicate adequately fulfills the research SLI specification. |
+
+## Fake / Fabricated Artifact Check
+- `FAKE_DEMO`: None. `cmd/demo` executes real computation without simulated mocks or hardcoded strings.
+- `FAKE_BENCHMARK`: None. No fabricated performance figures present.
+- `UNVERIFIED_RESULT`: None. All recorded outputs in `03-execution-result.md` match live execution.
