@@ -1,22 +1,37 @@
 # Test Audit
 
-## Coverage
+## Finding 1
+Location: tests/sharding_test.go:15 (TestPartitionPruning)
+Coverage: Partition pruning happy path incl. count and drop.
+Assessment: PASS
+Notes: Verifies single partition scanned after range query.
 
-- **Happy path**: Partition insert/query pruning, sharding key routing, scatter-gather aggregation, GSI point lookup, UUIDv7 generation, sequence block allocation, concurrent cluster access — all covered.
-- **Failure path**: Insert with no matching partition returns error; router returns ErrShardNotFound on empty cluster; GSI lookup and record fetch return errors for missing keys; scatter-gather with canceled context returns 0 responses.
-- **Edge cases**: Partition boundary conditions (inclusive start / exclusive end), modulo router resize, consistent hash ring wrap-around handled via binary search and modulo logic.
-- **Transitions**: Consistent hash AddShard triggers ring rebuild with sorted vnodes; RemoveShard filters ring; cluster AddShardNode adds new shard.
-- **Recovery**: Scatter-gather partial responses aggregated; canceled context yields empty result without blocking.
-- **Rollback**: Not applicable (in-memory simulation, no persistent transactions).
-- **Concurrency**: Concurrent cluster insert/read test with race detector passing.
-- **Negative cases**: Missing partition error, missing shard error, missing GSI email error, pre-canceled context test.
+## Finding 2
+Location: tests/sharding_test.go:63 (TestRoutingAndConsistentHashRelocation)
+Coverage: Modulo vs consistent hash relocation ratio.
+Assessment: PASS
+Notes: Bounds asserted; consistent hash >5% and <=40%.
 
-## Execution
+## Finding 3
+Location: tests/sharding_test.go:121 (TestClusterScatterGatherAndGSI)
+Coverage: Direct lookup, GSI lookup, scatter‑gather, pre‑canceled context.
+Assessment: PASS
+Notes: Covers failure/cancellation path.
 
-- `go test -v ./...`: PASS (all 5 tests passed)
-- `go test -race ./...`: PASS (no data races detected)
-- `go run ./cmd/demo`: PASS (completed successfully, output matches claims)
+## Finding 4
+Location: tests/sharding_test.go:172 (TestIDGenerators)
+Coverage: UUIDv7 format length, time ordering, sequence block allocator sequential IDs.
+Assessment: PASS
+Warnings: Does not cover ExtractTimeFromUUIDv7 (buggy function untested). MISSING_TEST for public idgen API.
 
-## Assessment
+## Finding 5
+Location: tests/sharding_test.go:207 (TestConcurrentClusterAccess)
+Coverage: Concurrent reads/writes across 200 ops.
+Assessment: PASS
+Notes: Race detector passing.
 
-Test suite is adequate for claimed behavior. No fabricated results; actual output matches recorded metrics.
+## Finding 6
+Negative/Edge Cases
+No test for empty router GetShard error handling, or modulo with single shard. MISSING_EDGE_CASE.
+
+Overall: Tests cover happy path, transitions, concurrency, negative context. Sequence allocator overflow and ExtractTimeFromUUIDv7 uncovered.

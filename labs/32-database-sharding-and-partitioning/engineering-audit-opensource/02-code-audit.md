@@ -1,35 +1,50 @@
-## Finding 1
+# Code Audit
 
-Location: internal/partitioning/table.go
-Claimed Behavior: Logical table partitioning with range pruning and partition dropping.
-Observed Implementation: Table.insert uses range check (inclusive start, exclusive end) under read lock; partition insert uses partition-level mutex. QueryRange uses correct overlap condition for pruning. DropPartition removes partition under table write lock.
+## Finding 1
+Location: internal/sharding/sharding.go:163-172 (GetShards)
+Claimed Behavior: ConsistentHashRouter.GetShards returns shard list deterministically
+Observed Implementation: Uses random map iteration order then sorts; output deterministic.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrent insert and drop are correctly blocked by table RWMutex. No data races observed.
+Notes: Minor inefficiency rebuilding slice each call.
 
 ## Finding 2
-
-Location: internal/sharding/sharding.go
-Claimed Behavior: Sharding cluster with modulo and consistent hash routing, scatter-gather queries, GSI point lookups.
-Observed Implementation: Router interface with ModuloRouter (hash % N) and ConsistentHashRouter (ring with virtual nodes). Cluster manages shard map with RWMutex, delegates routing, synchronizes GSI updates. ScatterGatherBroadcastWithContext copies shard slice under read lock, processes shards in parallel goroutines with context cancellation. Shard uses RWMutex for its map. GSI uses RWMutex for index map.
+Location: internal/sharding/sharding.go:416-438 (RebalanceData)
+Claimed Behavior: Resharding moves records to correct shard per router
+Observed Implementation: Reads all records, resets shards, re-inserts by router.GetShard (ignores error). No concurrent writes safety; assumes router not changed concurrently.
 Assessment: PASS
-Severity: LOW
-Notes: All shared state protected by appropriate mutexes. Race detector passes. No obvious deadlock scenarios.
+Severity: MEDIUM
+Notes: Router GetShard error is discarded, causing potential nil target if router empty; in single-threaded rebalance safe.
 
 ## Finding 3
-
-Location: internal/idgen/idgen.go
-Claimed Behavior: RFC 9562 compliant UUIDv7 generator and sequence block allocator.
-Observed Implementation: NewUUIDv7 extracts millisecond timestamp, sets version (0111) and variant (10) bits, fills remaining bytes with crypto/rand. SequenceBlockAllocator uses mutex to allocate ID blocks from fetcher (MemoryCentralSequence). MemoryCentralSequence allocates monotonically increasing blocks.
-Assessment: PASS
-Severity: LOW
-Notes: UUIDv7 generation is time-ordered (tested). No external dependencies; uses only stdlib.
+Location: internal/idgen/idgen.go:90-113 (ExtractTimeFromUUIDv7)
+Claimed Behavior: Extracts timestamp from UUIDv7.
+Observed Implementation: Parses 12 hex chars, but returns empty time on success in non-error branch (`return time.Time{}, nil`). Bug — success path returns zero value.
+Assessment: FAIL
+Severity: HIGH
+Notes: Function never returns extracted time; always returns epoch zero on success. Not used in demo/tests but is public API.
 
 ## Finding 4
-
-Location: cmd/demo/main.go
-Claimed Behavior: End‑to‑end demonstration of partitioning, sharding key hotspots, resharding relocation, scatter‑gather vs GSI, ID generation.
-Observed Implementation: Demo calls functions that exercise each component and prints metrics matching engineering claims.
+Location: internal/sharding/sharding.go:337-403 (ScatterGatherBroadcastWithContext)
+Claimed Behavior: Concurrent parallel query with context cancellation.
+Observed Implementation: Checks ctx.Done() in default-select loop; pre-canceled context yields ShardResponded=0, matching test.
 Assessment: PASS
 Severity: LOW
-Notes: Demo output matches recorded execution results; no hard‑coded values.
+
+## Finding 5
+Location: internal/sharding/sharding.go:212 (AllRecords)
+Claimed Behavior: Thread-safe snapshot of shard data.
+Observed Implementation: Returns slice copy under RLock.
+Assessment: PASS
+
+## Finding 6
+Location: internal/partitioning/table.go:92-119 (QueryRange)
+Claimed Behavior: Partition pruning scans overlapping partitions only.
+Observed Implementation: Overlap condition correct (`start < p.End && end > p.Start`); row-level filter applied.
+Assessment: PASS
+
+## Finding 7
+Location: internal/sharding/sharding.go:295-297 (Insert)
+Claimed Behavior: GSI updated when email present.
+Observed Implementation: GSI index stores email -> shardKey (not shardID), consistent with GetByEmailUsingGSI usage of shardKey in GetByShardKey, which re-routes key.
+Assessment: PASS
