@@ -5,35 +5,35 @@ Target Lab: labs/28-timeouts-and-deadlines
 ## Finding 1
 
 Location: `internal/deadline/deadline.go:13-28`
-Claimed Behavior: Context deadline execution budget and timeout inheritance.
-Observed Implementation: `ExecuteWithBudget` creates a child context with `context.WithTimeout(ctx, budget)`. Spawns worker in goroutine writing to buffered channel of size 1. Selects on `childCtx.Done()` vs `done`.
+Claimed Behavior: Executes worker function with budget; terminates on context cancellation or timeout.
+Observed Implementation: Uses `context.WithTimeout(ctx, budget)`. Launches worker function in a goroutine and selects on `childCtx.Done()` vs `done` channel. Channel capacity is 1, preventing goroutine blockage if context times out.
 Assessment: PASS
 Severity: LOW
-Notes: If `fn(childCtx)` does not honor `childCtx.Done()`, the spawned goroutine will remain running until `fn` returns. This is standard Go context semantics; callers must monitor `ctx.Done()`. Channel buffer of 1 prevents goroutine leaks on completion after timeout.
+Notes: If `fn` ignores `childCtx.Done()`, the background goroutine continues until `fn` completes. This is standard Go behavior for asynchronous execution with budget, but callers must cooperate with context.
 
 ## Finding 2
 
 Location: `internal/retry/retry.go:35-48`
-Claimed Behavior: Exponential backoff with Full Jitter: $sleep = \text{rand}(0, \min(M, B \cdot 2^{attempt-1}))$.
-Observed Implementation: Uses `math/rand/v2`, calculates `temp = float64(r.cfg.BaseBackoff) * float64(1 << uint(attempt-1))`, clamps to `MaxBackoff`, and returns `rand.Float64() * temp`.
+Claimed Behavior: Exponential backoff with full jitter in range `[0, min(MaxBackoff, BaseBackoff * 2^(attempt-1))]`.
+Observed Implementation: Uses `1 << uint(attempt-1)`, clips to `maxVal`, multiplies by `rand.Float64()`. Falls back to defaults in `NewRetrier`.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly checks context cancellation before attempts and during backoff wait.
+Notes: Correctly implements the AWS full jitter algorithm. Zero configuration defaults properly initialized.
 
 ## Finding 3
 
-Location: `internal/circuit/circuit.go:64-126`
-Claimed Behavior: Circuit breaker state transitions: CLOSED -> OPEN on failure threshold; OPEN -> HALF_OPEN after cooldown; HALF_OPEN -> CLOSED on success threshold; HALF_OPEN -> OPEN on single failure.
-Observed Implementation: State transitions guarded by `sync.RWMutex` (`mu.Lock()` on all state mutating paths and checks). `checkCooldown` lazily transitions OPEN to HALF_OPEN when cooldown duration elapses.
+Location: `internal/circuit/circuit.go:38-139`
+Claimed Behavior: Thread-safe circuit breaker with `CLOSED`, `OPEN`, and `HALF_OPEN` state transitions based on failure/success thresholds and cooldown duration.
+Observed Implementation: State machine guarded by `sync.RWMutex` (`mu.Lock()` used on both reads and state updates due to lazy cooldown transition `checkCooldown()`). State transitions follow specification.
 Assessment: PASS
 Severity: LOW
-Notes: `State()` uses `mu.Lock()` to allow lazy state updates on cooldown expiry, avoiding race conditions.
+Notes: Mutex correctly prevents race conditions during concurrent `Allow()`, `RecordSuccess()`, and `RecordFailure()` calls.
 
 ## Finding 4
 
-Location: `internal/idempotency/idempotency.go:29-52`
-Claimed Behavior: Thread-safe idempotency response store with lazy TTL eviction.
-Observed Implementation: Guarded by `sync.RWMutex`. `Get` takes `mu.Lock()` to safely delete expired records lazily. `Set` stores record with `time.Now()`.
+Location: `internal/idempotency/idempotency.go:13-52`
+Claimed Behavior: Concurrent safe in-memory deduplication store with TTL lazy-eviction.
+Observed Implementation: Protected by `sync.RWMutex` (`mu.Lock()` on both `Get` and `Set` to support in-place lazy deletion of expired keys).
 Assessment: PASS
 Severity: LOW
-Notes: Eviction is lazy on key access. Memory usage scales with unique keys until accessed post-TTL. Acceptable for in-memory lab demo scope.
+Notes: Clean and safe concurrent map implementation.

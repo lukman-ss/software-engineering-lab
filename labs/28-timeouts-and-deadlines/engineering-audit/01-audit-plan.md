@@ -2,31 +2,40 @@
 
 Target Lab: labs/28-timeouts-and-deadlines
 Implementation Files:
-- `internal/deadline/deadline.go`
-- `internal/retry/retry.go`
-- `internal/circuit/circuit.go`
-- `internal/idempotency/idempotency.go`
+- internal/deadline/deadline.go
+- internal/retry/retry.go
+- internal/circuit/circuit.go
+- internal/idempotency/idempotency.go
+
 Tests:
-- `internal/deadline/deadline_test.go`
-- `internal/retry/retry_test.go`
-- `internal/circuit/circuit_test.go`
-- `internal/idempotency/idempotency_test.go`
-- `tests/integration_test.go`
+- internal/deadline/deadline_test.go
+- internal/retry/retry_test.go
+- internal/circuit/circuit_test.go
+- internal/idempotency/idempotency_test.go
+- tests/integration_test.go
+
 Executable/Demo:
-- `cmd/demo/main.go`
+- cmd/demo/main.go
+
 Approved Research Inputs:
-- `research/05-report.md`
-- `research/01-plan.md`
+- research/05-report.md
+- research/03-evidence.md
+
 Main Claims To Verify:
-1. Context deadline propagation enforces execution time budgets and inherits parent timeouts.
-2. Retry mechanism uses exponential backoff with full jitter to avoid synchronization storms.
-3. Circuit breaker transitions between CLOSED, OPEN, and HALF_OPEN correctly based on failure/success thresholds and cooldown timeouts.
-4. Idempotency key store provides thread-safe response caching and lazy eviction on expiration.
+1. Context deadline propagation & execution budgets (`internal/deadline`).
+2. Exponential backoff with full jitter calculation (`internal/retry`).
+3. Circuit breaker state transitions (`CLOSED`, `OPEN`, `HALF_OPEN`) with thread-safety (`internal/circuit`).
+4. Idempotency store with TTL lazy-eviction and concurrent access safety (`internal/idempotency`).
+5. All tests compile and pass without race conditions (`go test -race ./...`).
+6. Demo binary runs cleanly to completion (`go run ./cmd/demo`).
+7. README documentation accurately describes codebase structure and execution commands.
+
 Commands To Run:
-- `go test ./...`
-- `go test -race ./...`
+- `go test -count=1 ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
+
 Primary Risks:
-- Race conditions during concurrent state transitions in Circuit Breaker or Idempotency Store.
-- Goroutine leakage in `ExecuteWithBudget` when worker functions block indefinitely.
-- Improper math or bounds handling in Full Jitter backoff calculations.
+- Go goroutine leaks in deadline execution (`ExecuteWithBudget`).
+- Race conditions during concurrent mutations of Breaker or Idempotency Store.
+- Docs/Code discrepancies in public APIs or configuration defaults.
