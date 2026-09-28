@@ -1,20 +1,18 @@
-# Docs vs Code Audit
+# Documentation vs Code Alignment
 
-Target Lab: labs/27-database-constraints
+## Comparison Summary
 
-## Comparison Matrix
+| Item | Claimed in README/Design | Implemented in Code | Verified in Demo/Test | Status |
+|------|-------------------------|---------------------|----------------------|--------|
+| NOT NULL (`23502`) | Enforces required columns | `engine.go:51-56` | `store_test.go:16`, `main.go:25` | MATCH |
+| CHECK (`23514`) | Evaluates row predicates (`age >= 18`, `status`) | `engine.go:60-68` | `store_test.go:40`, `main.go:30` | MATCH |
+| UNIQUE (`23505`) | Rejects duplicate keys under concurrency | `engine.go:78-83` | `store_test.go:69,162`, `main.go:58` | MATCH |
+| FOREIGN KEY (`23503`) | Enforces referential integrity | `engine.go:137-140` | `store_test.go:88`, `main.go:38` | MATCH |
+| PARTIAL UNIQUE INDEX | Conditional index `WHERE deleted_at IS NULL` | `engine.go:71-77` | `store_test.go:114`, `main.go:43` | MATCH |
+| Execution Commands | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | All runnable and passing | Verified by Auditor | MATCH |
 
-| Documented Claim / Element | Code / Test Implementation | Alignment Status | Notes |
-|---|---|---|---|
-| NOT NULL (`23502`) | `internal/engine/engine.go:51-56`, `TestNotNullConstraints` | MATCH | Implemented and verified |
-| CHECK (`23514`) | `internal/engine/engine.go:58-69`, `TestCheckConstraints` | MATCH | Verified for age, status, order total |
-| UNIQUE (`23505`) | `internal/engine/engine.go:79-83`, `TestUniqueConstraint`, `TestConcurrentRegistration_Safe_EnforcesUniqueness` | MATCH | Full full-table unique index |
-| FOREIGN KEY (`23503`) | `internal/engine/engine.go:127-148`, `TestForeignKeyConstraint` | MATCH | Verified referential check against users table |
-| PARTIAL UNIQUE INDEX (`WHERE deleted_at IS NULL`) | `internal/engine/engine.go:71-77`, `TestPartialUniqueIndex` | MATCH | Re-registration after soft deletion validated |
-| Concurrency Stress Demo | `cmd/demo/main.go:59-95` | MATCH | Real 50-worker test in demo and 20-worker in tests |
-| SQLSTATE Error Mapping | `internal/dberr/errors.go:83-99` | MATCH | Verified error code checks and domain translations |
+## Findings
 
-## Discrepancy Findings
-- `DOC_CODE_MISMATCH`: None observed.
-- `TEST_CLAIM_MISMATCH`: None observed.
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None observed.
+1. **DOC_CODE_MISMATCH**: None detected.
+2. **TEST_CLAIM_MISMATCH**: None detected.
+3. **RESEARCH_IMPLEMENTATION_MISMATCH**: None detected.

@@ -1,48 +1,46 @@
-# Code Audit Findings
-
-Target Lab: labs/27-database-constraints
+# Code Audit
 
 ## Finding 1
 
 Location: `internal/engine/engine.go:46-99`
-Claimed Behavior: Atomic enforcement of NOT NULL, CHECK, UNIQUE, and PARTIAL UNIQUE constraints during insert operations.
-Observed Implementation: Evaluates mandatory fields, check predicates, and map-based index uniqueness under `e.mu.Lock()`.
+Claimed Behavior: Atomic evaluation of NOT NULL, CHECK, UNIQUE, and PARTIAL UNIQUE constraints within storage lock.
+Observed Implementation: `Engine.InsertUser` acquires `e.mu.Lock()` and validates mandatory fields, age/status CHECK rules, and email uniqueness prior to inserting record into maps.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrency safety maintained via mutex synchronization. Auto-increment sequence generation and index updates happen atomically inside the lock.
+Notes: Synchronization ensures atomic index/table writes and prevents data corruption.
 
 ## Finding 2
 
 Location: `internal/engine/engine.go:102-120`
-Claimed Behavior: Soft deletion updates `DeletedAt` timestamp and clears partial unique index entry.
-Observed Implementation: Deletes entry from `activeEmails` map while retaining record in `users` map under `e.mu.Lock()`.
+Claimed Behavior: Soft delete updates `DeletedAt` and removes user from `activeEmails` partial index.
+Observed Implementation: `SoftDeleteUser` locks engine mutex, validates non-nil `DeletedAt`, deletes entry from `activeEmails`, and updates user record.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly enables soft-delete re-registration behavior matching partial unique index semantics (`WHERE deleted_at IS NULL`).
+Notes: Correctly models PostgreSQL `CREATE UNIQUE INDEX ... WHERE deleted_at IS NULL`.
 
 ## Finding 3
 
 Location: `internal/engine/engine.go:123-148`
-Claimed Behavior: Referential integrity verification for foreign key relationships (`fk_orders_user`).
-Observed Implementation: Checks presence of `o.UserID` in `e.users` before appending order to `e.orders`.
+Claimed Behavior: NOT NULL, CHECK (total_cents > 0), and FOREIGN KEY (user_id exists in users table) validation on order creation.
+Observed Implementation: `InsertOrder` checks `UserID != 0`, `TotalCents > 0`, and presence of `UserID` in `e.users` under lock.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly surfaces SQLSTATE `23503` when parent key does not exist.
+Notes: Foreign key referential integrity correctly enforced.
 
 ## Finding 4
 
-Location: `internal/store/store.go:24-47` vs `internal/store/store.go:59-66`
-Claimed Behavior: Unsafe application store exhibits race conditions under concurrent writes, whereas SafeStore relies on storage engine constraint guarantees.
-Observed Implementation: `UnsafeStore.RegisterUser` reads current state, injects sleep yield to expose race window, and writes without index lock, while `SafeStore.RegisterUser` delegates to engine atomic constraint checks.
+Location: `internal/dberr/errors.go:83-100`
+Claimed Behavior: Map storage constraint errors (SQLSTATE 23xxx) to clean domain errors.
+Observed Implementation: `MapToDomainError` inspects `ConstraintError.Code` and converts raw SQL state errors into structured domain errors.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately isolates storage-level constraint guarantees from application-level check pitfalls.
+Notes: Preserves constraint name and classification.
 
 ## Finding 5
 
-Location: `internal/dberr/errors.go:8-99`
-Claimed Behavior: ANSI/PostgreSQL SQLSTATE taxonomy for integrity constraint violations and translation to domain errors.
-Observed Implementation: Maps SQLSTATE `23502`, `23503`, `23505`, and `23514` into structured `ConstraintError` and translates them into domain messages.
+Location: `internal/store/store.go:24-47`
+Claimed Behavior: Application-level check without DB constraints suffers race conditions.
+Observed Implementation: `UnsafeStore.RegisterUser` reads current user count without holding engine write lock, sleeps for 1ms to exaggerate context switch window, then calls `InsertUserUnsafe`.
 Assessment: PASS
 Severity: LOW
-Notes: Error typing unwraps and inspects cleanly via `IsConstraintViolation`.
+Notes: Effectively demonstrates vulnerable TOCTOU pattern.

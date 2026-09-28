@@ -6,27 +6,25 @@ Implementation Files:
 - `internal/dberr/errors.go`
 - `internal/engine/engine.go`
 - `internal/store/store.go`
+- `cmd/demo/main.go`
 Tests:
 - `internal/store/store_test.go`
 Executable/Demo:
 - `cmd/demo/main.go`
 Approved Research Inputs:
-- `research/01-plan.md`
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/04-contradictions.md`
 - `research/05-report.md`
-- `research-audit/07-verdict.md`
+- `research-audit/07-verdict.md` (Verdict: APPROVED)
+- `engineering/01-design.md`
 Main Claims To Verify:
-1. Storage engine constraint checks enforce NOT NULL (`23502`), CHECK (`23514`), UNIQUE (`23505`), and FOREIGN KEY (`23503`) integrity.
-2. Partial unique indexing enforces conditional uniqueness (`WHERE deleted_at IS NULL`) allowing re-registration after soft deletion.
-3. Storage engine-level UNIQUE constraints prevent read-then-write concurrency race conditions under simultaneous worker requests (50 goroutines), whereas application-level checks fail.
-4. Error taxonomy matches standard SQLSTATE codes and maps to domain error representations.
+1. Declarative database constraints (NOT NULL, CHECK, UNIQUE, FOREIGN KEY, and PARTIAL UNIQUE INDEX) enforce invariants at the storage layer.
+2. Concurrent read-then-write checks in application space fail with duplicate rows, while storage engine UNIQUE constraints eliminate race conditions and enforce SQLSTATE `23505`.
+3. Partial unique index conditionally enforces uniqueness for active records (`WHERE deleted_at IS NULL`), permitting multiple soft-deleted records.
+4. Error taxonomy standardizes SQLSTATE Class 23 codes (`23502`, `23503`, `23505`, `23514`) with domain error mapping.
 Commands To Run:
 - `go test -v ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
 Primary Risks:
-- Race conditions or false-positive passes under race detector.
-- Discrepancies between execution result logs and live demo output.
-- Unhandled edge cases in partial index or foreign key verification.
+- Race conditions during concurrent inserts or soft-deletes.
+- In-memory simulation divergence from ANSI/PostgreSQL SQLSTATE semantics.
+- Weak test assertions (e.g. asserting non-nil error without validating constraint classification).
