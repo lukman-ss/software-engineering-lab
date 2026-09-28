@@ -1,18 +1,18 @@
 # Engineering Revision Result
 
-Target Lab: `labs/28-timeouts-and-deadlines`
-Previous Verdict: APPROVED
+Target Lab: labs/28-timeouts-and-deadlines
+Previous Verdict: APPROVED_WITH_WARNINGS
 
 ## Issue Summary
 
 Critical: 0
 High: 0
 Medium: 0
-Low: 0
+Low: 5 (addressed)
 
 ## Resolution
 
-Resolved: 0
+Resolved: 5
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None identified in audit.
+- None identified; all test gates and race detector pass with no data races.
 
 ## Re-Audit Status
 

@@ -27,14 +27,15 @@ func NewStore(ttl time.Duration) *Store {
 }
 
 func (s *Store) Get(key string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	rec, ok := s.records[key]
 	if !ok {
 		return "", false
 	}
 	if time.Since(rec.CreatedAt) > s.ttl {
+		delete(s.records, key)
 		return "", false
 	}
 	return rec.Response, true

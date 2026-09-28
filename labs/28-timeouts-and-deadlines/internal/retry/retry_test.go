@@ -67,3 +67,26 @@ func TestRetrier_ContextCanceled(t *testing.T) {
 		t.Fatalf("expected context deadline/canceled error, got %v", err)
 	}
 }
+
+func TestRetrier_JitterBoundsAndZeroConfig(t *testing.T) {
+	r := NewRetrier(Config{})
+	if r.cfg.MaxAttempts <= 0 || r.cfg.BaseBackoff <= 0 || r.cfg.MaxBackoff <= 0 {
+		t.Fatalf("expected positive default configs, got %+v", r.cfg)
+	}
+
+	rCustom := NewRetrier(Config{
+		MaxAttempts: 3,
+		BaseBackoff: 10 * time.Millisecond,
+		MaxBackoff:  40 * time.Millisecond,
+	})
+
+	for attempt := 1; attempt <= 5; attempt++ {
+		backoff := rCustom.CalculateBackoff(attempt)
+		if backoff < 0 {
+			t.Fatalf("backoff should never be negative, got %v", backoff)
+		}
+		if backoff > 40*time.Millisecond {
+			t.Fatalf("backoff should not exceed MaxBackoff (40ms), got %v", backoff)
+		}
+	}
+}

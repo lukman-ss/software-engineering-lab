@@ -40,9 +40,32 @@ func TestStore_ConcurrentAccess(t *testing.T) {
 		}(i)
 		go func(id int) {
 			defer wg.Done()
-			store.Get("concurrent-key")
+			res, ok := store.Get("concurrent-key")
+			if ok && res != "result" {
+				t.Errorf("unexpected value: %s", res)
+			}
 		}(i)
 	}
 
 	wg.Wait()
+}
+
+func TestStore_LazyEvictionOnGet(t *testing.T) {
+	store := NewStore(20 * time.Millisecond)
+	store.Set("expire-key", "val")
+
+	time.Sleep(30 * time.Millisecond)
+
+	val, ok := store.Get("expire-key")
+	if ok || val != "" {
+		t.Fatalf("expected key to be expired and empty, got %q, ok=%v", val, ok)
+	}
+
+	// Verify key was removed from map
+	store.mu.RLock()
+	_, exists := store.records["expire-key"]
+	store.mu.RUnlock()
+	if exists {
+		t.Fatalf("expected key to be deleted from map on lazy eviction")
+	}
 }
