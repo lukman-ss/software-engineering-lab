@@ -1,57 +1,60 @@
 # Test Audit
 
-Target Lab: `labs/28-timeouts-and-deadlines`
+## Test Suite Execution Results
 
-## Test Execution Results
-
+### 1. `go test -v ./...`
 ```text
-go test ./...
-?       timeouts-and-deadlines/cmd/demo [no test files]
-ok      timeouts-and-deadlines/internal/circuit 0.400s
-ok      timeouts-and-deadlines/internal/deadline        0.378s
-ok      timeouts-and-deadlines/internal/idempotency     0.457s
-ok      timeouts-and-deadlines/internal/retry   0.365s
-ok      timeouts-and-deadlines/tests    0.347s
-
-go test -race ./...
-ok      timeouts-and-deadlines/internal/circuit 1.163s
-ok      timeouts-and-deadlines/internal/deadline        1.141s
-ok      timeouts-and-deadlines/internal/idempotency     1.222s
-ok      timeouts-and-deadlines/internal/retry   1.129s
-ok      timeouts-and-deadlines/tests    1.112s
+=== RUN   TestCircuitBreaker_StateTransitions
+--- PASS: TestCircuitBreaker_StateTransitions (0.06s)
+PASS
+ok  	timeouts-and-deadlines/internal/circuit	0.142s
+=== RUN   TestExecuteWithBudget_Success
+--- PASS: TestExecuteWithBudget_Success (0.00s)
+=== RUN   TestExecuteWithBudget_Timeout
+--- PASS: TestExecuteWithBudget_Timeout (0.02s)
+=== RUN   TestExecuteWithBudget_ParentTimeoutInherited
+--- PASS: TestExecuteWithBudget_ParentTimeoutInherited (0.02s)
+PASS
+ok  	timeouts-and-deadlines/internal/deadline	0.122s
+=== RUN   TestStore_GetSet
+--- PASS: TestStore_GetSet (0.12s)
+=== RUN   TestStore_ConcurrentAccess
+--- PASS: TestStore_ConcurrentAccess (0.00s)
+PASS
+ok  	timeouts-and-deadlines/internal/idempotency	0.201s
+=== RUN   TestRetrier_SuccessOnFirstTry
+--- PASS: TestRetrier_SuccessOnFirstTry (0.00s)
+=== RUN   TestRetrier_RetryUntilSuccess
+--- PASS: TestRetrier_RetryUntilSuccess (0.00s)
+=== RUN   TestRetrier_ExceedMaxAttempts
+--- PASS: TestRetrier_ExceedMaxAttempts (0.00s)
+=== RUN   TestRetrier_ContextCanceled
+--- PASS: TestRetrier_ContextCanceled (0.02s)
+PASS
+ok  	timeouts-and-deadlines/internal/retry	0.105s
+=== RUN   TestIntegration_RetryWithCircuitBreaker
+--- PASS: TestIntegration_RetryWithCircuitBreaker (0.02s)
+=== RUN   TestIntegration_IdempotentRetry
+--- PASS: TestIntegration_IdempotentRetry (0.00s)
+PASS
+ok  	timeouts-and-deadlines/tests	0.105s
 ```
 
-## Coverage by Domain
+### 2. `go test -count=1 -race ./...`
+```text
+ok  	timeouts-and-deadlines/internal/circuit	1.403s
+ok  	timeouts-and-deadlines/internal/deadline	1.149s
+ok  	timeouts-and-deadlines/internal/idempotency	1.211s
+ok  	timeouts-and-deadlines/internal/retry	1.123s
+ok  	timeouts-and-deadlines/tests	1.112s
+```
 
-### 1. `internal/deadline`
-- Happy path: Fast function execution within budget (`TestExecuteWithBudget_Success`).
-- Failure path: Function exceeding budget returns `context.DeadlineExceeded` (`TestExecuteWithBudget_Timeout`).
-- Context cancellation propagation: Pre-canceled and canceled parent context propagates immediately (`TestExecuteWithBudget_ParentCancel`).
+## Coverage and Assertion Assessment
 
-### 2. `internal/retry`
-- Happy path: First attempt success without delay (`TestRetrier_SuccessFirstAttempt`).
-- Failure path: Exhaustion of `MaxAttempts` returning combined errors (`TestRetrier_MaxRetriesExceeded`).
-- Recovery path: Success on subsequent attempt (`TestRetrier_EventualSuccess`).
-- Backoff bounds: Verifies jittered delays are within theoretical `[0, min(max, base*2^(i-1))]` bounds (`TestRetrier_CalculateBackoffBounds`).
-- Context cancellation: Immediate abort upon context cancellation (`TestRetrier_ContextCancellation`).
+- **internal/deadline**: Tests normal return, child timeout triggering `context.DeadlineExceeded`, and parent deadline inheritance overriding larger child budgets.
+- **internal/retry**: Tests zero-retry success, retry success after transient errors, exhaustion of maximum attempts, and cancellation via context.
+- **internal/circuit**: Tests `CLOSED` -> `OPEN` on consecutive errors, fail-fast rejection while `OPEN`, transition to `HALF_OPEN` after cooldown, and transition back to `CLOSED` after consecutive successes.
+- **internal/idempotency**: Tests set/get, TTL expiration check, and concurrent reads/writes with race detector validation.
+- **tests/integration_test.go**: Proves retries stopping on circuit breaker tripping open, and idempotent request retry preventing duplicate side effects.
 
-### 3. `internal/circuit`
-- Happy path: Calls allowed in `CLOSED` state (`TestBreaker_InitialClosed`).
-- Transitions: Threshold failure transitions to `OPEN` (`TestBreaker_TripToOpen`).
-- Rejection: Fast rejection with `ErrCircuitOpen` while `OPEN` (`TestBreaker_RejectWhenOpen`).
-- Half-Open Cooldown: Cooldown expiration allows trial call (`TestBreaker_HalfOpenTransition`).
-- Recovery: Consecutive successes in `HALF_OPEN` restore `CLOSED` state (`TestBreaker_HalfOpenToClosed`).
-- Regression: Failure in `HALF_OPEN` immediately trips back to `OPEN` (`TestBreaker_HalfOpenFailureTripsToOpen`).
-- Concurrency: Parallel calls with race detector (`TestBreaker_ConcurrentAccess`).
-
-### 4. `internal/idempotency`
-- Basic operations: Store and retrieve response key (`TestStore_SetAndGet`).
-- Missing key: Returns not found (`TestStore_GetNotFound`).
-- Expiration / TTL: Records expire past configured TTL (`TestStore_TTLExpiration`).
-- Concurrency: Parallel writes and reads tested under `-race` (`TestStore_ConcurrentAccess`).
-
-### 5. `tests/integration_test.go`
-- End-to-end composite pipeline: Deadline budget + Exponential backoff + Circuit breaker + Idempotency deduplication interacting together (`TestEndToEnd_ResiliencePipeline`).
-
-Assessment: PASS
-All critical failure modes, edge cases, state transitions, and concurrency race conditions are covered with deterministic assertions.
+Assessment: PASS. All core behavioral claims are backed by executable assertions.
