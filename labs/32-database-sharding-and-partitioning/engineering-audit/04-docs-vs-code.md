@@ -1,16 +1,20 @@
-# Documentation vs Code Verification
+# Docs vs Code Audit
 
-## Matrix
+## Comparison Matrix
 
-| Component / Claim | README Description | Code Implementation | Status |
-|---|---|---|---|
-| Logical Partitioning | `internal/partitioning` range partitioning & pruning | `table.go` range overlap & pruning count | MATCH |
-| Router Types | `ModuloRouter` and `ConsistentHashRouter` | `sharding.go` both struct types implement `Router` interface | MATCH |
-| Scatter-Gather & GSI | Parallel broadcast & GSI lookup | `Cluster.ScatterGatherBroadcast` & `Cluster.GetByEmailUsingGSI` | MATCH |
-| ID Generation | RFC 9562 UUIDv7 & Sequence Block Allocator | `idgen.go` `NewUUIDv7` & `SequenceBlockAllocator` | MATCH |
-| Execution Commands | `go test ./...`, `go test -race ./...`, `go run ./cmd/demo` | All commands run clean without error | MATCH |
+| Component / Claim | Research / Design Claim | Implementation in Code | Demo / Test Behavior | Status |
+|---|---|---|---|---|
+| Single-Node Partitioning | Partition pruning on time ranges | `partitioning.Table.QueryRange` checks interval overlap | `QueryRange` scans 1/4 partitions, prunes 3 | MATCH |
+| Partition Dropping | Instant partition DROP operation | `Table.DropPartition` removes partition slice entry | Tested in `TestPartitionPruning` | MATCH |
+| Modulo Routing Relocation | Naive hash modulo relocates ~M/(M+1) (~80% for 4->5) | `ModuloRouter.GetShard` uses `hashKey(k) % N` | Demo relocates 79.84% (7984/10000) | MATCH |
+| Consistent Hashing Relocation | Ring buffer relocates ~1/(M+1) (~20% for 4->5) | `ConsistentHashRouter` uses virtual nodes and binary search ring | Demo relocates 12.00% (1200/10000) | MATCH |
+| Monotonic Hotspot | Sequential keys cause write hotspot | Ingesting date keys produces all writes on 1 shard | Demo shows 1000/1000 on shard-2 | MATCH |
+| Scatter-Gather Broadcast | Querying without shard key broadcasts to all shards | `ScatterGatherBroadcast` concurrently queries all shards | Demo queries 4/4 shards | MATCH |
+| Global Secondary Index | Secondary index enables direct point lookup | `GlobalSecondaryIndex` maps secondary key to ShardKey | Demo performs point lookup without broadcast (1 shard) | MATCH |
+| Distributed IDs (UUIDv7 & Sequence) | UUIDv7 time-ordered, chunked sequence allocation | `NewUUIDv7` RFC 9562 & `SequenceBlockAllocator` | Validated in test and demo | MATCH |
 
-## Findings
-- `DOC_CODE_MISMATCH`: None found.
-- `TEST_CLAIM_MISMATCH`: None found.
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None found.
+## Documentation Accuracy
+- `README.md` accurately describes architecture, components, test commands, and demo commands.
+- `engineering/01-design.md` matches the implemented package structures and interfaces.
+- `engineering/02-implementation-notes.md` accurately identifies limitations and trade-offs (e.g. no 2PC, in-memory transport).
+- No misleading or inflated claims detected.

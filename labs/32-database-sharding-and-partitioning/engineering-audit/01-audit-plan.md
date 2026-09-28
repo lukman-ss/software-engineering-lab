@@ -1,33 +1,41 @@
 # Engineering Audit Plan
 
 Target Lab: `labs/32-database-sharding-and-partitioning`
+
 Implementation Files:
-- `internal/partitioning/table.go`
 - `internal/sharding/sharding.go`
+- `internal/partitioning/table.go`
 - `internal/idgen/idgen.go`
 - `cmd/demo/main.go`
+
 Tests:
 - `tests/sharding_test.go`
+
 Executable/Demo:
 - `cmd/demo/main.go`
+
 Approved Research Inputs:
+- `research/01-plan.md`
+- `research/02-sources.md`
+- `research/03-evidence.md`
 - `research/05-report.md`
-- `research-audit/07-verdict.md`
-- `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
-- `engineering/03-execution-result.md`
+- `research-audit/07-verdict.md` (Research verdict: APPROVED)
+
 Main Claims To Verify:
-1. Logical table partitioning isolates sub-tables and performs range pruning on time ranges.
-2. Monotonic sharding keys produce severe write hotspots, while high-cardinality keys distribute evenly across shards.
-3. Cluster scale-out under Consistent Hashing relocates roughly $O(K/N)$ keys (~12-25%), compared to Hash Modulo remapping ~75-80% of keys.
-4. Queries without sharding keys execute via scatter-gather broadcast across all shards, whereas Global Secondary Index (GSI) lookups perform single-node direct point queries.
-5. Distributed ID generators (RFC 9562 UUIDv7 and Vitess-style Sequence Block Allocator) generate unique, monotonic/time-ordered identifiers without cross-shard collisions.
+1. In-engine table range partitioning prunes non-matching partitions during range queries.
+2. Modulo hashing suffers from catastrophic key relocation (~(M/(M+1))) on scale-out, whereas consistent hashing relocates only ~(1/(M+1)) keys.
+3. Monotonic shard keys concentrate writes onto a single shard (write hotspot), whereas high-cardinality keys distribute across shards.
+4. Non-shard-key lookups incur full cluster scatter-gather broadcast, whereas Global Secondary Index (GSI) performs point lookups.
+5. Distributed ID generation produces time-ordered UUIDv7 and gapless chunked sequence blocks.
+6. Concurrency safety across shard, cluster, table partition, and ID generator operations under Go race detector.
+
 Commands To Run:
-- `go test ./...`
+- `go test -v ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
+
 Primary Risks:
-- Data race conditions in concurrent scatter-gather, cluster routing, or partition scans.
-- Inaccurate modulo or consistent hash rebalancing metrics.
-- Discrepancy between README documentation and actual implemented API/demo behavior.
-- Incomplete failure/edge case test coverage for empty clusters, unknown shards, or missing keys.
+- Weak test assertions (e.g. testing lower bound only on relocation).
+- Deadlocks or race conditions on concurrent shard writes or GSI index updates.
+- Discrepancy between stated research conclusions and simplified in-memory simulation behavior.
+- Failure propagation or timeout omissions in scatter-gather query broadcasting.

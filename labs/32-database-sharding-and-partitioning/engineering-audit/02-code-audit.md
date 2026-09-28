@@ -1,41 +1,55 @@
 # Code Audit
 
-## Finding 1: Range Partition Pruning Correctness
-Location: `internal/partitioning/table.go:93-119`
-Claimed Behavior: Scans only partitions overlapping the range `[start, end)` and filters rows matching the time boundary.
-Observed Implementation: Correctly checks overlap condition `start.Before(p.Range.End) && end.After(p.Range.Start)` and filters rows with read locks.
-Assessment: PASS
-Severity: LOW
-Notes: Clean implementation of logical single-node partitioning.
+## Finding 1
 
-## Finding 2: Consistent Hash Ring Search & Virtual Nodes
-Location: `internal/sharding/sharding.go:84-176`
-Claimed Behavior: Ring hashing with virtual nodes and binary search ring lookup (`sort.Search`) for deterministic key routing.
-Observed Implementation: Virtual node string formatted as `shardID + "#" + strconv.Itoa(i)`. Standard `fnv.New64a` is used for 64-bit key hashing. Search wraps around `idx == len(ch.ring)` to `0`.
-Assessment: PASS
+Location: `internal/sharding/sharding.go:337-382` (`ScatterGatherBroadcast`)
+Claimed Behavior: Scatter-gather broadcast across all shards with parallel execution.
+Observed Implementation: Launches goroutines per shard, collects results into a buffered channel of size `len(shards)`, and waits with `sync.WaitGroup`. However, no timeout or context cancellation is supported; if a shard operation hangs, the query blocks indefinitely.
+Assessment: WARNING
 Severity: LOW
-Notes: standard library compliant implementation.
+Notes: Acceptable for an in-memory educational lab without network latency, but standard production scatter-gather requires context timeout / deadline propagation.
 
-## Finding 3: Scatter-Gather Parallel Execution & Concurrency
-Location: `internal/sharding/sharding.go:337-382`
-Claimed Behavior: Fan-out parallel query execution across all physical shards.
-Observed Implementation: Spawns one goroutine per shard using `sync.WaitGroup` and buffered result channel. Protects shard dictionary snapshot under RLock before spawn.
-Assessment: PASS
-Severity: LOW
-Notes: `go test -race ./...` passes without race conditions.
+## Finding 2
 
-## Finding 4: Sequence Block Allocator State Lock
-Location: `internal/idgen/idgen.go:42-74`
-Claimed Behavior: Vitess-style sequence block allocation without collision across callers.
-Observed Implementation: Guarded by `sync.Mutex` during block fetch and sequence increment.
+Location: `internal/sharding/sharding.go:279-298` (`Cluster.Insert` and `GlobalSecondaryIndex.Index`)
+Claimed Behavior: Sharded record insert with Global Secondary Index maintenance.
+Observed Implementation: Insert acquires shard lock, then writes to GSI map under separate lock. The operation is not atomic across shard and GSI (no 2PC / transaction).
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles block exhaustion by delegating to central sequence fetcher function.
+Notes: Accurately scoped and documented in `engineering/02-implementation-notes.md` under Known Limitations (no 2PC / cross-shard transactions).
 
-## Finding 5: UUIDv7 Specification Adherence
-Location: `internal/idgen/idgen.go:13-39`
-Claimed Behavior: RFC 9562 compliant time-ordered UUIDv7 generator.
-Observed Implementation: Sets 48-bit millisecond timestamp, 4-bit version (`0x70`), and 2-bit variant (`0x80`). Format matches `8-4-4-4-12` hex presentation.
+## Finding 3
+
+Location: `internal/sharding/sharding.go:83-176` (`ConsistentHashRouter`)
+Claimed Behavior: Ring-based consistent hashing with virtual nodes and binary search routing.
+Observed Implementation: Uses `fnv.New64a` hash of `shardID#vnodeIndex`, maintains sorted ring slice, and performs `sort.Search` for clockwise lookup. Dynamic `AddShard` and `RemoveShard` safely lock `sync.RWMutex`.
 Assessment: PASS
 Severity: LOW
-Notes: Uses `crypto/rand` for random bit portions.
+Notes: Clean, idiomatic, thread-safe Go implementation.
+
+## Finding 4
+
+Location: `internal/partitioning/table.go:93-119` (`Table.QueryRange`)
+Claimed Behavior: Logical range partitioning with partition pruning.
+Observed Implementation: Scans only partitions whose range overlaps `[start, end)` (`start.Before(p.Range.End) && end.After(p.Range.Start)`), correctly counting `PartitionsScanned` vs `TotalPartitions`.
+Assessment: PASS
+Severity: LOW
+Notes: Accurately simulates storage-engine level partition pruning.
+
+## Finding 5
+
+Location: `internal/idgen/idgen.go:13-39` (`NewUUIDv7`)
+Claimed Behavior: RFC 9562 compliant time-ordered UUIDv7.
+Observed Implementation: Encodes 48-bit millisecond timestamp in high bits, sets 4-bit version `0111`, and sets 2-bit variant `10`.
+Assessment: PASS
+Severity: LOW
+Notes: Produces lexicographically sortable identifiers consistent with RFC 9562 specifications.
+
+## Finding 6
+
+Location: `internal/idgen/idgen.go:42-73` (`SequenceBlockAllocator`)
+Claimed Behavior: Vitess-style sequence block allocation avoiding single-point DB sequence contention.
+Observed Implementation: Atomically allocates sequential IDs locally until `max` block limit, refreshing from central coordinator via `fetcher` callback.
+Assessment: PASS
+Severity: LOW
+Notes: Implementation correctly models chunked sequence allocation with mutex synchronization.
