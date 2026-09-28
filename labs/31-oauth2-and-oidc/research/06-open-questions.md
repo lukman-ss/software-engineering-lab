@@ -1,0 +1,2 @@
+- Unverified claims or procedural gaps identified in the evidence collection process (e.g., token storage best‑practice phrasing derived from threat‑model discussion rather than a direct normative statement).
+- Potential need for future updates as OAuth 2.1 finalizes (e.g., formalisation of PKCE requirement for all clients).
