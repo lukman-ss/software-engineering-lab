@@ -268,3 +268,49 @@ func TestChoreography_Flow(t *testing.T) {
 		t.Fatalf("expected approved order in choreography, got %v", orderSvc.GetOrder(orderID))
 	}
 }
+
+func TestChoreography_FailureCompensates(t *testing.T) {
+	ctx := context.Background()
+	bus := saga.NewEventBus()
+	orderSvc := services.NewOrderService()
+	paymentSvc := services.NewPaymentService()
+	invSvc := services.NewInventoryService(map[string]int{"item-1": 0}) // zero stock to force InventoryFailed
+
+	orderID := "ch-ord-fail"
+
+	bus.Subscribe(saga.OrderCreated, func(c context.Context, e saga.Event) {
+		id := e.SagaID
+		err := paymentSvc.ProcessPayment(id, 50.0, false)
+		if err != nil {
+			bus.Publish(c, saga.Event{Type: saga.PaymentFailed, SagaID: id})
+		} else {
+			bus.Publish(c, saga.Event{Type: saga.PaymentCompleted, SagaID: id})
+		}
+	})
+
+	bus.Subscribe(saga.PaymentCompleted, func(c context.Context, e saga.Event) {
+		id := e.SagaID
+		err := invSvc.Reserve("item-1", 1)
+		if err != nil {
+			bus.Publish(c, saga.Event{Type: saga.InventoryFailed, SagaID: id})
+		} else {
+			bus.Publish(c, saga.Event{Type: saga.InventoryReserved, SagaID: id})
+		}
+	})
+
+	bus.Subscribe(saga.InventoryFailed, func(c context.Context, e saga.Event) {
+		id := e.SagaID
+		_ = paymentSvc.RefundPayment(id)
+		_ = orderSvc.CancelOrder(id)
+	})
+
+	_ = orderSvc.CreateOrder(orderID)
+	bus.Publish(ctx, saga.Event{Type: saga.OrderCreated, SagaID: orderID})
+
+	if orderSvc.GetOrder(orderID) != services.OrderCancelled {
+		t.Fatalf("expected cancelled order in choreography failure, got %v", orderSvc.GetOrder(orderID))
+	}
+	if paymentSvc.HasPayment(orderID) {
+		t.Fatal("expected payment refunded in choreography failure")
+	}
+}
