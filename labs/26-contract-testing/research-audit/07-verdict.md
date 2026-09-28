@@ -2,7 +2,7 @@
 
 Target Lab: labs/26-contract-testing
 
-Audit Date: 2026-09-27
+Audit Date: 2026-09-28
 
 ## Summary
 
@@ -10,29 +10,18 @@ Major Claims Reviewed: 8
 Sources Reviewed: 10
 Unsupported Claims: 0
 Contradictions: 0
-Code Issues: 0 (N/A for research stage)
-Test Failures: 0 (N/A for research stage)
-Research Gaps: 3 (LOW)
+Code Issues: NOT_APPLICABLE (Research Audit Stage)
+Test Failures: NOT_APPLICABLE (Research Audit Stage)
+Research Gaps: 2 (LOW severity, acknowledged in open questions)
 
 ## Quality Gates
 
-Source Integrity:
-PASS
-
-Claim Support:
-PASS
-
-Internal Consistency:
-PASS
-
-Code Correctness:
-NOT_APPLICABLE
-
-Tests:
-NOT_APPLICABLE
-
-Documentation Accuracy:
-PASS
+Source Integrity: PASS
+Claim Support: PASS
+Internal Consistency: PASS
+Code Correctness: NOT_APPLICABLE
+Tests: NOT_APPLICABLE
+Documentation Accuracy: PASS
 
 ## Blocking Issues
 
@@ -40,13 +29,12 @@ None.
 
 ## Non-Blocking Issues
 
-1. **Vendor Heuristics for Test Pyramid**: The test pyramid rebalancing argument relies on vendor literature (`pactflow.io`). Properly identified as a limitation in research findings.
-2. **Archived Framework Reference**: Spring Cloud Contract is cited as an alternative CDC tool, but its repository is archived under `spring-attic`. Active tools (Pact) should be preferred in downstream implementation.
-3. **Author Attribution**: "Consumer-Driven Contracts" article is authored by Ian Robinson on Martin Fowler's website; source listing should attribute Ian Robinson.
+1. Quantitative effectiveness metrics rely on vendor case studies rather than academic studies (acknowledged in `06-open-questions.md`).
+2. IDL/schema-first contract testing (gRPC/GraphQL) vs Pact example-based testing is left as an open question for future research.
 
 ## Required Revisions
 
-1. Ensure downstream lab implementation uses active tools (e.g. Pact Go / Pact JS).
+None.
 
 ## Final Status
 

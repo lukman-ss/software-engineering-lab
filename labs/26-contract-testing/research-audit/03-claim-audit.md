@@ -1,227 +1,164 @@
 # Claim Audit
 
+Target Lab: labs/26-contract-testing
+Scope: Research Stage Claims
+
+---
+
 ## Claim 1
 
-Claim:
-Contract testing is a technique for testing integration points by checking each application in isolation to ensure messages conform to a shared contract, avoiding brittle and expensive end-to-end integration environments.
+Claim: Contract testing checks that inter-application messages conform to a shared understanding in isolation without deploying both applications together.
 
-Location:
-`05-report.md` (Finding 1) & `03-evidence.md` (Evidence 1)
+Location: `research/03-evidence.md` (Evidence 1), `research/05-report.md` (Finding 1)
 
-Evidence Provided:
-Direct quotes from Fowler (2011) and Pact Documentation Introduction.
+Evidence Provided: Direct quotes from Pact Foundation Introduction and Martin Fowler Bliki.
 
-Source:
-- Pact Foundation Introduction (`https://docs.pact.io/`)
-- Martin Fowler Bliki (`https://martinfowler.com/bliki/ContractTest.html`)
+Source: Pact Foundation (`https://docs.pact.io/`), Martin Fowler (`https://martinfowler.com/bliki/ContractTest.html`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Definition is uniform across industry and foundational literature.
+Notes: Well-supported by primary authoritative sources.
 
 ---
 
 ## Claim 2
 
-Claim:
-Consumer-Driven Contracts (CDC) derive the provider's obligations from the union of actual consumer expectations, allowing providers to evolve unused functionality freely without breaking consumers.
+Claim: Consumer-Driven Contracts use consumer test execution to generate contracts containing minimal concrete request/response pairs used by consumers, allowing providers to evolve unused fields freely.
 
-Location:
-`05-report.md` (Finding 2) & `03-evidence.md` (Evidence 2, Evidence 4)
+Location: `research/03-evidence.md` (Evidence 2, 4), `research/05-report.md` (Finding 2)
 
-Evidence Provided:
-Quotations from Robinson/Fowler (2006) and Pact Foundation Introduction.
+Evidence Provided: Pact Introduction docs and Martin Fowler CDC article (2006).
 
-Source:
-- Ian Robinson / Martin Fowler — Consumer-Driven Contracts (`https://martinfowler.com/articles/consumerDrivenContracts.html`)
-- Pact Foundation Introduction (`https://docs.pact.io/`)
+Source: Pact Foundation (`https://docs.pact.io/`), Martin Fowler (`https://martinfowler.com/articles/consumerDrivenContracts.html`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Core architecture pattern accurately captured.
+Notes: Accurate representation of consumer-driven contract mechanics.
 
 ---
 
 ## Claim 3
 
-Claim:
-Pact workflow runs in two phases: consumer unit test execution (generates pact file via local mock server) and provider verification (replays interactions against real provider service with provider states).
+Claim: Pact workflow operates in two isolated phases: consumer tests with mock provider (generating pact file) and provider verification replaying requests against real provider.
 
-Location:
-`05-report.md` (Finding 3) & `03-evidence.md` (Evidence 5)
+Location: `research/03-evidence.md` (Evidence 5), `research/05-report.md` (Finding 3)
 
-Evidence Provided:
-Step-by-step description and quotations from Pact docs.
+Evidence Provided: Pact How Pact Works guide.
 
-Source:
-- Pact Foundation — How Pact Works (`https://docs.pact.io/getting_started/how_pact_works`)
+Source: Pact Foundation (`https://docs.pact.io/getting_started/how_pact_works`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Accurately details test lifecycle and state setup.
+Notes: Matches Pact architecture specifications.
 
 ---
 
 ## Claim 4
 
-Claim:
-Contract tests should focus on message structure/schemas and error response formatting, not provider business logic validation or database side-effects.
+Claim: Contract tests must focus on message structure and generic error responses rather than provider functional behavior or business logic.
 
-Location:
-`05-report.md` (Finding 4) & `03-evidence.md` (Evidence 7)
+Location: `research/03-evidence.md` (Evidence 7), `research/05-report.md` (Finding 4)
 
-Evidence Provided:
-Guidance and examples on username validation rules and testing responsibility table.
+Evidence Provided: Pact Contract Tests vs Functional Tests guide.
 
-Source:
-- Pact Foundation — Contract Tests vs Functional Tests (`https://docs.pact.io/consumer/contract_tests_not_functional_tests`)
+Source: Pact Foundation (`https://docs.pact.io/consumer/contract_tests_not_functional_tests`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT / BEST_PRACTICE
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Important distinction to prevent brittle contract test suites.
+Notes: Core guidance on avoiding brittle contracts.
 
 ---
 
 ## Claim 5
 
-Claim:
-The `can-i-deploy` CLI tool in Pact Broker checks the verification matrix of consumer/provider version pairs and blocks incompatible deployments in CI/CD before release to environments.
+Claim: Pact Broker `can-i-deploy` CLI tool queries the Pact Matrix of consumer/provider versions to gate CI/CD deployment pipelines before code hits production.
 
-Location:
-`05-report.md` (Finding 5) & `03-evidence.md` (Evidence 10)
+Location: `research/03-evidence.md` (Evidence 10), `research/05-report.md` (Finding 5)
 
-Evidence Provided:
-CLI command syntax, exit codes, and matrix explanation.
+Evidence Provided: Pact Broker Can I Deploy documentation.
 
-Source:
-- Pact Foundation — Can I Deploy (`https://docs.pact.io/pact_broker/can_i_deploy`)
+Source: Pact Foundation (`https://docs.pact.io/pact_broker/can_i_deploy`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Standard deployment gate mechanism verified in official docs.
+Notes: Accurately describes Pact Broker matrix release strategy.
 
 ---
 
 ## Claim 6
 
-Claim:
-Contract testing applies equally to asynchronous messaging architectures (e.g. Kafka, RabbitMQ, SNS/SQS) by abstracting transport protocols and testing message payload schemas.
+Claim: Pact supports asynchronous message contract testing (Message Pacts) for Kafka, RabbitMQ, SNS/SQS, and Kinesis by abstracting transport protocols.
 
-Location:
-`05-report.md` (Finding 6) & `03-evidence.md` (Evidence 6)
+Location: `research/03-evidence.md` (Evidence 6), `research/05-report.md` (Finding 6)
 
-Evidence Provided:
-Pact non-HTTP testing documentation and message pact model.
+Evidence Provided: Pact How Pact Works non-HTTP testing section.
 
-Source:
-- Pact Foundation — How Pact Works (`https://docs.pact.io/getting_started/how_pact_works`)
+Source: Pact Foundation (`https://docs.pact.io/getting_started/how_pact_works`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Supported by Pact v2+ message specification.
+Notes: Fully supported.
 
 ---
 
 ## Claim 7
 
-Claim:
-Additive schema changes (adding new fields) are backward-compatible and safe when consumers practice 'just enough' validation / minimal response matching, whereas field deletions, renames, and type mutations are breaking changes requiring major version increments.
+Claim: Additive API changes (adding optional fields) are safe under minimal expected response matching, while breaking changes require major versioning.
 
-Location:
-`05-report.md` (Finding 7) & `03-evidence.md` (Evidence 11, Evidence 14)
+Location: `research/03-evidence.md` (Evidence 11), `research/05-report.md` (Finding 7)
 
-Evidence Provided:
-Pact minimal-response verification rules, Schematron patterns, and Google AIP-185 major versioning guidelines.
+Evidence Provided: Pact docs minimal response matching rules + Google AIP-185 API Versioning.
 
-Source:
-- Pact Foundation Docs
-- Martin Fowler / Ian Robinson (2006)
-- Google AIP-185 (`https://google.aip.dev/185`)
+Source: Pact Foundation (`https://docs.pact.io/`), Google AIP-185 (`https://google.aip.dev/185`)
 
-Source Actually Supports Claim:
-YES
+Source Actually Supports Claim: YES
 
-Classification:
-FACT
+Classification: FACT / IMPLEMENTATION-SPECIFIC
 
-Severity:
-LOW
+Severity: LOW
 
-Notes:
-Robustness principle applied to API contracts is supported by evidence.
+Notes: Research correctly notes that "additive vs breaking" terminology is synthesized from matching logic and versioning guidelines.
 
 ---
 
 ## Claim 8
 
-Claim:
-Contract testing rebalances the test pyramid by replacing most end-to-end integration tests with isolated contract tests, reducing flakiness and execution time.
+Claim: Contract testing rebalances the test pyramid by sitting between unit and E2E tests, reducing reliance on slow and flaky integrated test environments.
 
-Location:
-`05-report.md` (Finding 8) & `03-evidence.md` (Evidence 9)
+Location: `research/03-evidence.md` (Evidence 8, 9), `research/05-report.md` (Finding 8)
 
-Evidence Provided:
-Visual pyramid citations from Pactflow vendor blog and industry heuristics.
+Evidence Provided: Pactflow Contract Testing vs Integration Testing blog post.
 
-Source:
-- Pactflow Blog (`https://pactflow.io/blog/contract-testing-vs-integration-testing/`)
+Source: Pactflow (`https://pactflow.io/blog/contract-testing-vs-integration-testing/`)
 
-Source Actually Supports Claim:
-PARTIAL
+Source Actually Supports Claim: YES
 
-Classification:
-INTERPRETATION
+Classification: INTERPRETATION / HEURISTIC
 
-Severity:
-MEDIUM
+Severity: LOW
 
-Notes:
-While widely accepted as an industry testing heuristic, quantitative metrics (e.g. specific test execution speedups or exact pyramid ratios) are architectural heuristics rather than universal constants. Properly noted in `06-open-questions.md`.
+Notes: Properly identified as Tier 2 heuristic / vendor model in research notes.

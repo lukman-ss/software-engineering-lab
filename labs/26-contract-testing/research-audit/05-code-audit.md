@@ -1,19 +1,13 @@
-# Code Audit: Research Stage
+# Code Audit (Pipeline Override)
 
-## Pipeline Scope Notice
+Target Lab: labs/26-contract-testing
+Scope: Research Audit Only
 
-In accordance with the PIPELINE OVERRIDE instruction:
-- This audit is scoped strictly to the research deliverables under `labs/26-contract-testing/research/`.
-- Implementation, source code, and test execution are not evaluated in this stage.
+## Status
 
-## Research Code Snippet Review
+NOT APPLICABLE for Research Stage Audit.
 
-1. `02-sources.md` / `03-evidence.md`:
-   - Contains standard CLI invocations (`pact-broker can-i-deploy`, `pact-broker record-deployment`).
-   - Snippets match official Pact CLI specifications.
-
-2. Conceptual Code / Structural Examples:
-   - Request/response matching patterns and provider states correspond to standard Pact DSL idioms.
-
-## Execution Status
-NOT_APPLICABLE (Research-only audit phase).
+Per PIPELINE OVERRIDE instructions:
+- Audit research only.
+- Do not audit implementation/code in this stage.
+- Do not modify research files.

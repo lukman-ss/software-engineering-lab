@@ -1,5 +1,10 @@
 # Source Audit
 
+Target Lab: labs/26-contract-testing
+Scope: Research Stage Sources
+
+---
+
 ## Source 1
 
 Claimed Title: Pact Documentation - Introduction
@@ -19,7 +24,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Source publication date claimed in `02-sources.md` as "Aug 25, 2026". Live inspection confirms the page footer state reads "Last updated on Aug 25, 2026 by Matt Fellows".
+- None. Authoritative official documentation for consumer-driven contract testing and Pact specification.
 
 Assessment:
 PASS
@@ -36,7 +41,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY
+PRIMARY / AUTHORITATIVE_EXPERT
 
 Relevant:
 YES
@@ -45,7 +50,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative expert bliki defining integration contract tests and test double alignment.
+- None. Foundational bliki post defining contract tests as isolation tests validating test doubles against real services.
 
 Assessment:
 PASS
@@ -55,14 +60,14 @@ PASS
 ## Source 3
 
 Claimed Title: Consumer-Driven Contracts: A Service Evolution Pattern
-Claimed Publisher: Martin Fowler
+Claimed Publisher: Martin Fowler (Ian Robinson)
 URL: https://martinfowler.com/articles/consumerDrivenContracts.html
 
 Reachable:
 YES
 
 Source Type:
-PRIMARY
+PRIMARY / AUTHORITATIVE_EXPERT
 
 Relevant:
 YES
@@ -71,7 +76,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Author of article is Ian Robinson (published on martinfowler.com). `02-sources.md` lists publisher as Martin Fowler without explicitly citing Ian Robinson as primary author. Minor attribution precision issue, but content authority is intact.
+- Published in 2006 (XML/WS-* era), but foundational architectural concepts directly mapped to REST/JSON in modern tooling.
 
 Assessment:
 PASS
@@ -81,14 +86,14 @@ PASS
 ## Source 4
 
 Claimed Title: Spring Cloud Contract (archived repository)
-Claimed Publisher: Spring Attic (archived by Pivotal, now VMware / Broadcom)
+Claimed Publisher: Spring Attic
 URL: https://github.com/spring-attic/spring-cloud-contract
 
 Reachable:
 YES
 
 Source Type:
-PRIMARY
+PRIMARY / HISTORICAL
 
 Relevant:
 YES
@@ -97,10 +102,10 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Repository is archived. It demonstrates alternative CDC tools for JVM, but is no longer actively developed under Spring Attic.
+- Repository is archived; research correctly identifies this status and notes it as a historical alternative to Pact.
 
 Assessment:
-WARNING
+PASS
 
 ---
 
@@ -111,7 +116,7 @@ Claimed Publisher: Pact Foundation
 URL: https://docs.pact.io/getting_started/5_minute_getting_started_guide
 
 Reachable:
-YES (redirects to https://docs.pact.io/5-minute-getting-started-guide)
+YES
 
 Source Type:
 PRIMARY
@@ -123,7 +128,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- URL path redirected slightly, but content is available and relevant.
+- None. Quickstart reference for consumer test and provider verification flow.
 
 Assessment:
 PASS
@@ -149,7 +154,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Details mock generation, contract JSON emission, and provider verification replay.
+- None. Explains interactions, mock service, provider verification, provider states, and message pacts.
 
 Assessment:
 PASS
@@ -175,7 +180,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Explicitly details why side-effects and deep business logic validation belong in provider functional tests, not contract tests.
+- None. Directly supports boundaries between contract testing and functional/business logic testing.
 
 Assessment:
 PASS
@@ -201,7 +206,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Covers Pact Matrix verification checks and CI deployment gating.
+- None. Official documentation for CLI command and deployment gating matrix.
 
 Assessment:
 PASS
@@ -218,7 +223,7 @@ Reachable:
 YES
 
 Source Type:
-SECONDARY
+SECONDARY / VENDOR
 
 Relevant:
 YES
@@ -227,10 +232,10 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Commercial vendor blog (Pactflow/SmartBear). Empirical metrics (e.g. speed/cost benefits) are promotional heuristics rather than peer-reviewed measurements.
+- Vendor blog post containing heuristic pyramid and marketing claims; properly classified in research as Tier 2 / MEDIUM confidence.
 
 Assessment:
-WARNING
+PASS
 
 ---
 
@@ -244,7 +249,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY
+PRIMARY / STANDARDS
 
 Relevant:
 YES
@@ -253,7 +258,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative guideline on breaking vs non-breaking versioning strategies in enterprise API interfaces.
+- None. Authoritative API design guideline for major vs minor versioning and breaking changes.
 
 Assessment:
 PASS

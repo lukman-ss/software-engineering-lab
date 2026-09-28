@@ -1,65 +1,36 @@
 # Research Gap Analysis
 
+Target Lab: labs/26-contract-testing
+Scope: Research Stage
+
+---
+
 ## Gap 1
 
-Type:
-WEAK_SOURCE
+Type: SCOPE_ERROR / WEAK_SOURCE
 
-Severity:
-LOW
+Severity: LOW
 
-Location:
-`02-sources.md` (Source 9), `05-report.md` (Finding 8)
+Location: `research/06-open-questions.md`
 
-Problem:
-The claim regarding rebalanced test pyramid economics and quantitative benefits of contract testing relies primarily on vendor marketing materials (`pactflow.io`) rather than peer-reviewed or independent empirical benchmarks.
+Problem: Quantitative effectiveness metrics (e.g. bug reduction %, deployment speed) rely primarily on vendor case studies rather than independent empirical research.
 
-Required Revision:
-None blocking. The research report already correctly flags this limitation in `05-report.md` (Limitations) and `06-open-questions.md`.
+Required Revision: None required for lab foundation; open question document explicitly documents this limitation.
 
-Can Be Approved Without Fix:
-YES
+Can Be Approved Without Fix: YES
 
 ---
 
 ## Gap 2
 
-Type:
-OUTDATED_SOURCE
+Type: MISSING_CASE
 
-Severity:
-LOW
+Severity: LOW
 
-Location:
-`02-sources.md` (Source 4)
+Location: `research/06-open-questions.md`
 
-Problem:
-Spring Cloud Contract is listed as an alternative CDC framework, but the repository under `spring-attic` is archived.
+Problem: Comparison between schema-first IDL contract approaches (Protobuf/gRPC, GraphQL schemas) vs consumer-driven example-based contract testing (Pact) is noted as an open question.
 
-Required Revision:
-Ensure implementation design relies on active frameworks (e.g. Pact Go / Pact JS) rather than deprecated/archived toolsets.
+Required Revision: None required for core REST/HTTP and message contract testing topic.
 
-Can Be Approved Without Fix:
-YES
-
----
-
-## Gap 3
-
-Type:
-SCOPE_ERROR
-
-Severity:
-LOW
-
-Location:
-`02-sources.md` (Source 3)
-
-Problem:
-The author of the landmark Thoughtworks article "Consumer-Driven Contracts" is Ian Robinson, with Martin Fowler acting as host/publisher on `martinfowler.com`. The source list titles it under Martin Fowler.
-
-Required Revision:
-Attribute Ian Robinson as primary author in future documentation references.
-
-Can Be Approved Without Fix:
-YES
+Can Be Approved Without Fix: YES
