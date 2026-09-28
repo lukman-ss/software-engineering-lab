@@ -106,12 +106,13 @@ Zero traffic edge case: `SLI = 1.0` dan `CanDeploy = true` ketika `total = 0` �
 Burn rate mengukur laju konsumsi budget relatif terhadap target.
 
 ```go
-actualErrorRate := float64(bad) / float64(total)   // mis. 10% / 1000
-allowedErrorRate := 1.0 - targetSLO                 // 0.1%
-burnRate := actualErrorRate / allowedErrorRate      // 10% / 0.1% = 100x
+// Contoh: 20 error dari 1000 total request → error rate 2%
+actualErrorRate := float64(bad) / float64(total)
+allowedErrorRate := 1.0 - targetSLO                 // 0.1% untuk SLO 99.9%
+burnRate := actualErrorRate / allowedErrorRate      // 2% / 0.1% = 20x
 ```
 
-Burn rate 100x artinya Anda mengonsumsi 100× lebih cepat dari boleh.
+Burn rate 20x artinya Anda mengonsumsi 20× lebih cepat dari yang diizinkan. Pada demo Fase 2, akumulasi 10 error / 1100 total = 0.91% → 9.09x (melewati threshold 6.0x).
 
 ### Multi-Window Alerting
 

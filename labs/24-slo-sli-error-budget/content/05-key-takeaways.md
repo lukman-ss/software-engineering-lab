@@ -4,11 +4,11 @@
 
 2. **SLO < 100% adalah target nyata**. 100% tidak realistis karena device dan jaringan pengguna tidak terkontrol.
 
-3. **Error Budget = 1 − SLO**. Ini "uang" untuk berinovasi. Budget habis = deployment berhenti, fokus perbaiken.
+3. **Error Budget = 1 − SLO**. Ini "uang" untuk berinovasi. Budget habis = deployment berhenti, fokus perbaikan.
 
 4. **Budget formula**: `totalBudget = (1 − targetSlo) × totalEvents`; `remaining = totalBudget − badEvents`; `CanDeploy = false` ketika `remaining ≤ 0` dan ada traffic.
 
-5. **Burn Rate = actualErrorRate ÷ allowedErrorRate**. >1 berarti consumption melebihi target. Semakin tinggi, semaakin cepat intervention diperlukan.
+5. **Burn Rate = actualErrorRate ÷ allowedErrorRate**. >1 berarti consumption melebihi target. Semakin tinggi, semakin cepat intervention diperlukan.
 
 6. **Multi-window alerting (short + long) mencegah false positive**. Spike transit di short window saja tidak memicu alert bila long window masih bersih.
 

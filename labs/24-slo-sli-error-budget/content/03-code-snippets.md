@@ -439,7 +439,7 @@ for _, a := range alerts {
 }
 ```
 
-Explanation: 90 request sukses + 10 request gagal (status 500, latency 500ms) menghasilkan 10% error rate. Pada SLO 99.9% (allowed 0.1%), burn rate = 100x. Evaluator mendeteksi budget habis (CanDeploy = false). AlertEngine memicu slow burn alert (6.0x) karena kedua window melewati threshold.
+Explanation: 90 request sukses + 10 request gagal (status 500, latency 500ms) menghasilkan 10% error rate pada batch insiden. Akumulasi dengan baseline Fase 1 (1000 request sukses) menghasilkan 1100 total request dengan 10 error (0.91% error rate). Pada SLO 99.9% (allowed error rate 0.1%), burn rate = 0.91% / 0.1% = 9.09x. Evaluator mendeteksi budget habis (CanDeploy = false). AlertEngine memicu slow burn alert (6.0x) karena kedua window melewati threshold (9.09x ≥ 6.0x).
 
 ---
 

@@ -139,29 +139,30 @@ Allowed error: 0.1%   │  good = 1090                          │
 ## D4 — Multi-Window Alert: True Positive vs False Positive
 
 ```
-                    ┌──────────────────────────────────┐
-                    │    INCIDENT: 10% ERROR RATE      │
-                    └──────────────────┬─────────────┘
-                                       │
-              ┌────────────────────────┼────────────────────────┐
-              │                        │                        │
-              ▼                        ▼                        ▼
-    ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-    │   TRUE POSITIVE  │   │  FALSE POSITIVE  │   │  TRUE NEGATIVE   │
-    │  (alert fires)   │   │  (no alert)      │   │   (no alert)     │
-    └──────────────────┘   └──────────────────┘   └──────────────────┘
+                     ┌──────────────────────────────────┐
+                     │    INCIDENT: 10% ERROR RATE      │
+                     └──────────────────┬─────────────┘
+                                        │
+               ┌────────────────────────┼────────────────────────┐
+               │                        │                        │
+               ▼                        ▼                        ▼
+     ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+     │   TRUE POSITIVE  │   │  FALSE POSITIVE  │   │  TRUE NEGATIVE   │
+     │  (alert fires)   │   │  (no alert)      │   │   (no alert)     │
+     └──────────────────┘   └──────────────────┘   └──────────────────┘
 
   Short Window (5m):        Short Window (5m):          Short Window (5m):
-  98 OK + 2 ERR             90 OK + 10 ERR              98 OK + 2 ERR
-  2% error → 20x burn        10% error → 100x burn      2% error → 20x burn
+  98 OK + 2 ERR             90 OK + 10 ERR              9950 OK + 50 ERR
+  2% error → 20x burn        10% error → 100x burn      0.5% error → 5x burn
 
-  Long Window (60m):         Short Window (5m):          Long Window (60m):
-  9800 OK + 200 ERR          90 OK + 10 ERR              9999 OK + 1 ERR
-  2% error → 20x burn        10% error → 100x burn       0.01% → 0.1x burn
+  Long Window (60m):         Long Window (60m):          Long Window (60m):
+  9800 OK + 200 ERR         9999 OK + 1 ERR              99500 OK + 500 ERR
+  2% error → 20x burn       0.01% → 0.1x burn            0.5% → 5x burn
 
-  BOTH ≥ 6.0 → TICKET  ✓   BOTH ≥ 6.0 → TICKET  ✓      Short ≥ 6.0  BUT  Long < 6.0
-                           Short ≥ 14.4 → PAGE  ✓                       → NO ALERT ✓
-                                                      (transient spike filtered)
+  BOTH ≥ 6.0 → TICKET  ✓   Short ≥ 6.0 BUT Long < 6.0    BOTH < 6.0
+  (sustained high burn)     (transient spike filtered)   → NO ALERT ✓
+                              → NO ALERT ✓
+                             (single-window would false-alarm)
 ```
 
 Validasi: `TestAlertEngineBurnRate` (true positive) + negative test pada line 130-151 (false positive prevention).
