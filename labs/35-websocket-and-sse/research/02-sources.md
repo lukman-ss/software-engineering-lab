@@ -55,12 +55,22 @@ Relevance: API details, absence of built-in backpressure in the base `WebSocket`
 Title: RFC 7540: Hypertext Transfer Protocol Version 2 (HTTP/2)
 Publisher: Internet Engineering Task Force (IETF)
 URL: https://datatracker.ietf.org/doc/html/rfc7540
-Published: May 2015
+Published: May 2015 (Obsoleted by RFC 9113 in June 2022)
 Accessed: 2026-09-28
 Source Tier: Tier 1 (Official Standards Track Specification)
-Relevance: Details HTTP/2 framing, streams, multiplexing, and prohibition of connection-specific headers like `Upgrade`.
+Relevance: Details HTTP/2 framing, streams, multiplexing, and prohibition of connection-specific headers like `Upgrade`. Note: Technical multiplexing rules are preserved in RFC 9113.
 
 ## Source 7
+
+Title: epoll(7) - Linux Manual Page & sysctl kernel documentation
+Publisher: Linux Kernel Organization / Michael Kerrisk (man7.org)
+URL: https://man7.org/linux/man-pages/man7/epoll.7.html
+Published: Ongoing
+Accessed: 2026-09-28
+Source Tier: Tier 1 (Official OS / Kernel Documentation)
+Relevance: Describes Linux event notification facility (`epoll`) and kernel tuning parameters (`fs.file-max`, `net.ipv4.tcp_rmem`, `net.ipv4.tcp_wmem`) required for handling large numbers (~100,000) of concurrent open file descriptors / TCP sockets.
+
+## Source 8
 
 Title: Module ngx_http_proxy_module
 Publisher: NGINX Docs

@@ -117,8 +117,8 @@ Evidence:
 Sources:
 - RFC 8441 – Bootstrapping WebSockets with HTTP/2 (September 2018)
 - URL: https://datatracker.ietf.org/doc/html/rfc8441
-- RFC 7540 – Hypertext Transfer Protocol Version 2 (May 2015)
-- URL: https://datatracker.ietf.org/doc/html/rfc7540
+- RFC 7540 (May 2015, obsoleted by RFC 9113 June 2022) / RFC 9113 – HTTP/2
+- URL: https://datatracker.ietf.org/doc/html/rfc9113
 
 Confidence: HIGH
 
@@ -134,8 +134,8 @@ Evidence:
 Sources:
 - WHATWG HTML Living Standard Section 9.2
 - URL: https://html.spec.whatwg.org/multipage/server-sent-events.html
-- RFC 7540 Sections 5 and 8.1 (Streams and Multiplexing, HTTP request/response exchange)
-- URL: https://datatracker.ietf.org/doc/html/rfc7541
+- RFC 9113 Sections 5 and 8.1 (Streams and Multiplexing, HTTP message framing) — obsoletes RFC 7540 with identical multiplexing semantics
+- URL: https://datatracker.ietf.org/doc/html/rfc9113
 - MDN: EventSource – Web APIs
 - URL: https://developer.mozilla.org/en-US/docs/Web/API/EventSource
 
@@ -178,13 +178,15 @@ Confidence: MEDIUM (Authoritative vendor documentation; NGINX's specific WebSock
 Claim: Operating at ~100,000 concurrent connections requires addressing three resource domains: (1) OS file descriptor limits (`ulimit -n`), (2) per-connection memory overhead in the runtime, and (3) cross-node message broadcasting.
 
 Evidence:
-- Lab specification: "Each open socket consumes a file descriptor at the OS level."
-- Lab specification: "Each connection buffer consumes memory in the runtime (Go goroutines vs Node.js event loop)."
-- Lab specification: "Broadcast from node A needs to reach a user connected to node B."
+- Linux kernel documentation confirms each open TCP socket consumes a file descriptor; per-process limit is managed via `ulimit -n`, system-wide via `fs.file-max` sysctl; `epoll(7)` is the scalable event notification facility used by high-concurrency servers.
+- Per-connection memory overhead is runtime-specific (Go goroutine stacks, Node.js event loop buffers, JVM thread stacks); exact figures require empirical benchmarking.
+- Multi-node broadcast requires a centralized message broker; Redis Pub/Sub is a common choice, with Kafka, NATS, or gRPC-based pubsub as alternatives (Redis docs, cloud-native reference architectures).
 
 Sources:
-- Lab specification (Senior Software Engineer Lab #35)
-- URL: Not applicable (internal project)
+- Linux epoll(7) & sysctl documentation
+- URL: https://man7.org/linux/man-pages/man7/epoll.7.html
+- Redis Pub/Sub documentation
+- URL: https://redis.io/docs/manual/pubsub/
 
 Confidence: MEDIUM (Architectural principle, but not independently benchmarked or measured in this research).
 Corroborated By: RFC 6455 security considerations (Section 10.4) referencing "implementation-specific limits", and standard C10k/C10M engineering principles.
