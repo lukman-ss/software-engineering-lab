@@ -78,10 +78,17 @@ func (n *Node) SetLag(d time.Duration) {
 
 func (n *Node) WaitForLSN(ctx context.Context, targetLSN uint64) error {
 	ch := make(chan struct{})
+	stop := make(chan struct{})
+
 	go func() {
 		n.mu.Lock()
 		defer n.mu.Unlock()
 		for n.appliedLSN < targetLSN {
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			n.cond.Wait()
 		}
 		close(ch)
@@ -89,6 +96,10 @@ func (n *Node) WaitForLSN(ctx context.Context, targetLSN uint64) error {
 
 	select {
 	case <-ctx.Done():
+		close(stop)
+		n.mu.Lock()
+		n.cond.Broadcast()
+		n.mu.Unlock()
 		return ctx.Err()
 	case <-ch:
 		return nil

@@ -214,3 +214,18 @@ func TestConcurrentAccess_RaceFree(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestWaitForLSN_ContextTimeout(t *testing.T) {
+	c := cluster.NewCluster(1, 10*time.Second, cluster.AsyncReplication)
+	defer c.Close()
+
+	replica := c.Replicas()[0]
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := replica.WaitForLSN(ctx, 999)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("Expected context.DeadlineExceeded, got %v", err)
+	}
+}
