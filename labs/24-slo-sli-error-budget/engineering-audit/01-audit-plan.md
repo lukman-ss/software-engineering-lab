@@ -6,7 +6,6 @@ Implementation Files:
 - `internal/slo/evaluator.go`
 - `internal/alerting/engine.go`
 - `cmd/demo/main.go`
-- `go.mod`
 
 Tests:
 - `tests/slo_test.go`
@@ -20,22 +19,22 @@ Approved Research Inputs:
 - `engineering/01-design.md`
 
 Main Claims To Verify:
-1. SLI is calculated strictly as `good_events / total_events` across a time window.
-2. Error budget is calculated as `(1 - SLO) * total_events`, budget consumed equals `bad_events`, and negative remaining budget enforces `CanDeploy = false`.
-3. Out-of-order events are inserted and aggregated into correct time buckets rather than appended or dropped.
-4. Window eviction drops buckets older than `windowSize` relative to query/record timestamps.
-5. Multi-window multi-burn-rate alerting requires both short window and long window burn rates to exceed the burn rate threshold before triggering.
-6. Endpoint criticality differentiation correctly configures different SLO targets (99.9% vs 95.0%) with distinct error tolerance thresholds.
-7. Concurrency safety: metrics aggregation via `WindowTracker` is safe under concurrent reader/writer goroutines without data races.
-8. Demo executes realistically without mocked or hardcoded static output.
+1. Ratio-based SLI calculation (`good / total`) across time-windowed event tracker.
+2. Error budget computation `(1 - SLO) * total` and depletion logic leading to release freeze policy enforcement (`CanDeploy = false`).
+3. Multi-window multi-burn-rate alerting requiring both short and long window burn rates to breach threshold before firing.
+4. Concurrency safety of metrics tracker under parallel reads and writes.
+5. Out-of-order timestamp handling and bucket eviction correctness.
+6. Real demo execution and output match documented execution.
 
 Commands To Run:
-- `go test -count=1 -v ./...`
-- `go test -count=1 -race ./...`
+- `go test ./...`
+- `go test -race ./...`
+- `go test -v -count=1 ./tests`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Slice re-allocation/reslicing bugs in `WindowTracker.Record` during out-of-order insertion.
-- Eviction bounds calculation during sliding window evaluation.
-- Division by zero in SLI or BurnRate calculations under zero traffic.
-- Discrepancies between demo output and README / engineering claims.
+- Memory leaks or unbounded slice growth in metrics tracker.
+- Race conditions during concurrent `Record` and `Summary` calls.
+- Division by zero on zero traffic or 100% SLO target.
+- False positive alerts on transient spikes if multi-window logic is flawed.
+- Documentation divergence from actual executable output.

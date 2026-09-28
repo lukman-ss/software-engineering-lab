@@ -1,55 +1,41 @@
 # Code Audit
 
-## Finding 1
-
-Location: `internal/metrics/tracker.go:46-104`
-Claimed Behavior: Thread-safe recording and sorting of metric events into time-based buckets, correctly handling out-of-order timestamps.
-Observed Implementation: `Record()` acquires `w.mu.Lock()` and uses `evictStaleLocked()` before placing the event. If the event belongs to an existing older bucket or an uncreated intermediate time position, it searches through `w.buckets` and performs element insertion via reslicing `append(w.buckets[:i], append([]Bucket{b}, w.buckets[i:]...)...)`.
+## Finding 1: WindowTracker Out-of-Order Bucket Insertion Mutates Slice In-Place
+Location: `internal/metrics/tracker.go:88`
+Claimed Behavior: Safe out-of-order event recording with correct sliding window bucket ordering.
+Observed Implementation: Slice insertion `append(w.buckets[:i], append([]Bucket{b}, w.buckets[i:]...)...)` creates temporary slice allocations during insert.
 Assessment: PASS
 Severity: LOW
-Notes: Sorting and slice mutation under write lock works correctly. Out-of-order insertion and bucket matching maintain sorted order by `StartTime`.
+Notes: Correctly handles out-of-order timestamps without panics or index corruption. Mutex protection guarantees thread safety.
 
-## Finding 2
+## Finding 2: Evaluator Division by Zero Guard
+Location: `internal/slo/evaluator.go:44-47`
+Claimed Behavior: Safe evaluation when total events are zero.
+Observed Implementation: Checks `if total > 0` before computing `good / total`, defaulting `sli` to 1.0.
+Assessment: PASS
+Severity: LOW
+Notes: Properly guards against float division by zero.
 
+## Finding 3: AlertEngine Burn Rate Division by Zero & Target SLO Edge Case Guard
+Location: `internal/alerting/engine.go:52-60`
+Claimed Behavior: Calculate burn rate ratio against allowed error rate.
+Observed Implementation: Checks `total == 0` and `allowedErrorRate <= 0` (e.g. 100% SLO target), returning `0.0`.
+Assessment: PASS
+Severity: LOW
+Notes: Prevents division by zero errors cleanly.
+
+## Finding 4: Concurrency Synchronization in WindowTracker
+Location: `internal/metrics/tracker.go:47,118`
+Claimed Behavior: Thread-safe metric recording and summary extraction.
+Observed Implementation: `w.mu.Lock()` and `defer w.mu.Unlock()` used consistently across all mutating and read methods (`Record`, `Summary`).
+Assessment: PASS
+Severity: LOW
+Notes: Verified thread-safe under Go race detector.
+
+## Finding 5: Memory Growth & Stale Bucket Eviction
 Location: `internal/metrics/tracker.go:106-115`
-Claimed Behavior: Evicts buckets older than the sliding window size (`windowSize`).
-Observed Implementation: `evictStaleLocked(now)` computes `cutoff := now.Add(-w.windowSize)` and advances `idx` while `w.buckets[idx].StartTime.Before(cutoff)`. Reslices `w.buckets = w.buckets[idx:]`.
+Claimed Behavior: Sliding window evicts stale buckets outside `now - windowSize`.
+Observed Implementation: `evictStaleLocked` slices off stale elements `w.buckets = w.buckets[idx:]`. Slice underlying array GC cleanup is deferred until resliced, but bounded by window size.
 Assessment: PASS
 Severity: LOW
-Notes: Requires buckets to remain strictly ordered by `StartTime`, which is guaranteed by `Record()`.
-
-## Finding 3
-
-Location: `internal/slo/evaluator.go:41-70`
-Claimed Behavior: Evaluates SLI ratio, Error Budget, and deployment freeze status (`CanDeploy`). Zero traffic defaults safely to 100% SLI.
-Observed Implementation: When `total == 0`, `sli` is initialized to `1.0`. `totalErrorBudget` calculation handles 0 total events cleanly. `canDeploy` is evaluated as `true` unless `total > 0 && budgetRemaining <= 0`.
-Assessment: PASS
-Severity: LOW
-Notes: Handles zero traffic without divide-by-zero panics or invalid deployment freezes. Floating point rounding is applied to 4 decimal places for SLI and 2 for budget remaining.
-
-## Finding 4
-
-Location: `internal/alerting/engine.go:51-61`
-Claimed Behavior: Calculates burn rate as `actualErrorRate / allowedErrorRate`.
-Observed Implementation: Safely checks `if total == 0` (returns `0.0`) and `if allowedErrorRate <= 0` (returns `0.0`). Prevents division by zero.
-Assessment: PASS
-Severity: LOW
-Notes: Standard formula alignment with SRE Workbook definitions.
-
-## Finding 5
-
-Location: `internal/alerting/engine.go:72-76`
-Claimed Behavior: Multi-window burn rate alert triggering requiring both short window and long window burn rates to exceed the threshold factor.
-Observed Implementation: Evaluates `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`. Only triggers when both conditions are met.
-Assessment: PASS
-Severity: LOW
-Notes: Accurately implements multi-window alert logic to avoid false alerts on single-window transient spikes.
-
-## Finding 6
-
-Location: `cmd/demo/main.go:55-148`
-Claimed Behavior: Realistic multi-phase demonstration of baseline traffic, incident budget depletion, burn rate alert triggering, and endpoint criticality differences.
-Observed Implementation: Real execution populating metric trackers and running Evaluator / AlertEngine in 4 phases. Outputs true computed values.
-Assessment: PASS
-Severity: LOW
-Notes: Code is free of hardcoded mock responses or fake alert triggers. All values in stdout come from struct evaluation.
+Notes: Efficient in-memory sliding window implementation.

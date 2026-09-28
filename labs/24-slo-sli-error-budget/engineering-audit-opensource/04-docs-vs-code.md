@@ -1,19 +1,18 @@
 # Docs vs Code
 
 ## README vs Code
-- README: "internal/slo: Evaluator calculating SLI ratios, remaining Error Budget, and release freeze policy enforcement." Matches code.
-- README: "Multi-window burn rate alert calculator." Matches code.
-- README does not mention LatencyThreshold, matching actual usage (dead field).
+- README commands: `go test ./...`, `go test -race ./...`, `go run ./cmd/demo` — all match actual commands that succeed.
+- README structure descriptions match actual package layout. PASS
 
-## Engineering Design vs Code
-- Design: "In-memory ring/time-bucketed window tracking." Matches implementation.
-- Design: "standard library only." Confirmed (time, sync, math, fmt).
+## Engineering Notes vs Code
+- engineering/01-design.md: "100% test coverage on core math and sliding window calculations" — not met (missing edge cases). WARNING
+- engineering/02-implementation-notes.md: describes count-based budget correctly. PASS
+- engineering/03-execution-result.md: demo output matches actual execution output byte-for-byte. PASS
 
-## Execution Result vs Actual Run
-- Recorded demo output matches actual `go run ./cmd/demo` output exactly.
-- Recorded test output matches actual `go test` output exactly.
+## Mismatches
+1. DOC_CODE_MISMATCH: README says "Multi-Window Multi-Burn-Rate alerting" but each BurnRateRule uses a single BurnRateFactor applied to both short and long windows — no separate short/long burn factors.
+2. RESEARCH_IMPLEMENTATION_MISMATCH: Design doc claims 100% test coverage; actual coverage has gaps (see 03-test-audit.md).
+3. TEST_CLAIM_MISMATCH: None found — tests match what they claim.
 
-## Mismatch Summary
-No DOC_CODE_MISMATCH in external behavior. Dead field Config.LatencyThreshold not documented as functional.
-
-Result: PASS.
+## Overall
+Documentation is mostly accurate; two minor mismatches identified.

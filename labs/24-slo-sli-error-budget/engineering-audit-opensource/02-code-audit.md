@@ -2,54 +2,45 @@
 
 ## Finding 1
 
-Location: internal/metrics/tracker.go:109
-Claimed Behavior: Sliding window evicts events older than windowSize.
-Observed Implementation: evictStaleLocked uses `w.buckets[idx].StartTime.Before(cutoff)` (strict before). A bucket with start time exactly equal to cutoff (`now - windowSize`) is not evicted.
-Assessment: WARNING
+Location: internal/metrics/tracker.go:46-104 (Record), 117-127 (Summary)
+Claimed Behavior: Thread-safe sliding-window bucket aggregation with eviction.
+Observed Implementation: sync.RWMutex used (Lock on Record, Lock on Summary). Buckets kept sorted by StartTime; out-of-order events inserted in order. Stale buckets evicted by cutoff = now - windowSize.
+Assessment: PASS
 Severity: LOW
-Notes: Boundary condition may cause slightly larger effective window. Tests do not hit this edge case. Behavior is consistent but may deviate from strict window semantics.
+Notes: Race detector clean. Summary acquires write lock; could use RLock for read-only path but not a correctness issue.
 
 ## Finding 2
 
-Location: internal/metrics/tracker.go:67-92
-Claimed Behavior: Out-of-order timestamps insert bucket in correct chronological order.
-Observed Implementation: Insertion loop iterates from index 0 and inserts before first bucket with start time after the new bucket. Works correctly for all observed cases.
+Location: internal/metrics/tracker.go:67-91 (out-of-order insertion)
+Claimed Behavior: Handles out-of-order timestamps by inserting into correct bucket position.
+Observed Implementation: Loop scans existing buckets; inserts at sorted position or updates existing bucket. Verified by TestOutOfOrderTimestamps.
 Assessment: PASS
-Severity: N/A
-Notes: Logic is correct and passes all tests including out-of-order scenarios. Performance is O(n) per insert but acceptable.
+Severity: LOW
+Notes: Insertion into middle of slice is O(n); acceptable for demo scale.
 
 ## Finding 3
 
-Location: internal/slo/evaluator.go
-Claimed Behavior: Config.LatencyThreshold influences SLI calculation.
-Observed Implementation: Config.LatencyThreshold field is stored but never used. SLI determination relies solely on the tracker's isGood function, which is set by the caller.
-Assessment: FAIL
+Location: internal/slo/evaluator.go:41-71 (Evaluate)
+Claimed Behavior: SLI = good/total, error budget = (1 - targetSLO) * total, consumed = bad count, remaining = budget - consumed.
+Observed Implementation: Count-based budget. SLI rounded to 4 decimals, budget to 2 decimals. CanDeploy false when remaining <= 0.
+Assessment: WARNING
 Severity: MEDIUM
-Notes: Dead field creates misleading API. The Config suggests latency-based SLI support, but the evaluator ignores it. Demo works because caller's isGood uses latency directly.
+Notes: Design doc says "Error Budget = 1 - SLO" (ratio), but implementation uses count-based budget (ratio * total). Valid interpretation but differs from standard SRE time-based error budget. LatencyThreshold in Config is never used by evaluator — dead field (tracked via isGood callback instead).
 
 ## Finding 4
 
-Location: internal/alerting/engine.go
-Claimed Behavior: BurnRateRule.LongWindow and ShortWindow configure alert windows.
-Observed Implementation: These fields are never used. Alert windows are determined solely by the shortTracker and longTracker passed to NewAlertEngine.
+Location: internal/alerting/engine.go:71-75 (Check)
+Claimed Behavior: Multi-window burn-rate alerting.
+Observed Implementation: Trigger requires BOTH shortBurn >= factor AND longBurn >= factor.
 Assessment: WARNING
-Severity: LOW
-Notes: Unused fields indicate design drift. The engine correctly implements multi-window logic via separate trackers, but the rule struct contains dead code.
+Severity: MEDIUM
+Notes: Standard SRE multi-window burn-rate uses OR (either window exceeding threshold fires). AND logic is more conservative and can miss fast-burn incidents where long window is still clean. Single BurnRateFactor per rule — no separate short/long factors.
 
 ## Finding 5
 
-Location: internal/metrics/tracker.go:118
-Claimed Behavior: Summary provides thread-safe snapshot.
-Observed Implementation: Summary takes a write lock (mu.Lock()) because it calls evictStaleLocked which mutates buckets.
+Location: cmd/demo/main.go (demo output)
+Claimed Behavior: Demo shows baseline, incident, alert, endpoint comparison.
+Observed Implementation: Demo output matches engineering/03-execution-result.md exactly (verified by execution).
 Assessment: PASS
-Severity: N/A
-Notes: Correctly handles concurrent modification via eviction. Race detector passes, confirming safety.
-
-## Finding 6
-
-Location: internal/alerting/engine.go:63-89
-Claimed Behavior: Multi-window burn-rate alert triggers only when both windows exceed threshold.
-Observed Implementation: Check implements `if shortBurn >= factor && longBurn >= factor`. Matches specification.
-Assessment: PASS
-Severity: N/A
-Notes: Logic aligns with Google SRE Workbook recommendations. Demo confirms correct triggering.
+Severity: LOW
+Notes: No fake demo. Output is real.
