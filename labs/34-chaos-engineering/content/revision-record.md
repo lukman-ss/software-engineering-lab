@@ -61,11 +61,33 @@ Auditor Findings Addressed: content-audit/09-verdict.md (APPROVED_WITH_WARNINGS)
 - **Fix**: Expanded `runs/` entry to include full subdirectory tree.
 - **Impact**: Source map completeness restored.
 
+## Round 2 — Verbatim Snippet Fidelity Pass (based on engineering-audit verdicts)
+
+### 12. Snippet 1 Injector: Struct Field Alignment
+- **Issue**: `Injector` struct field alignment in snippet was narrower than source (`internal/fault/injector.go:12-18`), so the snippet was not byte-identical to source.
+- **Fix**: Restored source alignment for `mu`, `enabled`, `latency`, `errorRate`, `forceError`.
+- **Impact**: Snippet 1 now matches source exactly.
+
+### 13. Snippet 2 Circuit Breaker: Missing `// Success` Comment
+- **Issue**: Source comment `// Success` (`internal/circuitbreaker/circuitbreaker.go:94`) omitted before the Half-Open recovery branch.
+- **Fix**: Added `// Success` comment line to match source.
+- **Impact**: Snippet 2 now matches source exactly.
+
+### 14. Snippet 3 Monitor: Missing `maxErrorRate` Comment
+- **Issue**: Source comment `// Threshold e.g. 0.20 (20%)` (`internal/monitor/monitor.go:18`) omitted from `Monitor` struct field.
+- **Fix**: Added comment to `maxErrorRate  float64 // Threshold e.g. 0.20 (20%)`.
+- **Impact**: Snippet 3 now matches source exactly.
+
+### 15. Snippet 4 Runner: Missing `// Inject fault` Comment and Config Alignment
+- **Issue**: Source comment `// Inject fault` (`internal/experiment/runner.go:65`) omitted before `SetFault` call; `Config` struct field alignment narrower than source (`runner.go:22-28`).
+- **Fix**: Added `// Inject fault` comment; restored source alignment for `Config` fields.
+- **Impact**: Snippet 4 now matches source exactly.
+
 ## Verification
-- All code snippets (content/03-code-snippets.md) correctly reflect source code
+- All code snippets (content/03-code-snippets.md) verified byte-identical against `internal/fault/injector.go`, `internal/circuitbreaker/circuitbreaker.go`, `internal/monitor/monitor.go`, `internal/experiment/runner.go`
 - No research or engineering files modified — content-only revisions
 - Zero new dependencies or claims introduced
-- Addressed all warnings from content-audit/09-verdict.md
+- Addressed all warnings from content-audit/09-verdict.md plus non-blocking audit gaps (`errorRate` unused field documented, deterministic injection not overclaimed, `internal/*` paths used throughout)
 
 ---
 

@@ -18,11 +18,11 @@ import (
 var ErrInjectedFault = errors.New("chaos: injected fault failure")
 
 type Injector struct {
-	mu         sync.RWMutex
-	enabled    bool
-	latency    time.Duration
-	errorRate  float64 // 0.0 to 1.0
-	forceError bool
+	mu          sync.RWMutex
+	enabled     bool
+	latency     time.Duration
+	errorRate   float64 // 0.0 to 1.0
+	forceError  bool
 }
 
 func NewInjector() *Injector {
@@ -182,6 +182,7 @@ func (cb *CircuitBreaker) Execute(fn func() error, fallback func() error) error 
 		return err
 	}
 
+	// Success
 	if cb.state == StateHalfOpen {
 		cb.state = StateClosed
 		cb.failures = 0
@@ -222,7 +223,7 @@ type Monitor struct {
 	mu            sync.RWMutex
 	totalRequests uint64
 	failedRequests uint64
-	maxErrorRate  float64
+	maxErrorRate  float64 // Threshold e.g. 0.20 (20%)
 }
 
 func NewMonitor(maxErrorRate float64) *Monitor {
@@ -301,11 +302,11 @@ const (
 )
 
 type Config struct {
-	Name            string
-	Duration        time.Duration
-	Latency         time.Duration
-	ForceError      bool
-	MonitorInterval time.Duration
+	Name             string
+	Duration         time.Duration
+	Latency          time.Duration
+	ForceError       bool
+	MonitorInterval  time.Duration
 }
 
 type Experiment struct {
@@ -343,6 +344,7 @@ func (e *Experiment) Run(ctx context.Context) error {
 	e.state = StateRunning
 	e.mu.Unlock()
 
+	// Inject fault
 	e.injector.SetFault(e.config.Latency, e.config.ForceError)
 
 	ticker := time.NewTicker(e.config.MonitorInterval)
