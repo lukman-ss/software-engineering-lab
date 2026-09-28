@@ -10,20 +10,22 @@ Tests:
 Executable/Demo:
 - `cmd/demo/main.go`
 Approved Research Inputs:
-- `labs/29-saga-pattern/research-audit/07-verdict.md`
-- `labs/29-saga-pattern/research-revision/03-revision-result.md`
-- `labs/29-saga-pattern/engineering/01-design.md`
+- `research/05-report.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
 Main Claims To Verify:
-1. Forward execution through orchestrator executes sequentially.
-2. Failure triggering invokes compensating transactions in reverse (LIFO) order.
-3. Event bus supports choreography pattern with decoupled pub/sub.
-4. Services implement idempotency keys (PaymentService) and semantic locking (OrderService).
-5. Concurrency safety across shared service state and orchestrator logs.
+1. Orchestrator executes steps in forward order and records log entries.
+2. Step failure triggers strict reverse LIFO compensation for executed steps.
+3. EventBus enables Choreography-based saga coordination and failure compensation.
+4. Idempotency keys prevent double charge in PaymentService.
+5. Semantic locks prevent dirty reads/concurrent modifications in OrderService.
+6. Thread safety and concurrency safety across concurrent sagas.
 Commands To Run:
-- `go test -v ./...`
-- `go test -race ./...`
+- `go test -count=1 ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 Primary Risks:
-- Race conditions during concurrent saga step compensation or service state mutations.
-- Unhandled errors during compensation steps (fail-silent rollback vs logged failures).
-- Incomplete coverage of choreographic failure compensation in tests.
+- Race conditions or deadlocks during concurrent saga executions.
+- Incomplete rollback order in LIFO compensation logic.
+- Documentation overclaiming capabilities not present in source code.
