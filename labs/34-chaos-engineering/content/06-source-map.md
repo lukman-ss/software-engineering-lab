@@ -64,7 +64,7 @@ Tests:
 - cmd/demo/main.go:127-132 (traffic after experiment)
 
 ### Common Mistakes
-- engineering/01-design.md:37-38 (What Is Not Demonstrated)
+- engineering/02-implementation-notes.md:34-36 (What Is Not Demonstrated)
 - research/06-open-questions.md:1-3 (Open Questions)
 
 ---

@@ -57,7 +57,7 @@ Menggunakan `sync.RWMutex` untuk membaca konfigurasi secara aman dan mendukung p
 2. **State Machine Circuit Breaker (`internal/circuitbreaker/circuitbreaker.go`)**:
 Mengatur ambang batas kegagalan (`threshold`) dan waktu jeda (`cooldown`) sebelum memasuki mode `Half-Open`.
 3. **Monitor Steady-State (`internal/monitor/monitor.go`)**:
-Menghitung rasio kesalahan secara atomik dengan syarat minimum sampel (5 request) sebelum evaluasi kesehatan.
+Menghitung rasio kesalahan secara atomik dengan syarat minimum sampel (5 request) sebelum evaluasi kesehatan. Metode `Metrics()` mengembalikan `SteadyStateMetrics` berisi total, gagal, dan sukses untuk keperluan pemantauan dan demo.
 
 ## What the Tests Prove
 Pengujian unit dan konurensi (`tests/chaos_test.go`) membuktikan secara empiris:

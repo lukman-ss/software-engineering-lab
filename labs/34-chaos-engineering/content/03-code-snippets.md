@@ -21,7 +21,7 @@ type Injector struct {
 	mu         sync.RWMutex
 	enabled    bool
 	latency    time.Duration
-	errorRate  float64 // 0.0 to 1.0 (unused field per audit, kept for structure)
+	errorRate  float64 // 0.0 to 1.0
 	forceError bool
 }
 
@@ -234,6 +234,16 @@ func (m *Monitor) ErrorRate() float64 {
 	}
 	failed := atomic.LoadUint64(&m.failedRequests)
 	return float64(failed) / float64(total)
+}
+
+func (m *Monitor) Metrics() SteadyStateMetrics {
+	total := atomic.LoadUint64(&m.totalRequests)
+	failed := atomic.LoadUint64(&m.failedRequests)
+	return SteadyStateMetrics{
+		TotalRequests:   total,
+		FailedRequests:  failed,
+		SuccessRequests: total - failed,
+	}
 }
 
 func (m *Monitor) IsHealthy() bool {
