@@ -15,7 +15,7 @@ SLI/SLO/Error Budget mengubah "harus stabil" menjadi angka yang dapat diputuskan
 
 ## Mental Model
 
-Keandalan bukanlah 100%. Lebar dari target keandaran adalah **error budget**.
+Keandalan bukanlah 100%. Lebar dari target keandalan adalah **error budget**.
 
 ```
 SLO:       99.9% uptime
@@ -99,6 +99,8 @@ budgetRemaining := totalErrorBudget - float64(bad)
 
 Jika `budgetRemaining <= 0` dan ada traffic → `CanDeploy = false`.
 
+Formula alternatif (Finding 13, MEDIUM confidence, vendor-specific): Datadog menghitung sisa budget sebagai `100 × (current_status − target) / (100 − target)` dalam persen. Prinsipnya sama dengan rumus lab; lab menggunakan bentuk absolut karena SLI dihitung dalam range 0–1.
+
 Zero traffic edge case: `SLI = 1.0` dan `CanDeploy = true` ketika `total = 0` — menghindari false freeze saat service baru start atau tidak ada trafik (evaluator.go:44-47).
 
 ### Burn Rate
@@ -130,6 +132,8 @@ Threshold yang direkomendasikan:
 | Ticket Slow | 6.0× | 6h + 30m | 5% |
 
 Hanya dua rule di atas yang diimplementasikan di demo (`cmd/demo/main.go:38-49`). Rule Ticket 1×/3d+6h/10% dari rekomendasi Google SRE bersifat research-only, tidak diimplementasikan.
+
+Catatan divergensi: rekomendasi Google SRE (Finding 9) mengklasifikasikan 6.0×/6h+30m sebagai PAGE, sedangkan demo menetapkan 6.0× sebagai TICKET dan 14.4× sebagai PAGE. Implementasi sengaja menurunkan severity 6.0× agar sesuai kebijakan demo dua-tier.
 
 Catatan: field `LongWindow`, `ShortWindow`, `BudgetConsumedPct` di `BurnRateRule` diabaikan oleh `engine.Check()` — semua rule berbagi `shortTracker` dan `longTracker` konstruksi-time.
 
@@ -234,17 +238,17 @@ Race detector tidak mengembalikan error.
 `TestAlertEngineBurnRate` memverifikasi:
 
 1. 98 request OK + 2 error (2% error rate) → 20x burn rate → alert Page
-2. Short window sengekan (100x) tetapi long window bersih (0.1x) → **tidak ada alert**
+2. Short window spike (100x) tetapi long window bersih (0.1x) → **tidak ada alert**
 
-Ini membuktikan bahwa **multi-window check** mengurangi false positive pada spike transit.
+Ini membuktikan bahwa **multi-window check** mengurangi false positive pada spike transien.
 
 ## Recovery / Rollback (Hypothetical Procedure — NOT demonstrated in demo)
 
-Ketika `CanDeploy = false`:
+Ketika `CanDeploy = false` (budget habis):
 
-1. **STOP** semua non-essential deployments
+1. **STOP** semua deployments kecuali P0/security (postmortem requirement)
 2. Dianalisis root cause di `/api/v1/pay`
-3. Perbaikan dideploy sebagai hotfix **dengan approval P0**
+3. Perbaikan dideploy sebagai hotfix (setelah postmortem jika incident >20% budget)
 4. Setelah error rate turun, budget kembali positif → `CanDeploy = true`
 
 Catatan: Demo hanya menampilkan fase 1-4 (baseline → incident → alert → comparison). Tidak ada simulasi recovery yang benar-benar dijalankan.
@@ -316,7 +320,7 @@ Meskipun kedua endpoint melewati SLO, **Reports memiliki buffer 5%** yang jauh l
 4. **Burn rate = actual_error_rate / allowed_error_rate**. >1 artinya Anda "berlebihan".
 5. **Multi-window alert** (short + long) mengurangi false positive spike transit.
 6. **CanDeploy policy** memberi keputusan otomatis berdasar budget.
-7. **Congure SLO per endpoint** based on business criticality (Payment 99.9%, Reports 95%).
+7. **Konfigurasi SLO per endpoint** based on business criticality (Payment 99.9%, Reports 95%).
 8. **Thread-safety** terjamin dengan mutex sync.RWMutex di WindowTracker.
 9. **Implementasi in-memory** untuk demo; produksi butuh TSDB persistence.
 10. **Source**: Google SRE Book, SRE Workbook, Datadog, Prometheus — semua konsisten pada definisi inti.
