@@ -6,34 +6,25 @@ Implementation Files:
 - internal/saga/choreography.go
 - internal/services/services.go
 - cmd/demo/main.go
-
 Tests:
 - tests/saga_test.go
-
 Executable/Demo:
 - cmd/demo/main.go
-
 Approved Research Inputs:
 - research/05-report.md
 - engineering/01-design.md
-- engineering/02-implementation-notes.md
-
 Main Claims To Verify:
-1. Orchestrator executes forward steps in sequential order.
-2. Failure in forward execution triggers LIFO compensation across all completed steps.
-3. Choreography EventBus handles decoupled pub/sub events and event-driven compensation.
-4. Domain services implement semantic locking to prevent dirty reads / concurrent conflicting modifications.
-5. PaymentService provides idempotent execution based on payment/transaction ID.
-6. Context cancellation triggers rollback of executed steps with fresh context.
-7. Concurrency safety under race detector.
-
+1. Implementation supports both Orchestration and Choreography Saga models.
+2. Failure in orchestrator triggers compensating transactions in reverse order (LIFO).
+3. Payment service supports idempotency via processed payment keys.
+4. Order service implements semantic locking countermeasure.
+5. Code compiles cleanly and passes race detector (`go test -race ./...`).
+6. Demo output is real and matches code execution behavior.
 Commands To Run:
-- `go test -v ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
-
+- go test -v ./...
+- go test -race ./...
+- go run ./cmd/demo
 Primary Risks:
-- Silent failure during compensation.
-- Context deadline cancellation breaking compensation calls if executed with cancelled context (mitigated by using `context.Background()` in compensation).
-- Concurrency race conditions in Orchestrator/EventBus state.
-- Documentation mismatch with actual API signatures and structs.
+- Thread-safety / race conditions in orchestrator log state or event bus handler invocation.
+- Mismatch between README component paths / descriptions and actual codebase structure.
+- Incomplete failure compensation handling (e.g., partial compensation failures or context deadline cancellation).

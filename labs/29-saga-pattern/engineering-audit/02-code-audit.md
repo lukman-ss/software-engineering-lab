@@ -2,45 +2,45 @@
 
 ## Finding 1
 
-Location: `internal/saga/orchestrator.go:49-90`
-Claimed Behavior: Forward steps executed sequentially, failing step halts execution and initiates rollback.
-Observed Implementation: `Execute` iterates over copied step slice. Checked context cancellation per iteration. On error, marks status `FAILED` and calls `o.compensate(context.Background(), executed)`.
+Location: internal/saga/orchestrator.go:78-83
+Claimed Behavior: Step failure triggers LIFO compensating transactions and aggregates compensation errors.
+Observed Implementation: `Execute` copies steps safely under mutex, iterates forward, logs failure status on error, and executes `compensate` stack in reverse index order. If compensation returns errors, it formats and propagates both the step error and compensation errors.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly passes un-cancelled `context.Background()` to `compensate` so rollback transactions are not aborted by the forward request's cancelled context.
+Notes: LIFO compensation execution is correctly implemented and context cancellation is handled with a fallback `context.Background()` for compensation execution.
 
 ## Finding 2
 
-Location: `internal/saga/orchestrator.go:92-112`
-Claimed Behavior: Compensations executed in strict reverse order (LIFO), errors logged and aggregated.
-Observed Implementation: Loops `for i := len(executed) - 1; i >= 0; i--`. Appends logs as `COMPENSATED` or `COMPENSATE_FAILED`. Collects and returns aggregated `compErrors`.
+Location: internal/saga/orchestrator.go:58-68
+Claimed Behavior: Orchestrator checks context cancellation before executing steps and triggers compensation if context is done.
+Observed Implementation: Evaluates `ctx.Done()` in a select block prior to executing each step. If cancelled, logs status `StatusFailed` for the unexecuted step, runs compensation on executed steps using `context.Background()`, and returns context error.
 Assessment: PASS
 Severity: LOW
-Notes: LIFO reversal is exact. Status logging is protected by mutex.
+Notes: Ensures context cancellation does not skip rollback of already executed steps.
 
 ## Finding 3
 
-Location: `internal/saga/choreography.go:27-52`
-Claimed Behavior: Thread-safe pub/sub event bus supporting multiple decoupled event handlers.
-Observed Implementation: Protected with `sync.RWMutex`. `Publish` copies handler slice under read-lock before invocation to avoid deadlock during handler executions.
+Location: internal/services/services.go:33-35, 18-20
+Claimed Behavior: Semantic locking countermeasure prevents concurrent sagas from modifying pending order state.
+Observed Implementation: `OrderService` maintains `locks map[string]bool`. `CreateOrder` returns error if `s.locks[orderID]` is true, and sets lock to true. `ApproveOrder` and `CancelOrder` release lock via `delete(s.locks, orderID)`.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrency safe.
+Notes: Implements semantic locking countermeasure accurately for in-memory model.
 
 ## Finding 4
 
-Location: `internal/services/services.go:16-67`
-Claimed Behavior: Semantic locking mechanism on order creation until approved/cancelled.
-Observed Implementation: Mutex guarded map `locks[orderID]`. Returns error if order is already locked. Unlocks on `ApproveOrder` and `CancelOrder`.
+Location: internal/services/services.go:86-88
+Claimed Behavior: Idempotency keys prevent duplicate payments on retries.
+Observed Implementation: `PaymentService` checks `s.processedID[paymentID]`. If true, returns `nil` without re-processing amount.
 Assessment: PASS
 Severity: LOW
-Notes: Prevents dirty overwrites during saga execution.
+Notes: Correctly handles idempotent retries for payment processing.
 
 ## Finding 5
 
-Location: `internal/services/services.go:69-112`
-Claimed Behavior: Idempotent payment processing using idempotency keys.
-Observed Implementation: `processedID[paymentID]` checked under lock; returns `nil` early if already processed.
+Location: internal/saga/choreography.go:44-51
+Claimed Behavior: Event bus provides decoupled choreography event dispatching.
+Observed Implementation: `EventBus` protects handlers slice with `sync.RWMutex`, copies handlers under `RLock()`, and dispatches event handlers synchronously in loop under `Publish`.
 Assessment: PASS
 Severity: LOW
-Notes: Safe against duplicate retries.
+Notes: Thread-safe in-memory event bus implementation.

@@ -1,34 +1,25 @@
-# Docs vs Code Audit
+# Docs vs Code Comparison
 
-## Overview
+## Document Review
+- `README.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
 
-Comparison of `README.md`, `engineering/01-design.md`, `engineering/02-implementation-notes.md` against codebase in `internal/` and `tests/`.
+## Comparison Matrix
 
-## Comparisons
+| Claim in Docs | Location in Code | Status | Details |
+|---|---|---|---|
+| Orchestrator handles forward steps and LIFO compensation | `internal/saga/orchestrator.go` | MATCH | `Execute` and `compensate` methods implement exact LIFO rollback. |
+| Event bus for choreography | `internal/saga/choreography.go` | MATCH | `EventBus` provides `Subscribe` and `Publish`. |
+| Domain services with local state, idempotency, semantic locks | `internal/services/services.go` | MATCH | `OrderService` (locks), `PaymentService` (idempotency key), `InventoryService` (stock & reserve). |
+| Console demo runnable with `go run ./cmd/demo` | `cmd/demo/main.go` | MATCH | Real demo executes scenarios 1 and 2, producing exact expected output. |
+| Running tests instructions (`go test -v ./...`, `go test -race ./...`) | `tests/saga_test.go` | MATCH | Tests pass cleanly under both flags. |
 
-1. **Components List in README.md vs Actual Files**
-   - Listed:
-     - `internal/saga/orchestrator.go` -> Exists and matches.
-     - `internal/saga/choreography.go` -> Exists and matches.
-     - `internal/services/services.go` -> Exists and matches.
-     - `cmd/demo/main.go` -> Exists and matches.
-     - `tests/saga_test.go` -> Exists and matches.
-   - Assessment: PASS
+## Mismatch Findings
+- DOC_CODE_MISMATCH: None.
+- TEST_CLAIM_MISMATCH: None.
+- RESEARCH_IMPLEMENTATION_MISMATCH: None.
 
-2. **Execution Instructions**
-   - Listed commands:
-     - `go test -v ./...` -> Runs cleanly.
-     - `go test -race ./...` -> Runs cleanly.
-     - `go run ./cmd/demo` -> Runs cleanly and prints demo outputs.
-   - Assessment: PASS
-
-3. **Design Claims vs Implementation**
-   - Claim: LIFO compensation order.
-     - Verified: `orchestrator.go` loops backwards through executed steps.
-   - Claim: Decoupled Choreography via EventBus.
-     - Verified: `EventBus` pub/sub handles async event dispatch and handlers.
-   - Claim: Semantic locking on order entities.
-     - Verified: `OrderService` locks order keys on create and releases on approve/cancel.
-   - Claim: Idempotency keys on payments.
-     - Verified: `PaymentService` checks idempotency map on processed IDs.
-   - Assessment: PASS
+Assessment: PASS
+Severity: LOW

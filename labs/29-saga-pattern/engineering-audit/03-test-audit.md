@@ -2,30 +2,28 @@
 
 ## Test Suite Overview
 
-File: `tests/saga_test.go`
-Execution Results: 9/9 tests passed (with `-race` clean).
+Target Lab: `labs/29-saga-pattern`
+Test Location: `tests/saga_test.go`
+Test Count: 9 test cases
 
-## Test Coverage Matrix
+## Covered Scenarios
+- Happy Path (Orchestrator): `TestOrchestrator_HappyPath` verifies full forward workflow and state transitions.
+- Failure Path & Rollback: `TestOrchestrator_FailureCompensatesLIFO` verifies step failure and step log sequence match exact LIFO order.
+- Idempotency: `TestPayment_Idempotency` verifies duplicate payment calls return success.
+- Semantic Locking: `TestSemanticLock` verifies duplicate creation fails due to semantic lock.
+- Concurrency: `TestOrchestrator_Concurrency` runs 10 concurrent orchestrator sagas in goroutines and validates final stock level.
+- Choreography Happy Path: `TestChoreography_Flow` verifies event-driven execution flow to completion.
+- Choreography Failure Path: `TestChoreography_FailureCompensates` verifies inventory failure event triggers payment refund and order cancellation.
+- Edge Case (Compensation Error): `TestOrchestrator_CompensationErrorPropagated` verifies compensation failure logging (`StatusCompensateFailed`) and error propagation.
+- Edge Case (Context Cancellation): `TestOrchestrator_ContextCancellation` verifies cancellation triggers compensation stack execution.
 
-| Test Function | Target Feature | Coverage Type | Status |
-|---------------|----------------|---------------|--------|
-| `TestOrchestrator_HappyPath` | Orchestrator step sequence | Happy path, State transition | PASS |
-| `TestOrchestrator_FailureCompensatesLIFO` | Reverse compensation ordering & state rollback | Failure path, LIFO log ordering | PASS |
-| `TestPayment_Idempotency` | Payment deduplication | Edge case / Idempotency | PASS |
-| `TestSemanticLock` | Order semantic lock conflict prevention | Negative case / Conflict | PASS |
-| `TestOrchestrator_Concurrency` | Concurrent sagas with shared inventory | Concurrency safety & Race | PASS |
-| `TestChoreography_Flow` | Pub/Sub event-driven saga happy path | Happy path (Choreography) | PASS |
-| `TestChoreography_FailureCompensates` | Pub/Sub event-driven failure compensation | Failure path (Choreography) | PASS |
-| `TestOrchestrator_CompensationErrorPropagated` | Error aggregation during compensation | Failure propagation | PASS |
-| `TestOrchestrator_ContextCancellation` | Context deadline / Cancellation trigger | Failure path & Context handling | PASS |
+## Execution Verification
+Command: `go test -v ./...`
+Result: PASS (9/9 tests passed)
 
-## Test Execution Details
+Command: `go test -race ./...`
+Result: PASS (0 race conditions detected)
 
-- `go test -v ./...`:
-  - All tests passed.
-  - Step logs verified for LIFO ordering: `[EXECUTED, EXECUTED, FAILED, COMPENSATED, COMPENSATED]`.
-- `go test -race ./...`:
-  - Zero data races detected.
-- `go run ./cmd/demo`:
-  - Scenario 1 (Happy Path) completed with state `APPROVED`, stock reduced.
-  - Scenario 2 (Failure Rollback) properly reversed payment and cancelled order upon stock failure.
+Assessment: PASS
+Severity: LOW
+Notes: Comprehensive coverage across happy paths, failure paths, concurrency, LIFO logging, context cancellation, and choreography variants.
