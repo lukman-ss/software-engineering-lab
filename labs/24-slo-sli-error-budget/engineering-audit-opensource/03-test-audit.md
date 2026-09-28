@@ -1,23 +1,38 @@
-# Test Audit
+# Test Audit — labs/24-slo-sli-error-budget/tests/slo_test.go
 
-Execution:
-- `go build ./...`: PASS (BUILD_OK)
-- `go test -v -count=1 ./tests/...`: PASS (6/6)
-- `go test -count=1 -race ./...`: PASS (no data race, 1.468s)
-- `go vet ./...`: PASS (clean)
-- `go run ./cmd/demo`: PASS (real output, arithmetic verified)
-- Coverage via `go test -coverpkg=./...`: evaluator Evaluate 100%, metrics Record ~97%, alert Check 100%, CalculateBurnRate ~71% (degenerate-SLO guard untested)
+Coverage matrix (6 tests):
 
-Coverage matrix:
-- Happy path: covered (basic aggregation, SLI math, burn trigger)
-- Failure path: covered (budget exhaustion freeze, incident burn)
-- Edge cases: covered (zero traffic, full eviction, out-of-order, partial eviction)
-- Transitions: covered (CanDeploy true->false across error accumulation)
-- Recovery: NOT covered (no test for budget restoration / CanDeploy false->true after window expiry)
-- Rollback: NOT_APPLICABLE (stateless evaluator, no rollback semantics)
-- Concurrency: covered (20 goroutines x100 records + race detector clean)
-- Negative cases: covered (transient spike suppressed, zero traffic deploys)
+## TestMetricsWindowTracker
+- happy path, eviction. PASS.
+- edge: 0 after window expiry. covered.
 
-Test quality: strong where it counts. No assertion-only-on-happy-path gaming. Negative burn test uses realistic asymmetric window loads. Weakest spots are: missing recovery transition, missing 100%-errors SLI=0 case, degenerate guards uncovered.
+## TestSLOEvaluator
+- happy path 99/1 SLI=0.99 CanDeploy. PASS.
+- failure path 1 extra bad → CanDeploy=false. covered.
 
-Result: PASS with noted MISSING_TEST items (non-blocking).
+## TestAlertEngineBurnRate
+- happy path: 2% error ×100x? actually 2/100 = 2% → burn 20× vs 14.4 factor → triggered. correct.
+- negative/transient: short 10% / long 0.01% → 0 alerts. PASS.
+
+## TestOutOfOrderTimestamps
+- edge: out-of-order insert + partial eviction. PASS.
+
+## TestEvaluatorZeroTraffic
+- edge: total=0 SLI=1.0 CanDeploy=true. covered.
+
+## TestConcurrencyMetrics
+- concurrency: 20×100 = 2000 ops concurrent, race-clean. PASS.
+
+## Gaps
+- MISSING_TEST: `CalculateBurnRate` with total=0 or targetSLO such that allowedErrorRate<=0 — returns 0 but untested.
+- MISSING_TEST: `BurnRateRule` zero `BurnRateFactor` would always trigger (shortBurn>=0 and longBurn>=0) — no guard.
+- MISSING_TEST: tracker with zero/negative windowSize or nil isGood — no construction validation test.
+- MISSING_TEST: SLO evaluator exact-boundary budgetRemaining == 0 (not <= due to float) — no explicit test.
+- MISSING_TEST: recovery path — design promises recovery demo; tests never re-record good traffic after incident to show CanDeploy flip back to true. Not implemented in demo either.
+- MISSING_TEST: 100% error / 0% error edge for SLO (division-safe) — partially implied by zero-traffic test only.
+
+## Race Detector
+`go test -race ./...` → PASS (tests ok). No data races reported. PASS.
+
+## Overall Test Quality: PASS-STRONG-WEAKS
+Core math happy+failure paths and concurrency proven. Negative/transient suppression works. Missing pure edge tests and no failure-rollback/recovery coverage.

@@ -6,41 +6,30 @@ Audit Date: 2026-09-28
 ## Summary
 
 Code Files Reviewed: 4 (internal/metrics/tracker.go, internal/slo/evaluator.go, internal/alerting/engine.go, cmd/demo/main.go)
-Tests Reviewed: 1 file, 6 tests (tests/slo_test.go)
-Commands Executed: go build, go test -v, go test -race, go vet, gofmt -l, go run demo, coverage via -coverpkg, float boundary reproduction
+Tests Reviewed: tests/slo_test.go (6 tests)
+Commands Executed: `go build ./...`, `go test ./...`, `go test -race ./...`, `go run ./cmd/demo`
 Failures: 0
-Warnings: 5 (all LOW except 1 MEDIUM recovery-test gap and 1 MEDIUM recovery-demo claim)
+Warnings: 3 (dead LatencyThreshold field + fragile float freeze boundary; unused BurnRateRule windows; missing recovery phase)
 
 ## Quality Gates
 
 Compilation: PASS
 Tests: PASS
-Race Detector: PASS
-Demo: PASS
-Research Alignment: PASS
-Documentation Accuracy: WARNING
+Race Detector: PASS (clean, no data races)
+Demo: PASS (real computation, math independently reproduced)
+Research Alignment: WARNING (unused per-rule windows vs "multi-window per rule" intent — research excluded per override)
+Documentation Accuracy: WARNING (SLOEvaluator burn-rate attribution; recovery not demonstrated)
 
 ## Blocking Issues
-
-None.
+1. None. 0 HIGH/CRITICAL gaps.
 
 ## Non-Blocking Issues
-
-1. [MEDIUM] No recovery test: budget restoration / CanDeploy false->true unproven (05-gaps.md Gap 1).
-2. [MEDIUM] Design promises demo recovery phase; demo has none (Gap 3).
-3. [LOW] 100% coverage claim overstated; real: evaluator 100%, metrics Record ~97%, burn-rate calc ~71% (Gap 4).
-4. [LOW] Config.LatencyThreshold unused by evaluator; latency owned by tracker callback (Gap 5).
-5. [LOW] BurnRateRule window/budget fields dead; windows come from tracker pair (Gap 6).
-6. [LOW] No 100%-error edge test; no degenerate-SLO burn test (Gaps 2, 7).
-7. [LOW] gofmt misalignment across all four source files (cosmetic only).
+1. BurnRateRule struct declares LongWindow/ShortWindow/BudgetConsumedPct but Check ignores them; all rules share one tracker pair — semantics mismatch only, MEDIUM, documented in 05-gaps.md gap 8.
+2. Config.LatencyThreshold dead field + `budgetRemaining <= 0` float-fragile freeze — demo/tests unaffected.
+3. Missing edge tests (zero-factor rule, zero-budget boundary, nil isGood, zero-window tracker) and missing recovery test/demo.
 
 ## Required Revisions
-
-None blocking. Suggested before Technical Writer handoff:
-1. Soften design doc coverage claim to actual measured coverage, or add the 2-3 missing branch tests.
-2. Either add a demo recovery phase or remove the recovery sentence from the design doc.
-3. Document that LatencyThreshold is informational (classification lives in isGood), or wire it into the evaluator.
-4. Document or remove unused BurnRateRule fields.
+1. Non-required: optionally wire per-rule windows or remove fields; clarify freeze boundary (epsilon); add recovery phase + edge tests. Suggested in technical revision, not blocking approval.
 
 ## Final Status
 

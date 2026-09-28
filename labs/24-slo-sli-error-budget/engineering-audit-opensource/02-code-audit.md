@@ -1,82 +1,65 @@
-# Code Audit
+# Code Audit — labs/24-slo-sli-error-budget
 
 ## Finding 1
-
-Location: internal/metrics/tracker.go:46
-Claimed Behavior: Sliding-window event tracking with bucket aggregation, eviction, and concurrency protection.
-Observed Implementation: All entry points guarded by a single mutex. Eviction uses offset slice trim. Supports out-of-order insertion.
+Location: internal/metrics/tracker.go:46-104 (Record), 106-115 (evictStaleLocked)
+Claimed Behavior: Sliding-window bucketed good/total tracking with stale eviction.
+Observed Implementation: RWMutex-guarded slice of Buckets; evict on Record+Summary; out-of-order insert via sorted splice; same-bucket fast path.
 Assessment: PASS
 Severity: LOW
-Notes: No data race detected. Ran concurrent test multiple times without failure.
+Notes: O(n) splice insert fine at lab scale. Boundary `Before(cutoff)` retains bucket exactly at cutoff — reasonable semantics.
 
 ## Finding 2
-
-Location: internal/metrics/tracker.go:52
-Claimed Behavior: Truncate-based bucketing proxy for rolling windows
-Observed Implementation: Bucket boundaries computed by truncating each timestamp to the bucket size. Demo applies this consistently.
-Assessment: PASS
-Severity: MEDIUM
-Notes: Standard coarse time bucketing. All tests exercise it. No claim-breach observed.
+Location: internal/metrics/tracker.go:30-44 (NewWindowTracker), 46 (Record)
+Claimed Behavior: Robust tracker construction.
+Observed Implementation: No nil-guard on `isGood`; nil func panics on Record. No validation of `windowSize <= 0` (zero window evicts everything except exact-now bucket).
+Assessment: WARNING
+Severity: LOW
+Notes: No test hits these paths; normal construction unaffected.
 
 ## Finding 3
-
-Location: internal/slo/evaluator.go:41
-Claimed Behavior: Evaluate SLI, budget depletion, and release freeze
-Observed Implementation: SLI = good/total (default 1.0 for zero traffic). Budget = allowed - consumed. Release freeze `CanDeploy=false` when budget <= 0.
+Location: internal/metrics/tracker.go:117-128 (Summary)
+Claimed Behavior: Thread-safe read.
+Observed Implementation: Takes write `mu.Lock` (not RLock) because eviction mutates slice. Correct.
 Assessment: PASS
 Severity: LOW
-Notes: Uses float equality convention typical for SRE policy enforcement. Verified zero-traffic test returns SLI 1.0 and deploy allowed.
+Notes: `go test -race` clean on 20×100 concurrent Record test.
 
 ## Finding 4
-
-Location: internal/slo/evaluator.go:15
-Claimed Behavior: LatencyThreshold part of SLO config
-Observed Implementation: LatencyThreshold stored in Config but never used by Evaluator. Good/bad classification done upstream by caller's isGood callback.
-Assessment: WARNING
+Location: internal/slo/evaluator.go:41-71 (Evaluate)
+Claimed Behavior: SLI=good/total; budget=(1-target)*total-bad; freeze when exhausted.
+Observed Implementation: Matches. Zero-traffic SLI=1.0, CanDeploy=true. Rounding SLI 4dp, budget 2dp.
+Assessment: PASS
 Severity: LOW
-Notes: Config exposes LatencyThreshold as though evaluator enforces it. Evaluator ignores it. Tests/demo classify latency at the tracker callback instead. No functional bug. Documentation overstates evaluator's role.
+Notes: Verified math against demo: 1100 total/10 bad @99.9% → budget 1.1-10=-8.9, SLI 0.9909. Correct.
 
 ## Finding 5
-
-Location: internal/alerting/engine.go:63
-Claimed Behavior: Multi-window multi-burn-rate alerting without false positives
-Observed Implementation: Check requires BOTH short and long windows to exceed the same factor. Verified transient-spike negative test blocks alerts when long window stays clean.
-Assessment: PASS
-Severity: LOW
-Notes: Fast/slow distinction exists only via separate tracker instances sharing the factor list, not via per-rule window pairs enforced internally.
-
-## Finding 6
-
-Location: internal/alerting/engine.go:17,26
-Claimed Behavior: Rules carry named windows + severity + budget-consumed threshold
-Observed Implementation: LongWindow, ShortWindow, BudgetConsumedPct declared on BurnRateRule but never referenced in Check. Demo sets only Name/Severity/BurnRateFactor.
+Location: internal/slo/evaluator.go:10-14 (Config.LatencyThreshold), 54-57 (freeze `<= 0`)
+Claimed Behavior: Latency threshold enforced; freeze when budget exhausted.
+Observed Implementation: `LatencyThreshold` stored, never read — goodness delegated to tracker `isGood` closure. Freeze uses `budgetRemaining <= 0`; exact-zero boundary depends on float artifact (1-0.99=0.010000000000000009 saves the TestSLOEvaluator CanDeploy=true case).
 Assessment: WARNING
 Severity: LOW
-Notes: Dead struct fields. No impact on the exercised threshold path. Could mislead future maintainers into believing window selection and budget-percentage gating are honoured.
+Notes: Dead field, fragile boundary. No behavioral failure observed.
+
+## Finding 6
+Location: internal/alerting/engine.go:51-89 (CalculateBurnRate, Check)
+Claimed Behavior: Multi-window multi-burn-rate alerting; fast 14.4x page, slow 6x ticket.
+Observed Implementation: Dual-window check real: requires BOTH shortBurn AND longBurn >= factor; transient-spike negative case proven by test. BUT per-rule `LongWindow`/`ShortWindow`/`BudgetConsumedPct` fields declared, never used — all rules evaluated against single shared tracker pair, differing only by `BurnRateFactor`.
+Assessment: WARNING
+Severity: MEDIUM
+Notes: Core false-positive suppression works; rule-specific windows unimplemented. Zero-traffic returns 0 (no alert) — sane. Zero-factor rule would always trigger — untested edge.
 
 ## Finding 7
-
-Location: internal/alerting/engine.go:51
-Claimed Behavior: Burn rate = actual error rate / allowed error rate
-Observed Implementation: Returns 0 on zero traffic or degenerate SLO>=1. Otherwise exact textbook formula.
+Location: internal/alerting/engine.go:63-89; internal/metrics/tracker.go (locks)
+Claimed Behavior: Concurrency-safe alerting.
+Observed Implementation: Engine holds no own lock; safety inherited from tracker locks. No shared mutable engine state.
 Assessment: PASS
 Severity: LOW
-Notes: Zero-reporting convention coherent with evaluator. Partial branch coverage (71%) on degenerate-SLO guard. Uncovered branches benign.
+Notes: Race detector clean.
 
 ## Finding 8
-
-Location: internal/slo/evaluator.go:55
-Claimed Behavior: Release freeze when budget depleted
-Observed Implementation: Freeze condition `budgetRemaining <= 0`. Floating-point exact-boundary case (99 good + 1 bad at SLO 0.99) resolves to budgetRemaining ~+8.9e-16, not <= 0, so CanDeploy stays true. This matches mathematical budget balance (budget 1.0, consumed 1.0).
+Location: cmd/demo/main.go (all phases)
+Claimed Behavior: Baseline → incident → alerts → criticality comparison.
+Observed Implementation: Real computation via same packages; rerun output byte-identical to engineering/03-execution-result.md. Phase 3 honestly shows only TICKET (9.09x < 14.4x page threshold), not fabricated page alert.
 Assessment: PASS
 Severity: LOW
-Notes: Verified via independent float reproduction. No freeze-before-exhaustion bug. Boundary behaviour numerically correct.
-
-## Finding 9
-
-Location: cmd/demo/main.go
-Claimed Behavior: Runnable demo illustrating baseline, depletion, alerting, criticality comparison
-Observed Implementation: Demo runs end-to-end. Output arithmetic verified by hand: Phase 2 gives 1100 total, 10 bad, SLI 99.09%, budget -8.90, freeze. Burn 9.09x triggers 6.0x rule only, correctly NOT 14.4x. Reports tracker's 10% errors on 95% SLO gives -5.00 budget.
-Assessment: PASS
-Severity: LOW
-Notes: Demo real. Numbers reproduce. No fabricated output.
+Notes: No recovery phase despite design mentioning recovery. Demo timescales compressed (seconds vs 30min windows) — disclosed.
