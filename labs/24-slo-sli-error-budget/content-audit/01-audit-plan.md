@@ -1,44 +1,37 @@
 # Content Audit Plan
 
-## Target Lab
-`labs/24-slo-sli-error-budget`
+Target Lab: `labs/24-slo-sli-error-budget`
 
-## Audit Date
-2026-09-28
+## Audit Scope
 
-## Scope
-Audit the technical publication content (files in `content/`) against:
-1. Approved research output (`research/05-report.md`, `research/03-evidence.md`, `research/04-contradictions.md`)
-2. Approved engineering implementation (`engineering/` notes, `internal/` source code, `tests/slo_test.go`)
-3. Engineering audit findings (`engineering-audit/`, `engineering-audit-opensource/`)
+Review generated publication content against:
+- Approved research: `research/05-report.md`, `research/03-evidence.md`, `research/04-contradictions.md`
+- Approved engineering: `engineering/01-design.md`, `engineering/02-implementation-notes.md`, `engineering/03-execution-result.md`
+- Approved audits: `research-audit/07-verdict.md` (APPROVED), `engineering-audit/06-verdict.md` (APPROVED), `engineering-audit-opensource/06-verdict.md` (APPROVED with 2 non-blocking findings)
+- Content revision record: `content-revision/01-changes-made.md`
 
-## Pipeline Override Compliance
-- Audit content only. Do not audit research or code. Do not modify source/implementation files.
-- Findings written to `content-audit/`.
-- Final verdict written to `content-audit/09-verdict.md`.
+## Content Files to Audit
 
-## Content Package Under Review
-- `content/01-content-brief.md`
-- `content/02-master-draft.md`
-- `content/03-code-snippets.md`
-- `content/04-diagrams.md`
-- `content/05-key-takeaways.md`
-- `content/06-source-map.md`
+1. `content/01-content-brief.md`
+2. `content/02-master-draft.md`
+3. `content/03-code-snippets.md`
+4. `content/04-diagrams.md`
+5. `content/05-key-takeaways.md`
+6. `content/06-source-map.md`
 
-## Audit Methodology
-1. Extract every technical claim, formula, calculation, and assertion from each content file.
-2. Cross-reference claims against:
-   - Research report findings and evidence (authoritative definitions, calculations, caveats)
-   - Verified source code (actual function logic, field usage, return values)
-   - Recorded execution results (`engineering/03-execution-result.md`)
-   - Test suite assertions (`tests/slo_test.go`)
-3. Flag inaccuracies, hallucinated facts, misleading simplifications, or platform biases.
-4. Classify issues as BLOCKING, HIGH, MEDIUM, or LOW severity.
-5. Produce verdict: APPROVED | APPROVED_WITH_WARNINGS | NEEDS_REVISION | REJECTED.
+## Quality Gates
 
-## Quality Gates Evaluated
-- **Technical Accuracy**: Content formulas and calculations match implementation.
-- **Research Fidelity**: Definitions and caveats are faithfully reproduced with proper attribution.
-- **Engineering Fidelity**: Content correctly describes actual code behavior (not documented-but-unbuilt features).
-- **Clarity**: Explanations are accessible to target readers without obscuring caveats.
-- **Transparency**: Limitations, simplifications, and vendor-specific notes are disclosed.
+1. **Accuracy**: All claims traceable to approved research or verified implementation
+2. **Code Fidelity**: Snippets verbatim from approved source files
+3. **Test Alignment**: Test claims match actual test implementations and results
+4. **Completeness**: All core concepts covered (SLI, SLO, Error Budget, Burn Rate, Multi-Window, Criticality)
+5. **Transparency**: Engineering audit findings (LatencyThreshold unused, per-rule window fields unimplemented) disclosed
+6. **No Hallucination**: No fabricated benchmarks, incidents, or platform-specific bias
+7. **Formatting**: Consistent structure, clear diagrams, correct cross-references
+
+## Audit Process
+
+1. Read all reference materials
+2. Verify each content file against sources
+3. Document issues (blocking/non-blocking)
+4. Output verdict
