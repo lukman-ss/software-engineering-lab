@@ -27,9 +27,9 @@ Model mental ini mengeliminasi banyak pertimbangan teknis yang rumit. Arah komun
 
 ## Failure Scenario
 
-Bayangkan sebuah sistem notifikasi yang menggunakan WebSocket untuk mengirim update ke 10,000 client. Setiap proxy load balancer harus dikonfigurasi untuk mendukung WebSocket sticky sessions — koneksi harus tetap di node yang sama karena state koneksi ada di memori lokal. Ketika sebuah node restart, semua koneksi WebSocket terputus dan client harus reconnect secara manual (tidak ada auto-reconnect di level protokol). Proses reconnect memicu storm notifikasi ulang ke semua client secara bersamaan.
+Bayangkan sebuah sistem notifikasi yang menggunakan WebSocket untuk mengirim update ke 10,000 client. Setiap proxy load balancer umumnya membutuhkan konfigurasi WebSocket sticky sessions — koneksi harus tetap di node yang sama karena state koneksi ada di memori lokal — kecuali ada broker pesan terpusat. Ketika sebuah node restart, semua koneksi WebSocket terputus dan client harus reconnect secara manual (tidak ada auto-reconnect di level protokol). Proses reconnect memicu storm notifikasi ulang ke semua client secara bersamaan.
 
-Skenario yang sama dengan SSE: proxy tidak memerlukan sticky session karena SSE adalah HTTP standard. Load balancer bisa mendistribusikan koneksi ke node manapun. Ketika node restart, client `EventSource` secara otomatis reconnect dan mengirim `Last-Event-ID` header untuk mengambil event yang terlewat. Proses recovery terjadi tanpa intervensi developer.
+Skenario yang sama dengan SSE: proxy tidak memerlukan sticky session karena SSE adalah HTTP standard. Load balancer bisa mendistribusikan koneksi ke node manapun. Ketika node restart, client `EventSource` secara otomatis reconnect dan mengirim `Last-Event-ID` header untuk mengambil event yang terlewat. Proses recovery terjadi tanpa intervensi developer. Untuk replay lintas node tetap perlu shared history/broker seperti Redis Pub/Sub — in-memory history bersifat per-node.
 
 ## How It Works
 
@@ -91,7 +91,7 @@ Semua test lolos dengan dan tanpa race detector (`go test -race ./...`). Demo (`
 
 ## Recovery / Rollback
 
-SSE memiliki mekanisme recovery bawaan di level browser: `EventSource` API secara otomatis reconnect dengan exponential backoff dan mengirim `Last-Event-ID` header. Server menghitung event yang terlewat dari history dan mengirimkannya sebagai replay. Ini adalah perilaku spec-defined, bukan implementasi kustom.
+SSE memiliki mekanisme recovery bawaan di level browser: `EventSource` API secara otomatis reconnect dengan jeda sesuai field `retry` (implementation-defined, biasanya beberapa detik) dan mengirim `Last-Event-ID` header. Server menghitung event yang terlewat dari history dan mengirimkannya sebagai replay. Ini adalah perilaku spec-defined, bukan implementasi kustom.
 
 WebSocket tidak memiliki mekanisme recovery otomatis di level protokol. RFC 6455 Section 7.2.3 menggambarkan recovery dari abnormal closure sebagai implement concern. Developer harus membangun logika reconnect sendiri — pustaka seperti `ReconnectingWebSocket` ada untuk mengisi gap ini, tetapi bukan bagian dari spesifikasi.
 
@@ -101,7 +101,7 @@ WebSocket tidak memiliki mekanisme recovery otomatis di level protokol. RFC 6455
 
 **HTTP/2:** SSE berjalan native di HTTP/2 melalui stream multiplexing — tidak memerlukan ekstensi khusus. WebSocket over HTTP/2 memerlukan RFC 8441 Extended CONNECT method dengan `:protocol = websocket` pseudo-header karena HTTP/2 melarang connection-wide headers seperti `Upgrade` dan `Connection`.
 
-**Browser Limits:** SSE over HTTP/1.1 dibatasi hingga ~6 koneksi per origin (kebijakan browser de facto, bukan web standard). HTTP/2 menghilangkan bottleneck ini dengan negotiated stream limits (default 100). WebSocket tidak terkena batasan ini karena menggunakan koneksi TCP terpisah yang tidak dihitung dalam batas HTTP.
+**Browser Limits:** SSE over HTTP/1.1 dibatasi hingga ~6 koneksi per origin (kebijakan browser de facto, bukan web standard). HTTP/2 menghilangkan bottleneck ini dengan negotiated stream limits (default 100). WebSocket tidak dihitung dalam batas 6 koneksi HTTP/1.1 tersebut (tetapi browser tetap membatasi jumlah koneksi WS secara terpisah).
 
 **Scaling 100k Connections:** Klaim tentang 100,000 koneksi bersamaan adalah prinsip arsitektural yang dibahas dalam penelitian, bukan di-benchmark di lab ini. Batasan utama adalah OS file descriptor limits (`ulimit -n`) dan per-connection memory overhead dalam runtime. Untuk broadcast lintas node, diperlukan message broker seperti Redis Pub/Sub.
 
@@ -121,7 +121,7 @@ WebSocket tidak memiliki mekanisme recovery otomatis di level protokol. RFC 6455
 
 **Demo Lab: SSE Resumption dari Last-Event-ID**
 
-Server melakukan broadcast 2 event berita. Client connect dengan `Last-Event-ID: 1`. Server menghitung bahwa event ID 2 dan 3 harus di-replay (karena `evt.ID > 1`), sementara event ID 1 dilewati. Client menerima:
+Server melakukan broadcast 2 event berita. Client connect dengan `Last-Event-ID: 1`. Server menghitung bahwa event ID 2 harus di-replay (karena `evt.ID > 1`), sementara event ID 1 dilewati. Client menerima:
 
 ```
 [SSE Stream] id: 2
