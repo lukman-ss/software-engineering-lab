@@ -16,7 +16,7 @@ Tests Reviewed:
 - `tests/oauth_test.go`
 
 Commands Executed:
-- `go test -v -count=1 ./...`
+- `go test ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
 

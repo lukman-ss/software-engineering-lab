@@ -14,29 +14,23 @@ Executable/Demo:
 - cmd/demo/main.go
 
 Approved Research Inputs:
-- research/01-plan.md
-- research/02-sources.md
-- research/03-evidence.md
-- research/04-contradictions.md
 - research/05-report.md
-- research/06-open-questions.md
+- engineering/01-design.md
+- engineering/02-implementation-notes.md
 
 Main Claims To Verify:
-1. PKCE S256 verification prevents authorization code interception attacks (RFC 7636 / RFC 9700).
-2. OIDC ID Token claims (`iss`, `sub`, `aud`, `exp`, `nonce`) are validated correctly using HMAC-SHA256 signatures.
-3. Refresh token rotation issues new access/refresh tokens and invalidates consumed refresh tokens.
-4. Refresh token replay causes complete family revocation (RFC 9700 Section 4.14).
-5. State transitions and single-use authorization code constraints are enforced.
-6. Execution and race detector passes cleanly without data races.
+1. PKCE (RFC 7636/9700) implementation using S256 method prevents code interception attacks.
+2. OIDC ID Token issuing and cryptographic HMAC-SHA256 signature and standard claim (`iss`, `sub`, `aud`, `exp`, `nonce`) validation.
+3. OAuth 2.0 Authorization Code Grant with single-use code redemption.
+4. Refresh Token Rotation with lineage/family tracking and immediate family revocation upon reuse detection.
+5. Thread safety and concurrency handling across in-memory server state.
 
 Commands To Run:
-```bash
-go test -v ./...
-go test -race ./...
-go run ./cmd/demo
-```
+- go test ./...
+- go test -race ./...
+- go run ./cmd/demo
 
 Primary Risks:
-- Data race conditions in concurrent authorization, code exchange, token rotation, or token validation requests.
-- Incorrect implementation of Refresh Token Family Revocation or PKCE code verification.
-- Discrepancies between README / documentation claims and actual code behavior.
+- Race conditions during concurrent token exchanges or refresh requests.
+- Incorrect claim checking logic or loose signature validation in OIDC package.
+- Inconsistent scope validation or memory leaks in token maps.
