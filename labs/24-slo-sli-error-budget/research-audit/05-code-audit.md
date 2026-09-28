@@ -1,13 +1,9 @@
-# 05 — Code Audit
+# 05 Code Audit
 
-## Status: NOT APPLICABLE (Pipeline Override)
+**Status:** NOT_APPLICABLE  
+**Scope Note:** Pipeline override explicitly designates this stage as a research-only audit:
+- "Audit research only."
+- "Do not audit implementation/code in this stage."
+- "Do not modify research files."
 
-### Note on Scope
-Under the instructions of the Pipeline Override for this stage:
-- This audit cycle is strictly dedicated to verifying technical research (`research/`).
-- Source code, tests, and engineering implementations are not evaluated in this document.
-- Engineering implementation and runnable test suites will be evaluated in the dedicated engineering audit phase (`engineering-audit/`).
-
-### Quality Gate Check
-- Code Correctness: NOT_APPLICABLE
-- Tests Execution: NOT_APPLICABLE
+No source code or tests were audited or executed in this phase. Code correctness and test suites will be evaluated during the dedicated engineering audit pipeline phase.

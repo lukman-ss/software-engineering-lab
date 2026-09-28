@@ -1,18 +1,17 @@
 # Audit Verdict
 
-Target Lab: `labs/24-slo-sli-error-budget`
-
-Audit Date: 2026-09-27
+Target Lab: `labs/24-slo-sli-error-budget`  
+Audit Date: 2026-09-28  
 
 ## Summary
 
-Major Claims Reviewed: 14  
-Sources Reviewed: 9 (8 Tier 1, 1 Tier 2)  
+Major Claims Reviewed: 8  
+Sources Reviewed: 13  
 Unsupported Claims: 0  
-Contradictions: 4 (all resolved with clear root causes)  
-Code Issues: N/A (Pipeline Override — Research Audit only)  
-Test Failures: N/A (Pipeline Override — Research Audit only)  
-Research Gaps: 4 (documented and mitigated)  
+Contradictions: 4 (all documented and reconciled)  
+Code Issues: 0 (Code audit out of scope per pipeline override)  
+Test Failures: 0 (Tests out of scope per pipeline override)  
+Research Gaps: 3  
 
 ## Quality Gates
 
@@ -29,13 +28,13 @@ None.
 
 ## Non-Blocking Issues
 
-1. **Vendor Concentration**: Primary sources are heavily dominated by Google SRE literature (Book & Workbook). Mitigated by corroborating definitions against Datadog and Prometheus practices.
-2. **Empirical Generalizations**: The "70% outages caused by changes" statistic is an internal Google observation without external empirical backing. Properly annotated with LOW confidence in the evidence file and report.
-3. **Monthly Downtime Calculation Discrepancy**: Minor 6-minute discrepancy between strict 30-day month (Google Appendix A) and Gregorian average 30.44-day month. Fully explained and resolved in contradictions.
+1. **404 Sources Documented:** Sources 11, 12, and 13 returned 404 HTTP statuses. The research correctly excluded them from evidence weighting and relied on Tier 1 primary sources (Google SRE Book/Workbook).
+2. **Month Length Assumption Nuance:** 30-day month (Google convention) vs 30.44-day average month causes minor downtime calculation variance (7.2h vs 7h18m for 99%), which is fully documented in contradictions.
+3. **Burn Rate Parameter Generalization:** Multi-window burn rate alert thresholds vary slightly between Google recommendations and Datadog defaults; educational content should present them as baseline configurations requiring tuning.
 
 ## Required Revisions
 
-None. All claims are supported by authentic, reachable primary/secondary sources, and limitations are explicitly declared.
+None required for research phase approval.
 
 ## Final Status
 
