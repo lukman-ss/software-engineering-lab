@@ -14,13 +14,13 @@ Approved Engineering Status: APPROVED (2026-09-26, 5/5 tests PASS, race PASS. La
 
 Main Concepts: CDC vs provider-driven contracts; contract by example (Pact file) vs JSON Schema; test double vs real service; HTTP semantics dalam kontrak (method, path, status, header, body + enum/type/error); anti-pattern over-specification (jangan uji aturan validasi bisnis di kontrak); expand/contract untuk breaking change aman; Pact Broker & CI/CD gate (can-i-deploy) & independent deployability; Message Pact untuk event-driven (Kafka/RabbitMQ); piramida test setelah contract testing.
 
-Verified Behaviors:
-- `TestConsumerContractGeneration` — consumer MobileApp menghasilkan kontrak 1 interaksi `GET /v1/orders/ORD-123` dengan body minimal `{id, status, customer.name, total}`.
-- `TestProviderV1_ContractVerification_Success` — Provider V1 memenuhi kontrak; verifier `Passed=true`; `FetchOrder` berhasil.
-- `TestProviderBreaking_ContractVerification_Fails` — Breaking provider (3 mutasi: `IN_PROGRESS`→`in_progress`, `customer.name`→`customer.full_name`, `total` int→string) menghasilkan `Passed=false` dengan ≥3 error terperinci; `FetchOrder` gagal.
-- `TestProviderDual_ContractVerification_Success` — Dual provider (`/v1` + `/v2`) tetap lolos verifikasi V1; `FetchOrder` berhasil.
-- `TestConcurrentContractVerification` — 20 goroutine memverifikasi bersamaan tanpa race.
-- Demo 4 stage (generate → V1 pass → breaking blocked → dual pass) dieksekusi `go run ./cmd/demo`.
+Verified Behaviors (`tests/contract_test.go`):
+- `TestConsumerContractGeneration` (`:13`) — consumer MobileApp menghasilkan kontrak 1 interaksi `GET /v1/orders/ORD-123` dengan body minimal `{id, status, customer.name, total}`.
+- `TestProviderV1_ContractVerification_Success` (`:27`) — Provider V1 memenuhi kontrak; verifier `Passed=true`; `FetchOrder` berhasil.
+- `TestProviderBreaking_ContractVerification_Fails` (`:50`) — Breaking provider (3 mutasi: `IN_PROGRESS`→`in_progress`, `customer.name`→`customer.full_name`, `total` int→string) menghasilkan `Passed=false` dengan ≥3 error terperinci; `FetchOrder` gagal.
+- `TestProviderDual_ContractVerification_Success` (`:74`) — Dual provider (`/v1` + `/v2`) tetap lolos verifikasi V1; `FetchOrder` berhasil.
+- `TestConcurrentContractVerification` (`:96`) — 20 goroutine memverifikasi bersamaan tanpa race.
+- Demo 4 stage (generate → V1 pass → breaking blocked → dual pass) dieksekusi `go run ./cmd/demo` (`cmd/demo/main.go:14-68`).
 
 Available Case Studies: Lab order service: Mobile App sebagai consumer, Order Service sebagai provider (V1 compliant, Breaking, Dual V1+V2) pada routing `/v1/orders/{id}` dan `/v2/orders/{id}`.
 
