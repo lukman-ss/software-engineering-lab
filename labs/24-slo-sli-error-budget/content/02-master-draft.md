@@ -290,7 +290,7 @@ Perhitungan: SLO 99.9% → allowed error rate 0.1%. 10/1100 = 0.91% error rate �
 
 **PHASE 3 — Burn Rate Alert**
 ```
->>> ALERT TRIGGERED: [TICKET] Slow Burn Alert (6.0x) 
+>>> ALERT TRIGGERED: [TICKET] Slow Burn Alert (6.0x - 5% in 6h)
     | ShortBurn: 9.09x | LongBurn: 9.09x (Threshold: 6.00x)
 ```
 

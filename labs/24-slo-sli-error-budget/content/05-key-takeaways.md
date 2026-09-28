@@ -4,7 +4,7 @@
 
 2. **SLO < 100% adalah target nyata**. 100% tidak realistis karena device dan jaringan pengguna tidak terkontrol.
 
-3. **Error Budget = 1 − SLO**. Ini "uang" untuk berinovasi. Budget habis = deployment berhenti, fokus perbaikan.
+3. **Error Budget = 1 − SLO**. Ini "uang" untuk berinovasi. Budget habis → `CanDeploy = false` (STOP deployment berisiko), fokus perbaikan.
 
 4. **Budget formula**: `totalBudget = (1 − targetSlo) × totalEvents`; `remaining = totalBudget − badEvents`; `CanDeploy = false` ketika `remaining ≤ 0` dan ada traffic.
 

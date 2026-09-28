@@ -38,3 +38,35 @@ Target: `labs/24-slo-sli-error-budget` | Scope: `content/` only
 - Phase 4 note illustrates 2% differential without altering demo numbers.
 - D3 diagram visually distinguishes ignored BurnRateRule fields.
 - No research/ or code/ files edited.
+
+---
+
+## Revision — 2026-09-28 (Content Audit APPROVED_WITH_WARNINGS)
+
+Audit Basis: `content-audit/01-audit-report.md` + `09-verdict.md` — 4 LOW (NB-1..NB-4), no blocking issues.
+
+### NB-1 — Phase 3 alert suffix
+- File: `02-master-draft.md:293`
+- Before: `Slow Burn Alert (6.0x)`
+- After: `Slow Burn Alert (6.0x - 5% in 6h)`
+- Reason: Match `engineering/03-execution-result.md:64` verbatim.
+
+### NB-2 — D4 true-positive threshold/label
+- File: `04-diagrams.md:161-175`
+- Before: `BOTH ≥ 6.0 → TICKET` (cited test which uses PAGE 14.4×)
+- After: `BOTH ≥ 14.4 → PAGE` + validation note cites `TestAlertEngineBurnRate` PAGE + demo Fase 3 for TICKET 6.0×
+- Reason: Align diagram with test; demo TICKET noted separately.
+
+### NB-3 — Audit terminology clarity
+- File: `01-content-brief.md:18-19`
+- Before: `APPROVED (internal audit); open-source audit: 2 ...`
+- After: `APPROVED — internal engineering audit: no non-blocking findings; open-source engineering audit: APPROVED with 2 non-blocking warnings ... The two audits differ in scope/perspective; both are approved.`
+- Reason: Clarify internal (06-verdict APPROVED, None) vs open-source (APPROVED, 2 warnings).
+
+### NB-4 — Takeaway CanDeploy nuance
+- File: `05-key-takeaways.md:3`
+- Before: `Budget habis = deployment berhenti`
+- After: `Budget habis → CanDeploy = false (STOP deployment berisiko)`
+- Reason: Align with `evaluator.go:55-57` and master-draft phrasing.
+
+Verification: Fase 3 verbatim; D4 ≥14.4 matches test; brief distinguishes both audits; takeaway matches CanDeploy policy; no research/code edits.

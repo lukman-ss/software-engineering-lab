@@ -16,7 +16,7 @@ Approved Research Status:
 APPROVED
 
 Approved Engineering Status:
-APPROVED (internal audit); open-source audit: 2 non-blocking findings — LatencyThreshold dead field, per-rule window fields unimplemented — disclosed below
+APPROVED — internal engineering audit: no non-blocking findings; open-source engineering audit: APPROVED with 2 non-blocking warnings (LatencyThreshold dead field, per-rule window fields unimplemented) — disclosed below. The two audits differ in scope/perspective; both are approved.
 
 Main Concepts:
 1. SLI (Service Level Indicator): ukuran kuantitatif pengalaman pengguna (mis. rasio good/total events).

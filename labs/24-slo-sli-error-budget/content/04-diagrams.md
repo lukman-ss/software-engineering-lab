@@ -152,26 +152,26 @@ Allowed error: 0.1%   │  good = 1090                          │
                ┌────────────────────────┼────────────────────────┐
                │                        │                        │
                ▼                        ▼                        ▼
-     ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-     │   TRUE POSITIVE  │   │  FALSE POSITIVE  │   │  TRUE NEGATIVE   │
-     │  (alert fires)   │   │  (no alert)      │   │   (no alert)     │
-     └──────────────────┘   └──────────────────┘   └──────────────────┘
+      ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+      │   TRUE POSITIVE  │   │  FALSE POSITIVE  │   │  TRUE NEGATIVE   │
+      │  (alert fires)   │   │  (no alert)      │   │   (no alert)     │
+      └──────────────────┘   └──────────────────┘   └──────────────────┘
 
-  Short Window (5m):        Short Window (5m):          Short Window (5m):
-  98 OK + 2 ERR             90 OK + 10 ERR              9950 OK + 50 ERR
-  2% error → 20x burn        10% error → 100x burn      0.5% error → 5x burn
+Short Window (5m):        Short Window (5m):          Short Window (5m):
+   98 OK + 2 ERR             90 OK + 10 ERR              9950 OK + 50 ERR
+   2% error → 20x burn        10% error → 100x burn      0.5% error → 5x burn
 
-  Long Window (60m):         Long Window (60m):          Long Window (60m):
-  9800 OK + 200 ERR         9999 OK + 1 ERR              99500 OK + 500 ERR
-  2% error → 20x burn       0.01% → 0.1x burn            0.5% → 5x burn
+   Long Window (60m):         Long Window (60m):          Long Window (60m):
+   9800 OK + 200 ERR         9999 OK + 1 ERR              99500 OK + 500 ERR
+   2% error → 20x burn       0.01% → 0.1x burn            0.5% → 5x burn
 
-  BOTH ≥ 6.0 → TICKET  ✓   Short ≥ 6.0 BUT Long < 6.0    BOTH < 6.0
-  (sustained high burn)     (transient spike filtered)   → NO ALERT ✓
-                              → NO ALERT ✓
-                             (single-window would false-alarm)
+   BOTH ≥ 14.4 → PAGE  ✓   Short ≥ 14.4 BUT Long < 14.4    BOTH < 14.4
+   (sustained high burn)     (transient spike filtered)   → NO ALERT ✓
+                               → NO ALERT ✓
+                              (single-window would false-alarm)
 ```
 
-Validasi: `TestAlertEngineBurnRate` (true positive) + negative test pada line 130-151 (false positive prevention).
+Validasi: `TestAlertEngineBurnRate` (true positive PAGE 14.4× + negative test line 130-151, false positive prevention). Kasus TICKET 6.0× divalidasi skenario demo Fase 3 (9.09× ≥ 6.0, lihat D3).
 
 ---
 
