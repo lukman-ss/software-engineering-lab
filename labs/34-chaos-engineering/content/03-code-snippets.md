@@ -105,6 +105,19 @@ const (
 	StateHalfOpen
 )
 
+func (s State) String() string {
+	switch s {
+	case StateClosed:
+		return "CLOSED"
+	case StateOpen:
+		return "OPEN"
+	case StateHalfOpen:
+		return "HALF-OPEN"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 var ErrCircuitOpen = errors.New("circuit breaker is open")
 
 type CircuitBreaker struct {
@@ -227,15 +240,6 @@ func (m *Monitor) RecordFailure() {
 	atomic.AddUint64(&m.failedRequests, 1)
 }
 
-func (m *Monitor) ErrorRate() float64 {
-	total := atomic.LoadUint64(&m.totalRequests)
-	if total == 0 {
-		return 0.0
-	}
-	failed := atomic.LoadUint64(&m.failedRequests)
-	return float64(failed) / float64(total)
-}
-
 func (m *Monitor) Metrics() SteadyStateMetrics {
 	total := atomic.LoadUint64(&m.totalRequests)
 	failed := atomic.LoadUint64(&m.failedRequests)
@@ -246,10 +250,19 @@ func (m *Monitor) Metrics() SteadyStateMetrics {
 	}
 }
 
+func (m *Monitor) ErrorRate() float64 {
+	total := atomic.LoadUint64(&m.totalRequests)
+	if total == 0 {
+		return 0.0
+	}
+	failed := atomic.LoadUint64(&m.failedRequests)
+	return float64(failed) / float64(total)
+}
+
 func (m *Monitor) IsHealthy() bool {
 	total := atomic.LoadUint64(&m.totalRequests)
-	if total < 5 {
-		return true // Minimum sample safeguard
+	if total < 5 { // Minimum sample before evaluating breach
+		return true
 	}
 	return m.ErrorRate() <= m.maxErrorRate
 }
@@ -311,6 +324,18 @@ func NewExperiment(cfg Config, inj *fault.Injector, mon *monitor.Monitor) *Exper
 		monitor:  mon,
 		state:    StatePending,
 	}
+}
+
+func (e *Experiment) State() ExperimentState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.state
+}
+
+func (e *Experiment) AbortReason() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.abortReason
 }
 
 func (e *Experiment) Run(ctx context.Context) error {

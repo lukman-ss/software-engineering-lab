@@ -129,6 +129,13 @@ research/
 ├── 05-report.md
 ├── 06-open-questions.md
 └── runs/
+    └── 2026-09-28-chaos-engineering/
+        ├── 01-plan.md
+        ├── 02-sources.md
+        ├── 03-evidence.md
+        ├── 04-contradictions.md
+        ├── 05-report.md
+        └── 06-open-questions.md
 
 research-audit/
 ├── 01-audit-plan.md

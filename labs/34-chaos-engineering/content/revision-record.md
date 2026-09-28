@@ -36,6 +36,31 @@ Auditor Findings Addressed: content-audit/09-verdict.md (APPROVED_WITH_WARNINGS)
 - **Fix**: Changed reference from `engineering/01-design.md:37-38` to `engineering/02-implementation-notes.md:34-36`
 - **Impact**: Source traceability corrected for one entry.
 
+### 7. Snippet 3 Monitor: Method Ordering Restored
+- **Issue**: Snippet 3 declared `ErrorRate()` before `Metrics()`, reversing source order.
+- **Fix**: Reordered methods to match source: `RecordSuccess → RecordFailure → Metrics → ErrorRate → IsHealthy`.
+- **Impact**: Verbatim fidelity restored.
+
+### 8. Snippet 3 Monitor: IsHealthy Comment Restored
+- **Issue**: Comment text differed ("safeguard" vs "before evaluating breach") and placement moved from guard line to return line.
+- **Fix**: Moved comment back to guard line: `if total < 5 { // Minimum sample before evaluating breach` with bare `return true`.
+- **Impact**: Comment now verbatim with source.
+
+### 9. Snippet 2 Circuit Breaker: Missing String() Method
+- **Issue**: `State.String()` method (source: circuitbreaker.go:17–28) omitted from snippet despite being used by `fmt.Printf(..., cb.State())` in demo and tests.
+- **Fix**: Added complete `func (s State) String() string` method block after const definitions.
+- **Impact**: Full public API traceable from snippet.
+
+### 10. Snippet 4 Experiment Runner: Missing State() and AbortReason() Accessors
+- **Issue**: Two public accessors `Experiment.State()` and `Experiment.AbortReason()` (source: runner.go:48–58) omitted from snippet despite being used in demo (`exp.State()`, `abortExp.AbortReason()`).
+- **Fix**: Appended both accessor methods before `Run()`.
+- **Impact**: Complete public API now documented in snippet.
+
+### 11. Source Map: research/runs/ Subdirectory Added
+- **Issue**: `research/runs/2026-09-28-chaos-engineering/` with 6 files absent from Full Source List tree.
+- **Fix**: Expanded `runs/` entry to include full subdirectory tree.
+- **Impact**: Source map completeness restored.
+
 ## Verification
 - All code snippets (content/03-code-snippets.md) correctly reflect source code
 - No research or engineering files modified — content-only revisions
