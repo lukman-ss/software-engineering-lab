@@ -46,7 +46,7 @@ Semua diagram berdasar implementasi asli lab. Tidak ada komponen yang tidak ada 
 Komponen aktual:
 - `internal/metrics/tracker.go`: `WindowTracker` yang digunakan untuk SLO evaluator, short tracker, dan long tracker.
 - `internal/slo/evaluator.go`: `Evaluator` menggunakan satu `WindowTracker` untuk SLI & error budget.
-- `internal/alerting/engine.go`: `AlertEngine` menggunakan dua `WindowTracker` (short & long).
+- `internal/alerting/engine.go`: `AlertEngine` menggunakan dua `WindowTracker` (short & long). Catatan: field `LongWindow`, `ShortWindow`, dan `BudgetConsumedPct` di `BurnRateRule` diabaikan oleh `engine.Check()` — semua rule berbagi `shortTracker` dan `longTracker` konstruksi-time.
 
 ---
 
@@ -117,21 +117,27 @@ Allowed error: 0.1%   │  good = 1090                          │
                       │  CanDeploy = false ✓                  │
                       └─────────────────┬────────────────────┘
                                         │
-                      ┌─────────────────┴────────────────────┐
-                      │  Alert Engine  (internal/alerting/)   │
-                      │                                      │
-                      │  shortBurn = actual/allowed           │
-                      │  longBurn  = actual/allowed           │
-                      │                                      │
-                      │  triggered = shortBurn ≥ 14.4    AND   │
-                      │             longBurn  ≥ 14.4    (PAGE) │
-                      │          OR                          │
-                      │             shortBurn ≥ 6.0     AND   │
-                      │             longBurn  ≥ 6.0    (TICKET)│
-                      │                                      │
-                      │  Result: 9.09x ≥ 6.0 → TICKET (✓)     │
-                      │          9.09x < 14.4 → PAGE (✗)      │
-                      └──────────────────────────────────────┘
+                       ┌─────────────────┴────────────────────┐
+                       │  Alert Engine  (internal/alerting/)   │
+                       │                                      │
+                       │  shortBurn = actual/allowed           │
+                       │  longBurn  = actual/allowed           │
+                       │                                      │
+                       │  triggered = shortBurn ≥ 14.4    AND   │
+                       │             longBurn  ≥ 14.4    (PAGE) │
+                       │          OR                          │
+                       │             shortBurn ≥ 6.0     AND   │
+                       │             longBurn  ≥ 6.0    (TICKET)│
+                       │                                      │
+                       │  Result: 9.09x ≥ 6.0 → TICKET (✓)     │
+                       │          9.09x < 14.4 → PAGE (✗)      │
+                       │                                      │
+                       │  ⚠ PERINGATAN: BurnRateRule.         │
+                       │  LongWindow/ShortWindow/             │
+                       │  BudgetConsumedPct TIDAK DIBACA      │
+                       │  oleh Check() — semua rule pakai     │
+                       │  tracker global                      │
+                       └──────────────────────────────────────┘
 ```
 
 ---

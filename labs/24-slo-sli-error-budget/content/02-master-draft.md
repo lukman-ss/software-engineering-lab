@@ -1,10 +1,10 @@
 # SLI, SLO, Error Budget & Burn Rate Alerting
 
-## Problem
+## Masalah
 
 Tim reliability sering mengukur keandalan dengan metrik infrastructure seperti CPU, memory, atau queue depth. Metrik ini tidak mencerminkan pengalaman pengguna. Konklusi: server "sehat" tetapi pengguna mengalami error. Solusi: gunakan SLI (Service Level Indicator) yang mengukur langsung pengalaman pengguna, bukan internal state sistem.
 
-## Why This Matters
+## Mengapa Ini Penting
 
 Mengukur dengan metrik yang salah menyebabkan dua masalah utama:
 
@@ -13,7 +13,7 @@ Mengukur dengan metrik yang salah menyebabkan dua masalah utama:
 
 SLI/SLO/Error Budget mengubah "harus stabil" menjadi angka yang dapat diputuskan. Error budget berfungsi sebagai "uang" untuk mengalokasikan risiko: semakin besar budget yang tersisa, semakin banyak ruang untuk inovasi.
 
-## Mental Model
+## Model Mental
 
 Keandalan bukanlah 100%. Lebar dari target keandalan adalah **error budget**.
 
@@ -26,7 +26,7 @@ Budget Consumed: 2 errors > budget
 
 Setiap request yang gagal atau melanggar latency threshold mengonsumsi budget. Latency threshold ditentukan oleh caller via closure `isGood`, bukan dibaca `Evaluator`. Ketika budget habis, kebijakan mengatakan: **STOP deployment berisiko**, fokus pada perbaikan.
 
-## Core Concept
+## Konsep Inti
 
 ### 1. SLI (Service Level Indicator)
 
@@ -65,18 +65,18 @@ Total Error Budget = (1 - 0.999) × 1000 = 1 error
 
 Jika terjadi 2 error, budget habis (–1). Kebijakan `CanDeploy = false`.
 
-## Failure Scenario
+## Skenario Kegagalan *(Hipotetik)*
 
 1. Traffic normal: 1000 request, 0 error → SLI 100%, budget remaining 1.00
-2. Regresi baru: latency naik 500ms, error rate 5%
-3. Dalam 1 jam: 100 request, 5 error → SLI 95%, budget habis
+2. Regresi baru: latency naik 500ms, error rate 10%
+3. Dalam 1 jam: 100 request, 10 error → SLI 90%, budget habis
 4. Sistem mendorong alert: "Budget habis, SEMUA perubahan harus dihentikan"
 
 Tanpa error budget, tim tidak sadar sampai **dwell time incident** sudah parah — tidak ada metrik yang memaksa perhatian pada budget consumption rate.
 
-## How It Works
+## Cara Kerja
 
-### Architecture
+### Arsitektur
 
 ```
 Event → WindowTracker → (total, good, bad) → Evaluator → SLI, Budget
@@ -90,7 +90,7 @@ Komponen utama:
 - **Evaluator** (internal/slo/evaluator.go): Menghitung SLI, error budget, dan kebijakan deploy. Catatan: field `LatencyThreshold` di `Config` tidak dibaca oleh evaluator; penilaian latency dilakukan di closure `isGood` milik caller.
 - **AlertEngine** (internal/alerting/engine.go): Multi-window burn rate check pada short (5m) dan long (60m) windows.
 
-### Error Budget Calculation
+### Perhitungan Error Budget
 
 ```go
 totalErrorBudget := (1.0 - e.config.TargetUptime) * float64(total)
@@ -116,7 +116,7 @@ burnRate := actualErrorRate / allowedErrorRate      // 2% / 0.1% = 20x
 
 Burn rate 20x artinya Anda mengonsumsi 20× lebih cepat dari yang diizinkan. Pada demo Fase 2, akumulasi 10 error / 1100 total = 0.91% → 9.09x (melewati threshold 6.0x).
 
-### Multi-Window Alerting
+### Alerting Multi-Jendela
 
 Agar tidak memicu alert pada spike singkat:
 
@@ -137,7 +137,7 @@ Catatan divergensi: rekomendasi Google SRE (Finding 9) mengklasifikasikan 6.0×/
 
 Catatan: field `LongWindow`, `ShortWindow`, `BudgetConsumedPct` di `BurnRateRule` diabaikan oleh `engine.Check()` — semua rule berbagi `shortTracker` dan `longTracker` konstruksi-time.
 
-## Implementation
+## Implementasi
 
 ### WindowTracker
 
@@ -180,9 +180,9 @@ func (e *Evaluator) Evaluate(now time.Time) Status {
 
 Catatan: SLIs selalu dalam range 0–1 (0%–100%).
 
-## Code Walkthrough
+## Tur Kode
 
-### Event Recording
+### Pencatatan Event
 
 ```go
 ev := metrics.Event{
@@ -202,7 +202,7 @@ fmt.Printf("Target SLO: %.3f%% | SLI: %.4f%% | Budget: %.2f\n",
     status.TargetSLO*100, status.CurrentSLI*100, status.BudgetRemaining)
 ```
 
-### Burn Rate Alert
+### Alert Burn Rate
 
 ```go
 alerts := alertEngine.Check(evalTime)
@@ -212,18 +212,18 @@ for _, a := range alerts {
 }
 ```
 
-## What the Tests Prove
+## Yang Dibuktikan oleh Tes
 
-### Unit Tests
+### Tes Unit
 
-| Test | Verifikasi |
+| Tes | Verifikasi |
 |------|------------|
-| TestMetricsWindowTracker | Aggregation benar (12 total, 10 good, 2 bad) |
+| TestMetricsWindowTracker | Agregasi benar (12 total, 10 good, 2 bad) |
 | TestOutOfOrderTimestamps | Bucket ordering dan eviction benar |
 | TestEvaluatorZeroTraffic | SLI = 1.0 pada traffic nol, CanDeploy = true |
 | TestSLOEvaluator | CanDeploy = false ketika budget habis |
 
-### Concurrency Test
+### Tes Konkurensi
 
 `TestConcurrencyMetrics` mengeksekusi 20 goroutine × 100 request bersamaan. Semua request tercatat dengan benar:
 
@@ -233,7 +233,7 @@ expectedTotal := int64(numGoroutines * requestsPerGoroutine) // 2000
 
 Race detector tidak mengembalikan error.
 
-### Alert Engine Test
+### Tes Alert Engine
 
 `TestAlertEngineBurnRate` memverifikasi:
 
@@ -242,7 +242,7 @@ Race detector tidak mengembalikan error.
 
 Ini membuktikan bahwa **multi-window check** mengurangi false positive pada spike transien.
 
-## Recovery / Rollback (Hypothetical Procedure — NOT demonstrated in demo)
+## Recovery / Rollback (Prosedur Hipotetis — TIDAK ditunjukkan di demo)
 
 Ketika `CanDeploy = false` (budget habis):
 
@@ -253,14 +253,14 @@ Ketika `CanDeploy = false` (budget habis):
 
 Catatan: Demo hanya menampilkan fase 1-4 (baseline → incident → alert → comparison). Tidak ada simulasi recovery yang benar-benar dijalankan.
 
-## Production Considerations
+## Pertimbangan Produksi
 
-- **Window Size**: Lab gunakan 30 menit *kompresi waktu* (mewakili 30 hari dalam simulasi); Google rekomendasi 28 hari (4 minggu) untuk konsistensi weekend.
-- **Persistency**: Semua metrics in-memory. Untuk produksi, dump ke TSDB (Prometheus, Datadog) setiap interval singkat.
-- **Status Corrections**: Google SRE Workbook membahas "status corrections" untuk mengecualikan jendela pemeliharaan.
+- **Ukuran window**: Lab gunakan 30 menit *kompresi waktu* (mewakili 30 hari dalam simulasi); Google rekomendasi 28 hari (4 minggu) untuk konsistensi weekend.
+- **Persistensi**: Semua metrics in-memory. Untuk produksi, dump ke TSDB (Prometheus, Datadog) setiap interval singkat.
+- **Koreksi status**: Google SRE Workbook membahas "status corrections" untuk mengecualikan jendela pemeliharaan.
 - **Multi-endpoint**: Setiap endpoint dapat punya SLO berbeda. Di demo, Payment 99.9% vs Reports 95.0%.
 
-## Common Mistakes
+## Kesalahan Umum
 
 1. **Menggunakan 100% sebagai SLO**: Tidak realistis karena error device/jaringan tidak terkontrol.
 2. **Mengukur latency rata-rata**: Mean menyembunyikan tail latency. Gunakan percentile.
@@ -268,9 +268,9 @@ Catatan: Demo hanya menampilkan fase 1-4 (baseline → incident → alert → co
 4. **SLO untuk infrastructure metrics**: CPU/RAM adalah diagnostic signal, bukan user experience.
 5. **Tidak ada kebijakan setelah budget habis**: Error budget tanpa kebijakan = sekadar dashboard.
 
-## Case Study
+## Studi Kasus
 
-### Demo Output (Ringkasan)
+### Output Demo (Ringkasan)
 
 **PHASE 1 — Baseline Traffic**
 ```
@@ -286,7 +286,7 @@ SLI: 99.09% | Budget Remaining: -8.90
 CanDeploy: false (Budget exhausted)
 ```
 
-Perhitungan: SLO 99.9% → allowed error rate 0.1%. 10/1100 = 0.91% error rate → membutuhkan 9.1× burn rate.
+Perhitungan: SLO 99.9% → allowed error rate 0.1%. 10/1100 = 0.91% error rate → burn rate 9.09x.
 
 **PHASE 3 — Burn Rate Alert**
 ```
@@ -301,31 +301,31 @@ Reports Target SLO: 95.0% | SLI: 90.00% | Budget: -5.00
 CanDeploy: Both false
 ```
 
-Meskipun kedua endpoint melewati SLO, **Reports memiliki buffer 5%** yang jauh lebih lebar daripada Payment (0.1%).
+Meskipun pada demo kedua endpoint melewati SLO (budget habis), **Reports memiliki buffer 5%** yang jauh lebih lebar daripada Payment (0.1%). Ilustrasi: dengan error rate 2%, Payment (99.9%, allowed error 0.1%) tetap melewati budget (CanDeploy = false), tetapi Reports (95%, allowed error 5%) tetap di bawah ambang — CanDeploy = true. Ini memperlihatkan kritisitas endpoint memengaruhi keputusan deploy.
 
-## Checklist
+## Daftar Periksa
 
 - [ ] Tentukan SLI yang mengukur user experience (good/total ratio)
 - [ ] Pilih SLO realistis (≤ 99.99%, bukan 100%)
 - [ ] Definisikan latency threshold yang relevan
-- [ ] Implementasikan error budget policy (halo deployment, postmortem)
-- [ ] Setup multi-window burn rate alerting
-- [ ] Buat kebijakan per-endpoint based on criticality
+- [ ] Implementasikan error budget policy (halt deployment, postmortem)
+- [ ] Siapkan multi-window burn rate alerting
+- [ ] Buat kebijakan per-endpoint berdasarkan kritisitas bisnis
 
-## Key Takeaways
+## Poin Penting
 
 1. **SLI = good/total events** (ratio 0–100%). Ukur pengalaman, bukan infrastructure.
 2. **SLO < 100%** adalah target yang realistis. Error budget berfungsi sebagai toleransi risiko.
-3. **Error budget = 1 - SLO**. Consumtion happened on bad events.
+3. **Error budget = 1 - SLO**. Konsumsi terjadi pada bad events.
 4. **Burn rate = actual_error_rate / allowed_error_rate**. >1 artinya Anda "berlebihan".
-5. **Multi-window alert** (short + long) mengurangi false positive spike transit.
-6. **CanDeploy policy** memberi keputusan otomatis berdasar budget.
-7. **Konfigurasi SLO per endpoint** based on business criticality (Payment 99.9%, Reports 95%).
+5. **Alert multi-window** (short + long) mengurangi false positive spike transien.
+6. **Kebijakan CanDeploy** memberi keputusan otomatis berdasar budget.
+7. **Konfigurasi SLO per endpoint** berdasarkan kritisitas bisnis (Payment 99.9%, Reports 95%).
 8. **Thread-safety** terjamin dengan mutex sync.RWMutex di WindowTracker.
-9. **Implementasi in-memory** untuk demo; produksi butuh TSDB persistence.
-10. **Source**: Google SRE Book, SRE Workbook, Datadog, Prometheus — semua konsisten pada definisi inti.
+9. **Implementasi in-memory** untuk demo; produksi butuh persistensi TSDB.
+10. **Sumber**: Google SRE Book, SRE Workbook, Datadog, Prometheus — semua konsisten pada definisi inti.
 
-## Sources
+## Sumber
 
 - Google SRE Book Chapter 4: Service Level Objectives
 - Google SRE Book Chapter 3: Embracing Risk  
