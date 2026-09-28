@@ -1,19 +1,19 @@
 # Engineering Audit Plan
 
 Target Lab: labs/32-database-sharding-and-partitioning
-Implementation Files: internal/partitioning/table.go, internal/sharding/sharding.go, internal/idgen/idgen.go, cmd/demo/main.go, tests/sharding_test.go
+Implementation Files: internal/partitioning/table.go, internal/sharding/sharding.go, internal/idgen/idgen.go, cmd/demo/main.go
 Tests: tests/sharding_test.go
 Executable/Demo: cmd/demo/main.go
-Approved Research Inputs: N/A (audit stage skips research)
+Approved Research Inputs: (pipeline override – not audited)
 Main Claims To Verify:
 - Partition pruning works
-- Modulo router causes high data movement on scale-out
-- Consistent hash router minimizes movement
-- Scatter‑gather broadcasts all shards; GSI provides point lookup
-- UUIDv7 is time‑ordered; sequence allocator yields sequential IDs
-- Concurrency safety (race detector)
+- Hotspot vs uniform distribution
+- Resharding data movement percentages
+- Scatter‑gather vs GSI query behavior
+- UUIDv7 ordering & block allocator monotonic IDs
 Commands To Run:
-- go test ./... && go test -race ./...
+- go test -v ./...
+- go test -race ./...
 - go run ./cmd/demo
 Primary Risks:
-- Incorrect migration metrics, race conditions, missing error handling.
+- Concurrency bugs, race conditions, incorrect lock ordering, missing error handling

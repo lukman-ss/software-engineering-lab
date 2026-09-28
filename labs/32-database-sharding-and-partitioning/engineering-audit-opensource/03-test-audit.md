@@ -1,37 +1,60 @@
 # Test Audit
 
-## Finding 1
-Location: tests/sharding_test.go:15 (TestPartitionPruning)
-Coverage: Partition pruning happy path incl. count and drop.
-Assessment: PASS
-Notes: Verifies single partition scanned after range query.
+## Coverage of Claims
 
-## Finding 2
-Location: tests/sharding_test.go:63 (TestRoutingAndConsistentHashRelocation)
-Coverage: Modulo vs consistent hash relocation ratio.
-Assessment: PASS
-Notes: Bounds asserted; consistent hash >5% and <=40%.
+### Partition Pruning
+- Happy path: TestPartitionPruning inserts into Jan/Feb, queries Feb -> 2 records, 1 partition scanned.
+- Edge case: none (no query with no overlap)
+- Negative case: none (no test for timestamp before/after all partitions)
+Assessment: PASS for pruning, missing edge-case coverage.
 
-## Finding 3
-Location: tests/sharding_test.go:121 (TestClusterScatterGatherAndGSI)
-Coverage: Direct lookup, GSI lookup, scatter‑gather, pre‑canceled context.
-Assessment: PASS
-Notes: Covers failure/cancellation path.
+### ModuloRouter Relocation
+- TestRoutingAndConsistentHashRelocation tests 3->4 node scale on 5000 keys.
+- Observed: 3756/5000 keys moved (75.12%) matches expectation (~75%).
+- No test for empty shard list, single shard, or removal scenario.
+Assessment: PASS for baseline, missing edge cases.
 
-## Finding 4
-Location: tests/sharding_test.go:172 (TestIDGenerators)
-Coverage: UUIDv7 format length, time ordering, sequence block allocator sequential IDs.
-Assessment: PASS
-Warnings: Does not cover ExtractTimeFromUUIDv7 (buggy function untested). MISSING_TEST for public idgen API.
+### ConsistentHashRouter Relocation
+- Same test: 800/5000 keys moved (16.00%) logged (actual run).
+- Acceptance: 5-40% range per test -> PASS.
+- No test for vnodeCount = 0, vnodeCount = 1, or removal edge.
+Assessment: PASS for baseline, missing edge cases.
 
-## Finding 5
-Location: tests/sharding_test.go:207 (TestConcurrentClusterAccess)
-Coverage: Concurrent reads/writes across 200 ops.
-Assessment: PASS
-Notes: Race detector passing.
+### Scatter‑gather & GSI
+- TestClusterScatterGatherAndGSI inserts three records, verifies:
+  - direct GetByShardKey works.
+  - GSI lookup works.
+  - scatter-gather by email works.
+  - pre-canceled context yields 0 shard responses.
+Assessment: PASS.
 
-## Finding 6
-Negative/Edge Cases
-No test for empty router GetShard error handling, or modulo with single shard. MISSING_EDGE_CASE.
+### ID Generation
+- TestIDGenerators:
+  - UUIDv7 generation length and ordering (u1 < u2).
+  - SequenceBlockAllocator yields 25 sequential IDs.
+Assessment: PASS.
 
-Overall: Tests cover happy path, transitions, concurrency, negative context. Sequence allocator overflow and ExtractTimeFromUUIDv7 uncovered.
+### Concurrency
+- TestConcurrentClusterAccess: 200 goroutines each insert + GetByShardKey + GetByEmailUsingGSI.
+- Final total matches ops -> PASS.
+- Gaps: no concurrent AddShardNode vs Insert, no concurrent RebalanceData vs Insert, no concurrent RemoveShard.
+Assessment: PASS for exercised paths, missing concurrent-modification edge cases.
+
+### Missing Test Classes
+1. No direct unit tests for ModuloRouter or ConsistentHashRouter alone.
+2. No test for empty shard slice (GetShard returns ErrShardNotFound).
+3. No test for RemoveShard on live router.
+4. No test for RebalanceData (dead code).
+5. No test for Table.Insert with timestamp before/after all ranges.
+6. No test for Table.QueryRange with zero-width window.
+7. No negative test for malformed UUID input (ExtractTimeFromUUIDv7).
+8. No test for context deadline exceeded in scatter-gather (only pre-cancel).
+Assessment: MISSING_TEST and MISSING_EDGE_CASE gaps.
+
+Test Quality
+- Tests use actual implementation, no mocks; they exercise real concurrency and logic.
+- Test logging shows actual numbers, not canned expectations (good).
+- Test names are clear.
+
+## Summary
+Core behaviors (partition pruning, routing relocation, scatter-gather/GSI, ID generation) are unit‑tested and pass. Missing tests for edge cases, error paths, and concurrent modification leave some risk undetected. No test probes the deadlock hazard (Insert vs RebalanceData) or nil‑map panic in RebalanceData.
