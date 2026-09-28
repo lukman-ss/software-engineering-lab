@@ -5,7 +5,6 @@ Implementation Files:
 - `internal/metrics/tracker.go`
 - `internal/slo/evaluator.go`
 - `internal/alerting/engine.go`
-- `cmd/demo/main.go`
 
 Tests:
 - `tests/slo_test.go`
@@ -14,27 +13,25 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- `research/05-report.md`
-- `research-audit/07-verdict.md`
 - `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. Ratio-based SLI calculation (`good / total`) across time-windowed event tracker.
-2. Error budget computation `(1 - SLO) * total` and depletion logic leading to release freeze policy enforcement (`CanDeploy = false`).
-3. Multi-window multi-burn-rate alerting requiring both short and long window burn rates to breach threshold before firing.
-4. Concurrency safety of metrics tracker under parallel reads and writes.
-5. Out-of-order timestamp handling and bucket eviction correctness.
-6. Real demo execution and output match documented execution.
+1. SLI calculation accurately computes `good / total` ratio.
+2. Error budget calculation accurately reflects target SLO uptime allowance (`(1 - target) * total - bad`).
+3. Release freeze policy dynamically blocks deployments (`CanDeploy = false`) when remaining budget <= 0.
+4. Multi-window multi-burn-rate alert engine triggers correctly when short and long burn rate factors exceed thresholds.
+5. Code compiles cleanly and passes Go race detector without data races.
+6. Demo output is authentic and repeatable.
+7. Documentation in README and engineering notes matches the implementation accurately.
 
 Commands To Run:
-- `go test ./...`
-- `go test -race ./...`
-- `go test -v -count=1 ./tests`
+- `go test -count=1 ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Memory leaks or unbounded slice growth in metrics tracker.
-- Race conditions during concurrent `Record` and `Summary` calls.
-- Division by zero on zero traffic or 100% SLO target.
-- False positive alerts on transient spikes if multi-window logic is flawed.
-- Documentation divergence from actual executable output.
+- Mathematical rounding/floating point inaccuracies causing incorrect `CanDeploy` state or burn rate triggers.
+- In-memory sliding window eviction bugs when timestamps arrive out-of-order.
+- Concurrency race conditions in `WindowTracker` during simultaneous writes and summary reads.
+- Discrepancy between README documentation / engineering notes and actual implementation logic.

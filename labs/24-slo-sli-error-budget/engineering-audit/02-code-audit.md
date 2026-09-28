@@ -1,41 +1,46 @@
-# Code Audit
+# Engineering Code Audit
 
-## Finding 1: WindowTracker Out-of-Order Bucket Insertion Mutates Slice In-Place
-Location: `internal/metrics/tracker.go:88`
-Claimed Behavior: Safe out-of-order event recording with correct sliding window bucket ordering.
-Observed Implementation: Slice insertion `append(w.buckets[:i], append([]Bucket{b}, w.buckets[i:]...)...)` creates temporary slice allocations during insert.
+Target Lab: `labs/24-slo-sli-error-budget`
+
+## Finding 1
+
+Location: `internal/metrics/tracker.go:46-104`
+Claimed Behavior: Thread-safe recording of events into time-bucketed sliding windows, supporting in-order and out-of-order event ingestion.
+Observed Implementation: Mutex `w.mu.Lock()` guards all access to `w.buckets`. Events are truncated into bucket intervals and appended or inserted in sorted timestamp order. Stale buckets older than `windowSize` are evicted.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles out-of-order timestamps without panics or index corruption. Mutex protection guarantees thread safety.
+Notes: Concurrency safety verified under `-race`. Sorted slice insertion keeps buckets monotonically ordered.
 
-## Finding 2: Evaluator Division by Zero Guard
-Location: `internal/slo/evaluator.go:44-47`
-Claimed Behavior: Safe evaluation when total events are zero.
-Observed Implementation: Checks `if total > 0` before computing `good / total`, defaulting `sli` to 1.0.
+## Finding 2
+
+Location: `internal/metrics/tracker.go:117-128`
+Claimed Behavior: Thread-safe summary retrieval of total, good, and bad counts across the active sliding window.
+Observed Implementation: Summaries acquire write lock `w.mu.Lock()` because eviction (`evictStaleLocked`) is performed lazily during evaluation. Aggregates total, good, and bad counts cleanly.
 Assessment: PASS
 Severity: LOW
-Notes: Properly guards against float division by zero.
+Notes: Correctly accounts for dynamic time progression.
 
-## Finding 3: AlertEngine Burn Rate Division by Zero & Target SLO Edge Case Guard
-Location: `internal/alerting/engine.go:52-60`
-Claimed Behavior: Calculate burn rate ratio against allowed error rate.
-Observed Implementation: Checks `total == 0` and `allowedErrorRate <= 0` (e.g. 100% SLO target), returning `0.0`.
+## Finding 3
+
+Location: `internal/slo/evaluator.go:41-71`
+Claimed Behavior: Correct computation of SLI ratio, total error budget, remaining budget, and release freeze policy enforcement (`CanDeploy`).
+Observed Implementation:
+- Good/total ratio properly computed with zero-traffic guard (`sli = 1.0` if `total == 0`).
+- Total error budget is `(1.0 - TargetUptime) * total`.
+- Budget consumed is `float64(bad)`.
+- `budgetRemaining` is `totalErrorBudget - budgetConsumed`.
+- `canDeploy` is evaluated as `true` unless `total > 0 && budgetRemaining <= 0`.
 Assessment: PASS
 Severity: LOW
-Notes: Prevents division by zero errors cleanly.
+Notes: Rounding applied via `math.Round` for predictable precision without altering boolean decision correctness.
 
-## Finding 4: Concurrency Synchronization in WindowTracker
-Location: `internal/metrics/tracker.go:47,118`
-Claimed Behavior: Thread-safe metric recording and summary extraction.
-Observed Implementation: `w.mu.Lock()` and `defer w.mu.Unlock()` used consistently across all mutating and read methods (`Record`, `Summary`).
+## Finding 4
+
+Location: `internal/alerting/engine.go:51-88`
+Claimed Behavior: Multi-window multi-burn-rate alerting requiring both short and long window burn rates to breach the threshold before triggering.
+Observed Implementation:
+- `CalculateBurnRate(total, bad)` handles division by zero and zero allowed error rate safely.
+- `Check(now)` samples both `shortTracker` and `longTracker`. Both short and long burn rates must meet or exceed `BurnRateFactor` (`shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`).
 Assessment: PASS
 Severity: LOW
-Notes: Verified thread-safe under Go race detector.
-
-## Finding 5: Memory Growth & Stale Bucket Eviction
-Location: `internal/metrics/tracker.go:106-115`
-Claimed Behavior: Sliding window evicts stale buckets outside `now - windowSize`.
-Observed Implementation: `evictStaleLocked` slices off stale elements `w.buckets = w.buckets[idx:]`. Slice underlying array GC cleanup is deferred until resliced, but bounded by window size.
-Assessment: PASS
-Severity: LOW
-Notes: Efficient in-memory sliding window implementation.
+Notes: Implements Google SRE Multi-Window Multi-Burn-Rate alerting logic faithfully.
