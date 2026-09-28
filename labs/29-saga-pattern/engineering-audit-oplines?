@@ -1,0 +1,8 @@
+## Finding 5
+
+Location: cmd/demo/main.go:65-73
+Claimed: Demo shows happy path and rollback
+Observed: Prints scenario results matching test outcomes
+Assessment: PASS
+Severity: LOW
+Notes: Output aligns with test expectations
