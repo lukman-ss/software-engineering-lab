@@ -1,59 +1,46 @@
-# Code Audit
+# Code Audit Findings
 
-Target Lab: `labs/31-oauth2-and-oidc`
+## Finding 1
 
-## Finding 1: Standard Library Zero-Dependency Implementation
-
-Location: `go.mod`, `pkg/pkce/pkce.go`, `pkg/oidc/oidc.go`, `pkg/server/server.go`, `pkg/client/client.go`
-Claimed Behavior: Pure Go standard library implementation without third-party external dependencies.
-Observed Implementation: `go.mod` specifies `module labs/31-oauth2-and-oidc` with Go 1.22.0 and no external `require` directives. Imports use standard packages (`crypto/hmac`, `crypto/sha256`, `crypto/rand`, `encoding/base64`, `encoding/json`, `sync`, `time`, `errors`, `fmt`).
+Location: `pkg/pkce/pkce.go:23-72`
+Claimed Behavior: RFC 7636 PKCE code verifier and challenge generation and verification with S256 (mandatory length check 43-128 chars) and plain support.
+Observed Implementation: Verifier generation uses `crypto/rand` 32 bytes (43 base64url characters). `ComputeChallenge` checks verifier length `[43, 128]` and produces Base64URL-encoded SHA-256 digest for `S256` or identity for `plain`. `Verify` validates against challenge.
 Assessment: PASS
 Severity: LOW
-Notes: Clean, minimal, zero-dependency design.
+Notes: Compliant with RFC 7636 and RFC 9700.
 
-## Finding 2: PKCE Challenge Generation & Verification (RFC 7636)
+## Finding 2
 
-Location: `pkg/pkce/pkce.go`
-Claimed Behavior: Generates base64url-encoded code verifiers and S256 code challenges; rejects mismatched verifiers and invalid methods.
-Observed Implementation:
-- `GeneratePKCEPair` validates method (`S256` or `plain`), reads 32 random bytes, encodes with `base64.RawURLEncoding` (yielding 43 chars), and computes challenge.
-- `ComputeChallenge` checks verifier length (43..128) and calculates standard SHA-256 raw URL base64 digest for `S256`.
-- `Verify` re-computes challenge and compares string equality.
+Location: `pkg/oidc/oidc.go:40-116`
+Claimed Behavior: RFC 7519 / OIDC Core 1.0 ID token signing and validation with standard claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`).
+Observed Implementation: HMAC-SHA256 signature calculation and constant-time verification (`hmac.Equal`). Claims parsing validates issuer, audience, expiration time, future skew bounds, and nonce matching.
 Assessment: PASS
 Severity: LOW
-Notes: Correct standard implementation of RFC 7636 PKCE validation.
+Notes: Implementation correctly parses standard compact JWT format (`header.payload.signature`).
 
-## Finding 3: OIDC ID Token JWT Generation and Claim Validation
+## Finding 3
 
-Location: `pkg/oidc/oidc.go`
-Claimed Behavior: Signs ID Tokens using HMAC-SHA256 (HS256) and verifies claims (`iss`, `aud`, `exp`, `nonce`, future `iat`).
-Observed Implementation:
-- `SignIDToken` constructs standard 3-part JWT (`header.claims.signature`) with `base64.RawURLEncoding`.
-- `ParseAndVerifyIDToken` verifies HMAC-SHA256 signature using `hmac.Equal` (constant-time protection), validates `iss` equality, `aud` equality, expiration (`claims.Expiration <= unixNow`), future `iat` check (`unixNow+300`), and optional `nonce` equality.
+Location: `pkg/server/server.go:63-286`
+Claimed Behavior: Authorization code exchange requires PKCE verification, marks codes as used, supports OIDC ID token issuance when `openid` scope requested.
+Observed Implementation: `Authorize` enforces mandatory `code_challenge` and valid method. `ExchangeCode` validates grant expiration, prevents code reuse (`ErrCodeAlreadyUsed`), validates redirect URI and client ID, verifies PKCE challenge, issues access token, generates refresh token with `FamilyID`, and issues signed ID token if scope contains `openid`.
 Assessment: PASS
 Severity: LOW
-Notes: Secure signature comparison using `hmac.Equal` avoids timing attack vectors.
+Notes: Correct synchronization with mutex lock covering entire state mutation.
 
-## Finding 4: Authorization Server State and Concurrency Safety
-
-Location: `pkg/server/server.go`
-Claimed Behavior: State transitions for Auth Codes, Access Tokens, and Refresh Token family lineages are protected by mutex locking.
-Observed Implementation:
-- `AuthorizationServer` uses `s.mu.Lock()` and `defer s.mu.Unlock()` across all exported methods: `RegisterClient`, `Authorize`, `ExchangeCode`, `Refresh`, and `ValidateAccessToken`.
-- `AuthCode` validation marks `ac.Used = true` while under mutex lock.
-- `Refresh` checks `revokedFams`, marks token `Revoked = true`, and updates maps while under mutex lock.
-Assessment: PASS
-Severity: LOW
-Notes: No race conditions found under Go race detector.
-
-## Finding 5: Refresh Token Rotation & Family Revocation (RFC 9700)
+## Finding 4
 
 Location: `pkg/server/server.go:219-286`
-Claimed Behavior: Single-use refresh token rotation issuing new tokens in the same family, with replay detection revoking the entire token family.
-Observed Implementation:
-- When a refresh token is presented, `Refresh` checks if `revokedFams[meta.FamilyID]` is true, returning `ErrTokenReplayDetected`.
-- If `meta.Revoked` is true (indicating replay of a consumed refresh token), `s.revokedFams[meta.FamilyID] = true` is set, blocking all future tokens in that family.
-- On valid refresh, original token is marked `meta.Revoked = true`, and a new refresh token is stored with identical `FamilyID`.
+Claimed Behavior: Refresh Token Rotation with token family tracking (RFC 9700 Section 4.14). Replay of a consumed refresh token revokes entire family.
+Observed Implementation: When a token is refreshed, old token is marked `Revoked = true`. If a revoked token is presented, `revokedFams[meta.FamilyID]` is set to `true` and `ErrTokenReplayDetected` is returned. Subsequent attempts to use active tokens from that family are blocked.
 Assessment: PASS
 Severity: LOW
-Notes: Implementation matches RFC 9700 Section 4.14 specs.
+Notes: Fully implements single-use rotation and family revocation.
+
+## Finding 5
+
+Location: `pkg/server/server.go:288-321`
+Claimed Behavior: Access token validation and scope enforcement.
+Observed Implementation: Validates existence and expiration of access tokens under mutex lock. Helper `containsScope` checks all requested scopes against granted space-delimited scopes.
+Assessment: PASS
+Severity: LOW
+Notes: Scope parsing handles whitespace delimiters accurately.

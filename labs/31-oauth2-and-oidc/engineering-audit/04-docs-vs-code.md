@@ -1,21 +1,15 @@
 # Docs vs Code Audit
 
-Target Lab: `labs/31-oauth2-and-oidc`
-
 ## Comparison Matrix
 
-| Item | Documented Claim | Code / Test Reality | Match Status |
-| --- | --- | --- | --- |
-| Zero-dependency | Pure Go standard library | `go.mod` has 0 third-party dependencies | PASS |
-| PKCE Method | `S256` default, RFC 7636 | Implemented in `pkg/pkce`, tested in `tests/` | PASS |
-| ID Token Verification | HMAC-SHA256 JWT, claims verification (`iss`, `sub`, `aud`, `exp`, `nonce`) | Implemented in `pkg/oidc/oidc.go`, tested in `tests/` | PASS |
-| Refresh Token Rotation | Token family lineage, reuse detection revokes entire family | Implemented in `pkg/server/server.go:220-286`, tested in `tests/` | PASS |
-| Commands in README | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | All 3 commands execute without error | PASS |
-| Demo Output | Shows step 1 through step 8 walkthrough | Real terminal execution matches demo logs exactly | PASS |
+| Component / Claim | README Description | Code Implementation | Test Verification | Demo Execution | Status |
+|---|---|---|---|---|---|
+| OAuth 2.0 Access Token | Delegated authorization grant with scope checks | `pkg/server` (`ValidateAccessToken`) | `TestOAuth2_NegativePaths` | Step 5 in `cmd/demo` | MATCH |
+| OIDC ID Token | HMAC-SHA256 JWT with `iss`, `sub`, `aud`, `exp`, `nonce` | `pkg/oidc` (`SignIDToken`, `ParseAndVerifyIDToken`) | `TestOIDC_IDToken_*` | Step 4 in `cmd/demo` | MATCH |
+| PKCE Defense | RFC 7636 / RFC 9700 `S256` and `plain` methods | `pkg/pkce` (`ComputeChallenge`, `Verify`) | `TestPKCE_*`, `TestOAuth2_FullFlowAndPKCEInterception` | Step 1, 6 in `cmd/demo` | MATCH |
+| Refresh Token Rotation | RFC 9700 Sec 4.14 family tracking & reuse revocation | `pkg/server` (`Refresh`) | `TestOAuth2_RefreshTokenRotation_AndReplayDetection` | Step 7, 8 in `cmd/demo` | MATCH |
+| Running Commands | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | Valid go module and package layout | Passes identically as described | Runs cleanly with exact step outputs | MATCH |
 
-## Identified Mismatches
+## Discrepancies Found
 
-None.
-- No `DOC_CODE_MISMATCH`
-- No `TEST_CLAIM_MISMATCH`
-- No `RESEARCH_IMPLEMENTATION_MISMATCH`
+None. The documentation accurately reflects all implemented capabilities, parameter names, and verification workflows.

@@ -1,43 +1,33 @@
 # Engineering Audit Plan
 
-Target Lab: `labs/31-oauth2-and-oidc`
+Target Lab: labs/31-oauth2-and-oidc
 Implementation Files:
-- `pkg/pkce/pkce.go`
-- `pkg/oidc/oidc.go`
-- `pkg/server/server.go`
-- `pkg/client/client.go`
-- `go.mod`
+- pkg/pkce/pkce.go
+- pkg/oidc/oidc.go
+- pkg/server/server.go
+- pkg/client/client.go
 Tests:
-- `tests/oauth_test.go`
+- tests/oauth_test.go
 Executable/Demo:
-- `cmd/demo/main.go`
+- cmd/demo/main.go
 Approved Research Inputs:
-- `research/05-report.md`
-- `research-audit/07-verdict.md`
-- `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
-- `engineering/03-execution-result.md`
-- `README.md`
-
+- RFC 6749 (OAuth 2.0)
+- RFC 7636 (PKCE)
+- RFC 9700 (OAuth 2.0 Security Best Current Practice - Section 4.14 Refresh Token Rotation)
+- OpenID Connect Core 1.0 (ID Token claims and validation)
 Main Claims To Verify:
-1. Pure Go standard library implementation without external third-party dependencies.
-2. Authorization Code Grant flow with mandatory PKCE (RFC 7636 / RFC 9700) using `S256` method, successfully protecting against code interception.
-3. Separation of OAuth 2.0 (Access Token for authorization/resource access) and OIDC (ID Token JWT for authentication identity).
-4. OIDC ID Token signing and claims validation (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`) per OIDC Core 1.0 Section 3.1.3.7.
-5. Refresh Token Rotation with token family tracking and automatic family revocation on replay detection (RFC 9700 Section 4.14).
-6. Race safety under concurrent client requests and refresh operations.
-7. README, engineering docs, and demo output match actual code and test execution.
-
+1. PKCE (S256 and plain methods) protects against code interception attacks.
+2. OIDC ID Tokens are valid HMAC-SHA256 signed JWTs with correct claim verification (`iss`, `sub`, `aud`, `exp`, `nonce`).
+3. Authorization Server enforces single-use auth codes and PKCE verification.
+4. Refresh Token Rotation (RFC 9700) assigns family IDs, detects reuse of revoked refresh tokens, and invalidates the entire token family.
+5. Concurrency safety across authorization, code exchange, access token validation, and token refresh.
 Commands To Run:
-```bash
-go test ./...
-go test -v ./...
-go test -race ./...
-go run ./cmd/demo
-```
-
+- `go test -v ./...`
+- `go test -race ./...`
+- `go test -count=1 ./...`
+- `go test -race -count=1 ./...`
+- `go run ./cmd/demo`
 Primary Risks:
-- Thread safety and state mutation leaks in concurrent authorization / token issuance / token refresh.
-- Insufficient cryptographic or claims verification checks in OIDC parser (e.g. signature bypass, missing audience/issuer check, expired tokens).
-- PKCE challenge generation or verification mismatches (e.g., base64 encoding errors, padding discrepancies).
-- Discrepancies between documented behaviors in README/engineering notes and actual codebase implementation.
+- Race conditions during concurrent token exchanges or refresh token rotation.
+- Missing validations on ID token claims or PKCE parameters.
+- Mismatch between README documentation/claims and actual Go implementation.
