@@ -1,51 +1,45 @@
 # Test Audit
 
+## Test Suite Execution
+
+Commands:
+```bash
+go test -v ./...
+go test -count=1 -race -v ./...
+```
+
+Output:
+```text
+=== RUN   TestNotNullConstraints
+--- PASS: TestNotNullConstraints (0.00s)
+=== RUN   TestCheckConstraints
+--- PASS: TestCheckConstraints (0.00s)
+=== RUN   TestUniqueConstraint
+--- PASS: TestUniqueConstraint (0.00s)
+=== RUN   TestForeignKeyConstraint
+--- PASS: TestForeignKeyConstraint (0.00s)
+=== RUN   TestPartialUniqueIndex
+--- PASS: TestPartialUniqueIndex (0.00s)
+=== RUN   TestConcurrentRegistration_Safe_EnforcesUniqueness
+--- PASS: TestConcurrentRegistration_Safe_EnforcesUniqueness (0.00s)
+=== RUN   TestConcurrentRegistration_Unsafe_SuffersRaceCondition
+--- PASS: TestConcurrentRegistration_Unsafe_SuffersRaceCondition (0.00s)
+=== RUN   TestErrorClassification
+--- PASS: TestErrorClassification (0.00s)
+PASS
+ok  	github.com/lukman/software-engineering-lab/labs/27-database-constraints/internal/store	1.088s
+```
+
 ## Coverage Analysis
 
-1. **NOT NULL Constraints (`TestNotNullConstraints`)**
-   - Asserts missing Email on user registration returns non-nil error.
-   - Asserts missing Username on user registration returns non-nil error.
-   - Asserts missing UserID on order creation returns non-nil error.
-   - Status: PASS.
+1. **Happy Path**: Tested (valid user registration, valid order creation, partial index re-registration after soft delete).
+2. **Failure Path**: Tested (empty fields for NOT NULL, out-of-range age and invalid status for CHECK, missing parent row for FOREIGN KEY, duplicate email for UNIQUE).
+3. **Edge Cases**: Tested (soft-deleted row permitting reuse of email, while active duplicate email is rejected).
+4. **Concurrency**: Tested (50 concurrent goroutines against `SafeStore` with 1 winner and 49 rejections; same concurrency against `UnsafeStore` demonstrating multi-write race anomaly).
+5. **Race Detector**: Ran with `-race` flag, 0 data races detected.
 
-2. **CHECK Constraints (`TestCheckConstraints`)**
-   - Asserts `age < 18` is rejected.
-   - Asserts invalid status string is rejected.
-   - Asserts `total_cents <= 0` order is rejected.
-   - Status: PASS.
+## Assessment
 
-3. **UNIQUE Constraints (`TestUniqueConstraint`)**
-   - Asserts duplicate email registration fails on second attempt.
-   - Status: PASS.
-
-4. **FOREIGN KEY Constraints (`TestForeignKeyConstraint`)**
-   - Asserts order creation for non-existent `UserID=99999` fails.
-   - Asserts valid `UserID` succeeds.
-   - Status: PASS.
-
-5. **Partial Unique Index (`TestPartialUniqueIndex`)**
-   - Asserts duplicate active email fails.
-   - Asserts soft-deleting initial user allows subsequent active user with same email.
-   - Asserts duplicate second active user fails.
-   - Asserts inserting soft-deleted user directly bypasses active partial index constraint.
-   - Status: PASS.
-
-6. **Concurrency Race Safety (`TestConcurrentRegistration_Safe_EnforcesUniqueness`)**
-   - Launches 20 concurrent goroutines trying to insert identical email via `SafeStore`.
-   - Asserts exactly 1 registration succeeds and 19 fail.
-   - Asserts database count is exactly 1.
-   - Status: PASS.
-
-7. **Concurrency Race Vulnerability (`TestConcurrentRegistration_Unsafe_SuffersRaceCondition`)**
-   - Launches 20 concurrent goroutines trying to insert identical email via `UnsafeStore`.
-   - Asserts race condition causes `count > 1` duplicate insertions.
-   - Status: PASS.
-
-8. **Error Classification (`TestErrorClassification`)**
-   - Validates SQLSTATE code mappings for `23502`, `23503`, `23505`, and `23514`.
-   - Status: PASS.
-
-## Execution Output
-
-`go test -v ./...`: PASS (8 tests executed, 0 failures)
-`go test -count=1 -race ./...`: PASS (0 data races detected)
+Assessment: PASS
+Severity: LOW
+Notes: Test suite is robust, reproducible, and verifies all claimed integrity guarantees.
