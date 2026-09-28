@@ -1,12 +1,11 @@
-# Code Audit
+# Code Audit: Bloom Filters Research
 
-## Status
-NOT APPLICABLE (PIPELINE OVERRIDE)
+**PIPELINE OVERRIDE ACTIVE**
 
-## Summary
-Per the audit instructions and pipeline override:
-- "Audit research only."
-- "Do not audit implementation/code in this stage."
-- "Do not modify research files."
+This audit is scoped to research-only.
 
-No implementation, source files, or tests exist or were executed for `labs/39-bloom-filters` at this research verification stage.
+Per the pipeline override directive, code audit is not applicable at this stage.
+
+No implementation files, runnable code, or tests exist in `labs/39-bloom-filters` at this stage of the pipeline.
+
+No code audit was performed.
