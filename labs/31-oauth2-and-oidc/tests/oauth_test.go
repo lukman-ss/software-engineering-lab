@@ -216,6 +216,101 @@ func TestOAuth2_RefreshTokenRotation_AndReplayDetection(t *testing.T) {
 	}
 }
 
+func TestPKCE_Plain_Method(t *testing.T) {
+	pair, err := pkce.GeneratePKCEPair("plain")
+	if err != nil {
+		t.Fatalf("GeneratePKCEPair plain failed: %v", err)
+	}
+	if pair.CodeChallenge != pair.CodeVerifier {
+		t.Fatalf("plain challenge must equal verifier")
+	}
+	if err := pkce.Verify(pair.CodeVerifier, pair.CodeChallenge, "plain"); err != nil {
+		t.Fatalf("Verify failed for plain method: %v", err)
+	}
+}
+
+func TestOIDC_MalformedJWT(t *testing.T) {
+	secret := []byte("test-signing-key-123456789012")
+	if _, err := oidc.ParseAndVerifyIDToken("invalid.jwt", secret, "iss", "aud", "", time.Now()); err == nil {
+		t.Errorf("expected malformed jwt error for 2-part string")
+	}
+	if _, err := oidc.ParseAndVerifyIDToken("bad!header.bad!payload.bad!sig", secret, "iss", "aud", "", time.Now()); err == nil {
+		t.Errorf("expected malformed jwt error for non-base64 input")
+	}
+}
+
+func TestOAuth2_NegativePaths(t *testing.T) {
+	key := []byte("secret-key-12345678901234567890")
+	as := server.NewAuthorizationServer("https://auth.example.com", key)
+	as.RegisterClient("client_1", "https://app.com/cb")
+
+	// 1. Authorize with bad client
+	if _, err := as.Authorize("bad_client", "https://app.com/cb", "openid", "sub1", "ch", "S256", "n"); err == nil {
+		t.Errorf("expected error for unregistered client")
+	}
+
+	// 2. Authorize with bad redirect uri
+	if _, err := as.Authorize("client_1", "https://evil.com/cb", "openid", "sub1", "ch", "S256", "n"); err == nil {
+		t.Errorf("expected error for wrong redirect uri")
+	}
+
+	// 3. Authorize with empty challenge
+	if _, err := as.Authorize("client_1", "https://app.com/cb", "openid", "sub1", "", "S256", "n"); err == nil {
+		t.Errorf("expected error for empty challenge")
+	}
+
+	// 4. Authorize with invalid challenge method
+	if _, err := as.Authorize("client_1", "https://app.com/cb", "openid", "sub1", "ch", "INVALID_METHOD", "n"); err == nil {
+		t.Errorf("expected error for invalid challenge method")
+	}
+
+	// Valid authorize
+	cli := client.NewClient("client_1", "https://app.com/cb", as, key)
+	ch, _ := cli.BuildAuthorizationRequest("openid profile read:data")
+	ac, err := as.Authorize("client_1", "https://app.com/cb", "openid profile read:data", "user1", ch, "S256", cli.Nonce)
+	if err != nil {
+		t.Fatalf("Authorize failed: %v", err)
+	}
+
+	// 5. Exchange with invalid code
+	if _, err := as.ExchangeCode("non_existent_code", "client_1", "https://app.com/cb", cli.Verifier); err == nil {
+		t.Errorf("expected error for non-existent code")
+	}
+
+	// 6. Exchange with mismatched clientID / redirectURI
+	if _, err := as.ExchangeCode(ac.Code, "wrong_client", "https://app.com/cb", cli.Verifier); err == nil {
+		t.Errorf("expected error for mismatched client ID")
+	}
+	if _, err := as.ExchangeCode(ac.Code, "client_1", "https://wrong.com/cb", cli.Verifier); err == nil {
+		t.Errorf("expected error for mismatched redirect URI")
+	}
+
+	// Legitimate exchange
+	resp, err := cli.Exchange(ac.Code)
+	if err != nil {
+		t.Fatalf("Exchange failed: %v", err)
+	}
+
+	// 7. Validate access token scopes
+	if _, err := as.ValidateAccessToken(resp.AccessToken, "read:data"); err != nil {
+		t.Errorf("expected scope read:data to pass: %v", err)
+	}
+	if _, err := as.ValidateAccessToken(resp.AccessToken, "write:admin"); err == nil {
+		t.Errorf("expected scope check to fail for ungranted write:admin")
+	}
+	if _, err := as.ValidateAccessToken("invalid_token", "read:data"); err == nil {
+		t.Errorf("expected error for nonexistent token")
+	}
+
+	// 8. Refresh negative cases
+	if _, err := as.Refresh("non_existent_rt", "client_1"); err == nil {
+		t.Errorf("expected error for non-existent refresh token")
+	}
+	if _, err := as.Refresh(resp.RefreshToken, "wrong_client"); err == nil {
+		t.Errorf("expected error for refresh with wrong client ID")
+	}
+}
+
 func TestOAuth2_ConcurrencyAndRace(t *testing.T) {
 	key := []byte("secret-key-12345678901234567890")
 	as := server.NewAuthorizationServer("https://auth.example.com", key)

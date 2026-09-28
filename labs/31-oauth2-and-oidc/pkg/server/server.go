@@ -54,14 +54,19 @@ type TokenResponse struct {
 	Scope        string `json:"scope"`
 }
 
+type AccessTokenMeta struct {
+	Subject   string
+	Scope     string
+	ExpiresAt time.Time
+}
+
 type AuthorizationServer struct {
 	mu           sync.Mutex
 	Issuer       string
 	SigningKey   []byte
 	Clients      map[string]string // clientID -> redirectURI
 	authCodes    map[string]*AuthCode
-	tokens       map[string]string            // accessToken -> subject
-	tokenScopes  map[string]string            // accessToken -> scope
+	tokens       map[string]*AccessTokenMeta  // accessToken -> meta
 	refreshMeta  map[string]*RefreshTokenMeta // tokenString -> meta
 	revokedFams  map[string]bool              // familyID -> true
 }
@@ -72,8 +77,7 @@ func NewAuthorizationServer(issuer string, signingKey []byte) *AuthorizationServ
 		SigningKey:  signingKey,
 		Clients:     make(map[string]string),
 		authCodes:   make(map[string]*AuthCode),
-		tokens:      make(map[string]string),
-		tokenScopes: make(map[string]string),
+		tokens:      make(map[string]*AccessTokenMeta),
 		refreshMeta: make(map[string]*RefreshTokenMeta),
 		revokedFams: make(map[string]bool),
 	}
@@ -150,18 +154,27 @@ func (s *AuthorizationServer) ExchangeCode(code, clientID, redirectURI, codeVeri
 
 	// Issue Access Token
 	atBytes := make([]byte, 24)
-	rand.Read(atBytes)
+	if _, err := rand.Read(atBytes); err != nil {
+		return nil, err
+	}
 	accessToken := "at_" + hex.EncodeToString(atBytes)
-	s.tokens[accessToken] = ac.Subject
-	s.tokenScopes[accessToken] = ac.Scope
+	s.tokens[accessToken] = &AccessTokenMeta{
+		Subject:   ac.Subject,
+		Scope:     ac.Scope,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
 
 	// Issue Refresh Token with lineage / family tracking
 	familyBytes := make([]byte, 8)
-	rand.Read(familyBytes)
+	if _, err := rand.Read(familyBytes); err != nil {
+		return nil, err
+	}
 	familyID := "fam_" + hex.EncodeToString(familyBytes)
 
 	rtBytes := make([]byte, 24)
-	rand.Read(rtBytes)
+	if _, err := rand.Read(rtBytes); err != nil {
+		return nil, err
+	}
 	refreshToken := "rt_" + hex.EncodeToString(rtBytes)
 
 	s.refreshMeta[refreshToken] = &RefreshTokenMeta{
@@ -237,7 +250,9 @@ func (s *AuthorizationServer) Refresh(refreshToken, clientID string) (*TokenResp
 
 	// Issue new rotated refresh token in the same family
 	newRtBytes := make([]byte, 24)
-	rand.Read(newRtBytes)
+	if _, err := rand.Read(newRtBytes); err != nil {
+		return nil, err
+	}
 	newRefreshToken := "rt_" + hex.EncodeToString(newRtBytes)
 
 	s.refreshMeta[newRefreshToken] = &RefreshTokenMeta{
@@ -251,10 +266,15 @@ func (s *AuthorizationServer) Refresh(refreshToken, clientID string) (*TokenResp
 
 	// Issue new access token
 	atBytes := make([]byte, 24)
-	rand.Read(atBytes)
+	if _, err := rand.Read(atBytes); err != nil {
+		return nil, err
+	}
 	newAccessToken := "at_" + hex.EncodeToString(atBytes)
-	s.tokens[newAccessToken] = meta.Subject
-	s.tokenScopes[newAccessToken] = meta.Scope
+	s.tokens[newAccessToken] = &AccessTokenMeta{
+		Subject:   meta.Subject,
+		Scope:     meta.Scope,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
 
 	return &TokenResponse{
 		AccessToken:  newAccessToken,
@@ -269,12 +289,35 @@ func (s *AuthorizationServer) ValidateAccessToken(accessToken, requiredScope str
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sub, exists := s.tokens[accessToken]
+	meta, exists := s.tokens[accessToken]
 	if !exists {
 		return "", errors.New("invalid or expired access token")
 	}
 
-	return sub, nil
+	if time.Now().After(meta.ExpiresAt) {
+		return "", errors.New("invalid or expired access token")
+	}
+
+	if requiredScope != "" && !containsScope(meta.Scope, requiredScope) {
+		return "", fmt.Errorf("insufficient scope: required %s, granted %s", requiredScope, meta.Scope)
+	}
+
+	return meta.Subject, nil
+}
+
+func containsScope(grantedScope, requiredScope string) bool {
+	reqs := splitSpaces(requiredScope)
+	grantList := splitSpaces(grantedScope)
+	grantedMap := make(map[string]bool)
+	for _, g := range grantList {
+		grantedMap[g] = true
+	}
+	for _, r := range reqs {
+		if !grantedMap[r] {
+			return false
+		}
+	}
+	return true
 }
 
 func containsOpenID(scope string) bool {

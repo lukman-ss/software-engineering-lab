@@ -41,11 +41,15 @@ func (c *Client) BuildAuthorizationRequest(scope string) (string, error) {
 	c.Verifier = pair.CodeVerifier
 
 	stateBytes := make([]byte, 16)
-	rand.Read(stateBytes)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return "", err
+	}
 	c.State = hex.EncodeToString(stateBytes)
 
 	nonceBytes := make([]byte, 16)
-	rand.Read(nonceBytes)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return "", err
+	}
 	c.Nonce = hex.EncodeToString(nonceBytes)
 
 	return pair.CodeChallenge, nil
