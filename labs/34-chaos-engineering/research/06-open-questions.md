@@ -1,0 +1,3 @@
+- Bagaimana mengotomatiskan eksperimen chaos dalam pipeline CI/CD tanpa mengganggu SLO production?
+- Apa standar metrik kuantitatif terbaik untuk mendeteksi *incipient failure* sebelum *steady state* breach terjadi?
+- Bagaimana memodelkan kegagalan multi-service yang kompleks secara bersamaan (compound failures)?
