@@ -17,11 +17,11 @@ All diagrams derived from the actual implementation of `labs/26-contract-testing
     └─ produces Contract JSON (1 interaction)
        └─ contract.json artifact
 
-[3]           ┌──────────────────────────────┐
-              │   Contract Verifier (CI gate)   │
-              │   verifier.Verify(baseURL, c)   │
-              │   validates: status + body only │
-              └──────────────────────────────┘
+[3]           ┌───────────────────────────────────┐
+              │    Contract Verifier (CI gate)    │
+              │    verifier.Verify(baseURL, c)    │
+              │ validates: status + header + body │
+              └───────────────────────────────────┘
                         │
        ┌────────────────┼──────────────┐
        │                │              │
@@ -151,8 +151,11 @@ TestProviderDual_* ──────┤  ✓           │ Dual server (V1 rout
 
 TestConcurrent_* ────────┤  ✓           │ 20 goroutine verify calls → no race;
                          │              │   go test -race PASS
+TestVerifier_Header_* ───┤  ✓           │ Verifies header mismatch, bad JSON, and status mismatch errors
+
+TestProviderDual_V2_* ───┤  ✓           │ Asserts 200 OK from /v2/orders/ORD-123 direct request
 ```
 
-**Note:** The 6 non-blocking engineering gaps (GAP-01 through GAP-06, engineering-audit-opensource/06-verdict.md) are explicitly out of the verified coverage set.
+**Note:** The non-blocking engineering observations (e.g., array comparison out of scope) are documented in engineering audit reports.
 
-**Verification scope disclaimer:** The current implementation validates HTTP status code and response body fields only. Response header validation is a planned enhancement (see GAP-01). Verifier error ordering depends on map iteration; order may vary between runs (see GAP-06). The `/v2` endpoint exists in ProviderDual but has no associated consumer contract or verification test (see GAP-02). Production Pact implementations include header validation and deterministic ordering.
+**Verification scope disclaimer:** The current implementation validates HTTP status code, response headers, and response body fields. Verifier error ordering depends on map iteration; order may vary between runs. The `/v2` endpoint exists in ProviderDual and is covered by direct assertions in `TestProviderDual_V2Endpoint_DirectAssertion`. Production Pact implementations include broker support and state management.

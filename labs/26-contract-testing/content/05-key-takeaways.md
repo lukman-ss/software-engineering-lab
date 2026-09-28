@@ -14,7 +14,7 @@
 
 7. **Contract testing complements — does not replace — other tests**: Unit and functional tests validate internal behavior and business logic; contract tests validate integration boundaries; E2E tests validate critical user journeys.
 
-8. **Subset verification** means provider-side extra fields (e.g., `notes`, `created_at`) do not break consumer contracts — only consumer-required fields are checked. Verifier validates status code and body fields only; response header validation is not implemented (planned enhancement; see GAP-01 in `engineering-audit-opensource/06-verdict.md`).
+8. **Subset verification** means provider-side extra fields (e.g., `notes`, `created_at`) do not break consumer contracts — only consumer-required fields are checked. Verifier validates status code, response headers, and body fields (`internal/contract/verifier.go:90-98`).
 
 9. **Type precision matters**: Using `json.Number` in contracts and `UseNumber()` decoder allows verifier to distinguish integer `150000` from string `"150000"`, catching semantic type changes that JSON Schema alone would miss.
 
