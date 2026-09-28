@@ -1,16 +1,21 @@
-# Docs vs Code Analysis
+# Docs vs Code Audit: labs/31-oauth2-and-oidc
 
-## Comparison Summary
+## Documents Reviewed
+- `README.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
+- Source code in `pkg/`, `cmd/demo/`, and `tests/`
 
-| Documented Claim / Specification | Code Implementation | Test Verification | Verdict |
+## Comparison Matrix
+
+| Claim / Feature | Source Document | Implementation Reality | Status |
 |---|---|---|---|
-| OAuth 2.0 Auth Code Grant | `pkg/server/server.go` (`Authorize`, `ExchangeCode`) | `TestOAuth2_FullFlowAndPKCEInterception` | PASS |
-| Single-use Auth Code | `server.go:137` (`ac.Used`) | `TestOAuth2_FullFlowAndPKCEInterception:178` | PASS |
-| PKCE RFC 7636 / RFC 9700 S256 | `pkg/pkce/pkce.go` | `TestPKCE_*` and `TestOAuth2_FullFlowAndPKCEInterception` | PASS |
-| OIDC ID Token Claims & Signature | `pkg/oidc/oidc.go` | `TestOIDC_IDToken_*` | PASS |
-| Refresh Token Rotation (RFC 9700 §4.14) | `server.go:206` (`Refresh`) | `TestOAuth2_RefreshTokenRotation_AndReplayDetection` | PASS |
-| Token Family Invalidation on Replay | `server.go:222` (`revokedFams`) | `TestOAuth2_RefreshTokenRotation_AndReplayDetection:212` | PASS |
-| Concurrency Safety | `server.go` mutex synchronization | `TestOAuth2_ConcurrencyAndRace` | PASS |
-| Demo Walkthrough | `cmd/demo/main.go` | Real execution verified | PASS |
+| PKCE S256 & Plain support | `README.md`, `01-design.md` | `pkg/pkce/pkce.go` implements S256 & plain verification with 43-128 char bounds. | MATCH |
+| OIDC ID Token Verification | `README.md`, `01-design.md` | `pkg/oidc/oidc.go` validates HMAC-SHA256 signature, iss, aud, exp, nonce, iat. | MATCH |
+| Refresh Token Rotation & Family Revocation | `README.md`, `01-design.md` | `pkg/server/server.go` invalidates entire family ID upon replay. | MATCH |
+| Commands documented | `README.md` (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo`) | All documented commands run successfully with zero errors. | MATCH |
+| Demo output | `03-execution-result.md` | Real execution output matches recorded demo steps and security blocks verbatim. | MATCH |
 
-No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH` identified.
+## Discrepancies
+None detected. No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH`.

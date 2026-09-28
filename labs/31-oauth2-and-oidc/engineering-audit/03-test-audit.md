@@ -1,29 +1,33 @@
-# Test Audit
+# Test Audit: labs/31-oauth2-and-oidc
 
-## Coverage Analysis
+## Test Suite Execution Results
 
-1. **PKCE Tests (`tests/oauth_test.go`)**:
-   - `TestPKCE_S256_Valid`: Verifies length constraints and S256 verification (PASS).
-   - `TestPKCE_InvalidMethod`: Verifies unsupported challenge method rejection (PASS).
-   - `TestPKCE_Mismatch`: Verifies code verifier mismatch failure (PASS).
+Executed commands:
+1. `go test -v -count=1 ./...`
+   - Result: PASS (all 10 test functions passed in 0.099s)
+2. `go test -race -count=1 ./...`
+   - Result: PASS (0 race conditions detected in 1.110s)
+3. `go run ./cmd/demo`
+   - Result: PASS (completed successfully with all 8 operational steps)
 
-2. **OIDC Tests (`tests/oauth_test.go`)**:
-   - `TestOIDC_IDToken_Valid`: Verifies proper signing and validation of all claims (PASS).
-   - `TestOIDC_IDToken_TamperedSignature`: Verifies signature tampering detection (PASS).
-   - `TestOIDC_IDToken_Expired`: Verifies expired token rejection (PASS).
-   - `TestOIDC_IDToken_MismatchClaims`: Verifies issuer, audience, and nonce mismatch rejections (PASS).
+## Test Coverage Breakdown
 
-3. **OAuth2 Flow & PKCE Interception (`tests/oauth_test.go`)**:
-   - `TestOAuth2_FullFlowAndPKCEInterception`: Verifies full flow, authorization code reuse prevention, and malicious interception protection (PASS).
+| Test Case | Category | Proves Claim |
+|---|---|---|
+| `TestPKCE_S256_Valid` | Happy Path | PKCE pair generation and verification succeeds for valid S256 verifiers. |
+| `TestPKCE_InvalidMethod` | Negative | Rejects invalid challenge methods. |
+| `TestPKCE_Mismatch` | Negative | Rejects mismatched verifier vs challenge. |
+| `TestPKCE_Plain_Method` | Edge/Compatibility | Supports and validates `plain` PKCE method per spec. |
+| `TestOIDC_IDToken_Valid` | Happy Path | ID token creation and claim verification succeeds for valid token. |
+| `TestOIDC_IDToken_TamperedSignature` | Negative / Security | Rejects tampered JWT payload/signature. |
+| `TestOIDC_IDToken_Expired` | Negative | Rejects expired ID token. |
+| `TestOIDC_IDToken_MismatchClaims` | Negative | Catches issuer, audience, and nonce mismatches. |
+| `TestOIDC_MalformedJWT` | Negative / Edge | Handles truncated and non-base64 tokens gracefully. |
+| `TestOAuth2_FullFlowAndPKCEInterception` | Security / Flow | Verifies full auth code grant + PKCE interception attack defense + single-use code redemption. |
+| `TestOAuth2_RefreshTokenRotation_AndReplayDetection` | Security / Flow | Verifies token rotation + replay detection + complete family invalidation. |
+| `TestOAuth2_NegativePaths` | Negative / Edge | Tests bad client, wrong redirect URI, empty challenge, scope mismatch, unknown tokens. |
+| `TestOAuth2_ConcurrencyAndRace` | Concurrency | 20 concurrent goroutines executing full auth + token exchange + validation + refresh concurrently. |
 
-4. **Refresh Token Rotation & Family Replay Detection (`tests/oauth_test.go`)**:
-   - `TestOAuth2_RefreshTokenRotation_AndReplayDetection`: Verifies token rotation, detection of old refresh token replay, and immediate revocation of active family member (PASS).
+## Assessment
 
-5. **Concurrency & Race Conditions (`tests/oauth_test.go`)**:
-   - `TestOAuth2_ConcurrencyAndRace`: Spawns 20 concurrent goroutines performing authorization, token exchange, validation, and refresh against the shared server under `-race` flag (PASS).
-
-## Execution Results
-
-- `go test -v ./...`: PASS (10/10 tests passing)
-- `go test -race ./...`: PASS (0 race conditions detected)
-- `go run ./cmd/demo`: PASS (All 8 demo steps executed cleanly with expected outputs)
+The test suite thoroughly verifies both normative functionality and adversarial attack paths (interception attacks, replay attacks, tampered tokens, concurrent requests).

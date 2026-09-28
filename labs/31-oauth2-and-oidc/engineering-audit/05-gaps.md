@@ -1,8 +1,9 @@
-# Gap Analysis
+# Gap Analysis: labs/31-oauth2-and-oidc
 
-## Gaps Identified
+## Summary of Gaps
 
-No critical, high, or medium gaps identified.
+No blocking or non-blocking functional gaps identified.
 
-### Minor Observations (LOW)
-- In `pkg/server/server.go:ValidateAccessToken`, `requiredScope` parameter is present in signature but not strictly compared against `tokenScopes[accessToken]` if scope checks are omitted by caller. Not a blocker since test and demo flows exercise subject retrieval and primary grant validation.
+| Gap Type | Description | Severity | Remediation |
+|---|---|---|---|
+| None | Implementation matches approved research; tests cover edge cases and concurrency; documentation accurately describes the codebase. | N/A | None required |

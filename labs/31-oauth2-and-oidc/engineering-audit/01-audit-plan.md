@@ -1,36 +1,38 @@
 # Engineering Audit Plan
 
-Target Lab: labs/31-oauth2-and-oidc
+Target Lab: `labs/31-oauth2-and-oidc`
 Implementation Files:
-- pkg/pkce/pkce.go
-- pkg/oidc/oidc.go
-- pkg/server/server.go
-- pkg/client/client.go
+- `pkg/pkce/pkce.go`
+- `pkg/oidc/oidc.go`
+- `pkg/server/server.go`
+- `pkg/client/client.go`
 
 Tests:
-- tests/oauth_test.go
+- `tests/oauth_test.go`
 
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
 
 Approved Research Inputs:
-- research/05-report.md
-- engineering/01-design.md
-- engineering/02-implementation-notes.md
+- `research/05-report.md`
+- `research-audit/07-verdict.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. PKCE (RFC 7636/9700) implementation using S256 method prevents code interception attacks.
-2. OIDC ID Token issuing and cryptographic HMAC-SHA256 signature and standard claim (`iss`, `sub`, `aud`, `exp`, `nonce`) validation.
-3. OAuth 2.0 Authorization Code Grant with single-use code redemption.
-4. Refresh Token Rotation with lineage/family tracking and immediate family revocation upon reuse detection.
-5. Thread safety and concurrency handling across in-memory server state.
+1. PKCE computation and verification (`S256` SHA-256 + Base64URL and `plain` methods with 43-128 length validation).
+2. OIDC ID Token signing and claims validation (HMAC-SHA256, `iss`, `sub`, `aud`, `exp`, `iat`, `nonce`).
+3. Authorization Server flow handling (Authorization Code grant, single-use auth code redemption, PKCE binding).
+4. Refresh Token Rotation with lineage/family tracking and entire family revocation upon reuse/replay detection (RFC 9700 §4.14).
+5. Thread safety and concurrency correctness across state maps under concurrent access.
+6. Negative scenarios and failure paths (tampered JWT, expired token, mismatched claims, bad redirect URI, replay attempts).
 
 Commands To Run:
-- go test ./...
-- go test -race ./...
-- go run ./cmd/demo
+- `go test -v -count=1 ./...`
+- `go test -race -count=1 ./...`
+- `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions during concurrent token exchanges or refresh requests.
-- Incorrect claim checking logic or loose signature validation in OIDC package.
-- Inconsistent scope validation or memory leaks in token maps.
+- Data race conditions in map operations inside `AuthorizationServer`.
+- Flawed refresh token family revocation semantics allowing revoked tokens to refresh or leaking access.
+- Incomplete validation of OIDC claims or PKCE challenges.

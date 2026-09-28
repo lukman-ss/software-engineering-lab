@@ -1,25 +1,16 @@
 # Engineering Audit Verdict
 
-Target Lab: labs/31-oauth2-and-oidc
-Audit Date: Mon Sep 28 2026
+Target Lab: `labs/31-oauth2-and-oidc`
+Audit Date: 2026-09-28
 
 ## Summary
 
-Code Files Reviewed:
-- `pkg/pkce/pkce.go`
-- `pkg/oidc/oidc.go`
-- `pkg/server/server.go`
-- `pkg/client/client.go`
-- `cmd/demo/main.go`
-
-Tests Reviewed:
-- `tests/oauth_test.go`
-
+Code Files Reviewed: 4 (`pkg/pkce/pkce.go`, `pkg/oidc/oidc.go`, `pkg/server/server.go`, `pkg/client/client.go`)
+Tests Reviewed: 1 (`tests/oauth_test.go`)
 Commands Executed:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
-
+- `go test -v -count=1 ./...` (PASS)
+- `go test -race -count=1 ./...` (PASS)
+- `go run ./cmd/demo` (PASS)
 Failures: 0
 Warnings: 0
 
