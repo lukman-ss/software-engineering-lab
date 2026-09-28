@@ -4,48 +4,45 @@ Target Lab: labs/26-contract-testing
 
 ## Finding 1
 
-Location: `internal/contract/verifier.go:58-115`
-Claimed Behavior: Verifier executes HTTP request against baseURL and compares returned payload against contract expectations, failing when contract expectations are violated.
-Observed Implementation: Verifier handles request creation, status code validation, JSON decoding with `decoder.UseNumber()`, and field-by-field recursive diffing via `diffValues`.
+Location: `internal/contract/verifier.go:60-128`
+Claimed Behavior: Verifier inspects method, path, headers, status codes, and performs subset JSON schema/field validation against provider endpoints.
+Observed Implementation: `Verify` builds HTTP requests, validates response headers, status codes, and parses response JSON into recursive diff comparator `diffValues` (`decoder.UseNumber()` preserved for accurate type comparisons).
 Assessment: PASS
 Severity: LOW
-Notes: `io.ReadAll` and response body close handled properly.
+Notes: Correctly handles nested paths, maps, and numbers. Correctly closes response body.
 
 ## Finding 2
 
-Location: `internal/contract/verifier.go:117-176`
-Claimed Behavior: Detects structural missing keys, primitive type mismatches, and value mismatches while tolerating additive provider fields not declared in consumer contract.
-Observed Implementation: `diffValues` checks key presence recursively. Extra fields on `actual` map not present in `expected` map are ignored, adhering to consumer-driven contract principles. Type differences and value differences are captured with descriptive path strings.
+Location: `internal/contract/verifier.go:130-189`
+Claimed Behavior: Recursive comparison of JSON subset detects missing keys, primitive type mismatches, and value mismatches.
+Observed Implementation: `diffValues` checks missing keys in target objects, distinguishes `json.Number` vs strings, and checks reflection types. Correctly implements consumer-driven contract subset semantics (extra provider fields are ignored; only fields declared in the contract are enforced).
 Assessment: PASS
 Severity: LOW
-Notes: Correctly utilizes `json.Number` comparisons to prevent int/float float64 coercion quirks.
+Notes: Accurately reports missing fields (`customer.name`), type mismatches (`total`: string vs number), and value/enum mismatches (`status`: `in_progress` vs `IN_PROGRESS`).
 
 ## Finding 3
 
-Location: `internal/consumer/client.go:34-79`
-Claimed Behavior: Mobile client fetches order and fails when breaking provider schema (missing `customer.name`, unexpected status, type failure) is returned.
-Observed Implementation: Strict unmarshalling and runtime validation of required contract constraints (`raw.Customer.Name == ""` and status enums) ensures consumer-side failure matches verifier failure.
+Location: `internal/provider/server.go:11-44`, `46-80`, `82-131`
+Claimed Behavior: Independent HTTP handlers for Provider V1 (compliant), Provider Breaking (non-compliant), and Provider Dual (backward-compatible V1 + new V2).
+Observed Implementation: Distinct structs `ProviderV1`, `ProviderBreaking`, and `ProviderDual` implementing `http.Handler` via `ServeHTTP`. Method checking handles non-GET with 405. Route checking handles 404.
 Assessment: PASS
 Severity: LOW
-Notes: Client behaves identically to production consumer expectations.
+Notes: Handlers are stateless, thread-safe, and self-contained.
 
 ## Finding 4
 
-Location: `internal/provider/server.go:12-131`
-Claimed Behavior: Provides three HTTP handlers representing V1 compliant provider, breaking change provider, and dual-version evolutionary provider.
-Observed Implementation:
-- `ProviderV1`: returns contract-matching JSON (`status: "IN_PROGRESS"`, `total: 150000`, `customer.name: "Budi Santoso"`).
-- `ProviderBreaking`: introduces casing mismatch (`"in_progress"`), type mismatch (`"150000"` string), and field rename (`full_name`).
-- `ProviderDual`: serves V1 contract compliant payload on `/v1/orders/` and new schema on `/v2/orders/`.
+Location: `internal/consumer/client.go:37-82`, `84-114`
+Claimed Behavior: Mobile consumer defines its required contract and implements client parsing enforcing its contract assertions.
+Observed Implementation: `GenerateMobileContract()` builds contract data structure specifying required interactions. `FetchOrder()` handles HTTP response and explicitly verifies contract integrity on unmarshalled fields.
 Assessment: PASS
 Severity: LOW
-Notes: Handlers are stateless, robust, and return standard Content-Type and HTTP status codes.
+Notes: Standard library HTTP client with 5-second timeout.
 
 ## Finding 5
 
-Location: `tests/contract_test.go:96-114`
-Claimed Behavior: Concurrent verification runs safely without race conditions.
-Observed Implementation: Spawns 20 parallel goroutines invoking `verifier.Verify(srv.URL, c)` concurrently against `httptest.Server`. Verified with `go test -race ./...`.
+Location: `internal/contract/verifier.go:52-58`
+Claimed Behavior: Thread-safe verifier execution under concurrent loads.
+Observed Implementation: `Verifier` uses standard `*http.Client` which is goroutine-safe. The `Verify` method creates local request and response structures per invocation without shared mutable state.
 Assessment: PASS
 Severity: LOW
-Notes: No shared mutable state in Verifier. Safe for concurrent CI runner simulations.
+Notes: Validated by `TestConcurrentContractVerification` with `go test -race ./...`.
