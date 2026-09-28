@@ -26,7 +26,7 @@ Tanpa Circuit Breaker, Fallback, dan Auto-Abort:
 
 ## How It Works
 Arsitektur laboratorium ini terdiri dari empat komponen utama di dalam direktori `internal/`:
-1. **`Injector` (`internal/fault/injector.go`)**: Menyisipkan latensi (menggunakan `time.Sleep` dengan pengecualian `ctx.Done()`) atau error paksa (`ErrInjectedFault`) secara aman dan thread-safe.
+1. **`Injector` (`internal/fault/injector.go`)**: Menyisipkan latensi (menggunakan `time.After` dengan dukungan pembatalan konteks `ctx.Done()`) atau error paksa (`ErrInjectedFault`) secara aman dan thread-safe.
 2. **`Monitor` (`internal/monitor/monitor.go`)**: Melacak total permintaan, permintaan sukses, dan permintaan gagal secara atomik (`sync/atomic`), serta mengevaluasi apakah error rate melampaui batas maksimum yang diizinkan.
 3. **`CircuitBreaker` (`internal/circuitbreaker/circuitbreaker.go`)**: Mengelola transisi state (`Closed` → `Open` → `Half-Open` setelah cooldown) dan mengeksekusi fungsi `fallback` saat state terbuka atau terjadi error.
 4. **`Experiment` (`internal/experiment/runner.go`)**: Menjalankan siklus eksperimen, memeriksa kesehatan sistem secara periodik via ticker, dan melakukan auto-abort serta netralisasi injeksi seketika saat steady-state breach terdeteksi.
@@ -84,7 +84,7 @@ Ketika eksperimen chaos selesai atau di-abort, fungsi `terminate()` langsung mem
 Demonstrasi interaktif (`cmd/demo/main.go`) mensimulasikan layanan pembayaran:
 1. **Baseline**: 5 request sukses (`CLOSED`, error rate 0%).
 2. **Chaos dengan Mitigasi**: 10 request di bawah gangguan downstream dengan Resilient Client (Circuit Breaker + Fallback). Hasil: Berhasil memproses fallback ("Payment Queued"), error rate 0.00%, state CB beralih dari CLOSED ke OPEN.
-3. **Chaos Tanpa Mitigasi**: Injeksi error murni memicu pelanggaran threshold 20%. Eksperimen mendeteksi pelanggaran, melakukan `ABORT`, dan menetralkan injector secara otomatis.
+3. **Chaos Tanpa Mitigasi**: Injeksi error murni memicu pelanggaran threshold (lab example: 20%). Eksperimen mendeteksi pelanggaran, melakukan `ABORT`, dan menetralkan injector secara otomatis.
 4. **Recovery**: Trafik pasca-eksperimen kembali normal (`CLOSED`, sukses penuh).
 
 ## Checklist
