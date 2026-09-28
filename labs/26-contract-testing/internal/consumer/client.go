@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"labs/26-contract-testing/internal/contract"
 )
@@ -25,8 +26,10 @@ type MobileOrderClient struct {
 
 func NewMobileOrderClient(baseURL string) *MobileOrderClient {
 	return &MobileOrderClient{
-		BaseURL:    baseURL,
-		HTTPClient: &http.Client{},
+		BaseURL: baseURL,
+		HTTPClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 )
 
 // Interaction defines a single consumer-provider HTTP interaction expectation.
@@ -50,7 +51,9 @@ type Verifier struct {
 
 func NewVerifier() *Verifier {
 	return &Verifier{
-		Client: &http.Client{},
+		Client: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
 }
 
@@ -82,6 +85,16 @@ func (v *Verifier) Verify(baseURL string, c *Contract) VerificationResult {
 			result.Passed = false
 			result.Errors = append(result.Errors, fmt.Sprintf("[%s] status code mismatch: expected %d, got %d",
 				interaction.Description, interaction.Response.Status, resp.StatusCode))
+		}
+
+		// Validate response headers if expected by contract
+		for expectedHeaderKey, expectedHeaderVal := range interaction.Response.Headers {
+			actualHeaderVal := resp.Header.Get(expectedHeaderKey)
+			if !strings.EqualFold(actualHeaderVal, expectedHeaderVal) {
+				result.Passed = false
+				result.Errors = append(result.Errors, fmt.Sprintf("[%s] header mismatch for '%s': expected %q, got %q",
+					interaction.Description, expectedHeaderKey, expectedHeaderVal, actualHeaderVal))
+			}
 		}
 
 		bodyBytes, err := io.ReadAll(resp.Body)
