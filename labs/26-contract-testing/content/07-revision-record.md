@@ -6,6 +6,7 @@ Audit source: `content-audit/01-audit-summary.md`, `content-audit/02-findings.md
 ## Audit Status & Resolution
 - Audit verdict: APPROVED_WITH_WARNINGS.
 - All code references, gap disclosures (GAP-01 response headers unasserted, GAP-02 V2 unverified, GAP-06 map iteration nondeterminism), and CDC test claims verified accurate against codebase.
+- **No content revision required** — all findings already properly disclosed in lab content per engineering audit.
 
 ## Recorded Content Items
 - `02-master-draft.md` — verified header declared not validated disclaimer (GAP-01), verifier scope status+body (GAP-01), V2 unverified note (GAP-02).
