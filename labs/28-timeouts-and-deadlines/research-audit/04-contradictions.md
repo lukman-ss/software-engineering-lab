@@ -1,31 +1,62 @@
-# Contradiction Audit: Lab 28 (Timeouts & Deadlines)
+# Contradictions & Trade-offs Audit: Research Stage — Timeouts and Deadlines
 
 ## Contradiction 1
-Statement A: Immediate retry on transient errors (Azure Retry Pattern).
-Statement B: Do not retry immediately during overload; return error immediately or backoff (Google SRE Handling Overload).
-Type: SOURCE_CONFLICT / SCOPE_DIFFERENCE
-Impact: Misconfigured retry logic can crash an already struggling backend.
-Assessment: RESOLVED in research. The research correctly distinguishes packet corruption/single-connection transient blips from overload/saturation errors where immediate retry causes cascading meltdowns.
+
+Statement A:
+"Timeouts should be generous (e.g., 30s) to avoid dropping requests during temporary network spikes or heavy downstream computation." (`research/04-contradictions.md`: Lines 6-7)
+
+Statement B:
+"Timeouts should be tight (e.g., 2x-3x P99 latency) to release resources immediately and prevent thread pool exhaustion." (`research/04-contradictions.md`: Line 7)
+
+Type:
+INTERNAL (Trade-off Analysis)
+
+Impact:
+Provides operational clarity on how to set timeout thresholds based on SLOs and workload types (interactive vs background).
+
+Assessment:
+PASS. Correctly analyzed and resolved via hierarchical deadline budgeting ($T_{timeout} = \min(\text{user\_deadline} - \text{elapsed} - \text{buffer}, 3 \times P99)$).
 
 ---
 
 ## Contradiction 2
-Statement A: Lower layers should fail fast and only top layer retries (Azure Retry Pattern).
-Statement B: Retries should only happen at the immediate parent layer above the rejecting dependency, propagating "don't retry" upward (Google SRE).
-Type: INTERNAL / PATTERN_VARIATION
-Impact: Minor implementation variance.
-Assessment: RESOLVED in research. Both avoid multi-layer multiplicative retry explosions.
+
+Statement A:
+"Propagating absolute timestamps across distributed systems (e.g. `deadline = 2026-09-28T12:00:05.000Z`)." (`research/04-contradictions.md`: Line 18)
+
+Statement B:
+"Propagating relative remaining timeout durations (e.g. `grpc-timeout = 1800m`)." (`research/04-contradictions.md`: Line 19)
+
+Type:
+SOURCE_CONFLICT / BEST_PRACTICE_RESOLUTION
+
+Impact:
+Identifies NTP clock skew vulnerability in distributed systems.
+
+Assessment:
+PASS. Correctly resolved by adopting relative remaining duration serialization (`timeout = deadline - now()`), as specified in gRPC wire protocol standards.
 
 ---
 
 ## Contradiction 3
-Statement A: gRPC example code shows up to 10 retry attempts.
-Statement B: Google SRE and Resilience4j mandate max 3 retry attempts and <10% client retry ratio.
-Type: INTERNAL
-Impact: Naive code can cause retry storm.
-Assessment: RESOLVED in research. The 10-attempt code in SRE Book was explicitly presented as an anti-pattern demonstration of naive retry loops.
+
+Statement A:
+"Automatically retry failed requests up to $N$ times immediately upon timeout." (`research/04-contradictions.md`: Line 29)
+
+Statement B:
+"Treat timeout as indeterminate state; never retry non-idempotent operations without an idempotency key; use exponential backoff with Full Jitter and a process-wide retry budget." (`research/04-contradictions.md`: Lines 30-31)
+
+Type:
+INTERNAL (Anti-pattern vs Resilience Pattern)
+
+Impact:
+Prevents retry storm outages and duplicate transactional state creation.
+
+Assessment:
+PASS. Highlighting naive immediate retries as an anti-pattern and establishing Practice B as mandatory for production architectures aligns with authoritative SRE standards.
 
 ---
 
-## Summary
-No material unresolved contradictions remain in the research documentation. All key tensions between sources have been properly contextualized and reconciled.
+## Overall Assessment
+
+No material un-analyzed contradictions or invalid trade-offs exist across the research documentation. All identified tensions are explicitly resolved with evidence-based industry standards.

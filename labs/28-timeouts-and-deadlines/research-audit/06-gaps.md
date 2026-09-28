@@ -1,24 +1,65 @@
-# Gap Analysis: Lab 28 (Timeouts & Deadlines)
+# Research Gap Analysis: Timeouts and Deadlines
 
 ## Gap 1
-Type: SCOPE_ERROR / IMPLEMENTATION_GAP
-Severity: LOW
-Location: `06-open-questions.md: Section 1`
-Problem: Specific timeout budget numbers for Indonesian e-commerce benchmark scenarios (PG=150ms, Inventory=400ms, Payment=1.2s) are heuristic estimates (e.g. PG=200ms, Inventory=500ms, Payment=1.5s, Total=2.5s within 3s SLA) and require empirical load test validation.
-Required Revision: Validate during implementation lab benchmarking phase.
-Can Be Approved Without Fix: YES (Acknowledged as open question in research).
+
+Type:
+SCOPE_ERROR / MINOR_URL_FORMATTING
+
+Severity:
+LOW
+
+Location:
+`research/02-sources.md`: Line 47 (`https://docs.stripe.com/error-handling.md?lang=go`)
+
+Problem:
+The Stripe API documentation URL includes a markdown documentation suffix (`.md?lang=go`).
+
+Required Revision:
+Update the URL to the standard canonical web route `https://docs.stripe.com/error-handling` in future documentation revisions.
+
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 2
-Type: MISSING_CASE
-Severity: LOW
-Location: `06-open-questions.md: Section 3`
-Problem: Hedged requests (sending parallel requests to 2nd replica after P95 delay) vs simple timeouts trade-offs are identified but not deeply quantified.
-Required Revision: Include optional discussion item in lab presentation/article.
-Can Be Approved Without Fix: YES.
+
+Type:
+MISSING_CASE
+
+Severity:
+LOW
+
+Location:
+`research/06-open-questions.md`: Lines 7-10 (Distributed Tracing & W3C HTTP Headers)
+
+Problem:
+While gRPC has a standardized header (`grpc-timeout`), HTTP/1.1 and REST services have diverse conventions (`Request-Timeout`, `Deadline`, OpenTelemetry baggage).
+
+Required Revision:
+Document standard OpenTelemetry W3C baggage header patterns for propagating deadlines across heterogeneous HTTP services in follow-up architecture guides.
+
+Can Be Approved Without Fix:
+YES
 
 ---
 
-## Summary
-All research gaps have been documented in `06-open-questions.md`. No critical or blocking research gaps remain.
+## Gap 3
+
+Type:
+MISSING_CASE
+
+Severity:
+LOW
+
+Location:
+`research/06-open-questions.md`: Lines 3-6 (Dynamic/Adaptive Timeouts)
+
+Problem:
+The research covers static and budgeted timeouts thoroughly, but leaves dynamic P99-adaptive timeouts as an open question for advanced runtime systems.
+
+Required Revision:
+Appropriately logged as an open research question; does not block the core foundation of timeouts, deadlines, and retry protections.
+
+Can Be Approved Without Fix:
+YES

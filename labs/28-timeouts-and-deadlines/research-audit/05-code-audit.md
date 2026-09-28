@@ -1,8 +1,9 @@
-# Code Audit: Lab 28 (Timeouts & Deadlines)
+# Code Audit: Research Stage — Timeouts and Deadlines
 
-## Scope
-Pipeline Override: Research only stage.
-No application source code or tests exist in `labs/28-timeouts-and-deadlines` at this stage.
+## Audit Status: NOT_APPLICABLE (PIPELINE OVERRIDE)
 
-## Status
-NOT_APPLICABLE (Implementation deferred to Engineering phase).
+Per explicit pipeline audit instructions:
+- "Audit research only."
+- "Do not audit implementation/code in this stage."
+
+Implementation code (`internal/`, `cmd/`, `tests/`) and runnable validations are evaluated during the dedicated Engineering / Implementation audit phase, not the Research Audit stage.
