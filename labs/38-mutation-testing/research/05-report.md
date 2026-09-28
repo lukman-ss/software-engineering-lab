@@ -26,9 +26,9 @@ Notes: Tests with no assertions (or weak assertions like `assert res > 0`) can a
 
 Claim: Mutation Score = (Killed Mutants / Total Mutants) × 100%. A high mutation score indicates a robust test suite; a low score reveals weak assertions regardless of code coverage.
 
-Evidence: "The value of a test suite is measured by the percentage of mutants that it kills." — Wikipedia (citing DeMillo et al., 1978). Martin Fowler confirms: "Each run makes a small modification to the code, such as reversing a conditional or removing a line. We then run the test suite. If the tests pass, then we've found a problem." PIT states: "The quality of your tests can be gauged from the percentage of mutations killed."
+Evidence: "The value of a test suite is measured by the percentage of mutants that it kills." — Wikipedia (citing DeMillo et al., 1978). Martin Fowler (pre-publication draft; page carries "This is a draft entry" notice): "Each run makes a small modification to the code, such as reversing a conditional or removing a line. We then run the test suite. If the tests pass, then we've found a problem." PIT states: "The quality of your tests can be gauged from the percentage of mutations killed."
 
-Sources: Wikipedia (https://en.wikipedia.org/wiki/Mutation_testing), Martin Fowler (https://martinfowler.com/bliki/MutationTesting.html), PIT (https://pitest.org/)
+Sources: Wikipedia (https://en.wikipedia.org/wiki/Mutation_testing), Martin Fowler (pre-publication draft; https://martinfowler.com/bliki/MutationTesting.html), PIT (https://pitest.org/)
 Confidence: HIGH
 Notes: A mutation score of 100% means every mutant was killed — every small change to the code was caught by a failing test. This is the gold standard against which all other coverage metrics are measured (PIT). The ×100% convention is standard for expressing percentages; Wikipedia states it as a ratio.
 
@@ -86,23 +86,23 @@ Notes: Practical tools use heuristics to minimize the impact. PIT avoids mutatin
 
 Claim: Large-scale adoption of mutation testing has been limited by five barriers (scalability, unrealistic mutants, equivalent mutants, computational cost, overstretching), which LLMs can help overcome through mutation-guided test generation.
 
-Evidence: "By leveraging LLMs we've been able to overcome the barriers that have prevented mutation testing from being efficiently deployed at scale." — Mark Harman, Meta Engineering (September 2025). ACH uses LLMs to: (a) generate fewer, highly-targeted mutants; (b) detect equivalent mutants with LLM-based classifier; (c) auto-generate tests that kill mutants. Trial results (Oct–Dec 2024): 73% of generated tests accepted by engineers, 36% judged privacy-relevant.
+Evidence: "By leveraging LLMs we've been able to overcome the barriers that have prevented mutation testing from being efficiently deployed at scale." — Mark Harman, Meta Engineering (September 2025). ACH uses LLMs to: (a) generate fewer, highly-targeted mutants; (b) detect equivalent mutants with LLM-based classifier; (c) auto-generate tests that kill mutants. Trial results (Oct–Dec 2024): 73% of generated tests accepted by engineers, 36% judged privacy-relevant. arXiv abstract corroborates: 9,095 mutants and 571 privacy-hardening test cases across 10,795 Android Kotlin classes on 7 software platforms; LLM equivalence detector precision 0.79/recall 0.47 → 0.95/0.96 with preprocessing.
 
-Sources: Meta Engineering Blog (https://engineering.fb.com/2025/09/30/security/llms-are-the-key-to-mutation-testing-and-better-compliance/); arXiv reference: https://arxiv.org/pdf/2501.12862
-Confidence: MEDIUM (industry report, single primary source; not yet independently peer-reviewed)
-Notes: This represents evolution from mutation testing as evaluation tool → mutation testing as test generation tool. Authors present at FSE 2025 and EuroSTAR 2025.
+Sources: Meta Engineering Blog (https://engineering.fb.com/2025/09/30/security/llms-are-the-key-to-mutation-testing-and-better-compliance/); arXiv preprint abstract (https://arxiv.org/abs/2501.12862)
+Confidence: MEDIUM (industry report; primary source is single blog post, corroborated by preprint abstract; not yet independently peer-reviewed at publication time)
+Notes: This represents evolution from mutation testing as evaluation tool → mutation testing as test generation tool. Authors present at FSE 2025 and EuroSTAR 2025. The "five barriers" framing is Harman/Meta's specific articulation, not a universal taxonomy.
 
 ---
 
 ### Finding 8: Mutation testing is applicable across languages but tooling maturity varies
 
-Claim: While mutation testing concepts are language-agnostic, practical tooling is strongest for JVM (PIT) and JavaScript/TypeScript (Stryker), with limited support for Go and other languages.
+Claim: While mutation testing concepts are language-agnostic, practical tooling is strongest for JVM (PIT) and JavaScript/TypeScript (Stryker), with growing but less mature options for Go.
 
-Evidence: PIT supports Java and Kotlin (via Arcmutate). Stryker supports JavaScript/TypeScript, C#, and Scala. Wikipedia: "The increased use of object-oriented programming languages and unit testing frameworks has led to the creation of mutation testing tools that test individual portions of an application." PIT FAQ: "Currently supported languages are Java, Kotlin (via the Arcmutate kotlin plugin)." For Go, no widely adopted mutation testing tool comparable to PIT or Stryker exists.
+Evidence: PIT supports Java and Kotlin (via Arcmutate). Stryker supports JavaScript/TypeScript, C#, and Scala. Wikipedia: "The increased use of object-oriented programming languages and unit testing frameworks has led to the creation of mutation testing tools that test individual portions of an application." PIT FAQ: "Currently supported languages are Java, Kotlin (via the Arcmutate kotlin plugin)." For Go, community tools exist but lack production-grade maturity: go-mutesting (https://github.com/zimmski/go-mutesting) provides AST-based mutation with branch/expression/statement mutators; gremlins (https://github.com/go-gremlins/gremlins, https://gremlins.dev) offers CLI-based Go mutation testing. No widely adopted Go tool matches PIT or Stryker's feature parity (CI integration, dashboard, incremental analysis).
 
-Sources: PIT FAQ (https://pitest.org/faq/), Stryker docs (https://stryker-mutator.io/docs/)
+Sources: PIT FAQ (https://pitest.org/faq/), Stryker docs (https://stryker-mutator.io/docs/), go-mutesting GitHub, gremlins GitHub
 Confidence: HIGH
-Notes: The lab specification targets Go for implementation, but Go mutation testing remains an open research/engineering challenge.
+Notes: The lab specification targets Go for implementation. The Go tooling landscape is actively developing but remains behind JVM and JS/TS ecosystems. The custom mutation engine design (lab specification) is justified by this gap.
 
 ---
 
@@ -115,6 +115,26 @@ Evidence: PIT integrates with Ant, Maven, Gradle, and CI pipelines. Arcmutate en
 Sources: PIT website (https://pitest.org/), PIT FAQ (https://pitest.org/faq/)
 Confidence: HIGH
 Notes: Practical usage focuses on incremental mutation analysis (only changed code), making it feasible in fast development cycles. The CI integration pattern mirrors coverage reporting in modern workflows.
+
+### Finding 10: Subsumed mutants affect mutation score interpretation
+
+Claim: Some mutants are "subsumed" by others — they exist at the same source location and produce identical test outcomes — and therefore do not contribute to coverage metrics. This is a secondary concern that affects mutation score accuracy but does not undermine the core concept.
+
+Evidence: "In addition to equivalent mutants, there are subsumed mutants which are mutants that exist in the same source code location as another mutant, and are said to be 'subsumed' by the other mutant. Subsumed mutants are not visible to a mutation testing tool, and do not contribute to coverage metrics." — Wikipedia (Mutation testing article). For example, if two mutants A and B change a line identically and Mutant A is killed first, Mutant B is subsumed.
+
+Sources: Wikipedia (https://en.wikipedia.org/wiki/Mutation_testing)
+Confidence: HIGH
+Notes: Subsumed mutants are an advanced refinement topic. Core mutation testing concepts (equivalent mutants, RIP model) remain correct without this addition. Their omission does not affect the lab's implementation guidance.
+
+### Finding 11: No industry-standard mutation score threshold exists
+
+Claim: There is no universally accepted minimum mutation score threshold; proposed values (80%, 85%, 90%) vary by project and context. Sources consulted did not establish a consensus standard.
+
+Evidence: PIT documentation does not state a recommended minimum score. Stryker documentation focuses on reporting rather than threshold enforcement. No authoritative source was found prescribing a specific threshold value. The absence of a threshold is notable — unlike code coverage where 80%+ is commonly recommended, mutation testing lacks an equivalent benchmark.
+
+Sources: PIT FAQ, Stryker docs (no threshold found)
+Confidence: HIGH
+Notes: Readers should not interpret the absence of a threshold in sources as one being unimportant; rather, the field simply has not converged on a standard. Projects should determine thresholds empirically based on their risk profile.
 
 ---
 
@@ -129,6 +149,7 @@ All authoritative sources agree on:
 - PIT and Stryker are the leading production-ready tools (JVM and JS/TS respectively).
 - Mutation testing is white-box testing requiring source code access.
 - Martin Fowler confirms mutation testing was historically expensive but is now practical.
+- Subsumed mutants do not contribute to coverage metrics (Wikipedia).
 
 ## Areas of Disagreement
 

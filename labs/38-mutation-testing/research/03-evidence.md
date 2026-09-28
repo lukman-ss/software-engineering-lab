@@ -7,7 +7,7 @@ Evidence: "Mutation testing was originally proposed by Richard Lipton as a stude
 Source: Wikipedia (referencing DeMillo, Lipton, Sayward 1978)
 URL: https://en.wikipedia.org/wiki/Mutation_testing
 Confidence: HIGH
-Corroborated By: Martin Fowler's bliki entry also references the historical timeline of mutation testing.
+Corroborated By: Martin Fowler's bliki entry (pre-publication draft; carries "This is a draft entry" notice) also references the historical timeline of mutation testing.
 Notes: Original paper NOT directly accessed. Bibliographic reference from Wikipedia: R. A. DeMillo, R. J. Lipton, F. G. Sayward. Hints on test data selection: Help for the practicing programmer. IEEE Computer, 11(4):34-41, April 1978.
 
 ## Evidence 2
@@ -23,8 +23,8 @@ Notes: Source [6] is Ammann & Offutt (2008). [12] is Offutt (1992). [13] is Acre
 ## Evidence 3
 
 Claim: The mutation score measures test quality by the percentage of mutants killed.
-Evidence: "The value of a test suite is measured by the percentage of mutants that it kills." — Wikipedia (citing [6]). Also: "Each run makes a small modification to the code, such as reversing a conditional or removing a line. We then run the test suite. If the tests pass, then we've found a problem." — Martin Fowler.
-Source: Wikipedia + Martin Fowler
+Evidence: "The value of a test suite is measured by the percentage of mutants that it kills." — Wikipedia (citing [6]). Also: "Each run makes a small modification to the code, such as reversing a conditional or removing a line. We then run the test suite. If the tests pass, then we've found a problem." — Martin Fowler (pre-publication draft; page carries "This is a draft entry" notice).
+Source: Wikipedia + Martin Fowler (pre-publication draft; carries "This is a draft entry" notice)
 URL: https://en.wikipedia.org/wiki/Mutation_testing / https://martinfowler.com/bliki/MutationTesting.html
 Confidence: HIGH
 Corroborated By: PIT FAQ: "The quality of your tests can be gauged from the percentage of mutations killed."
@@ -34,7 +34,7 @@ Notes: The formula Mutation Score = (Killed / Total) × 100% is standard convent
 
 Claim: Code coverage can be 100% while test quality is poor; mutation testing exposes this discrepancy.
 Evidence: "Traditional test coverage (i.e line, statement, branch, etc.) measures only which code is executed by your tests. It does not check that your tests are actually able to detect faults in the executed code." — PIT. Stryker analogy: "Imagine a sandwich covered with paste. Code coverage would tell you the bread is 80% covered with paste. Mutation testing, on the other hand, would tell you it is actually chocolate paste."
-Source: PIT (https://pitest.org/) and Stryker (https://stryker-mutator.io/docs/General/example/)
+Source: PIT (https://pitest.org/) and Stryker (https://stryker-mutator.io/docs/)
 Confidence: HIGH
 Corroborated By: Consistent with the central thesis of both PIT and Stryker documentation.
 Notes: This directly validates the lab's key claim about false confidence from 100% code coverage.
@@ -110,10 +110,30 @@ Notes: This taxonomy is pedagogically useful; industrial tools use different cat
 
 ## Evidence 12
 
-Claim: The Meta ACH system uses LLMs to generate targeted mutants and tests, achieving 73% engineer acceptance and 36% privacy relevance in trials.
-Evidence: "By leveraging LLMs we've been able to overcome the barriers that have prevented mutation testing from being efficiently deployed at scale." — Mark Harman, Meta Engineering. "Over thousands of mutants and hundreds of generated tests, privacy engineers at Meta accepted 73% of the generated tests, with 36% judged as privacy relevant."
-Source: Meta Engineering Blog
-URL: https://engineering.fb.com/2025/09/30/security/llms-are-the-key-to-mutation-testing-and-better-compliance/
-Confidence: MEDIUM (industry report, single source, not yet peer-reviewed)
-Corroborated By: arXiv preprint https://arxiv.org/pdf/2501.12862 referenced in the blog (PDF was fetched but content was binary; abstract text cited in blog).
-Notes: ACH combines mutation-guided test generation with LLMs. LLM equivalence detector: 0.79/0.47 precision/recall → 0.95/0.96 with preprocessing. This is the most recent development in the field (September 2025).
+Claim: Meta ACH uses LLMs to generate targeted mutants and tests, achieving 73% engineer acceptance, 36% privacy relevance, and 0.95/0.96 precision/recall on equivalence detection with preprocessing.
+Evidence: "ACH generates relatively few mutants... from which it generated 9,095 mutants and 571 privacy-hardening test cases. ACH also deploys an LLM-based equivalent mutant detection agent that achieves a precision of 0.79 and a recall of 0.47 (rising to 0.95 and 0.96 with simple pre-processing). ACH was used by Messenger and WhatsApp test-a-thons where engineers accepted 73% of its tests, judging 36% to privacy relevant." — arXiv:2501.12862 abstract (Foster et al., 2025). Also: "By leveraging LLMs we've been able to overcome the barriers that have prevented mutation testing from being efficiently deployed at scale." — Mark Harman, Meta Engineering Blog.
+Source: arXiv (https://arxiv.org/abs/2501.12862) + Meta Engineering Blog (https://engineering.fb.com/2025/09/30/security/llms-are-the-key-to-mutation-testing-and-better-compliance/)
+URL: https://arxiv.org/abs/2501.12862 / https://engineering.fb.com/2025/09/30/security/llms-are-the-key-to-mutation-testing-and-better-compliance/
+Confidence: MEDIUM (industry report; primary source is single blog post, corroborated by preprint abstract)
+Corroborated By: arXiv abstract (Source 12) verifies all statistics directly: 9,095 mutants, 571 tests, 10,795 Android Kotlin classes, 7 platforms.
+Notes: ACH combines mutation-guided test generation with LLMs. This is the most recent development in the field (September 2025). The arXiv abstract corroborates the blog post figures but the full PDF was not read directly.
+
+## Evidence 13
+
+Claim: Go has two community-driven mutation testing tools: go-mutesting and gremlins, though neither matches the maturity or feature parity of PIT (JVM) or Stryker (JS/TS).
+Evidence: go-mutesting: "go-mutesting is a framework for performing mutation testing on Go source code. Its main purpose is to find source code which is not covered by any tests." Implements branch mutators (if, else, case), expression mutators (comparison, remove), and statement mutators (remove). Uses an exec-based workflow. (Source 10) gremlins: "A mutation testing tool for Go" with CLI and documentation at https://gremlins.dev. (Source 11) Wikipedia: "The increased use of object-oriented programming languages and unit testing frameworks has led to the creation of mutation testing tools that test individual portions of an application." PIT FAQ confirms Java/Kotlin only; Stryker supports JS/TS, C#, Scala — no Go support mentioned.
+Source: GitHub (go-mutesting, gremlins), Wikipedia, PIT FAQ, Stryker docs
+URL: https://github.com/zimmski/go-mutesting / https://github.com/go-gremlins/gremlins / https://pitest.org/faq/
+Confidence: HIGH (sources verified and accessible)
+Corroborated By: Confirmed via GitHub search and repository README text.
+Notes: Both tools are open-source community projects. go-mutesting supports AST-level mutation with configurable mutators. gremlins provides CLI-based workflow. Neither offers production-grade CI integration comparable to PIT's Arcmutate plugin or Stryker's dashboard.
+
+## Evidence 14
+
+Claim: Subsumed mutants are mutants that exist in the same source code location as another mutant and do not contribute to coverage metrics because their result is identical to the already-tested mutant.
+Evidence: "In addition to equivalent mutants, there are subsumed mutants which are mutants that exist in the same source code location as another mutant, and are said to be 'subsumed' by the other mutant. Subsumed mutants are not visible to a mutation testing tool, and do not contribute to coverage metrics." — Wikipedia (Mutation testing article, subsumed mutants section).
+Source: Wikipedia
+URL: https://en.wikipedia.org/wiki/Mutation_testing
+Confidence: HIGH (directly accessible source)
+Corroborated By: Standard concept in mutation testing literature; relevant for understanding mutation score accuracy.
+Notes: Subsumed mutants are an advanced refinement topic. Core mutation testing concept (equivalent mutants, RIP model) is correct without this addition. Subsumed mutants affect interpretation of high mutation scores.

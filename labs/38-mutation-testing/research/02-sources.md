@@ -92,3 +92,48 @@ Accessed: 2026-09-28 (bibliographic metadata only, via Wikipedia citation)
 Source Tier: Tier 1 (peer-reviewed academic survey)
 Relevance: Standard survey of mutation testing development.
 Notes: Paper NOT opened directly; cite as secondary-attributed only.
+
+## Source 10
+
+Title: go-mutesting — Mutation testing for Go source code
+Publisher: zimmski (GitHub repository)
+URL: https://github.com/zimmski/go-mutesting
+Published: README last updated per repo activity (ongoing project)
+Accessed: 2026-09-28
+Source Tier: Tier 2 (community open-source project)
+Relevance: Go mutation testing framework with mutators for branch, expression, and statement levels. Implements mutation score calculation and mutation output.
+Notes: Available at https://github.com/zimmski/go-mutesting. Provides an exec-based mutation workflow for Go.
+
+## Source 11
+
+Title: gremlins — A mutation testing tool for Go
+Publisher: go-gremlins (GitHub organization)
+URL: https://github.com/go-gremlins/gremlins
+Homepage: https://gremlins.dev
+Published: Ongoing project
+Accessed: 2026-09-28
+Source Tier: Tier 2 (community open-source project)
+Relevance: Another Go mutation testing tool with CLI, documentation site, and support for Go mutation workflows.
+Notes: Available at https://github.com/go-gremlins/gremlins with homepage at https://gremlins.dev.
+
+## Source 12
+
+Title: Mutation-Guided LLM-based Test Generation at Meta (arXiv preprint)
+Publisher: arXiv (cs.SE, cs.AI, cs.LG)
+URL: https://arxiv.org/abs/2501.12862
+Published: Submitted 22 January 2025
+Accessed: 2026-09-28
+Source Tier: Tier 1 (primary academic preprint; peer-reviewed venue: FSE 2025 Industry Track)
+Relevance: Full arXiv abstract corroborates Meta ACH trial statistics from the blog post; authors include Mark Harman, Christopher Foster, Abhishek Gulati, et al. Provides exact numbers: 9,095 mutants, 571 privacy-hardening test cases across 10,795 Android Kotlin classes on 7 software platforms; LLM equivalence detector 0.79 precision / 0.47 recall, rising to 0.95 / 0.96 with preprocessing; 73% engineer acceptance; 36% privacy-relevant.
+Notes: Abstract text directly accessible at https://arxiv.org/abs/2501.12862. The PDF was not fetched directly (binary content); all statistics verified from the abstract page.
+
+## Source 13
+
+Title: Mutation testing (Wikipedia — subsumed mutants section)
+Publisher: Wikipedia
+URL: https://en.wikipedia.org/wiki/Mutation_testing
+Published: Last edited 6 September 2026
+Accessed: 2026-09-28
+Source Tier: Tier 2 (crowdsourced encyclopedia)
+Relevance: Defines subsumed mutants — mutants that exist at the same source location as another mutant and are "subsumed" by the other; they do not contribute to coverage metrics. Provides concrete example.
+Notes: Used to address Gap 8 (missing subsumed mutants case).
