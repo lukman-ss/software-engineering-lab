@@ -1,27 +1,23 @@
-# Docs vs Code Audit
+# Documentation vs Code Verification
 
-Target Lab: labs/26-contract-testing
+## Documents Checked
+- `README.md`
+- `engineering/01-design.md`
+- `engineering/02-implementation-notes.md`
+- `engineering/03-execution-result.md`
 
-## Comparison Summary
+## Comparison Matrix
 
-| Item | Documentation Claim | Actual Implementation | Status |
-|------|--------------------|------------------------|--------|
-| Directory Structure | `README.md` lists `cmd/demo/main.go`, `internal/consumer`, `internal/contract`, `internal/model`, `internal/provider`, `tests/contract_test.go` | Matches exactly. All files exist in declared paths. | MATCH |
-| Test Commands | `go test -v ./...` & `go test -race ./...` | Tests pass cleanly without race warnings. | MATCH |
-| Demo Command | `go run ./cmd/demo` | Demo executes and outputs all 4 stages without errors. | MATCH |
-| Features Claimed | Consumer contract generation, Provider V1 validation, Breaking change detection, Dual Provider V1+V2 backward compatibility | Fully implemented and verified in code and tests. | MATCH |
-| Mismatches Found | None | None | MATCH |
+| Claim / Section | Documented Claim | Code / Execution Reality | Status |
+|---|---|---|---|
+| Project Structure | README lists cmd, internal (consumer, contract, model, provider), tests | Exactly matches filesystem layout | MATCH |
+| Test Commands | `go test -v ./...`, `go test -race ./...` | Both run cleanly and pass | MATCH |
+| Demo Command | `go run ./cmd/demo` | Runs cleanly and produces expected 4 stages | MATCH |
+| Tolerant Reader | Consumer expects subset, extra provider fields ignored | Verified in `diffValues` logic and demo | MATCH |
+| Breaking Scenarios | Detects casing, missing field, type mismatch | `TestProviderBreaking_ContractVerification_Fails` proves all 3 errors | MATCH |
+| Concurrency Support | Verifier safe for concurrent execution | `TestConcurrentContractVerification` passes with `-race` | MATCH |
 
-## Specific Checks
-
-### DOC_CODE_MISMATCH
-- Result: NONE
-- Analysis: README claims match actual file paths, exported function names, and CLI tool output.
-
-### TEST_CLAIM_MISMATCH
-- Result: NONE
-- Analysis: Tests directly verify all claims made in `README.md` and `engineering/01-design.md`.
-
-### RESEARCH_IMPLEMENTATION_MISMATCH
-- Result: NONE
-- Analysis: Implementation adheres to approved design guidelines (pure Go standard library CDC implementation without external pact daemon requirements).
+## Findings
+- No DOC_CODE_MISMATCH detected.
+- No TEST_CLAIM_MISMATCH detected.
+- No RESEARCH_IMPLEMENTATION_MISMATCH detected.
