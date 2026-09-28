@@ -12,9 +12,9 @@ Low: 0
 
 ## Resolution
 
-Resolved: 0
-Partially Resolved: 0
-Unresolved: 0
+Resolved: N/A
+Partially Resolved: N/A
+Unresolved: N/A
 
 ## Validation
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None.
+None.
 
 ## Re-Audit Status
 
