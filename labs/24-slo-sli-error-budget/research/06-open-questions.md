@@ -1,55 +1,47 @@
-# 06 — Open Questions
+# Open Questions
 
 ## Unanswered Questions
 
-1. **Industry-wide SLO adoption rates:** Berapa persen organisasi engineering yang secara luas mengimplementasikan SLO-based error budgeting? Tidak ada data kuantitatif publik universal yang tersedia.
+1. **Optimal Time Window Selection**
+   - Rolling window (4 weeks) vs. calendar window (monthly/quarterly): No data-driven consensus. Google recommends rolling; Evernote chose calendar; Home Depot undecided. Organizations must weigh user experience alignment vs business reporting needs.
 
-2. **Optimasi burn rate thresholds:** Apakah ada standar otoritatif (Google, CNCF, NIST) untuk parameter burn rate selain rekomendasi Google 14.4×/6×/1×? Datadog menggunakan 1-6 (elevated) / 6+ (critical) pada 2h window.
+2. **Burn Rate Threshold Customization**
+   - Google's Table 5-8 provides starting parameters (2%/1h, 5%/6h, 10%/3d), but optimal values depend on traffic volume, on-call cadence, and incident response maturity. No authoritative guidance exists for tuning these thresholds.
 
-3. **Statistik "70% outage dari change":** Tidak ada sumber independen (AWS, Azure, postmortemm data, paper akademik) yang diverifikasi yang mendukung angka 70%. Google hanya mengutip ini tanpa metodologi.
+3. **OpenSLO Ecosystem Adoption**
+   - Primary evidence (OpenSLO spec website) exists, but independent industry adoption rates, real-world usage case studies, and interoperability with other tools (Prometheus, Datadog, Grafana) are not documented.
 
-4. **Multi-service error budget allocation:** Bagaimana secara praktis mengalokasikan/fungsi error budget ke banyak layanan dengan SLO berbeda? Google SRE tidak menyebutkan framework untuk ini.
+4. **Error Budget Policy Enforcement at Scale**
+   - Google and Home Depot describe error budget policies, but specific automation for halting deployments (e.g., GitOps integration) is not standardized. No reference implementation exists for automated policy enforcement.
 
-5. **SLO untuk data correctness/durability:** Bagaimana mengukur "benar/baik" sebagai SLI pada sistem storage/pipeline? Google menyebut penting, tapi tidak memberikan metode praktis.
+## Weak Evidence
 
-## Weak Evidence Areas
+1. **Low-Traffic Service Alerting**
+   - Google SRE Workbook (p. 119-120) provides recommendations (artificial traffic, service combination, lower SLO), but no empirical data on false positive rates or intervention cost-benefit analysis for these techniques.
 
-1. **Burn rate numeric thresholds** — Hanya Google SRE Workbook + Datadog. Tidak ada sumber tidak-Google (AWS, Azure, Prometheus Cookbook) yang menyebut "burn rate 14.4x".
+2. **Burn Rate Reset Time Metrics**
+   - Google documents reset times (e.g., 58 minutes for single-burn-rate alert), but provides no field data on operator response times vs. budget recovery rates for multi-burn-rate configurations.
 
-2. **"Cost 100x per nine" claim** — Google SRE Book menyatakan "an incremental improvement in reliability may cost 100x more" tanpa metodologi empiri yang dikutip. Tidak ada studi industri independen.
-
-3. **User preference for lower variance** — Google menyatakan "people prefer slightly slower system to one with high variance" tanpa referensi studi pengguna yang dikutip.
-
-4. **SLO status corrections formula** — Datadog formalisasi, Google hanya contoh Chubby planned outage. Tidak ada standar industri.
+3. **VALET Framework Scalability**
+   - Home Depot reports scaling to 800 services, but latency of updates (e.g., 3 days later still counts toward limit) and correction limit (100 one-time corrections per SLO) are documented but not validated against large-scale incidents.
 
 ## Claims Needing Deeper Research
 
-1. **Perbandingan window 28 hari vs 30 hari** — Apakah ada data A/B testing yang menunjukkan mana yang lebih baik untuk traffic dengan pola weekday/weekend yang berbeda?
+1. **Do multi-dimensional SLOs (availability + latency) cause SLO sprawl?**
+   - SRE Book advocates multiple targets; SRE Workbook implicitly suggests this is manageable. Quantitative study of SLO count vs team cognitive load is absent.
 
-2. **Error budget policy di enterprise kecil** — Bagaimana implementasi kebijakan budget error di organisasi tanpa dedicated SRE team?
+2. **Business Impact vs. Technical Degradation**
+   - Evernote mentions "user feedback" as input for SLO targets; no methodology exists for translating business impact (e.g., payment webhook failure) to numeric reliability requirements.
 
-3. **Statistik internal Google vs industry** — Apakah data Google tentang "70% outage from change" konsisten dengan data dari konferensi SREcon, post-mortem publik, atau studi DevOps Research?
-
-4. **SLO vs Feature Velocity trade-off empiris** — Apakah ada data kuantitatif perusahaan yang menunjukkan correlation antara error budget consumption dan deployment frequency?
+3. **SLOs for Event-Driven vs. Request-Driven Systems**
+   - "Freshness" SLIs for pipelines are documented, but no systematic comparison between event-driven architectures and request-response architectures for SLO design.
 
 ## Possible Next Research Directions
 
-1. **Cross-company postmortem collection** — Kumpulkan postmortem publik (AWS Status, GCP Status, GitHub Status, Netflix TechBlog) untuk menganalisis distribusi penyebab outage.
+1. **Cross-vendor SLO implementation comparison**: Conduct side-by-side analysis of Google SRE Workbook recommendations vs Datadog's burn rate indicator vs Grafana's SLO plugin. Verify if core algorithms are identical.
 
-2. **Vendor SLO comparison** — Bandingkan implementasi SLO di AWS CloudWatch (Service Health), GCP SLO, Azure Monitor, New Relic, VictorOps.
+2. **Empirical study of SLO alerting effectiveness**: Survey SRE teams on false positive/negative rates for multi-window multi-burn-rate alerts at different thresholds.
 
-3. **OpenTelemetry integration** — Bagaimana SLI/SLO berlaku pada traces/metrics/logs? OpenTelemetry semantic conventions untuk service-level metrics apa yang tersedia?
+3. **SLO target selection methodology**: Develop a business-impact framework (cost of downtime × frequency × revenue impact) to derive SLO targets mathematically rather than qualitatively.
 
-4. **Case study industri** — Cari informasi publik dari:
-   - Netflix Tech Blog (Chaos Engineering, SRE)
-   - Uber Engineering (Metric-based SLOs)
-   - Shopify Engineering (Error budget culture)
-   - LinkedIn Engineering (SRE practices)
-
-5. **Akademik research** — Cari di Google Scholar untuk "Service Level Objectives", "Error Budget SRE", "Reliability Engineering Metrics".
-
-6. **Indonesian SLO adoption** — Eksplorasi adopsi SLO di perusahaan teknologi Indonesia (Gojek, Tokopedia, Traveloka, Bukalapak) melalui blog teknis mereka.
-
----
-
-**Status:** Beberapa klaim utama telah diverifikasi (SLI/SLO/Error Budget definisi, kalkulasi, downtime, burn rate). Namun beberapa statistik industri (70% outages from change, 100x cost per nine) tetap bersifat klaim internal tanpa verifikasi independen. Error budget policy example dari Google dapat diadopsi, tetapi perlu disesuaikan dengan budaya organisasi masing-masing.
+4. **Indonesian SRE community adoption**: Investigate whether Indonesian companies have adopted SLO practices (e.g., Gojek, Tokopedia, Bukalapak) and publish their SLO frameworks.

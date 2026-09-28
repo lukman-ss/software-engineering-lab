@@ -1,89 +1,131 @@
+# Sources
+
 ## Source 1
 
-Title: Chapter 4 - Service Level Objectives
-Publisher: Google SRE Book (Google Inc., O'Reilly Media)
+Title: Service Level Objectives (Chapter 4, Google SRE Book)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
 URL: https://sre.google/sre-book/service-level-objectives/
-Published: 2016 (O'Reilly SRE Book), continuously updated
-Accessed: 2026-09-27
-Source Tier: Tier 1 (Google internal primary source / official documentation)
-Relevance: Definisi isomorph SLI/SLO/SLA, contoh implementasi, best practice pemilihan target.
+Published: 2016 (original), 2017 (O'Reilly)
+Accessed: 2026-09-28
+Source Tier: Tier 1
+Relevance: Canonical definitions of SLI, SLO, SLA; SLI types; aggregation; percentile vs. average; error budget concept; SLO selection guidance
 
 ## Source 2
 
-Title: Chapter 3 - Embracing Risk
-Publisher: Google SRE Book (Google Inc., O'Reilly Media)
-URL: https://sre.google/sre-book/embracing-risk/
-Published: 2016
-Accessed: 2026-09-27
+Title: Implementing SLOs (Chapter 2, Google SRE Workbook)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
+URL: https://sre.google/workbook/implementing-slos/
+Published: 2018 (O'Reilly)
+Accessed: 2026-09-28
 Source Tier: Tier 1
-Relevance: Error budget, availability table, risk tolerance layanan, cost non-linear kaunter reliability.
+Relevance: Step-by-step SLO recipe; SLI specification vs. implementation; ratio-based SLIs; error budget calculation; time window selection; stakeholder agreement; error budget policy; SLO decision matrix
 
 ## Source 3
 
-Title: Appendix A - Availability Table
-Publisher: Google SRE Book (Google Inc., O'Reilly Media)
-URL: https://sre.google/sre-book/availability-table/
-Published: 2016
-Accessed: 2026-09-27
+Title: Embracing Risk (Chapter 3, Google SRE Book)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
+URL: https://sre.google/sre-book/embracing-risk/
+Published: 2016 (original), 2017 (O'Reilly)
+Accessed: 2026-09-28
 Source Tier: Tier 1
-Relevance: Tabel downtime terstandarisasi per tahun/kuartal/bulan/minggu/hari/jam untuk banyak availability level (99%, 99.9%, 99.99%, 99.999%).
+Relevance: Risk management framework; why 100% is wrong; error budget as alignment tool; cost/benefit of reliability; aggregate availability formula; risk tolerance by service type
 
 ## Source 4
 
-Title: Chapter 2 - Implementing SLOs
-Publisher: Google SRE Workbook (Google Inc.)
-URL: https://sre.google/workbook/implementing-slos/
-Published: 2018
-Accessed: 2026-09-27
+Title: Alerting on SLOs (Chapter 5, Google SRE Workbook)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
+URL: https://sre.google/workbook/alerting-on-slos/
+Published: 2018 (O'Reilly)
+Accessed: 2026-09-28
 Source Tier: Tier 1
-Relevance: Step-by-step implementasi SLO, kalkulasi error budget, kebijakan release vs reliability, multi-window SLO, contoh kalkulasi nyata.
+Relevance: Burn rate concept; multi-window multi-burn-rate alerting; recommended alert parameters; low-traffic service handling; extreme availability goals; request class buckets
 
 ## Source 5
 
-Title: Chapter 5 - Alerting on SLOs
-Publisher: Google SRE Workbook (Google Inc.)
-URL: https://sre.google/workbook/alerting-on-slos/
-Published: 2018
-Accessed: 2026-09-27
+Title: Availability Table (Appendix A, Google SRE Book)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
+URL: https://sre.google/sre-book/availability-table/
+Published: 2016 (original), 2017 (O'Reilly)
+Accessed: 2026-09-28
 Source Tier: Tier 1
-Relevance: Burn rate alerting, multi-window multi-burn-rate, precision/recall/detection time, rekomendasi parameter (14.4x/1h, 6x/6h, 1x/3d).
+Relevance: Downtime allowed per availability level (90% to 99.999%) per year/quarter/month/week/day/hour; "nines" reference table
 
 ## Source 6
 
-Title: Appendix B - Example Error Budget Policy
-Publisher: Google SRE Workbook (Google Inc.)
-URL: https://sre.google/workbook/error-budget-policy/
-Published: 2018-02-19
-Accessed: 2026-09-27
+Title: SLO Engineering Case Studies (Chapter 3, Google SRE Workbook)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
+URL: https://sre.google/workbook/slo-engineering-case-studies/
+Published: 2018 (O'Reilly)
+Accessed: 2026-09-28
 Source Tier: Tier 1
-Relevance: Template kebijakan budget error, prosedur postmortem bila budget terpaksa >20%, escalation path, statistik "70% outage dari change".
+Relevance: Real-world implementation at Evernote and The Home Depot (VALET framework); adoption journey; error budget culture evolution; percentiles vs averages practice
 
 ## Source 7
 
-Title: Concepts in Service Monitoring
-Publisher: Google Cloud Documentation (Google Inc.)
-URL: https://cloud.google.com/stackdriver/docs/solutions/slo-monitoring
-Published: 2026-09-25
-Accessed: 2026-09-27
-Source Tier: Tier 1 (official cloud provider doc)
-Relevance: SLI sebagai rasio good/total events, error budget formula, burn rate konsep, jenis SLO (metric-based, monitor-based, time-slice).
+Title: Practical Alerting from Time-Series Data (Chapter 10, Google SRE Book)
+Publisher: Google (O'Reilly Media, CC BY-NC-ND 4.0)
+URL: https://sre.google/sre-book/practical-alerting/
+Published: 2016 (original), 2017 (O'Reilly)
+Accessed: 2026-09-28
+Source Tier: Tier 1
+Relevance: Borgmon architecture; white-box vs. black-box monitoring; alerting rules; alerting on symptoms vs. causes
 
 ## Source 8
 
-Title: Alerting | Prometheus
-Publisher: Prometheus Authors / The Linux Foundation
-URL: https://prometheus.io/docs/practices/alerting/
-Published: 2014-2026
-Accessed: 2026-09-27
-Source Tier: Tier 1 (official CNCF project documentation)
-Relevance: Prinsip alerting symptom bukan cause, golden signals (latency, traffic, errors, saturation), perkiraan for duration vs burn rate.
+Title: OpenSLO Specification
+Publisher: OpenSLO Community (Apache 2.0)
+URL: https://openslo.github.io/OpenSLO/
+Published: 2021+
+Accessed: 2026-09-28
+Source Tier: Tier 1
+Relevance: Open standard for declarative SLO definitions; YAML specification; vendor-neutral; Git workflow integration; schema versions v1, v2alpha
 
 ## Source 9
 
-Title: Service Level Objectives
+Title: Alerting Best Practices
+Publisher: Prometheus (CNCF)
+URL: https://prometheus.io/docs/practices/alerting/
+Published: Ongoing
+Accessed: 2026-09-28
+Source Tier: Tier 2
+Relevance: Alert on symptoms not causes; alerting for online serving systems, offline processing, batch jobs, capacity; naming conventions
+
+## Source 10
+
+Title: Service Level Objectives (Datadog)
 Publisher: Datadog
 URL: https://docs.datadoghq.com/service_level_objectives/
-Published: 2026-09-27
-Accessed: 2026-09-27
-Source Tier: Tier 2 (reputable technical platform documentation)
-Relevance: Definisi SLI/SLO/SLA/error budget yang identik dengan Google, error budget remaining formula, burn rate indicator (elevated 1-6, critical >6), SLO status corrections, tipe SLO (metric/monitor/time-slice).
+Published: Ongoing
+Accessed: 2026-09-28
+Source Tier: Tier 2
+Relevance: Vendor implementation of SLOs; metric-based/monitor-based/time-slice SLO types; error budget formula; burn rate indicator; SLO status corrections; rolling windows
+
+## Source 11
+
+Title: Google Cloud Blog: SRE Basics (404)
+Publisher: Google Cloud
+URL: https://cloud.google.com/blog/products/devops-sre/sre-basics-service-level-indicators-service-level-objectives-and-service-level-agreements
+Published: Unknown (page removed)
+Accessed: 2026-09-28
+Source Tier: Tier 1
+Relevance: NOT AVAILABLE (404). Recorded to document the failed fetch; content superseded by Google SRE Book chapters.
+
+## Source 12
+
+Title: Grafana SLO docs (404)
+Publisher: Grafana
+URL: https://grafana.com/docs/grafana-cloud/monitor-applications/slos/
+Published: Unknown
+Accessed: 2026-09-28
+Source Tier: Tier 1
+Relevance: NOT AVAILABLE (404). URL structure changed; not used as evidence.
+
+## Source 13
+
+Title: OpenTelemetry SLO semconv (404)
+Publisher: OpenTelemetry
+URL: https://opentelemetry.io/docs/specs/semconv/service-level-objectives/
+Published: Unknown
+Accessed: 2026-09-28
+Source Tier: Tier 1
+Relevance: NOT AVAILABLE (404). No OpenTelemetry SLO semantic conventions found at that path; NOT VERIFIED whether an equivalent spec exists.

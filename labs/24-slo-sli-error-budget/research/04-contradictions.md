@@ -1,49 +1,66 @@
-# 04 — Contradictions
+# Contradictions
 
-## Contradiction 1: Downtime per Bulan untuk 99% — Selisih 6 Menit
+## Contradiction 1: Pick SLO from current performance or not?
 
-- **Topic Lab klaim:** 99% → ~7 jam 18 menit/bulan (438 menit)
-- **Google Appendix A klaim:** 99% → 7.2 jam/bulan = 7 jam 12 menit/bulan (432 menit)
-- **Assessment:** Selisih 6 menit (~1.4%). Penyebab: asumsi panjang bulan berbeda. Lab ~438 menit → 0.6% dari 30.44 hari (bulan rata-rata 365/12). Google 432 menit → 1% dari 30 hari tepat (43,200 menit). Keduanya benar di bawah asumsi berbeda. Untuk konsistensi, lab perlu eksplisit: "30 hari" vs "bulan kalender rata-rata".
-- **Impact:** LOW. Tidak mengubah keputusan engineering.
+SOURCE A (Google SRE Book, Ch.4 "Choosing Targets"):
+"Don't pick a target based on current performance. While understanding the merits and limits of a system is essential, adopting values without reflection may lock you into supporting a system that requires heroic efforts to meet its targets."
 
-## Contradiction 2: 99.99% per Bulan — 4m23s vs 4m19s
+SOURCE B (Google SRE Workbook, Ch.2):
+"In our first book, we advise against picking an SLO based upon current performance... While that advice is true, your current performance can be a good place to start if you don't have any other information, and if you have a good process for iterating in place."
 
-- **Topic Lab:** 99.99% → ~4 menit 23 detik/bulan (263 detik)
-- **Google Appendix A:** 99.99% → 4.32 menit = 4 menit 19.2 detik/bulan (259 detik)
-- **Assessment:** Selisih 3.8 detik (~1.5%). Penyebab sama: basis hitung bulan. Lab sedikit lebih longgar (mungkin pembulatan).
-- **Impact:** LOW.
+ASSESSMENT:
+Not a factual contradiction but a documented evolution of guidance (2016 → 2018). Source A warns against anchoring; Source B softens it for teams with no data, with iteration as the condition. Both agree current performance alone must not be the final answer. Uncertainty: which approach is preferable in practice is not resolved by either source; context-dependent.
 
-## Contradiction 3: Window SLO — 30 Hari (Lab) vs 4 Minggu (Google)
+## Contradiction 2: Time window — rolling vs calendar
 
-- **Topic Lab contoh:** SLO 99.9% per 30 hari (rolling)
-- **SRE Workbook Ch.2:** "four-week rolling window to be a good general-purpose interval" (28 hari) + weekly/quarterly pelengkap
-- **Assessment:** Bukan kontradiksi; keduanya rolling window. 28 hari dipilih agar tiap window punya jumlah weekend identik (hindari bias weekday/weekend). 30 hari lebih intuitif untuk konteks bisnis bulanan. Keduanya valid; trade-off: LAB lebih umum dipahami, GOOGLE lebih stabil untuk traffic mingguan.
-- **Impact:** LOW. Perlu dokumentasikan window yang dipakai.
+SOURCE A (Google SRE Workbook, Ch.2 "Choosing an Appropriate Time Window"):
+"We have found a four-week rolling window to be a good general-purpose interval... Rolling windows are more closely aligned with user experience. We recommend defining this period as an integral number of weeks so it always contains the same number of weekends."
 
-## Contradiction 4: Burn Rate Threshold — Google vs Datadog
+SOURCE B (Evernote case study, same workbook):
+"We deliberately chose to bind our SLOs to a calendar month versus a rolling period to keep us focused and organized when running service reviews."
 
-- **Google SRE Workbook Ch.5:** page 14.4x (1h+5m), page 6x (6h+30m), ticket 1x (3d+6h)
-- **Datadog SLO docs:** burn rate indicator red >6 (2h window), yellow 1-6 (2h window)
-- **Assessment:** Implementasi berbeda, bukan kontradiksi prinsip. Datadog mengonsolidasikan ke 2h window + 2 threshold; Google menggunakan multi-window dengan 3 tier. Kedua pendekatan sama-sama menggunakan konsep burn rate (budget consumption rate) dengan short window = 1/12 long window.
-- **Impact:** LOW. Dokumentasikan bahwa threshold numerik adalah vendor-specific.
+SOURCE C (Home Depot case study, same workbook):
+"Like many companies adopting error budgets, we're weighing the pros and cons of rolling windows versus fixed windows."
 
-## Contradiction 5: "70% Outage dari Change"
+ASSESSMENT:
+Google recommends rolling windows (user experience alignment); Evernote explicitly chose calendar month (review cadence alignment); Home Depot undecided. Sources may differ because rolling windows optimize for user experience while calendar windows optimize for business planning. What remains uncertain: neither source demonstrates a data-driven conclusion that one is universally better; both trade-offs are acknowledged.
 
-- **Sumber:** Google SRE Workbook Appendix B
-- **Klaim:** "Changes are a major source of instability, representing roughly 70% of our outages"
-- **Status:** Klaim internal Google tanpa metodologi publik di halaman tersebut. Tidak ada sumber independen (AWS, Azure, CNCF, paper akademik) yang berhasil diverifikasi dalam riset ini yang mendukung angka 70% ini.
-- **Assessment:** Tandai LOW confidence; jangan dikutip sebagai statistik universal. Bisa dibicarakan sebagai "Google experience" tapi bukan evidence-based standard industri.
-- **Impact:** MEDIUM. Topic specification tidak menyebut angka ini.
+## Contradiction 3: Availability measurement — time-based vs request-based
 
-## Contradiction 6: Tidak Ada Kontradiksi Material Lain
+SOURCE A (Google SRE Book, Ch.3 "Embracing Risk"):
+"At Google, however, a time-based metric for availability is usually not meaningful... we define availability in terms of the request success rate." (For globally distributed services, they are "at least partially 'up' at all times.")
 
-Klaim inti (SLI=indikator, SLO=target, Error Budget=1−SLO, hindari CPU sebagai SLO user, percentile > average, burn rate untuk alerting, SLO beda per endpoint) konsisten lintas Ch.3/Ch.4/Ch.6/Workbook Ch.2/Ch.5/Appendix B + Datadog + Prometheus.
+SOURCE B (Evernote case study, Google SRE Workbook):
+Evernote used prober-based uptime checks: "If a prober check fails, the node is marked as Unconfirmed Down and then a second geographically separate prober performs a check."
 
-Tidak ada sumber yang merekomendasikan 100% sebagai target atau average latency sebagai SLI utama.
+ASSESSMENT:
+Google prefers aggregate request-based availability; Evernote used time-based prober uptime (a black-box measure). They may differ because Evernote had a single-region service with a status page endpoint, while Google services are globally distributed so time-based availability is always "up". Uncertainty: Evernote acknowledged limitations (moved toward client-side/API-level SLIs in later versions). Both are valid depending on system topology; neither source claims universality.
 
-## Verifikasi Hitungan Latihan Lab
+## Contradiction 4: Burn rate indicator implementation differs across vendors
 
-- Payment Webhook SLO 99.99% dari 200.000 request → budget = 0.01% × 200.000 = **20 request boleh gagal**.
-- 15 gagal = 15/20 = **75% error budget habis**.
-- Cross-check: SRE Book aggregate availability formula (successful/total) menghasilkan angka identik. Konsisten.
+SOURCE A (Google SRE Workbook, Ch.5):
+Recommends multi-window, multi-burn-rate alerting: page at 14.4x burn rate over 1h+5m windows, 6x over 6h+30m; ticket at 1x over 3d+6h.
+
+SOURCE B (Datadog documentation):
+"Burn rate indicators use a rolling 2-hour window... A red icon indicating a critical burn rate above 6 in the past 2 hours. A yellow icon indicating an elevated burn rate between 1 and 6 in the past 2 hours."
+
+ASSESSMENT:
+Google's approach is multi-window with different thresholds per window; Datadog uses a single 2-hour rolling window with two thresholds (1 and 6). They differ because Datadog provides a simplified built-in indicator for dashboards, while Google's approach is tuned for alerting precision/recall trade-offs. Uncertainty: Datadog does not document how its indicator maps to page/ticket decisions; Google's parameters are explicitly stated as "starting point" requiring tuning. Core burn rate math agrees across both.
+
+## Contradiction 5: Lab material downtime figures vs Google Availability Table
+
+SOURCE A (Google SRE Book, Appendix A "Availability Table"):
+99% → 7.2 hours per month; 99.9% → 43.2 minutes per month; 99.99% → 4.32 minutes per month (assuming 30-day month).
+
+SOURCE B (Lab topic specification):
+"99% → ~7 jam 18 menit/bulan; 99,9% → ~43 menit/bulan; 99,99% → ~4 menit 23 detik/bulan"
+
+ASSESSMENT:
+99.9% matches (43.2 min ≈ 43 min). 99% and 99.99% differ slightly: lab figures (7h18m, 4m23s) correspond to an average month of 365.25/12 ≈ 30.44 days, while Google's table uses a 30-day month (7.2h, 4m19.2s). Assessment: both are arithmetically correct under different month-length assumptions; not a factual error but an undisclosed assumption. Lab material does not state which month definition it uses. Google's table is the authoritative primary source for "per month" figures under its stated 30-day convention.
+
+## Contradiction 6: Google Cloud blog overview unavailable
+
+SOURCE A (Intended): Google Cloud blog "SRE basics: SLI, SLO, SLA" — fetch returned 404 (2026-09-28).
+
+ASSESSMENT:
+Cannot be used as corroboration. Definitions of SLI/SLO/SLA are instead verified via Google SRE Book Ch.4 (Tier 1) plus Datadog docs (Tier 2), which agree. No substantive disagreement; the missing source only reduces redundancy of cross-check for the definitional claims (still 2 independent sources: Google SRE Book + Datadog).

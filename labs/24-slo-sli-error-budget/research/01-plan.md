@@ -1,40 +1,64 @@
-# 01 — Research Plan
+# Research Plan
 
-Research Topic
-SLO, SLI & Error Budget — Mengubah "Sistem Harus Stabil" Menjadi Angka yang Bisa Diputuskan (labs/24-slo-sli-error-budget, Senior Software Engineer Daily #24, Bahasa Indonesia).
+## Research Topic
+SLO, SLI & Error Budget — Service Level Objectives, Service Level Indicators, and Error Budget concepts in Site Reliability Engineering
 
-Objective
-Verifikasi setiap klaim teknis material di TOPIC SPECIFICATION terhadap sumber primer otoritatif. Pisahkan fakta terverifikasi vs klaim sumber vs interpretasi vs unknowns. Sediakan angka yang sudah di-cross-check untuk fase engineering (perhitungan budget, burn rate, downtime).
+## Objective
+Investigate and collect authoritative evidence on SLO/SLI/Error Budget concepts, their practical application, industry standards, calculation methods, and best practices for reliability engineering decision-making.
 
-Research Questions
-1. Definisi kanonis SLI, SLO, SLA, Error Budget?
-2. Apakah contoh hitung SLI 999.200/1.000.000 = 99,92% benar?
-3. Apakah angka downtime 99% / 99,9% / 99,99% per bulan di lab akurat vs tabel otoritatif?
-4. Apakah Error Budget = 1 − SLO dan contoh 10.000.000 req → 10.000 budget benar?
-5. Apakah jawaban latihan (webhook 200.000 req, SLO 99,99% → 20 gagal; 15 gagal = 75%) benar?
-6. Apakah klaim "100% bukan target" didukung sumber primer? Alasannya?
-7. Apakah panduan "CPU bukan SLO user", "percentile bukan average", "SLO beda per endpoint", "burn rate untuk alerting" didukung?
-8. Rekomendasi window (30 hari vs 4 minggu) dan error budget policy apa yang didokumentasikan primer?
+## Research Questions
 
-Search Strategy
-1. Mulai dari sumber Tier 1: Google SRE Book (Ch.3 Embracing Risk, Ch.4 SLO, Appendix A Availability Table), SRE Workbook (Ch.2 Implementing SLOs, Ch.5 Alerting on SLOs, Appendix B Error Budget Policy).
-2. Cross-check independen Tier 1/2: Google Cloud SLO monitoring docs, Prometheus alerting practices, Datadog SLO docs.
-3. Buka tiap halaman penuh via WebFetch; tidak pakai snippet. Klaim AWS Builders Library dicoba tetapi URL 404 pada 2026-09-27 → tidak dipakai sebagai evidence.
-4. Verifikasi aritmetika lab dengan hitung ulang manual.
+1. **Definitions & Core Concepts**
+   - What are the canonical definitions of SLI, SLO, and Error Budget?
+   - How do they relate to SLA (Service Level Agreement)?
+   - What are the mathematical formulations?
 
-Expected Primary Sources
-- https://sre.google/sre-book/service-level-objectives/
-- https://sre.google/sre-book/embracing-risk/
-- https://sre.google/sre-book/availability-table/
-- https://sre.google/workbook/implementing-slos/
-- https://sre.google/workbook/alerting-on-slos/
-- https://sre.google/workbook/error-budget-policy/
-- https://cloud.google.com/stackdriver/docs/solutions/slo-monitoring
-- https://prometheus.io/docs/practices/alerting/
-- https://docs.datadoghq.com/service_level_objectives/
+2. **Industry Standards & Frameworks**
+   - What does Google's SRE book / workbook say?
+   - What are the OpenSLO / OpenTelemetry standards?
+   - What do CNCF / TAG Observability recommend?
 
-Risks / Unknowns
-- Semua sumber Tier 1 berasal dari ekosistem Google; risiko bias vendor tunggal. Mitigasi: cross-check Datadog + Prometheus.
-- Angka downtime bergantung asumsi panjang bulan (30 hari vs 30,44 hari) → selisih kecil diekspektasikan, didokumentasikan di contradictions.
-- Statistik "70% outage dari change" hanya klaim internal Google tanpa metodologi publik → tandai LOW.
-- Rekomendasi window dan threshold burn rate bersifat praktik, bukan hasil eksperimen terkontrol.
+3. **SLI Selection & Design**
+   - What are the recommended SLI types (availability, latency, quality, freshness, correctness, durability)?
+   - How to choose SLIs based on user experience vs infrastructure metrics?
+   - What are anti-patterns in SLI selection?
+
+4. **SLO Target Setting**
+   - How to determine appropriate SLO targets based on business impact?
+   - What are common SLO tiers (99%, 99.9%, 99.99%, 99.999%) and their implications?
+   - How to handle different SLOs for different endpoints/criticality levels?
+
+5. **Error Budget Calculation & Burn Rate**
+   - What are the standard formulas for error budget calculation?
+   - How does burn rate alerting work (multi-window, multi-burn-rate)?
+   - What are the recommended alerting thresholds?
+
+6. **Practical Implementation**
+   - How to implement SLOs in practice (Prometheus, Grafana, Datadog, etc.)?
+   - What are the common pitfalls and how to avoid them?
+   - How to use error budgets for release decisions and prioritization?
+
+7. **Case Studies & Real-World Applications**
+   - How do companies (Google, Netflix, Slack, etc.) implement these concepts?
+   - What are the measurable outcomes?
+
+## Search Strategy
+
+1. Primary sources: Google SRE Book, SRE Workbook, official documentation
+2. Standards: OpenSLO specification, OpenTelemetry semantic conventions
+3. Industry publications: ACM Queue, USENIX ;login:, conferences (SREcon, Velocity)
+4. Vendor documentation: Prometheus, Grafana, Datadog, Honeycomb, Nobl9
+5. Technical blogs from recognized experts
+
+## Expected Primary Sources
+
+- **Tier 1**: Google SRE Book (2016), SRE Workbook (2018), OpenSLO spec, OpenTelemetry docs, CNCF TAG Observability whitepapers
+- **Tier 2**: SREcon presentations, USENIX papers, major tech company engineering blogs
+- **Tier 3**: Community discussions, personal blogs (for discovery only)
+
+## Risks / Unknowns
+
+- Some Google SRE content may be dated (2016-2018); need to verify current practices
+- OpenSLO is relatively new (2021+); adoption may be limited
+- Vendor-specific implementations may differ from standards
+- Indonesian language context for the lab - need to verify terminology alignment

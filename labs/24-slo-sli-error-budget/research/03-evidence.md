@@ -1,217 +1,151 @@
-## Evidence 1 — SLI Definition
+# Evidence
 
-Claim: SLI adalah ukuran kuantitatif aspek level layanan yang diberikan.
-Evidence: "An SLI is a service level indicator—a carefully defined quantitative measure of some aspect of the level of service that is provided."
-Source: Google SRE Book Ch.4
+## Evidence 1: SLI Definition
+
+Claim: An SLI is a service level indicator—a carefully defined quantitative measure of some aspect of the level of service that is provided.
+Evidence: "An SLI is a service level *indicator*—a carefully defined quantitative measure of some aspect of the level of service that is provided."
+Source: Service Level Objectives (Google SRE Book)
 URL: https://sre.google/sre-book/service-level-objectives/
 Confidence: HIGH
-Corroborated By: Datadog docs, Prometheus docs (golden signals)
-Notes: Definisi kanonis. Contoh: request latency, error rate, throughput, availability.
+Corroborated By: Source 2 (SRE Workbook), Source 10 (Datadog)
+Notes: Most common SLIs include request latency, error rate, system throughput.
 
-## Evidence 2 — Common SLI Types
+## Evidence 2: SLO Definition
 
-Claim: SLI umum mencakup latency, error rate, throughput, availability; agregasi via rate/percentile.
-Evidence: "Most services consider request latency... Other common SLIs include the error rate... and system throughput... raw data is collected over a measurement window and then turned into a rate, average, or percentile."
-Source: Google SRE Book Ch.4
+Claim: An SLO is a service level objective: a target value or range of values for a service level that is measured by an SLI.
+Evidence: "An SLO is a *service level objective*: a target value or range of values for a service level that is measured by an SLI."
+Source: Service Level Objectives (Google SRE Book)
 URL: https://sre.google/sre-book/service-level-objectives/
 Confidence: HIGH
-Corroborated By: Datadog (metric-based SLI), Prometheus (golden signals)
-Notes: Sumber tambahan: Datadog mendefinisikan SLI sebagai "quantitative measurement... a metric or aggregation of one or more monitors."
+Corroborated By: Source 2, Source 10
+Notes: Natural structure is SLI ≤ target or lower bound ≤ SLI ≤ upper bound.
 
-## Evidence 3 — SLI Bentuk Rasio Good/Total
+## Evidence 3: Error Budget Concept
 
-Claim: SLI ideal berupa rasio good events / total events (0–100%).
-Evidence: "we generally recommend treating the SLI as the ratio of two numbers: the number of good events divided by the total number of events."
-Source: Google SRE Workbook Ch.2
+Claim: An error budget is the allowed amount of unreliability (100% - SLO) that can be spent on innovation while maintaining reliability targets.
+Evidence: "If you have a 99.9% success ratio SLO, then a service that receives 3 million requests over a four-week period had a budget of 3,000 (0.1%) errors over that period."
+Source: Implementing SLOs (Google SRE Workbook)
 URL: https://sre.google/workbook/implementing-slos/
 Confidence: HIGH
-Corroborated By: Datadog "SLI is the sum of good events divided by the sum of total events" (metric-based SLO)
-Notes: Memudahkan kalkulasi error budget dan tooling.
+Corroborated By: Source 3 (Embracing Risk), Source 10 (Datadog)
+Notes: Error budget = 100% - SLO; allows product velocity vs reliability trade-off decisions.
 
-## Evidence 4 — SLA vs SLO
+## Evidence 4: SLI Must Be User-Centric
 
-Claim: SLA mengandung konsekuensi (mis. denda); SLO tidak punya konsekuensi eksplisit.
-Evidence: "SLAs are service level agreements: an explicit or implicit contract with your users that includes consequences of meeting (or missing) the SLOs they contain... if there is no explicit consequence, then you are almost certainly looking at an SLO."
-Source: Google SRE Book Ch.4
+Claim: SLIs should measure user experience, not internal infrastructure metrics like CPU utilization.
+Evidence: "SLOs that are meaningful, understood, and represented in metrics, you can configure alerting to notify an on-caller only when there are actionable, specific threats to the error budget."
+Source: Alerting on SLOs (Google SRE Workbook)
+URL: https://sre.google/workbook/alerting-on-slos/
+Confidence: HIGH
+Corroborated By: Source 3, Source 9 (Prometheus)
+Notes: CPU is infrastructure metric; user cares about success, latency, correctness—not internal utilization.
+
+## Evidence 5: Percentiles Over Averages for Latency SLIs
+
+Claim: Use percentile latency (P95/P99) not average latency for user-facing SLIs because averages hide tail latency.
+Evidence: "Most metrics are better thought of as *distributions* rather than averages. For example, for a latency SLI, some requests will be serviced quickly, while others will invariably take longer—sometimes much longer. A simple average can obscure these tail latencies."
+Source: Service Level Objectives (Google SRE Book)
 URL: https://sre.google/sre-book/service-level-objectives/
 Confidence: HIGH
-Corroborated By: Datadog "SLA: explicit or implicit agreement... consequences for not meeting them"
-Notes: "Most people really mean SLO when they say SLA."
+Corroborated By: Source 6 (Home Depot case study), Source 10 (Datadog)
+Notes: Figure 4-1 shows 50th vs 99th percentile latency; P99 can be 20x slower than median.
 
-## Evidence 5 — Availability Tabel (Time-based)
+## Evidence 6: Burn Rate Alerting Parameters
 
-Claim: 99% = 7.2 jam/bulan (432 menit), 99.9% = 43.2 menit/bulan, 99.99% = 4.32 menit/bulan (259 detik), 99.999% = 25.9 detik/bulan.
-Evidence: Google SRE Book Appendix A Table 1-1.
-Source: Google SRE Book Appendix A
+Claim: Recommended SLO-based alerting uses multi-window, multi-burn-rate: page on 2% budget in 1h (burn rate 14.4) or 5% in 6h (burn rate 6); ticket on 10% in 3d (burn rate 1).
+Evidence: "We recommend the parameters listed in Table 5-8 as the starting point for your SLO-based alerting configuration."
+Source: Alerting on SLOs (Google SRE Workbook)
+URL: https://sre.google/workbook/alerting-on-slos/
+Confidence: HIGH
+Corroborated By: Source 4 (same), implicit in Source 10 (Datadog burn rate indicator)
+Notes: Table 5-8 specifies: Page: 1h/5m @ 14.4x burn rate (2% budget); Page: 6h/30m @ 6x burn rate (5% budget); Ticket: 3d/6h @ 1x burn rate (10% budget).
+
+## Evidence 7: Error Budget Calculation Formula
+
+Claim: Error budget remaining % = 100 × (current status - target) / (100 - target)
+Evidence: "The remaining error budget is displayed as a percentage and is calculated using the following formula: $$\text"error budget remaining" = 100 * {\text"current status" - \text" target"} / { 100 - \text"target"}$$"
+Source: Service Level Objectives (Datadog)
+URL: https://docs.datadoghq.com/service_level_objectives/
+Confidence: HIGH
+Corroborated By: Source 2 (Implementing SLOs), Source 3 (Embracing Risk)
+Notes: Example: 95% current status on 90% SLO → (95-90)/(100-90) = 5/10 = 50% error budget remaining.
+
+## Evidence 8: Availability "Nines" Downtime
+
+Claim: 99.9% availability allows 43.2 minutes downtime per month; 99.99% allows 4.32 minutes per month.
+Evidence: From Availability Table: 99.9% → 43.2 minutes/month; 99.99% → 4.32 minutes/month
+Source: Availability Table (Google SRE Book)
 URL: https://sre.google/sre-book/availability-table/
 Confidence: HIGH
-Corroborated By: Google SRE Book Ch.3 (aggregate availability formula)
-Notes: Topic specification menyebut "7 jam 18 menit" untuk 99% → selisih 6 menit karena basis perhitungan (30.44 hari vs 30 hari); bukan kontradiksi teknis, dijelaskan di contradictions.
+Corroborated By: Source 3 (Embracing Risk discusses "nines"), basic calculation verification
+Notes: 100% - 99.9% = 0.1% downtime; 0.1% × 30 days × 24h × 60m = 43.2 minutes.
 
-## Evidence 6 — 100% Reliability Bukan Target
+## Evidence 9: SLO Must Be Below 100%
 
-Claim: 100% reliability adalah target yang salah karena: (a) probabilitas kegagalan nonzero, (b) user tidak merasakan beda antara 99.99% vs 99.999% (device/network lebih lemah), (c) cost naik non-linear (~100x per nines), (d) change = sumber outage #1.
-Evidence: "100% reliability is the wrong target... four reasons" + cost discussion.
-Source: Google SRE Workbook Ch.2
-URL: https://sre.google/workbook/implementing-slos/
-Confidence: HIGH
-Corroborated By: Google SRE Book Ch.3 "cost does not increase linearly as reliability increments"
-Notes: Konsisten lintas sumber.
-
-## Evidence 7 — Error Budget = 1 − SLO
-
-Claim: Error budget = 100% - SLO%; selisih antara target dan actual.
-Evidence: "An error budget is 1 minus the SLO of the service. A 99.9% SLO service has a 0.1% error budget."
-Source: Google SRE Book Ch.3
-URL: https://sre.google/sre-book/embracing-risk/
-Confidence: HIGH
-Corroborated By: Datadog "error budget = 100% - SLO target percentage"; SRE Workbook Appendix B
-Notes: Contoh valid: 1M request SLO 99.9% → budget 1000 errors.
-
-## Evidence 8 — Error Budget sebagai Decision Tool
-
-Claim: Budget tinggi → release lebih cepat; budget hampir habis → stop deployment berisiko, fokus reliability.
-Evidence: "As long as there is error budget remaining, new releases can be pushed."
-Source: Google SRE Book Ch.3
-URL: https://sre.google/sre-book/embracing-risk/
-Confidence: HIGH
-Corroborated By: Datadog, SRE Workbook Appendix B (SLO Miss Policy)
-Notes: Ini inti value proposition: mengubah reliability jadi alat keputusan, bukan sekadar dashboard.
-
-## Evidence 9 — Burn Rate Alerting
-
-Claim: Burn rate = laju konsumsi budget relatif SLO. Multi-window recommended: page 14.4x (2%/1h+5m), page 6x (5%/6h+30m), ticket 1x (10%/3d+6h). Short window = 1/12 long window.
-Evidence: Table 5-8 + contoh PromQL expr.
-Source: Google SRE Workbook Ch.5
-URL: https://sre.google/workbook/alerting-on-slos/
-Confidence: HIGH
-Corroborated By: Datadog "Burn rate indicators: red icon >6, yellow icon 1-6 in past 2 hours"
-Notes: Datadog pakai 2 jam window vs Google rekomendasi 1h/6h/3d — bukan kontradiksi, hanya implementasi berbeda.
-
-## Evidence 10 — Percentile bukan Average
-
-Claim: Mean menyembunyikan tail latency; gunakan P50/P95/P99.
-Evidence: "Most metrics are better thought of as distributions rather than averages" + Figure 4-1: typical 50ms tapi 5% request 20x lambat.
-Source: Google SRE Book Ch.4
-URL: https://sre.google/sre-book/service-level-objectives/
-Confidence: HIGH
-Corroborated By: Datadog "Percentiles show the shape of the distribution", Prometheus "focus on high percentile values"
-Notes: User lebih suka latency stabil meski sedikit lebih tinggi daripada variansi tinggi.
-
-## Evidence 11 — CPU/RAM Bukan SLO User
-
-Claim: SLO baik ukur pengalaman user (request berhasil? cepat?); CPU/RAM = diagnostic signal.
-Evidence: "Ideally, the SLI directly measures a service level of interest" + contoh AdSense vs AdWords latency tradeoff.
-Source: Google SRE Book Ch.4
-URL: https://sre.google/sre-book/service-level-objectives/
-Confidence: HIGH
-Corroborated By: Prometheus "alert on symptoms, not causes"; Datadog "SLI should be user-facing"
-Notes: Prinsip ala Google: ukur output user, bukan input infra.
-
-## Evidence 12 — SLO Berbeda per Endpoint
-
-Claim: Criticality berbeda → SLO berbeda (mis. POST /payment/webhook > GET /report).
-Evidence: "Not all requests are considered equal... bucketing untuk menambah label ke SLI dan menerapkan SLO berbeda" + Tabel 5-10 (CRITICAL/HIGH_FAST/HIGH_SLOW/LOW/NO_SLO).
-Source: Google SRE Workbook Ch.5
-URL: https://sre.google/workbook/alerting-on-slos/
-Confidence: HIGH
-Corroborated By: Datadog "Different SLOs for different request classes"
-Notes: Topic specification menyebut contoh ini → didukung.
-
-## Evidence 13 — Four Golden Signals
-
-Claim: Latency, Traffic, Errors, Saturation adalah empat sinyal utama monitoring.
-Evidence: "The four golden signals of monitoring are latency, traffic, errors, and saturation. If you can only measure four metrics of your user-facing system, focus on these four."
-Source: Google SRE Book Ch.6
-URL: https://sre.google/sre-book/monitoring-distributed-systems/
-Confidence: HIGH
-Corroborated By: Datadog "Golden signals are latency, traffic, errors, and saturation"; Prometheus golden signals
-Notes: Definisi konsisten di ekosistem.
-
-## Evidence 14 — Error Budget Remaining Formula (Datadog)
-
-Claim: error budget remaining = 100 * (current_status - target) / (100 - target)
-Evidence: Datadog Documentation explicitly states this formula.
-Source: Datadog SLO docs
-URL: https://docs.datadoghq.com/service_level_objectives/
-Confidence: MEDIUM (Datadog-specific implementation, mathematically sound)
-Notes: Umum digunakan, tetapi sumber Google tidak menyebut formula eksplisit.
-
-## Evidence 15 — SLO Miss Policy (Google Template)
-
-Claim: Budget habis → halt changes kecuali P0/security; single incident >20% budget → postmortem + P0 action item.
-Evidence: SRE Workbook Appendix B full policy.
-Source: Google SRE Workbook Appendix B
-URL: https://sre.google/workbook/error-budget-policy/
-Confidence: HIGH
-Corroborated By: SRE Workbook Ch.2 "Establishing an Error Budget Policy"
-Notes: Template; perlu persetujuan PM/dev/SRE di organisasi masing-masing.
-
-## Evidence 16 — Statistik "70% Outage from Change"
-
-Claim: "Changes are a major source of instability, representing roughly 70% of our outages"
-Evidence: SRE Workbook Appendix B Background section.
-Source: Google SRE Workbook Appendix B
-URL: https://sre.google/workbook/error-budget-policy/
-Confidence: LOW (klaim internal Google tanpa metodologi publik di halaman tersebut)
-Corroborated By: NOT VERIFIED (tidak ditemukan sumber independen dalam riset ini)
-Notes: Gunakan dengan hati-hati; bukan fakta universal.
-
-## Evidence 17 — Status Corrections
-
-Claim: Status corrections allow exclude time periods (maintenance, non-business hours, deployments) dari SLO calculation.
-Evidence: Datadog "Status corrections allow you to exclude specific time periods... Prevent expected downtime... Ignore non-business hours... Ensure that temporary issues caused by deployments do not negatively impact your SLOs."
-Source: Datadog SLO docs
+Claim: Setting SLO at 100% eliminates error budget and prevents innovation/reliability balance.
+Evidence: "Setting a 100% target means having an error budget of 0% since error budget is equal to 100%—SLO target. Without error budget representing acceptable risk, you face difficulty finding alignment between the conflicting priorities of maintaining customer-facing reliability and investing in feature development."
+Source: Service Level Objectives (Datadog)
 URL: https://docs.datadoghq.com/service_level_objectives/
 Confidence: HIGH
-Corroborated By: Google SRE Book Ch.4 "SLOs Set Expectations" (planned outages contoh Chubby)
-Notes: Datadog formalisasi konsep yang disebut sekilas di Google SRE.
+Corroborated By: Source 2, Source 3
+Notes: Also causes division-by-zero in alert evaluations.
 
-## Evidence 18 — Window SLO Recommendation
+## Evidence 10: OpenSLO Declarative Format
 
-Claim: Rolling 4 minggu (28 hari) adalah interval general-purpose yang baik; lengkapi weekly summary + quarterly report.
-Evidence: "We have found a four-week rolling window to be a good general-purpose interval."
-Source: Google SRE Workbook Ch.2
-URL: https://sre.google/workbook/implementing-slos/
-Confidence: MEDIUM (rekomendasi praktik Google, bukan hasil eksperimen terkontrol)
-Corroborated By: Datadog (7d, 30d, 90d options)
-Notes: Topic specification pakai 30 hari; bukan kontradiksi, trade-off: 28 hari = weekend konsisten, 30 hari = lebih intuitive untuk bisnis bulanan.
-
-## Evidence 19 — Metric vs Monitor vs Time-Slice SLO
-
-Claim: Datadog mendefinisikan 3 tipe SLO: metric-based (good/total count), monitor-based (uptime dari monitor), time-slice (custom uptime definition).
-Evidence: Datadog "SLO types: Metric-based, Monitor-based, Time Slice SLOs" + definition table.
-Source: Datadog SLO docs
-URL: https://docs.datadoghq.com/service_level_objectives/
+Claim: OpenSLO provides vendor-neutral YAML specification for SLOs as code.
+Evidence: "OpenSLO is a service level objective (SLO) language that declaratively defines reliability and performance targets using a simple YAML specification."
+Source: OpenSLO Specification
+URL: https://openslo.github.io/OpenSLO/
 Confidence: HIGH
-Corroborated By: NOT VERIFIED di Google SRE (konsep serupa tapi tidak dibedakan dalam tipe eksplisit)
-Notes: Implementasi vendor; prinsip SLI rasio tetap konsisten.
+Corroborated By: Source 8 (self), implicit in Source 6 (case studies show need for standardization)
+Notes: Apache 2.0 license; enables Git workflow integration; schema versions v1, v2alpha.
 
-## Evidence 20 — Kalkulasi Latihan Lab (Validasi)
+## Evidence 11: Evernote SLO Adoption Journey
 
-Claim: Payment Webhook SLO 99.99% dari 200.000 request → budget = 20 request; 15 gagal = 75% budget habis.
-Evidence: Manual calculation: 0.01% × 200.000 = 20; 15/20 = 0.75 = 75%.
-Source: Topic specification exercise (verified against SRE Book aggregate availability formula)
+Claim: Evernote adopted 99.95% monthly uptime SLO after moving to GCP, improved dev/ops alignment.
+Evidence: "Our first SLOs document contained the following: A definition of the SLOs: This was an uptime measure: 99.95% uptime measured over a monthly window..."
+Source: SLO Engineering Case Studies (Google SRE Workbook - Evernote)
+URL: https://sre.google/workbook/slo-engineering-case-studies/
 Confidence: HIGH
-Corroborated By: Google SRE Book Ch.3 aggregate availability formula
-Notes: Contoh valid; sesuai dengan konsep.
+Corroborated By: Source 6 (Home Depot case study), Source 2 (implementing SLOs guidance)
+Notes: After 9 months, on SLO v3; shared SLO dashboards with Google CRE team; aligned priorities.
 
-## Evidence 21 — Alert on Symptoms, Not Causes
+## Evidence 12: Home Depot VALET Framework
 
-Claim: Alerts should fire on user-visible symptoms (latency, errors, traffic), bukan infrastructure (CPU, memory).
-Evidence: Prometheus "aim to have as few alerts as possible, by alerting on symptoms that are associated with end-user pain rather than trying to catch every possible way that pain could be caused."
-Source: Prometheus Alerting docs
+Claim: The Home Depot created VALET (Volume, Availability, Latency, Errors, Tickets) SLO framework, scaled to 800 services in <1 year.
+Evidence: "After tracking SLOs for about 50 services at the beginning of the year, by the end of the year we were tracking SLOs for 800 services, with about 50 new services per month being registered with VALET."
+Source: SLO Engineering Case Studies (Google SRE Workbook - Home Depot)
+URL: https://sre.google/workbook/slo-engineering-case-studies/
+Confidence: HIGH
+Corroborated By: Source 6 (self), Source 2 (implementing SLOs)
+Notes: VALET became part of annual performance reviews; simplified metrics for business owners (99.5% = MVP, 99.9% = adequate, 99.95% = selling systems, 99.99% = shared infra).
+
+## Evidence 13: Alert on Symptoms Not Causes
+
+Claim: Alert on user-visible symptoms (latency, error rate) not root causes (CPU, disk) to avoid alert fatigue.
+Evidence: "Aim to have as few alerts as possible, by alerting on symptoms that are associated with end-user pain rather than trying to catch every possible way that pain could be caused."
+Source: Alerting Best Practices (Prometheus)
 URL: https://prometheus.io/docs/practices/alerting/
 Confidence: HIGH
-Corroborated By: Google SRE Book Ch.6 "monitoring symptoms is easier the further 'up' your stack you monitor"
-Notes: Ini prinsip ala Google; konsisten di ekosistem.
+Corroborated By: Source 4, Source 10
+Notes: Only page on latency at one point in stack; for error rates, page on user-visible errors.
 
-## Evidence 22 — Multi-dimensional SLOs
+## Evidence 14: SLO Decision Matrix
 
-Claim: SLO bisa multiple thresholds (90% < 100ms, 99% < 400ms) untuk menangkap distribusi user experience.
-Evidence: Google SRE Book Ch.4 contoh "90% Get RPC < 1ms, 99% Get RPC < 10ms, 99.9% Get RPC < 100ms".
-Source: Google SRE Book Ch.4
-URL: https://sre.google/sre-book/service-level-objectives/
+Claim: SLO compliance, toil, and customer satisfaction determine action: tighten/loosen SLO, adjust toil, change release velocity.
+Evidence: Table 2-5 shows decision matrix: e.g., SLO Met + Low Toil + High Sat → (a) increase velocity or (b) step back; SLO Missed + High Toil + Low Sat → Offload toil and fix product.
+Source: Implementing SLOs (Google SRE Workbook)
+URL: https://sre.google/workbook/implementing-slos/
 Confidence: HIGH
-Corroborated By: Datadog "Multiple target values per SLO"
-Notes: Bukan kontradiksi dengan topic specification yang menyebut single SLO; ini extension best practice.
+Corroborated By: Source 2 (self), logical extension of error budget policy
+Notes: Provides actionable framework for SLO-based prioritization beyond just "stop releases".
+
+## Evidence 15: Low-Traffic Service Alerting Challenges
+
+Claim: Low-traffic services can cause alerting noise; single failed request may represent high burn rate.
+Evidence: "If a system receives 10 requests per hour, then a single failed request results in an hourly error rate of 10%. For a 99.9% SLO, this request constitutes a 1,000x burn rate and would page immediately..."
+Source: Alerting on SLOs (Google SRE Workbook)
+URL: https://sre.google/workbook/alerting-on-slos/
+Confidence: HIGH
+Corroborated By: Source 4 (self), Source 9 (Prometheus mentions low-traffic considerations)
+Notes: Solutions: generate artificial traffic, combine services, modify client retry logic, lower SLO or increase window.
