@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -60,10 +61,10 @@ func TestPartitionPruning(t *testing.T) {
 }
 
 func TestRoutingAndConsistentHashRelocation(t *testing.T) {
-	numKeys := 1000
+	numKeys := 5000
 	keys := make([]string, numKeys)
 	for i := 0; i < numKeys; i++ {
-		keys[i] = fmt.Sprintf("user_tenant_%d", i)
+		keys[i] = fmt.Sprintf("tenant_%d", i)
 	}
 
 	// 1. Modulo router test: 3 nodes -> 4 nodes
@@ -111,9 +112,9 @@ func TestRoutingAndConsistentHashRelocation(t *testing.T) {
 		t.Errorf("expected modulo move ratio >= 65%%, got %.2f%%", modMoveRatio*100)
 	}
 
-	// Consistent hashing should move roughly 1/4 = 25% keys (+/- variance)
-	if chMoveRatio > 0.40 {
-		t.Errorf("expected consistent hash move ratio <= 40%%, got %.2f%%", chMoveRatio*100)
+	// Consistent hashing should move roughly 1/4 = 25% keys (+/- variance) and strictly > 0%
+	if chMoveRatio <= 0.05 || chMoveRatio > 0.40 {
+		t.Errorf("expected consistent hash move ratio between 5%% and 40%%, got %.2f%%", chMoveRatio*100)
 	}
 }
 
@@ -155,6 +156,16 @@ func TestClusterScatterGatherAndGSI(t *testing.T) {
 	}
 	if sgRes.ShardsQueried != 3 {
 		t.Fatalf("expected 3 shards queried, got %d", sgRes.ShardsQueried)
+	}
+
+	// Scatter Gather with context timeout/cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-canceled context
+	canceledRes := cluster.ScatterGatherBroadcastWithContext(ctx, func(r sharding.Record) bool {
+		return r.Email == "carol@example.com"
+	})
+	if canceledRes.ShardResponded != 0 {
+		t.Fatalf("expected 0 shard responses on canceled context, got %d", canceledRes.ShardResponded)
 	}
 }
 

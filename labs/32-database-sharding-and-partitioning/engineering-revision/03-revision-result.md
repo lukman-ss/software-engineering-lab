@@ -8,11 +8,11 @@ Previous Verdict: APPROVED
 Critical: 0
 High: 0
 Medium: 0
-Low: 0
+Low: 2
 
 ## Resolution
 
-Resolved: 0
+Resolved: 2
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None.
+- In-memory simulated shards without network failure injection (documented limitation).
 
 ## Re-Audit Status
 

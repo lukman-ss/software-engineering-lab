@@ -1,6 +1,7 @@
 package sharding
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -335,6 +336,11 @@ type ScatterGatherResult struct {
 
 // ScatterGatherBroadcast queries all shards in parallel when sharding key is unknown.
 func (c *Cluster) ScatterGatherBroadcast(predicate func(Record) bool) ScatterGatherResult {
+	return c.ScatterGatherBroadcastWithContext(context.Background(), predicate)
+}
+
+// ScatterGatherBroadcastWithContext queries all shards in parallel with context timeout/cancellation.
+func (c *Cluster) ScatterGatherBroadcastWithContext(ctx context.Context, predicate func(Record) bool) ScatterGatherResult {
 	c.mu.RLock()
 	shards := make([]*Shard, 0, len(c.shards))
 	for _, s := range c.shards {
@@ -354,10 +360,23 @@ func (c *Cluster) ScatterGatherBroadcast(predicate func(Record) bool) ScatterGat
 		wg.Add(1)
 		go func(shard *Shard) {
 			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				ch <- shardResult{err: ctx.Err()}
+				return
+			default:
+			}
+
 			var matched []Record
 			for _, rec := range shard.AllRecords() {
-				if predicate(rec) {
-					matched = append(matched, rec)
+				select {
+				case <-ctx.Done():
+					ch <- shardResult{err: ctx.Err()}
+					return
+				default:
+					if predicate(rec) {
+						matched = append(matched, rec)
+					}
 				}
 			}
 			ch <- shardResult{records: matched}
@@ -370,8 +389,10 @@ func (c *Cluster) ScatterGatherBroadcast(predicate func(Record) bool) ScatterGat
 	var combined []Record
 	responded := 0
 	for res := range ch {
-		responded++
-		combined = append(combined, res.records...)
+		if res.err == nil {
+			responded++
+			combined = append(combined, res.records...)
+		}
 	}
 
 	return ScatterGatherResult{

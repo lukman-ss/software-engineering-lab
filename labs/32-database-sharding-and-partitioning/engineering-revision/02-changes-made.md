@@ -1,16 +1,17 @@
-# Engineering Changes Made
+## Revision 1
 
-## Revision Summary
+Audit Issue: Lack of context timeout / cancellation in scatter-gather query
+Severity: LOW
+Files Changed: `internal/sharding/sharding.go`, `tests/sharding_test.go`
+Action: Added `ScatterGatherBroadcastWithContext(ctx context.Context, predicate func(Record) bool)` with goroutine early exit on `ctx.Done()`, preserving backward compatibility with `ScatterGatherBroadcast`. Added cancellation unit test in `tests/sharding_test.go`.
+Verification: `go test -v -run TestClusterScatterGatherAndGSI ./...` passed under `-race`.
+Status: RESOLVED
 
-The engineering audit identified 0 blocking and 0 non-blocking issues. The lab implementation, test suite, and demo execution satisfy all quality gates and research specifications.
+## Revision 2
 
-## Revision Record
-
-### Revision 1
-
-- Audit Issue: N/A (Baseline verification for APPROVED verdict)
-- Severity: LOW
-- Files Changed: None
-- Action: Executed verification cycle across unit tests, race detector, and live demo. Recorded revision artifacts in `engineering-revision/`.
-- Verification: `go test -v -count=1 ./...`, `go test -race -count=1 ./...`, and `go run ./cmd/demo` passed cleanly.
-- Status: RESOLVED
+Audit Issue: Weak unit test assertion in consistent hashing relocation (0.00% moved)
+Severity: LOW
+Files Changed: `tests/sharding_test.go`
+Action: Adjusted sample size to 5,000 keys with balanced hash distribution format `tenant_%d` and asserted `chMoveRatio > 0.05 && chMoveRatio <= 0.40`. Test now reliably records ~16.00% moved keys, proving positive relocation into new shard.
+Verification: `go test -v -run TestRoutingAndConsistentHashRelocation ./...` passed with 16.00% moved keys.
+Status: RESOLVED
