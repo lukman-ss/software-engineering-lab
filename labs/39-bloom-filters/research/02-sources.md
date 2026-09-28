@@ -31,7 +31,7 @@ Authors: Daniel Peng, Frank Dabek
 Date: 2010
 URL: https://research.google/pubs/pub36726/
 Type: USENIX Symposium paper
-Summary: Google research on distributed transactions. Uses Bloom filters to speed up web‑search indexing and mentions cache‑penetration avoidance as a use case.
+Summary: Google research on distributed transactions built on Bigtable. Bloom filter usage for avoiding unnecessary disk reads resides in the underlying Bigtable SSTable layer (per-SST filters), not as an application-level cache-penetration barrier in Percolator itself.
 
 ## Source 5
 Title: BitFunnel – Search Engine Indexing Algorithm
@@ -61,9 +61,10 @@ Summary: Explains FNV‑1 and FNV‑1a designs. Highlights that FNV‑1a has bet
 Title: Cuckoo filters – replacing Bloom filters with deletions
 Authors: Fan, Zhao, et al.
 Date: 2014 (presentation)
-URL: https://www.cs.cmu.edu/~fanzhao/cuckoo-filter.pdf
+URL: https://www.cs.cmu.edu/~dga/papers/cuckoo-conext2014.pdf
 Type: Conference presentation
 Summary: Shows how Cuckoo filters remove the deletion limitation of classic Bloom filters while keeping similar space efficiency. Contains empirical FP‑rate comparison (Figure 3).
+Corrected URL: https://dl.acm.org/doi/10.1145/2674005.2674994 (ACM DL)
 
 ## Source 9
 Title: An overview of log-structured merge trees
