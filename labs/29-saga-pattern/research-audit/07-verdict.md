@@ -1,17 +1,17 @@
 # Audit Verdict
 
 Target Lab: labs/29-saga-pattern
-Audit Date: 2026-09-28
+Audit Date: Mon Sep 28 2026
 
 ## Summary
 
-Major Claims Reviewed: 10
+Major Claims Reviewed: 9
 Sources Reviewed: 4
 Unsupported Claims: 0
 Contradictions: 0
-Code Issues: 0 (Not applicable in research audit phase)
-Test Failures: 0 (Not applicable in research audit phase)
-Research Gaps: 2 (Non-blocking)
+Code Issues: NOT_APPLICABLE (Pipeline Override: Research audit only)
+Test Failures: NOT_APPLICABLE
+Research Gaps: 3 (Low severity, non-blocking)
 
 ## Quality Gates
 
@@ -28,8 +28,8 @@ None.
 
 ## Non-Blocking Issues
 
-1. Quantitative benchmark metrics (latency, throughput) comparing Saga to 2PC remain documented as open research questions.
-2. Specific framework implementations (e.g. Temporal, Axon, MassTransit) deferred to implementation phase.
+1. Quantitative benchmark metrics (p95 latency and ops/sec under network partition) are noted as open questions rather than established data.
+2. Specific framework implementations (e.g. Temporal, Axon, MassTransit) are deferred to open questions.
 
 ## Required Revisions
 

@@ -1,132 +1,107 @@
 # Claim Audit: Saga Pattern Research
 
-Target Lab: labs/29-saga-pattern
-Audit Date: 2026-09-28
-
-## Claim 1
-
-Claim: Traditional 2PC distributed transactions are unsuitable for distributed microservices with database-per-service; Saga pattern provides alternative distributed coordination.
-Location: `research/03-evidence.md` (Evidence 1), `research/05-report.md` (Finding 1)
-Evidence Provided: Azure Architecture Center & Microservices.io quotations on limitations of 2PC and database-per-service isolation.
-Source: Microsoft Azure Architecture Center, Microservices.io
+## Claim 1: 2PC Infeasibility for Database-per-Service Microservices
+Location: `05-report.md:13-24`, `03-evidence.md:3-16`
+Claim: Traditional distributed transaction protocols like 2PC are infeasible or impractical across independently owned and scaled microservice databases.
+Evidence Provided: Direct quotes from Microsoft Azure Architecture Center and Chris Richardson.
+Source: Microsoft Azure (`/patterns/saga`), Microservices.io (`/patterns/data/saga.html`)
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Supported by consensus across microservices literature.
+Notes: Supported by both primary industry sources.
 
 ---
 
-## Claim 2
-
-Claim: A saga decomposes a distributed transaction into a sequence of local transactions, achieving saga-level atomicity via forward execution or compensating reverse execution.
-Location: `research/03-evidence.md` (Evidence 2, Evidence 10), `research/05-report.md` (Finding 2)
-Evidence Provided: Direct definitions from Azure Architecture Center and Chris Richardson.
-Source: Microsoft Azure Architecture Center, Microservices.io
+## Claim 2: Saga Decomposes Distributed Transactions into Sequence of Local Transactions
+Location: `05-report.md:27-38`, `03-evidence.md:18-31`
+Claim: A saga breaks a distributed transaction into a sequence of local transactions, each updating a local database and initiating the next step via event or message.
+Evidence Provided: Quotes from Microsoft Azure and Microservices.io.
+Source: Microsoft Azure, Microservices.io
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Core conceptual definition accurate and verified.
+Notes: Direct textual match in both sources.
 
 ---
 
-## Claim 3
-
-Claim: Compensating transactions are explicit application/business-level corrective actions, not automatic low-level ACID rollbacks.
-Location: `research/03-evidence.md` (Evidence 3), `research/05-report.md` (Finding 4)
-Evidence Provided: Citations from Azure Architecture Center and Chris Richardson highlighting lack of automatic rollback.
-Source: Microsoft Azure Architecture Center, Microservices.io
+## Claim 3: Coordination Approaches (Choreography vs Orchestration) and Trade-offs
+Location: `05-report.md:41-59`, `03-evidence.md:48-64`
+Claim: Sagas are implemented either via Choreography (event-driven, decentralized, prone to cyclic dependencies and testing difficulty) or Orchestration (central controller, clearer flow, single point of failure risk).
+Evidence Provided: Comparative table and descriptions matching Azure Architecture Center and Chris Richardson.
+Source: Microsoft Azure, Microservices.io
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Distinguishes physical rollback from logical semantic compensation.
+Notes: Well-supported standard taxonomy.
 
 ---
 
-## Claim 4
-
-Claim: Saga implementations split into Choreography (event-driven, decentralized) and Orchestration (centralized orchestrator), each carrying distinct trade-offs in complexity, coupling, and testing.
-Location: `research/03-evidence.md` (Evidence 4), `research/05-report.md` (Finding 3)
-Evidence Provided: Structural comparison from Azure Architecture Center & Microservices.io.
-Source: Microsoft Azure Architecture Center, Microservices.io
+## Claim 4: Compensating Transactions Are Business-Level Corrective Actions
+Location: `05-report.md:62-73`, `03-evidence.md:33-46`
+Claim: Sagas lack automatic rollback; failures require explicit compensating transactions that semantically undo changes rather than restoring exact previous raw states.
+Evidence Provided: Direct statements from Chris Richardson and Microsoft Azure.
+Source: Microservices.io, Microsoft Azure
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Standard architectural dichotomy verified.
+Notes: Critical semantic distinction accurately captured.
 
 ---
 
-## Claim 5
-
-Claim: Saga transaction steps are classified into Compensable (can be undone), Pivot (point of no return), and Retryable (idempotent, guaranteed completion).
-Location: `research/03-evidence.md` (Evidence 5), `research/05-report.md` (Finding 5)
-Evidence Provided: Azure Architecture Center taxonomy.
+## Claim 5: Transaction Classification (Compensable, Pivot, Retryable)
+Location: `05-report.md:76-89`, `03-evidence.md:66-79`
+Claim: Steps in a saga are classified into Compensable (reversible), Pivot (point of no return), and Retryable (idempotent operations following pivot).
+Evidence Provided: Exact definitions from Microsoft Azure Architecture Center.
 Source: Microsoft Azure Architecture Center
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Established transaction taxonomy in saga design.
+Notes: Verified directly in Microsoft Learn documentation.
 
 ---
 
-## Claim 6
-
-Claim: Sagas lack built-in isolation ("I" in ACID), risking data anomalies including lost updates, dirty reads, and fuzzy/nonrepeatable reads.
-Location: `research/03-evidence.md` (Evidence 6, Evidence 11), `research/05-report.md` (Finding 6)
-Evidence Provided: Azure Architecture Center and Chris Richardson anomaly classifications.
-Source: Microsoft Azure Architecture Center, Microservices.io
+## Claim 6: Lack of Isolation and Data Anomalies
+Location: `05-report.md:92-103`, `03-evidence.md:82-95`
+Claim: Sagas lack ACID Isolation ('I'), leading to possible data anomalies including lost updates, dirty reads, and fuzzy/nonrepeatable reads.
+Evidence Provided: Quotes from Microsoft Azure and Microservices.io.
+Source: Microsoft Azure, Microservices.io
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Accurately identifies the primary theoretical compromise of Sagas.
+Notes: Core theoretical limitation accurately represented.
 
 ---
 
-## Claim 7
-
-Claim: Six standard countermeasures mitigate isolation anomalies: semantic lock, commutative updates, pessimistic view, reread values, version files, and risk-based concurrency.
-Location: `research/03-evidence.md` (Evidence 7), `research/05-report.md` (Finding 7)
-Evidence Provided: Azure Architecture Center countermeasure taxonomy (derived from Microservices Patterns Chapter 4).
-Source: Microsoft Azure Architecture Center, Manning Publications
-Source Actually Supports Claim: YES
-Classification: INTERPRETATION
-Severity: LOW
-Notes: Catalog of design patterns for application-level isolation.
-
----
-
-## Claim 8
-
-Claim: Local transactions and compensating transactions in a saga must be idempotent to handle retries and transient network failures safely.
-Location: `research/03-evidence.md` (Evidence 8), `research/05-report.md` (Finding 8)
-Evidence Provided: Azure Architecture Center & Chris Richardson idempotent consumer requirements.
-Source: Microsoft Azure Architecture Center, Microservices.io
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Crucial engineering prerequisite for at-least-once distributed messaging.
-
----
-
-## Claim 9
-
-Claim: Compensating transactions can fail permanently, leaving intermediate states committed; systems rely on operational recovery including DLQs, alerts, admin reconciliation, and out-of-band adjustments.
-Location: `research/03-evidence.md` (Evidence 9, Evidence 9a), `research/05-report.md` (Finding 9)
-Evidence Provided: Azure Architecture Center operational monitoring references.
+## Claim 7: Countermeasures for Isolation Anomalies
+Location: `05-report.md:106-116`, `03-evidence.md:97-113`
+Claim: Anomalies can be mitigated via semantic lock, commutative updates, pessimistic view, reread values, version files, and risk-based concurrency.
+Evidence Provided: Documented strategies from Microsoft Azure Architecture Center.
 Source: Microsoft Azure Architecture Center
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Accurately bounds automated compensation capabilities vs operational realities.
+Notes: Verified directly in Microsoft Learn documentation.
 
 ---
 
-## Claim 10
-
-Claim: Services in a saga must atomically update local state and publish events/messages without cross-resource distributed transactions (requiring patterns like Transactional Outbox).
-Location: `research/03-evidence.md` (Evidence 13)
-Evidence Provided: Chris Richardson microservices.io specification on reliable message publishing.
+## Claim 8: Atomicity of Local State Update and Message Publication
+Location: `03-evidence.md:204-212`
+Claim: For reliable saga execution, services must atomically update local state and publish events/messages (e.g. via Transactional Outbox or Event Sourcing).
+Evidence Provided: Microservices.io pattern documentation.
 Source: Microservices.io
 Source Actually Supports Claim: YES
 Classification: FACT
 Severity: LOW
-Notes: Foundational reliability rule for event-driven sagas.
+Notes: Crucial engineering constraint verified.
+
+---
+
+## Claim 9: Failure of Compensating Transactions & Operational Remediation
+Location: `03-evidence.md:130-161`, `05-report.md:133-143`, `06-open-questions.md:23-27`
+Claim: Compensating transactions can fail, leaving systems in an inconsistent intermediate state requiring operational patterns such as DLQs, alerts, and manual reconciliation.
+Evidence Provided: Microsoft Azure documentation notes limitations of compensating transactions and need for monitoring.
+Source: Microsoft Azure Architecture Center
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurately scoped and acknowledges boundaries of automation.

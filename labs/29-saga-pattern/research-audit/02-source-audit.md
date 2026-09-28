@@ -1,8 +1,5 @@
 # Source Audit: Saga Pattern Research
 
-Target Lab: labs/29-saga-pattern
-Audit Date: 2026-09-28
-
 ## Source 1
 
 Claimed Title: Saga Design Pattern
@@ -10,12 +7,15 @@ Claimed Publisher: Microsoft Azure Architecture Center
 URL: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
 Reachable: YES
-Source Type: PRIMARY (Cloud Provider Architecture Standard)
+
+Source Type: PRIMARY
+
 Relevant: YES
+
 Supports Claimed Topic: YES
 
 Problems:
-- None. Authoritative reference covering choreography, orchestration, compensable/pivot/retryable types, lack of isolation, and countermeasures.
+- None. URL is active, content directly matches citations regarding choreography/orchestration, compensable/pivot/retryable transactions, data anomalies, and countermeasures.
 
 Assessment: PASS
 
@@ -28,12 +28,15 @@ Claimed Publisher: Chris Richardson / Microservices.io
 URL: https://microservices.io/patterns/data/saga.html
 
 Reachable: YES
-Source Type: PRIMARY (Industry Standard Reference by Pattern Authority)
+
+Source Type: PRIMARY
+
 Relevant: YES
+
 Supports Claimed Topic: YES
 
 Problems:
-- None. Direct authoritative pattern definition by author of "Microservices Patterns".
+- None. URL is active, content directly matches citations regarding Database-per-Service context, 2PC replacement, choreography vs orchestration, lack of automatic rollback, lack of isolation, and transactional messaging requirements.
 
 Assessment: PASS
 
@@ -46,12 +49,15 @@ Claimed Publisher: Chris Richardson / Manning Publications
 URL: https://livebook.manning.com/book/microservices-patterns/chapter-4/143
 
 Reachable: YES
-Source Type: PRIMARY (Published Technical Literature)
+
+Source Type: PRIMARY
+
 Relevant: YES
+
 Supports Claimed Topic: YES
 
 Problems:
-- None. Chapter 4 provides foundational coverage of sagas, coordinating mechanisms, and isolation countermeasures.
+- Paywall/preview restriction on full chapter, but reference is cited appropriately for isolation countermeasures and saga design details.
 
 Assessment: PASS
 
@@ -64,11 +70,14 @@ Claimed Publisher: ACM SIGMOD Record
 URL: https://dl.acm.org/doi/10.1145/62224.62226
 
 Reachable: YES
-Source Type: PRIMARY (Foundational Academic Paper, 1987)
+
+Source Type: PRIMARY
+
 Relevant: YES
+
 Supports Claimed Topic: YES
 
 Problems:
-- Paywalled paper; correctly acknowledged in research limitations. Foundational concept definition verified.
+- Foundational academic paper (1987). Paywall/subscription for full text on ACM DL, but existence, metadata, and citation context are accurate.
 
 Assessment: PASS

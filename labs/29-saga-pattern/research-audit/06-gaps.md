@@ -1,24 +1,29 @@
 # Research Gap Analysis: Saga Pattern Research
 
-Target Lab: labs/29-saga-pattern
-Audit Date: 2026-09-28
-
 ## Gap 1
-
 Type: MISSING_CASE
 Severity: LOW
-Location: `research/06-open-questions.md` (Question 2)
-Problem: Empirical benchmark datasets comparing throughput/latency of Saga vs 2PC under high network latency are absent.
-Required Revision: None for conceptual research; maintain open tracking for future performance lab.
+Location: `research/06-open-questions.md:11-16`
+Problem: Quantitative empirical performance benchmarks (e.g. exact p95/p99 latency overhead and throughput differences between 2PC and Saga under high contention) are not provided in the research report.
+Required Revision: None required for conceptual/architectural research phase; benchmarks can be measured or cited in subsequent engineering/benchmarking labs.
 Can Be Approved Without Fix: YES
 
 ---
 
 ## Gap 2
-
-Type: IMPLEMENTATION_GAP
+Type: SCOPE_ERROR
 Severity: LOW
-Location: `research/06-open-questions.md` (Question 1, Question 4)
-Problem: Concrete implementation recipes for specific tech stacks (e.g., Temporal, MassTransit, Axon) and detailed DLQ/alerting configs are deferred to implementation phase.
-Required Revision: None for research phase; addressed during lab code development.
+Location: `research/06-open-questions.md:1-9`
+Problem: Technology-specific saga framework patterns (e.g., Axon, MassTransit, Temporal/Cadence) are listed as open questions rather than fully detailed in the general research.
+Required Revision: None. Lab focuses on core architectural patterns rather than specific third-party proprietary frameworks.
+Can Be Approved Without Fix: YES
+
+---
+
+## Gap 3
+Type: WEAK_SOURCE
+Severity: LOW
+Location: `research/02-sources.md:33-41`
+Problem: Foundational 1987 ACM paper by Garcia-Molina & Salem is cited behind an academic paywall and not fully quoted in evidence compared to modern cloud architecture sources.
+Required Revision: None. Modern industry sources (Microsoft, Chris Richardson) adequately cover distributed saga adaptations in microservice contexts.
 Can Be Approved Without Fix: YES
