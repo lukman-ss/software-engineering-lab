@@ -1,16 +1,21 @@
 # Engineering Audit Verdict
 
 Target Lab: `labs/24-slo-sli-error-budget`
-Audit Date: 2026-09-27
+Audit Date: Mon Sep 28 2026
 
 ## Summary
 
-Code Files Reviewed: 3 (`internal/metrics/tracker.go`, `internal/slo/evaluator.go`, `internal/alerting/engine.go`)
-Tests Reviewed: 1 (`tests/slo_test.go`)
+Code Files Reviewed:
+- `internal/metrics/tracker.go`
+- `internal/slo/evaluator.go`
+- `internal/alerting/engine.go`
+- `cmd/demo/main.go`
+Tests Reviewed:
+- `tests/slo_test.go`
 Commands Executed:
 - `go test ./...`
 - `go test -race ./...`
-- `go test -count=1 -v -race ./...`
+- `go test -v -count=1 ./tests`
 - `go run ./cmd/demo`
 Failures: 0
 Warnings: 0

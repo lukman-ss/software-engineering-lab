@@ -1,44 +1,38 @@
-# Test Suite Audit
+# Test Audit
 
-## Coverage & Test Verification
+Target Lab: `labs/24-slo-sli-error-budget`
 
-### Executed Commands
+## Test Execution Results
 
-1. `go test ./...`
-   Result: `PASS`
-2. `go test -count=1 -race ./...`
-   Result: `PASS`
-3. `go test -count=1 -v -race ./...`
-   Result:
-   ```text
-   === RUN   TestMetricsWindowTracker
-   --- PASS: TestMetricsWindowTracker (0.00s)
-   === RUN   TestSLOEvaluator
-   --- PASS: TestSLOEvaluator (0.00s)
-   === RUN   TestAlertEngineBurnRate
-   --- PASS: TestAlertEngineBurnRate (0.01s)
-   === RUN   TestOutOfOrderTimestamps
-   --- PASS: TestOutOfOrderTimestamps (0.00s)
-   === RUN   TestEvaluatorZeroTraffic
-   --- PASS: TestEvaluatorZeroTraffic (0.00s)
-   === RUN   TestConcurrencyMetrics
-   --- PASS: TestConcurrencyMetrics (0.00s)
-   PASS
-   ok  	labs/24-slo-sli-error-budget/tests	1.338s
-   ```
+Command: `go test -v -count=1 ./tests`
+Result: PASS
+Duration: 0.093s
 
-## Test Analysis by Category
+Command: `go test -race ./...`
+Result: PASS
+Data races detected: 0
 
-| Test Function | Target Feature | Happy Path | Failure Path | Edge Cases / Concurrency | Result |
-| :--- | :--- | :---: | :---: | :---: | :--- |
-| `TestMetricsWindowTracker` | Window aggregation & eviction | Yes | Yes | Yes (eviction cutoff) | PASS |
-| `TestSLOEvaluator` | SLI & Error Budget policy | Yes | Yes | Yes (budget exhaustion) | PASS |
-| `TestAlertEngineBurnRate` | Multi-window burn rate alert | Yes | Yes | Yes (negative transient spike test) | PASS |
-| `TestOutOfOrderTimestamps` | Tracker timestamp handling | Yes | Yes | Yes (out-of-order insertion & eviction) | PASS |
-| `TestEvaluatorZeroTraffic` | Evaluator zero-traffic state | Yes | N/A | Yes (zero total events, fallback) | PASS |
-| `TestConcurrencyMetrics` | Tracker thread safety | Yes | Yes | Yes (20 goroutines x 100 requests) | PASS |
+## Coverage Analysis
 
-## Test Weakness & Gap Evaluation
-- No missing core paths identified.
-- Negative testing verified: `TestAlertEngineBurnRate` verifies that transient spikes isolated only to the short window do NOT trigger long-window alert rules.
-- Concurrency verified: `TestConcurrencyMetrics` runs under Go's race detector with zero data races detected.
+1. **Happy Path**:
+   - `TestMetricsWindowTracker`: Verifies recording 10 good events and 2 bad events, matching total=12, good=10, bad=2.
+   - `TestSLOEvaluator`: Verifies 99% SLI calculation with 99 good and 1 bad event under 99% target SLO.
+
+2. **Failure Path & Deployment Gate**:
+   - `TestSLOEvaluator`: Verifies `CanDeploy` flips from `true` to `false` when an additional bad event depletes the error budget.
+
+3. **Multi-Window Multi-Burn-Rate Alerting**:
+   - `TestAlertEngineBurnRate`:
+     - Positive case: Verifies firing when both short and long windows exceed 14.4x threshold (20x observed).
+     - Negative case (transient spike): Verifies no alert fires when short window has high burn (100x) but long window remains below threshold (0.1x).
+
+4. **Edge Cases**:
+   - `TestOutOfOrderTimestamps`: Ingests later timestamp (+5s) followed by earlier timestamps (+2s), confirming in-order bucket maintenance, correct counter aggregation, and accurate partial eviction.
+   - `TestEvaluatorZeroTraffic`: Verifies 0 requests produce SLI=1.0, 0 events, and `CanDeploy=true` without division by zero.
+
+5. **Concurrency & Thread Safety**:
+   - `TestConcurrencyMetrics`: Runs 20 concurrent goroutines recording 100 requests each (2,000 total events) with mixed good/bad status codes under `go test -race`. Verified total = 2,000, good + bad = 2,000, zero race conditions.
+
+## Assessment
+
+PASS. Test coverage is robust across happy path, edge cases, failure states, negative alerting cases, and concurrent access.

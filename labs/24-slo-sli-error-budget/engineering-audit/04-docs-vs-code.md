@@ -1,15 +1,18 @@
-# Documentation vs Code Verification
+# Documentation vs Code Audit
 
-## Artifact Comparison
+Target Lab: `labs/24-slo-sli-error-budget`
 
-| Claim / Section | Documented Location | Code / Reality | Status |
-| :--- | :--- | :--- | :--- |
-| SLI Ratio Definition | `README.md`, `engineering/01-design.md`, `research/05-report.md` | `internal/slo/evaluator.go:44-47` (`good / total`) | MATCH |
-| Error Budget Formula | `README.md`, `engineering/01-design.md`, `research/05-report.md` | `internal/slo/evaluator.go:49-52` (`(1 - target) * total`) | MATCH |
-| Release Freeze Behavior | `README.md`, `engineering/01-design.md` | `internal/slo/evaluator.go:54-57` (`budgetRemaining <= 0 -> CanDeploy = false`) | MATCH |
-| Multi-Window Alerting | `engineering/01-design.md`, `engineering/02-implementation-notes.md` | `internal/alerting/engine.go:73` (`shortBurn >= factor && longBurn >= factor`) | MATCH |
-| Test Commands | `README.md:15-18` | `go test ./...` and `go test -race ./...` run and pass directly | MATCH |
-| Demo Execution Output | `engineering/03-execution-result.md:48-73` | Output of `go run ./cmd/demo` matches verbatim | MATCH |
+## Comparison Matrix
+
+| Component / Claim | README Description | Code & Test Implementation | Verdict |
+|---|---|---|---|
+| `internal/metrics` | Sliding-window time-bucketed event tracker for recording requests and measuring good vs total events | Implemented in `tracker.go` with time buckets, timestamp truncation, sorting, and eviction. | MATCH |
+| `internal/slo` | Evaluator calculating SLI ratios, remaining Error Budget, and release freeze policy enforcement | Implemented in `evaluator.go` calculating SLI, consumed budget, remaining budget, and `CanDeploy` boolean. | MATCH |
+| `internal/alerting` | Multi-window burn-rate alert calculator evaluating fast and slow budget burn rates against SLO thresholds | Implemented in `engine.go` checking both short and long window burn rates against factor thresholds. | MATCH |
+| `cmd/demo` | Executable demonstration illustrating baseline SLO tracking, error budget depletion during an incident, and burn rate alert triggering | Implemented in `cmd/demo/main.go` producing 4 phases of execution. | MATCH |
+| `tests/` | Unit and concurrency tests ensuring thread-safety and mathematical correctness | Implemented in `tests/slo_test.go` covering out-of-order, zero-traffic, transient alerts, and concurrency. | MATCH |
+| Commands | `go test ./...`, `go test -race ./...`, `go run ./cmd/demo` | All commands run successfully with 0 failures and 0 race warnings. | MATCH |
 
 ## Discrepancies Found
-- None. No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH` identified.
+
+None. README cleanly and accurately documents package responsibilities and execution steps.

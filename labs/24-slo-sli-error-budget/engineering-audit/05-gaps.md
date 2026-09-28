@@ -1,19 +1,25 @@
-# Engineering Gaps Analysis
+# Gap Analysis
 
 Target Lab: `labs/24-slo-sli-error-budget`
 
 ## Identified Gaps
 
-No blocking or high severity gaps identified.
+No critical, high, or medium gaps identified.
 
-### Minor Observations
+### Summary by Gap Type
+- `MISSING_TEST`: NONE
+- `BROKEN_IMPLEMENTATION`: NONE
+- `DOC_CODE_MISMATCH`: NONE
+- `RACE_CONDITION`: NONE
+- `UNHANDLED_ERROR`: NONE
+- `MISSING_EDGE_CASE`: NONE
+- `IMPLEMENTATION_OVERCLAIM`: NONE
+- `RESEARCH_MISMATCH`: NONE
+- `FAKE_DEMO`: NONE
+- `FAKE_BENCHMARK`: NONE
+- `UNVERIFIED_RESULT`: NONE
 
-| Gap ID | Gap Type | Severity | Description | Mitigation / Status |
-| :--- | :--- | :---: | :--- | :--- |
-| GAP-01 | IMPLEMENTATION_SCOPE | LOW | In-memory metric storage resets on process termination. | Documented as an intended design decision in `engineering/02-implementation-notes.md`. Not a defect for this lab scope. |
-| GAP-02 | EDGE_CASE_GRANULARITY | LOW | Sub-millisecond latency distribution is not modeled as full histogram buckets. | Basic boolean `isGoodEvent(e)` predicate adequately fulfills the research SLI specification. |
-
-## Fake / Fabricated Artifact Check
-- `FAKE_DEMO`: None. `cmd/demo` executes real computation without simulated mocks or hardcoded strings.
-- `FAKE_BENCHMARK`: None. No fabricated performance figures present.
-- `UNVERIFIED_RESULT`: None. All recorded outputs in `03-execution-result.md` match live execution.
+### Minor Observation (Informational)
+- Location: `internal/metrics/tracker.go:88`
+  - Observation: `w.buckets = append(w.buckets[:i], append([]Bucket{b}, w.buckets[i:]...)...)` creates a transient slice allocation on out-of-order insertion.
+  - Severity: LOW (Non-blocking). Out-of-order writes are rare and slice capacity reallocations are minimal for standard sliding windows.
