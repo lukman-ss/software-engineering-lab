@@ -1,9 +1,5 @@
 ## Docs vs Code
 
-(Placeholder for docs vs code comparison)
-
-## Mismatch 1
-
-Location: 
-Type: DOC_CODE_MISMATCH / TEST_CLAIM_MISMATCH / RESEARCH_IMPLEMENTATION_MISMATCH
-Details:
+- README describes SSE replay, WebSocket echo, endpoints, matches implementation.
+- Claims about unidirectional SSE, Last-Event-ID replay, full-duplex WS confirmed by code and demo output.
+- No mismatches detected.

@@ -1,12 +1,8 @@
-## Test Audit
+## Test Findings
 
-(Placeholder for test audit findings)
+- TestSSE_Formatting passes: validates Event.Format.
+- TestSSE_LastEventID_Resumption passes: verifies replay skipping ID 1.
+- TestWebSocket_TextAndBinary passes: checks echo text and reversed binary.
+- TestSSE_Concurrency passes: spawns 10 clients, broadcasts 5 events, ensures no panic.
 
-## Finding 1
-
-Location: 
-Claimed Behavior: 
-Observed Implementation: 
-Assessment: PASS / WARNING / FAIL
-Severity: LOW / MEDIUM / HIGH / CRITICAL
-Notes:
+All tests succeed (`go test ./...` PASS).
