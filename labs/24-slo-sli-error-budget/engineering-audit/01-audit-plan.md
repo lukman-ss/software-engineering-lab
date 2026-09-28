@@ -13,25 +13,23 @@ Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
+- Research phase completed with focus on Google SRE SLI/SLO ratios, Error Budget, and Multi-Window Multi-Burn-Rate alerting.
 
 Main Claims To Verify:
-1. SLI calculation accurately computes `good / total` ratio.
-2. Error budget calculation accurately reflects target SLO uptime allowance (`(1 - target) * total - bad`).
-3. Release freeze policy dynamically blocks deployments (`CanDeploy = false`) when remaining budget <= 0.
-4. Multi-window multi-burn-rate alert engine triggers correctly when short and long burn rate factors exceed thresholds.
-5. Code compiles cleanly and passes Go race detector without data races.
-6. Demo output is authentic and repeatable.
-7. Documentation in README and engineering notes matches the implementation accurately.
+1. SLI correctly calculated as `good_events / total_events`.
+2. Error Budget calculation and depletion (`TotalErrorBudget = (1 - SLO) * total_events`, `BudgetRemaining = TotalErrorBudget - bad_events`).
+3. Release freeze policy (`CanDeploy = false`) when Error Budget is exhausted.
+4. Multi-window multi-burn-rate alerting logic requiring both short and long windows to breach thresholds.
+5. Code compiles cleanly and passes all test suites including race detector (`go test -race ./...`).
+6. Demo output is real and reproducible via `go run ./cmd/demo`.
+7. Documentation in `README.md` accurately reflects code structure and instructions.
 
 Commands To Run:
-- `go test -count=1 ./...`
-- `go test -count=1 -race ./...`
+- `go test -v -count=1 ./...`
+- `go test -v -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Mathematical rounding/floating point inaccuracies causing incorrect `CanDeploy` state or burn rate triggers.
-- In-memory sliding window eviction bugs when timestamps arrive out-of-order.
-- Concurrency race conditions in `WindowTracker` during simultaneous writes and summary reads.
-- Discrepancy between README documentation / engineering notes and actual implementation logic.
+- Race conditions during concurrent `Record` or `Summary` calls in `metrics.WindowTracker`.
+- Incorrect out-of-order event ingestion or sliding window bucket eviction logic.
+- Miscalculated burn rates under zero traffic or edge-case window boundaries.
