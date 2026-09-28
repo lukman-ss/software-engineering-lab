@@ -1,80 +1,80 @@
-# Code Audit
+## Finding 1
 
-## Finding 1 — Lock-order inversion between Insert and RebalanceData
-
-Location: internal/sharding/sharding.go:280 Insert (router lock -> c.mu RLock), internal/sharding/sharding.go:416 RebalanceData (c.mu Lock -> router lock)
-Claimed Behavior: Cluster supports concurrent insert and rebalance operations.
-Observed Implementation: Insert acquires the router lock first then the cluster RWMutex (RLock). RebalanceData acquires the cluster RWMutex (Lock) first then the router lock inside the same critical section. These two lock orderings are inverted. If an Insert and RebalanceData run concurrently, each goroutine can hold one lock and wait for the other -> permanent deadlock.
-Assessment: FAIL
-Severity: HIGH
-Notes: Not detected by the race detector (it is a logical deadlock, not a data race). No test exercises Insert concurrently with RebalanceData, so the hazard is unproven and latent.
-
-## Finding 2 — RebalanceData nil-map panic on missing target shard
-
-Location: internal/sharding/sharding.go:432-434
-Claimed Behavior: RebalanceData migrates all records back onto correct shards after a scale event.
-Observed Implementation: After resetting every shard, the loop calls `targetShard, _ := c.router.GetShard(...)` and then `c.shards[targetShard].Put(rec)`. The error from GetShard is discarded and the map lookup assumes targetShard exists in c.shards. If a shard was removed from the cluster but not the router (or GetShard returns ErrShardNotFound), `c.shards[targetShard]` is nil and `.Put` panics on a nil-pointer dereference.
-Assessment: FAIL
-Severity: HIGH
-Notes: Latent — RebalanceData is never invoked by the demo or tests. The function is effectively dead code with a panic surface.
-
-## Finding 3 — ExtractTimeFromUUIDv7 silently returns zero time
-
-Location: internal/idgen/idgen.go:90-113
-Claimed Behavior: ExtractTimeFromUUIDv7 extracts a millisecond timestamp from a UUIDv7 string.
-Observed Implementation: The primary path uses `fmt.Sscan(clean[:12], "%12x", &high)` to parse 12 hex chars into an [8]byte. On any Sscanf success the function returns `time.Time{}, nil` (zero value, no error); the manual fallback loop only runs when Sscanf fails outright. For a well-formed UUIDv7 the primary parse "succeeds" and the correct timestamp is never returned.
-Assessment: FAIL
-Severity: MEDIUM
-Notes: Dead code — not called by demo or tests. Still a broken implementation sitting in the module.
-
-## Finding 4 — Table.Insert holds table reader lock while mutating partition
-
-Location: internal/partitioning/table.go:73-83
-Claimed Behavior: Thread-safe concurrent inserts.
-Observed Implementation: Insert acquires `t.mu.RLock` and then calls `p.Insert(rec)` which acquires the partition's `p.mu.Lock`. Multiple concurrent inserts can therefore proceed in parallel and are only serialized at the partition level — correct and safe, lock ordering is consistent (table -> partition) across Insert and QueryRange.
+Location: internal/partitioning/table.go:73-84
+Claimed Behavior: QueryRange scans only overlapping partitions (partition pruning).
+Observed Implementation: Loop checks overlap condition `start.Before(p.Range.End) && end.After(p.Range.Start)` and increments `scanned` only for overlapping partitions.
 Assessment: PASS
 Severity: LOW
-Notes: Acceptable design; the RLock on the table is held only for the partition-selection loop, partitions have their own mutexes.
+Notes: Test TestPartitionPruning verifies scanned count =1.
 
-## Finding 5 — Scatter-gather bounded goroutine fan-out
+## Finding 2
 
-Location: internal/sharding/sharding.go:359-384
-Claimed Behavior: Parallel broadcast across shards with context cancellation.
-Observed Implementation: A goroutine is spawned per shard (fan-out bounded by shard count). Each goroutine re-checks the context during iteration and reports errors via a buffered channel closed by `wg.Wait`. Results are aggregated after all goroutines complete. Correct.
+Location: internal/sharding/sharding.go:42-52
+Claimed Behavior: ModuloRouter GetShard distributes keys using hash%N.
+Observed Implementation: Uses hashKey(key) % len(shards).
 Assessment: PASS
 Severity: LOW
-Notes: Shard count is small and config-controlled; goroutine count is bounded.
+Notes: Test TestRoutingAndConsistentHashRelocation checks move ratio.
 
-## Finding 6 — ConsistentHashRouter ring rebuild on AddShard
+## Finding 3
 
-Location: internal/sharding/sharding.go:115-122
-Claimed Behavior: AddShard inserts a shard onto the ring.
-Observed Implementation: Appends vnodeCount entries and re-sorts the entire ring on every AddShard call — O(V log V) per add. Correct but inefficient; with many scale operations this is a bottleneck.
-Assessment: WARNING (performance, not correctness)
+Location: internal/sharding/sharding.go:143-159
+Claimed Behavior: ConsistentHashRouter GetShard uses ring lookup and wraps around.
+Observed Implementation: Search for first hash >= key; if idx==len(ring) set 0.
+Assessment: PASS
 Severity: LOW
-Notes: Acceptable for the demo scale (4-5 shards).
+Notes: Tested in same test.
 
-## Finding 7 — GetShardCounts returns consistent snapshot
+## Finding 4
+
+Location: internal/sharding/sharding.go:337-403
+Claimed Behavior: ScatterGatherBroadcast queries all shards in parallel, respects context cancellation.
+Observed Implementation: Goroutine per shard, checks ctx.Done before processing each record.
+Assessment: PASS
+Severity: LOW
+Notes: Test TestClusterScatterGatherAndGSI verifies shard responses zero on canceled context.
+
+## Finding 5
+
+Location: internal/idgen/idgen.go:12-38
+Claimed Behavior: NewUUIDv7 produces RFC9562 time‑ordered UUID.
+Observed Implementation: Encodes millisecond timestamp, sets version and variant bits.
+Assessment: PASS
+Severity: LOW
+Notes: Test TestIDGenerators checks lexicographic ordering and extraction.
+
+## Finding 6
+
+Location: internal/idgen/idgen.go:40-72
+Claimed Behavior: SequenceBlockAllocator allocates sequential IDs using block fetcher.
+Observed Implementation: Fetches new block when current >= max, increments current.
+Assessment: PASS
+Severity: LOW
+Notes: Test verifies sequential IDs across multiple blocks.
+
+## Finding 7
 
 Location: internal/sharding/sharding.go:405-414
-Claimed Behavior: Report per-shard record counts.
-Observed Implementation: Acquires cluster RLock then calls `s.Count()` (which takes the per-shard RLock). Lock ordering cluster -> shard is consistent with Insert. Safe.
+Claimed Behavior: GetShardCounts returns per‑shard record counts safely.
+Observed Implementation: RLock, iterate shards, Count() which RLocks each shard.
 Assessment: PASS
 Severity: LOW
+Notes: Concurrency test ensures total records match ops.
 
-## Finding 8 — UUIDv7 generation
+## Finding 8
 
-Location: internal/idgen/idgen.go:13-39
-Claimed Behavior: RFC 9562 time-ordered UUIDv7.
-Observed Implementation: 48-bit big-endian millisecond timestamp in bytes 0-5, version nibble (0x70) in high nibble of byte 6, variant (10) in byte 8, remaining bytes random. Format string produces correct 8-4-4-4-12 layout. Test verifies u1 < u2 lexicographically.
+Location: cmd/demo/main.go (various sections)
+Claimed Behavior: Demo reflects actual implementation results (partition pruning, hotspot, resharding ratios, scatter‑gather vs GSI timings, ID generation).
+Observed Implementation: Calls real functions; output matches test expectations.
 Assessment: PASS
 Severity: LOW
+Notes: Manual run matches printed values.
 
-## Finding 9 — SequenceBlockAllocator
+## Finding 9
 
-Location: internal/idgen/idgen.go:57-73
-Claimed Behavior: Block allocation of monotonic IDs.
-Observed Implementation: Returns base+1..base+blockSize, then fetches a new block via fetcher when exhausted. MemoryCentralSequence.AllocateBlock returns cursor+1 and advances. Test confirms monotonic sequential output across block boundary.
+Location: README.md lines 5‑16
+Claimed Behavior: README describes components and demo steps.
+Observed Implementation: Matches code (partitioning, sharding, ID generation, demo commands).
 Assessment: PASS
 Severity: LOW
-Notes: No overflow guard, but acceptable for in-memory demo.
+Notes: No mismatch detected.
