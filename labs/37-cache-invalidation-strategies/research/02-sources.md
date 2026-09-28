@@ -100,6 +100,8 @@ Accessed: 2026-09-28
 Source Tier: 1 (would-be)
 Relevance: Intended to corroborate Redis TTL, SETEX, cache-aside/write-through specifics. All returned 404/403 at current site structure — no evidence extracted. Claims requiring Redis-official wording marked NOT VERIFIED.
 
+**REVISER UPDATE (2026-09-28):** Redis documentation URLs were unreachable at attempted paths; redis.io site structure has moved from `/docs/latest/develop/` to different paths. Alternative source URLs needed for re-verification include `https://redis.io/docs/latest/develop/interact/search-and-query/` and `https://redis.io/learn/howtos/`. Until re-verified, all Redis-specific pattern claims (cache-aside best practices, `SET NX PX` for distributed locks, `TTL key` retrieval semantics) must be treated as NOT VERIFIED from Redis-official docs. General cache-aside principles remain verified via Microsoft Learn (Source 01) and should be used as the primary vendor guidance for Redis-tier claims.
+
 ## Source 11
 
 Title: Internal codebase reference — labs/04-caching (cache_aside.go, write_through.go, stampede.go)

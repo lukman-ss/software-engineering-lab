@@ -75,7 +75,21 @@ Confidence: HIGH.
 
 Claim: Each request computes a random offset `offset = -Δ·β·ln(U)` (U ~ uniform(0,1)) and re-evaluates the key when `now + offset ≥ expiry`. Longer DB round-trips (`Δ`) and traffic bursts naturally increase the probability of an early rebuild before the official TTL; `beta = 1` is the practical default [Evidence 10]. The approach trades slightly earlier-than-TTL evictions (more frequent, smaller waves of rebuild) for eliminating the synchronized spike at expiry [Evidence 10].
 
-Evidence: Wikipedia algorithm and rationale, attributed to Vattani et al. PVLDB 2015 (DOI confirms paper existence) [Evidence 10, 11]. The authors' optimality claim is accepted on bibliographic authority alone; the paper PDF (both URLs) returned raw compressed streams that could not be parsed, so theorem statements and experimental graphs were not verified [Evidence 11, 09]. The lab's pedagogical formula `Δ·β·ln(rand()) > TTL_remaining` appears to omit the minus sign; as written it is always false for `rand() ∈ (0,1)` [Contradiction C1].
+Evidence: Wikipedia algorithm and rationale, attributed to Vattani et al. PVLDB 2015 (DOI confirms paper existence) [Evidence 10, 11]. The authors' optimality claim is accepted on bibliographic authority alone; primary paper mathematical proofs and experimental benchmarks were not independently extracted due to PDF parsing failure — both PDF URLs returned binary streams that could not be decompressed. Theorem statements and quantitative benchmarks are NOT VERIFIED from the primary text [Evidence 11, 09].
+
+**WARNING: Formula sign error in lab specification.** The lab's pedagogical formula `Δ·β·ln(rand()) > TTL_remaining` is ALWAYS FALSE for `rand() ∈ (0,1)` because `ln(rand())` is negative, making the left-hand side negative while `TTL_remaining` is positive. An engineer implementing this formula verbatim will never trigger probabilistic early refresh. The mathematically correct form, as derived from Wikipedia's transcription of the paper, is:
+
+```
+-Δ·β·ln(rand()) > TTL_remaining
+```
+
+which is equivalently:
+
+```
+Δ·β·(-ln(rand())) > TTL_remaining
+```
+
+or in original notation: `-delta * beta * log(rand(0,1)) >= TTL_remaining`. The minus sign (or equivalently `ln(1/rand())`) is essential. Do not implement `Δ·β·ln(rand()) > TTL_remaining`.
 
 Sources: Wikipedia — Cache stampede (algorithm); DOI metadata for VLDB 2015; labs/04-caching/stampede.go (for context).
 Confidence: MEDIUM (algorithm description HIGH; optimality proof and exact formula notation NOT VERIFIED).
@@ -93,10 +107,12 @@ Confidence: HIGH for RFC semantics; MEDIUM for applicability at the application-
 
 Claim: Adding random jitter to TTL values (or to retry backoff intervals) desynchronizes expiry or retry clocks across keys and clients, reducing the likelihood that many entries expire simultaneously [Evidence 16]. However, jitter does not prevent the stampede of a single hot key whose expiry still falls within one jitter interval of a burst of miss requests.
 
+**NOTE:** The latter statement — that jitter alone fails to cap concurrent rebuilds of one hot key — is an inferential deduction based on single-key contention mechanics, not a direct quote from a primary caching source. No opened source states this exact limitation verbatim. The deduction is logically sound but should be labeled as interpretation, not sourced fact.
+
 Evidence: Wikipedia cites jitter as a general anti-synchronization technique for retry backoffs [Evidence 7]. The repo's `TTLWithJitter(base, maxJitter)` deterministically returns `base + rand[0, maxJitter)` [Evidence 2, 16].
 
 Sources: Wikipedia — Thundering herd; local stampede.go.
-Confidence: HIGH for jitter's purpose; MEDIUM for sufficiency claim.
+Confidence: HIGH for jitter's purpose; MEDIUM (inferential) for single-key insufficiency claim.
 
 ## Areas of Agreement
 

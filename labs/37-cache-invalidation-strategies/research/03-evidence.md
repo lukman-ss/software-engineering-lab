@@ -211,13 +211,15 @@ Notes: No universal TTL number. Lab 5-minute TTL + 15s jitter is a local convent
 
 Claim: Jitter on TTL (or on retry backoff) desynchronizes expiry/retry clocks so many clients do not expire or retry at the same instant.
 
+**NOTE:** The claim that jitter alone fails to cap concurrent rebuilds of a single hot key — i.e., that jitter does not prevent stampede on one key whose expiry still falls within one jitter interval of a burst of miss requests — is an inferential deduction based on single-key contention mechanics, not a direct quote from a primary caching source. No opened source states this exact limitation verbatim. The deduction is logically sound (a single key's expiry window can still receive multiple concurrent requests even with jitter applied across the key's TTL value) but should be labeled as interpretation, not sourced fact.
+
 Evidence: Wikipedia Thundering herd Mitigation: "randomness is added to the wait intervals between retries, so that clients are no longer synchronized." labs/04-caching/stampede.go: `TTLWithJitter` returns `base + random[0, maxJitter)` — "Never reduces TTL below base."
 
 Source: Wikipedia — Thundering herd problem; local stampede.go
 URL: https://en.wikipedia.org/wiki/Thundering_herd_problem
-Confidence: MEDIUM for jitter-as-stampede-mitigation (OS/retry context); HIGH that jitter desynchronizes clocks
+Confidence: HIGH for jitter desynchronizes clocks; MEDIUM (inferential) for single-key insufficiency claim.
 Corroborated By: Conceptual overlap with XFetch (randomize *when* rebuild happens) but XFetch randomizes per-request near expiry; jitter randomizes the expiry timestamp itself.
-Notes: Jitter alone does not cap concurrent rebuilds of one hot key at T=TTL: if all TTLs cluster, a popular key can still stampede. Jitter helps when many keys share the same TTL origin (deploy, cron, cache warm).
+Notes: Jitter helps when many keys share the same TTL origin (deploy, cron, cache warm). For a single hot key, jitter alone does not prevent stampede; the key remains vulnerable to concurrent miss requests during its TTL window.
 
 ## Evidence 17
 
