@@ -1,46 +1,51 @@
-# Code Audit Findings
+# Code Audit
+
+Target Lab: labs/31-oauth2-and-oidc
 
 ## Finding 1
 
-Location: `pkg/pkce/pkce.go:23-72`
-Claimed Behavior: RFC 7636 PKCE code verifier and challenge generation and verification with S256 (mandatory length check 43-128 chars) and plain support.
-Observed Implementation: Verifier generation uses `crypto/rand` 32 bytes (43 base64url characters). `ComputeChallenge` checks verifier length `[43, 128]` and produces Base64URL-encoded SHA-256 digest for `S256` or identity for `plain`. `Verify` validates against challenge.
+Location: `pkg/pkce/pkce.go:23-71`
+Claimed Behavior: RFC 7636 PKCE pair generation and verification using S256 and plain methods.
+Observed Implementation: Verifier generated via `crypto/rand` (32 bytes base64url encoded -> 43 characters). Challenge correctly hashes with SHA256 and encodes to base64url without padding. Method validation and length checks (43 to 128 characters) enforced.
 Assessment: PASS
 Severity: LOW
-Notes: Compliant with RFC 7636 and RFC 9700.
+Notes: Compliant with RFC 7636.
 
 ## Finding 2
 
 Location: `pkg/oidc/oidc.go:40-116`
-Claimed Behavior: RFC 7519 / OIDC Core 1.0 ID token signing and validation with standard claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`).
-Observed Implementation: HMAC-SHA256 signature calculation and constant-time verification (`hmac.Equal`). Claims parsing validates issuer, audience, expiration time, future skew bounds, and nonce matching.
+Claimed Behavior: ID Token signing and claims validation (iss, aud, exp, iat, nonce) with HMAC-SHA256.
+Observed Implementation: Standard HS256 JWT generation with base64url encoding. Verification parses parts, recomputes HMAC signature, uses `hmac.Equal` to prevent timing attacks, and validates issuer, audience, expiration, clock skew for iat, and nonce.
 Assessment: PASS
 Severity: LOW
-Notes: Implementation correctly parses standard compact JWT format (`header.payload.signature`).
+Notes: Correctly handles tamper detection and claim mismatches.
 
 ## Finding 3
 
-Location: `pkg/server/server.go:63-286`
-Claimed Behavior: Authorization code exchange requires PKCE verification, marks codes as used, supports OIDC ID token issuance when `openid` scope requested.
-Observed Implementation: `Authorize` enforces mandatory `code_challenge` and valid method. `ExchangeCode` validates grant expiration, prevents code reuse (`ErrCodeAlreadyUsed`), validates redirect URI and client ID, verifies PKCE challenge, issues access token, generates refresh token with `FamilyID`, and issues signed ID token if scope contains `openid`.
+Location: `pkg/server/server.go:63-74, 92-217`
+Claimed Behavior: Authorization Server enforces client registration, mandatory PKCE, one-time auth code usage, and scopes.
+Observed Implementation: `s.mu.Lock()` protects all server state operations. Auth codes expire after 5 minutes and cannot be reused (`ac.Used` check). Code exchange verifies PKCE challenge with supplied verifier before minting access, refresh, and ID tokens.
 Assessment: PASS
 Severity: LOW
-Notes: Correct synchronization with mutex lock covering entire state mutation.
+Notes: Thread-safe in-memory implementation.
 
 ## Finding 4
 
 Location: `pkg/server/server.go:219-286`
-Claimed Behavior: Refresh Token Rotation with token family tracking (RFC 9700 Section 4.14). Replay of a consumed refresh token revokes entire family.
-Observed Implementation: When a token is refreshed, old token is marked `Revoked = true`. If a revoked token is presented, `revokedFams[meta.FamilyID]` is set to `true` and `ErrTokenReplayDetected` is returned. Subsequent attempts to use active tokens from that family are blocked.
+Claimed Behavior: Refresh Token Rotation with token family tracking and reuse detection (RFC 9700 Section 4.14).
+Observed Implementation: Each initial refresh token is tagged with a unique `FamilyID`. When a refresh token is presented:
+1. Checks if `s.revokedFams[meta.FamilyID]` is true. If so, rejects.
+2. Checks if `meta.Revoked` is true (reuse of consumed token). If so, marks `s.revokedFams[meta.FamilyID] = true` and rejects.
+3. If valid, marks `meta.Revoked = true`, issues a new refresh token sharing the same `FamilyID`, and issues a new access token.
 Assessment: PASS
 Severity: LOW
-Notes: Fully implements single-use rotation and family revocation.
+Notes: Properly models family revocation upon replay attack detection.
 
 ## Finding 5
 
-Location: `pkg/server/server.go:288-321`
-Claimed Behavior: Access token validation and scope enforcement.
-Observed Implementation: Validates existence and expiration of access tokens under mutex lock. Helper `containsScope` checks all requested scopes against granted space-delimited scopes.
+Location: `pkg/server/server.go:288-322`
+Claimed Behavior: Resource server token validation and space-delimited scope checks.
+Observed Implementation: Validates existence, expiry, and required scope subsets using custom space-tokenization helper.
 Assessment: PASS
 Severity: LOW
-Notes: Scope parsing handles whitespace delimiters accurately.
+Notes: Scope parsing handles whitespace and multiple scopes properly.

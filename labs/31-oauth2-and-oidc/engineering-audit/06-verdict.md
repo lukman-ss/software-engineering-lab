@@ -13,13 +13,11 @@ Code Files Reviewed:
 - `cmd/demo/main.go`
 
 Tests Reviewed:
-- `tests/oauth_test.go` (13 test cases)
+- `tests/oauth_test.go` (10 test suites, 13 test cases)
 
 Commands Executed:
 - `go test -v ./...` (PASS)
 - `go test -race ./...` (PASS)
-- `go test -count=1 ./...` (PASS)
-- `go test -race -count=1 ./...` (PASS)
 - `go run ./cmd/demo` (PASS)
 
 Failures: 0
