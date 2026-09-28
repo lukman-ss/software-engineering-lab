@@ -1,19 +1,17 @@
 # Gap Analysis
 
-Target Lab: labs/28-timeouts-and-deadlines
+No gaps identified in `labs/28-timeouts-and-deadlines`.
 
-## Gaps Identified
+## Evaluated Categories
 
-No critical, high, or medium gaps identified.
-
-- `MISSING_TEST`: None. Unit tests and integration tests cover all core features and failure paths.
-- `BROKEN_IMPLEMENTATION`: None. All packages execute as expected.
-- `DOC_CODE_MISMATCH`: None.
-- `RACE_CONDITION`: None. Go race detector passed with 0 data races.
-- `UNHANDLED_ERROR`: None. Errors properly propagated, handled, and joined.
-- `MISSING_EDGE_CASE`: None blocking. Zero-value config fallbacks are properly handled.
-- `IMPLEMENTATION_OVERCLAIM`: None.
-- `RESEARCH_MISMATCH`: None.
-- `FAKE_DEMO`: None. Real executable demo in `cmd/demo/main.go`.
-- `FAKE_BENCHMARK`: None. No synthetic or unverified benchmarks claimed.
-- `UNVERIFIED_RESULT`: None.
+- `MISSING_TEST`: NONE (Unit & integration test coverage present for all 4 core components).
+- `BROKEN_IMPLEMENTATION`: NONE (All code compiles and passes unit + integration tests).
+- `DOC_CODE_MISMATCH`: NONE (README matches package structure and commands).
+- `RACE_CONDITION`: NONE (Passed `go test -race ./...`).
+- `UNHANDLED_ERROR`: NONE (Context cancellation and max retry errors handled and joined cleanly).
+- `MISSING_EDGE_CASE`: NONE (Zero-value configuration defaults, half-open failure re-tripping, and lazy eviction tested).
+- `IMPLEMENTATION_OVERCLAIM`: NONE (Claims match actual stdlib Go implementations).
+- `RESEARCH_MISMATCH`: NONE (Aligned with research recommendations on deadline propagation, full jitter, 3-state circuit breaker, and idempotency deduplication).
+- `FAKE_DEMO`: NONE (`cmd/demo/main.go` executes actual component logic).
+- `FAKE_BENCHMARK`: NONE (No benchmark claims made).
+- `UNVERIFIED_RESULT`: NONE (All demo outputs and test cases verified by actual run).

@@ -1,39 +1,37 @@
 # Code Audit
 
-Target Lab: labs/28-timeouts-and-deadlines
-
 ## Finding 1
 
-Location: `internal/deadline/deadline.go:13-28`
-Claimed Behavior: Executes worker function with budget; terminates on context cancellation or timeout.
-Observed Implementation: Uses `context.WithTimeout(ctx, budget)`. Launches worker function in a goroutine and selects on `childCtx.Done()` vs `done` channel. Channel capacity is 1, preventing goroutine blockage if context times out.
+Location: `internal/deadline/deadline.go:17-27`
+Claimed Behavior: Context deadline propagation and budgeted worker execution.
+Observed Implementation: Worker executes in goroutine sending to buffered `done` channel (`chan error, 1`). Select blocks on `childCtx.Done()` or `done`.
 Assessment: PASS
 Severity: LOW
-Notes: If `fn` ignores `childCtx.Done()`, the background goroutine continues until `fn` completes. This is standard Go behavior for asynchronous execution with budget, but callers must cooperate with context.
+Notes: Channel is buffered to prevent goroutine leak if `childCtx.Done()` triggers before `done <- fn(childCtx)`.
 
 ## Finding 2
 
 Location: `internal/retry/retry.go:35-48`
-Claimed Behavior: Exponential backoff with full jitter in range `[0, min(MaxBackoff, BaseBackoff * 2^(attempt-1))]`.
-Observed Implementation: Uses `1 << uint(attempt-1)`, clips to `maxVal`, multiplies by `rand.Float64()`. Falls back to defaults in `NewRetrier`.
+Claimed Behavior: Exponential backoff calculation with full jitter.
+Observed Implementation: Math bit-shift for power of 2 capped at `MaxBackoff`. Uses `rand.Float64() * temp` from standard library `math/rand/v2`.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly implements the AWS full jitter algorithm. Zero configuration defaults properly initialized.
+Notes: Jitter properly bounded in range `[0, MaxBackoff]`. Standard library `math/rand/v2` is thread-safe and source of randomness is sufficient for retry jitter.
 
 ## Finding 3
 
-Location: `internal/circuit/circuit.go:38-139`
-Claimed Behavior: Thread-safe circuit breaker with `CLOSED`, `OPEN`, and `HALF_OPEN` state transitions based on failure/success thresholds and cooldown duration.
-Observed Implementation: State machine guarded by `sync.RWMutex` (`mu.Lock()` used on both reads and state updates due to lazy cooldown transition `checkCooldown()`). State transitions follow specification.
+Location: `internal/circuit/circuit.go:64-126`
+Claimed Behavior: Thread-safe 3-state circuit breaker state machine (`StateClosed`, `StateOpen`, `StateHalfOpen`).
+Observed Implementation: All state checks, state transitions, and cooldown window checks use `sync.RWMutex` write locking (`b.mu.Lock()`).
 Assessment: PASS
 Severity: LOW
-Notes: Mutex correctly prevents race conditions during concurrent `Allow()`, `RecordSuccess()`, and `RecordFailure()` calls.
+Notes: Atomic transitions guarded properly. `checkCooldown()` correctly evaluates time elapsed since last state change.
 
 ## Finding 4
 
-Location: `internal/idempotency/idempotency.go:13-52`
-Claimed Behavior: Concurrent safe in-memory deduplication store with TTL lazy-eviction.
-Observed Implementation: Protected by `sync.RWMutex` (`mu.Lock()` on both `Get` and `Set` to support in-place lazy deletion of expired keys).
+Location: `internal/idempotency/idempotency.go:29-52`
+Claimed Behavior: In-memory deduplication store with lazy TTL eviction.
+Observed Implementation: `Get` and `Set` use `s.mu.Lock()`. `Get` lazily deletes keys whose `CreatedAt` exceeds TTL.
 Assessment: PASS
 Severity: LOW
-Notes: Clean and safe concurrent map implementation.
+Notes: `Get` acquires write lock (`s.mu.Lock()`) allowing safe map deletion during lazy eviction. Race detector verified under concurrent operations.
