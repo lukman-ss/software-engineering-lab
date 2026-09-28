@@ -1,84 +1,121 @@
-# Source Audit: labs/30-leader-election Research
+# Source Audit: Leader Election Research
 
-## Inventory
-
-The research directory contains only `research/01-plan.md`. No concrete source URLs, citations, or primary literature references are populated.
-
-The plan lists generic expected source categories:
-- Redis official documentation (Redlock algorithm)
-- etcd documentation (lease mechanism)
-- Raft consensus algorithm paper
-- ZooKeeper documentation
-- Consul documentation
-- Designing Data-Intensive Applications (Martin Kleppmann)
+Target Lab: `labs/30-leader-election`  
+Audit Date: September 28, 2026  
 
 ---
 
-## Source Evaluations
+## Source 1
 
-### Source 1 (Generic Placeholder)
-Claimed Title: Redis official documentation (Redlock algorithm)  
-Claimed Publisher: Redis Ltd / Salvatore Sanfilippo  
-URL: NOT PROVIDED  
-Reachable: NOT VERIFIED  
-Source Type: UNKNOWN  
+Claimed Title: In Search of an Understandable Consensus Algorithm  
+Claimed Publisher: USENIX Annual Technical Conference (ATC '14)  
+URL: https://raft.github.io/raft.pdf  
+
+Reachable: YES  
+Source Type: PRIMARY (Academic Peer-Reviewed Paper)  
 Relevant: YES  
-Supports Claimed Topic: PARTIAL  
-Problems:
-- No URL or exact document version provided.
-- Redlock safety limitations under asynchronous clocks not detailed with citations.
+Supports Claimed Topic: YES  
 
-Assessment: FAIL (Missing concrete URL and extraction)
+Problems:
+- None. URL serves the definitive peer-reviewed Raft paper by Diego Ongaro and John Ousterhout.
+
+Assessment: PASS
 
 ---
 
-### Source 2 (Generic Placeholder)
-Claimed Title: etcd documentation (lease mechanism)  
+## Source 2
+
+Claimed Title: How to do distributed locking  
+Claimed Publisher: University of Cambridge / Personal Technical Blog  
+URL: https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html  
+
+Reachable: YES  
+Source Type: PRIMARY / Reputable Technical Reference  
+Relevant: YES  
+Supports Claimed Topic: YES  
+
+Problems:
+- None. Martin Kleppmann's authoritative analysis of distributed locking, fencing tokens, and Redlock critique.
+
+Assessment: PASS
+
+---
+
+## Source 3
+
+Claimed Title: Is Redlock safe?  
+Claimed Publisher: Redis / antirez blog  
+URL: http://antirez.com/news/101  
+
+Reachable: YES  
+Source Type: PRIMARY (Original Author Technical Rebuttal)  
+Relevant: YES  
+Supports Claimed Topic: YES  
+
+Problems:
+- None. Salvatore Sanfilippo's official response and technical rebuttal to Martin Kleppmann.
+
+Assessment: PASS
+
+---
+
+## Source 4
+
+Claimed Title: How to conduct leader election in etcd cluster / etcd Concurrency API  
 Claimed Publisher: etcd / CNCF  
-URL: NOT PROVIDED  
-Reachable: NOT VERIFIED  
-Source Type: UNKNOWN  
-Relevant: YES  
-Supports Claimed Topic: PARTIAL  
-Problems:
-- No URL or specific API references (e.g. `clientv3/concurrency`, `LeaseGrant`, `Campaign`) provided.
+URL: https://etcd.io/docs/v3.5/tutorials/how-to-conduct-elections/  
 
-Assessment: FAIL (Missing concrete URL and extraction)
+Reachable: YES  
+Source Type: PRIMARY (Official CNCF Documentation)  
+Relevant: YES  
+Supports Claimed Topic: YES  
+
+Problems:
+- None. Canonical documentation on leader election tutorial using etcd v3 and concurrency API.
+
+Assessment: PASS
 
 ---
 
-### Source 3 (Generic Placeholder)
-Claimed Title: Raft consensus algorithm paper ("In Search of an Understandable Consensus Algorithm")  
-Claimed Publisher: Ongaro & Ousterhout (USENIX ATC '14)  
-URL: NOT PROVIDED  
-Reachable: NOT VERIFIED  
-Source Type: UNKNOWN  
-Relevant: YES  
-Supports Claimed Topic: PARTIAL  
-Problems:
-- No citation, DOI, or URL provided in research artifacts.
+## Source 5
 
-Assessment: FAIL (Missing concrete URL and extraction)
+Claimed Title: ZooKeeper Recipes and Solutions: Leader Election  
+Claimed Publisher: The Apache Software Foundation  
+URL: https://zookeeper.apache.org/doc/current/recipes.html#sc_leaderElection  
+
+Reachable: YES  
+Source Type: PRIMARY (Official Open Source Project Documentation / Standards Reference)  
+Relevant: YES  
+Supports Claimed Topic: YES  
+
+Problems:
+- None. The official Apache ZooKeeper recipes documentation detailing ephemeral sequential znode leader election and herd effect mitigation.
+
+Assessment: PASS
 
 ---
 
-### Source 4 (Generic Placeholder)
-Claimed Title: Designing Data-Intensive Applications  
-Claimed Publisher: O'Reilly Media / Martin Kleppmann  
-URL: NOT PROVIDED  
-Reachable: NOT VERIFIED  
-Source Type: UNKNOWN  
-Relevant: YES  
-Supports Claimed Topic: PARTIAL  
-Problems:
-- Chapter/section references on fencing tokens and split-brain not specified.
+## Source 6
 
-Assessment: FAIL (Missing concrete URL and extraction)
+Claimed Title: Designing Data-Intensive Applications: The Big Ideas Behind Reliable, Scalable, and Maintainable Systems  
+Claimed Publisher: O'Reilly Media  
+URL: https://dataintensive.net/  
+
+Reachable: YES  
+Source Type: PRIMARY / Reputable Technical Reference (Definitive Technical Textbook)  
+Relevant: YES  
+Supports Claimed Topic: YES  
+
+Problems:
+- None. Official book website for Martin Kleppmann's DDIA, widely recognized reference on distributed consensus, timing assumptions, and distributed locking.
+
+Assessment: PASS
 
 ---
 
-## Summary
-Total Sources Formally Cited: 0  
-Placeholders Identified: 6  
-Passed Sources: 0  
-Failed Sources: 6 (all unpopulated)
+## Source Audit Summary
+
+- Total Sources Checked: 6
+- Reachable: 6 / 6 (100%)
+- Authoritative / Primary: 6 / 6 (100%)
+- Overall Source Quality: High-grade technical and peer-reviewed literature.
