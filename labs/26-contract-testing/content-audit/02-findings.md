@@ -1,28 +1,63 @@
-# Content Audit Findings & Analysis
+# Audit Summary
 
-Target Lab: `labs/26-contract-testing`
-Date: 2026-09-28
+Audit Date: 2026-09-28
+Target Lab: labs/26-contract-testing
+Scope: Content accuracy audit only (no code/research changes)
+Auditor: Kiro (AI Technical Content Auditor)
 
-## 1. Engineering Alignment & Implementation Verification
+---
 
-### Code References & Snippets
-- `03-code-snippets.md` matches `internal/consumer/client.go`, `internal/provider/server.go`, `internal/contract/verifier.go`, `internal/model/order.go`, and `cmd/demo/main.go` accurately.
-- Line references and implementations match exact code lines without hallucinated syntax or methods.
-- The use of `json.Number` and `decoder.UseNumber()` for primitive type preservation (`150000` int vs string) is documented accurately and matches `diffValues()` logic.
+# Findings
 
-### Gaps & Limitations Disclosure
-- **GAP-01 (Response Header Validation)**: Documented explicitly in `02-master-draft.md` (lines 21, 52, 204), `04-diagrams.md` (lines 23, 158), `05-key-takeaways.md` (line 17). The content makes clear that while headers are specified in contract interactions, `verifier.Verify()` currently asserts only status codes and JSON response body fields.
-- **GAP-02 (V2 Route Unverified)**: Documented explicitly in `02-master-draft.md` (line 153), `03-code-snippets.md` (line 203), and `04-diagrams.md` (line 158). The content explicitly notes that `/v2/orders/{id}` exists in `ProviderDual` but lacks a dedicated consumer contract and verification test in the lab suite.
-- **GAP-06 (Nondeterministic Map Iteration Order)**: Documented explicitly in `01-content-brief.md` (line 31) and `04-diagrams.md` (line 158).
+## Verified Accurate Claims
 
-## 2. Test Verification Alignment
-- 5 tests cited in `02-master-draft.md` and `04-diagrams.md` match `tests/contract_test.go` (`TestConsumerContractGeneration`, `TestProviderV1_ContractVerification_Success`, `TestProviderBreaking_ContractVerification_Fails`, `TestProviderDual_ContractVerification_Success`, `TestConcurrentContractVerification`).
-- Test outcomes and assertions match actual behavior (exit codes, pass/fail status, concurrency check).
+1. **Consumer contract generation** — `GenerateMobileContract()` in `internal/consumer/client.go:82-111` produces correct structure with MobileApp/OrderService, one interaction for `/v1/orders/ORD-123`, `json.Number("150000")` for total.
+2. **Provider V1 compliance** — `ProviderV1.ServeHTTP` in `internal/provider/server.go:18-44` returns exact schema matching contract (IN_PROGRESS, customer.name, int64 total). Verification passes.
+3. **Provider Breaking changes** — `ProviderBreaking.ServeHTTP` in `internal/provider/server.go:53-80` emits 3 breaking mutations: status casing (`in_progress`), field rename (`full_name`), type change (string total). Verification fails with ≥3 errors.
+4. **Provider Dual** — `ProviderDual.ServeHTTP` in `internal/provider/server.go:89-131` supports `/v1` (compliant) and `/v2` (evolved schema). `/v1` path passes verification.
+5. **Verifier engine** — `Verifier.Verify()` in `internal/contract/verifier.go:57-115` performs subset validation with `json.Number` preservation via `decoder.UseNumber()`. `diffValues()` in `internal/contract/verifier.go:117-176` detects missing fields, type mismatches, value mismatches.
+6. **Test coverage** — All 5 tests in `tests/contract_test.go` exist and pass:
+   - `TestConsumerContractGeneration` (line 13)
+   - `TestProviderV1_ContractVerification_Success` (line 27)
+   - `TestProviderBreaking_ContractVerification_Fails` (line 50)
+   - `TestProviderDual_ContractVerification_Success` (line 74)
+   - `TestConcurrentContractVerification` (line 96)
+7. **Demo orchestrator** — `cmd/demo/main.go:14-71` executes 4 stages matching lab claims.
+8. **Model DTOs** — `OrderResponseV1`, `OrderResponseBreaking`, `OrderResponseV2` in `internal/model/order.go` match code behavior.
+9. **Mobile client field validation** — `FetchOrder` in `internal/consumer/client.go:34-79` enforces contract assumptions (customer.name presence, status enum check).
 
-## 3. Conceptual & Terminology Accuracy
-- No fabricated terms or metrics detected.
-- CDC principles (consumer minimal expectation, subset matching, CI gate, expand/contract migration pattern) reflect standard industry literature (Martin Fowler, Pact Foundation).
-- Clear distinctions made between contract tests, unit tests, and end-to-end integration tests.
+## Content Discrepancies — Gaps Documented in Engineering Audit
 
-## 4. Areas of Warning / Observations
-- **Minor Observation**: `07-revision-record.md` already pre-records revisions matching the open-source engineering audit disclosures. All cited cross-references to GAP-01, GAP-02, and GAP-06 in `02-master-draft.md`, `03-code-snippets.md`, `04-diagrams.md`, and `05-key-takeaways.md` are present and verified in the current content text.
+1. **GAP-01 (HIGH)**: Response header validation is declared in docs and contract (e.g., `02-master-draft.md` line 21, `04-diagrams.md` line 33) but **not implemented** in `Verifier.Verify`. The verifier never compares `ResponseDefinition.Headers` against actual `resp.Header`. A provider returning wrong Content-Type would pass verification.
+   - Status: Documented correctly in `engineering-audit-opensource/06-verdict.md`, lab content accurately discloses this limitation.
+2. **GAP-02 (HIGH)**: `/v2` endpoint exists in `ProviderDual` (`internal/provider/server.go:112-128`) but has **no consumer interaction**, **no test**, and **no demo coverage**. Lab content correctly notes this (e.g., `02-master-draft.md` line 153, `04-diagrams.md` line 130).
+   - Status: Documented correctly in `engineering-audit-opensource/06-verdict.md`, lab content accurately discloses this limitation.
+3. **GAP-06 (LOW)**: Error ordering is nondeterministic due to map iteration in `diffValues()`. Recorded demo transcript differs from fresh run. Lab content correctly notes this (e.g., `01-content-brief.md` line 30).
+   - Status: Documented correctly in `engineering-audit-opensource/06-verdict.md`, lab content accurately discloses this limitation.
+
+## Content Quality
+
+- Language: Indonesian/English mix as specified in content brief (`01-content-brief.md` line 4).
+- Formatting: Code blocks preserve exact file paths, line numbers, comments.
+- Diagrams: Accurate reflection of implementation (consumer/provider contract flow, verifier subset logic, 3 breaking diffs).
+- Sources: All citations trace to lab files.
+
+---
+
+# Verdict
+
+**APPROVED_WITH_WARNINGS**
+
+Rationale: All factual claims about implementation behavior are accurate. Three documented gaps (GAP-01, GAP-02, GAP-06) are correctly disclosed in lab content per engineering audit findings. Content does not hallucinate behavior or overstate capabilities beyond disclosed limitations.
+
+No content revision required beyond existing disclosures.
+
+---
+
+# Audit Output Files
+
+- `content-audit/01-audit-summary.md` — This file.
+- `content-audit/02-findings.md` — Detailed findings (this output).
+- `content-audit/09-verdict.md` — Final verdict.
+
+Audit performed per pipeline override: audit content only, no code/research modification, no file deletion.
