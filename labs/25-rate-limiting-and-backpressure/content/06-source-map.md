@@ -1,166 +1,160 @@
 # Source Map
 
-## Rate Limiting: Token Bucket
+Pemetaan tiap bagian article ke sumber riset, sumber eksternal, file implementasi, dan test yang mendukungnya.
+
+## Problem
 
 Research:
-- research/05-report.md (Finding 1)
-- research/02-sources.md (Source 1: RFC 6585, Source 3: Token Bucket Wikipedia)
+- `research/05-report.md` — Executive Summary (risk cascading failure tanpa protective mechanisms)
+
+Research Sources:
+- [10] Google SRE Workbook: Handling Overload (https://landing.google.com/sre/sre-book/chapters/handling-overload/)
+- [7] Stripe Engineering Blog: Scaling your API with rate limiters (https://stripe.com/blog/rate-limiters)
+
+## Why This Matters
+
+Research:
+- `research/05-report.md` — Finding 6 (Multi-Layer Rate Limiting Approach)
+- `research/05-report.md` — Finding 8 (Google SRE Per-Customer Limits)
+
+Research Sources:
+- [7] Stripe Engineering Blog: Scaling your API with rate limiters
+- [10] Google SRE Workbook: Handling Overload
+
+## Mental Model
+
+Research:
+- `research/05-report.md` — Finding 1 (Token Bucket vs Leaky Bucket), Finding 2 (Backpressure vs Rate Limiting), Finding 3 (Exponential Backoff with Jitter)
+
+Research Sources:
+- [1] Token bucket — Wikipedia
+- [12] Leaky bucket — Wikipedia
+- [8] AWS Architecture Blog: Exponential Backoff And Jitter
 
 Implementation:
-- internal/ratelimit/bucket.go (TokenBucket struct, AllowN, RetryAfterSeconds)
+- `internal/ratelimit/bucket.go` — TokenBucket, LeakyBucket
+- `internal/backpressure/queue.go` — BoundedQueue
+- `internal/retry/backoff.go` — ComputeBackoff
 
-Tests:
-- internal/ratelimit/bucket_test.go (TestTokenBucket_BurstAndRefill, TestTokenBucket_ConcurrencyRace, TestTokenBucket_RetryAfterSeconds)
-
-Demo:
-- cmd/demo/main.go (Phase 1: Token Bucket Burst & Rate Limiting)
-
----
-
-## Rate Limiting: Leaky Bucket
+## Core Concept: Token Bucket vs. Leaky Bucket
 
 Research:
-- research/05-report.md (Finding 1, Notes)
-- research/02-sources.md (Source 6: Leaky Bucket Wikipedia)
+- `research/05-report.md` — Finding 1
+- `research/03-evidence.md` — Evidence 1 (Token Bucket Properties), Evidence 2 (Leaky Bucket Meter vs Queue)
+
+Research Sources:
+- [1] Token bucket — Wikipedia
+- [12] Leaky bucket — Wikipedia
+- [5] NGINX limit_req_module
 
 Implementation:
-- internal/ratelimit/bucket.go (LeakyBucket struct, Allow)
+- `internal/ratelimit/bucket.go` — `NewTokenBucket`, `Allow()`, `AllowN()`, `NewLeakyBucket`, `Allow()`
 
-Tests:
-- internal/ratelimit/bucket_test.go (TestLeakyBucket_LeakRate)
-
-Demo:
-- cmd/demo/main.go (Phase 2: Leaky Bucket Traffic Smoothing)
-
----
-
-## HTTP 429 Middleware (RFC 6585)
+## Failure Scenario
 
 Research:
-- research/05-report.md (Finding 2)
-- research/02-sources.md (Source 1: RFC 6585)
+- `research/05-report.md` — Finding 5 (Little's Law), Executive Summary
+
+Research Sources:
+- [3] Little's law — Wikipedia
+- [6] RFC 6585: Additional HTTP Status Codes
+
+Calculation:
+- 5,000,000 items ÷ 2,000 items/sec = 2,500 seconds ≈ 41 minutes 40 seconds (verified against Little's Law)
+
+## Architecture
+
+Engineering:
+- `engineering/01-design.md` — Architecture diagram, Components section
 
 Implementation:
-- internal/httputil/middleware.go (RateLimitMiddleware, RateLimitResponse)
+- `internal/httputil/middleware.go` — HTTP Middleware / Tenant Extractor
+- `internal/ratelimit/bucket.go` + `internal/ratelimit/registry.go` — Token Bucket + Registry
+- `internal/backpressure/queue.go` — Bounded Queue
+- `internal/retry/backoff.go` — Jitter Backoff
+- `cmd/demo/main.go` — CLI demo
 
-Tests:
-- internal/httputil/middleware_test.go (TestRateLimitMiddleware_RFC6585)
+## Implementation
 
----
+Engineering:
+- `engineering/01-design.md` — Implementation Decisions (pure stdlib, monotonic time, mutex vs CAS)
+- `engineering/02-implementation-notes.md` — Core Design Decisions, Known Limitations
 
-## Multi-tenant Registry (Tenant Isolation)
+Implementation Files:
+- `internal/ratelimit/bucket.go` — TokenBucket, LeakyBucket
+- `internal/ratelimit/registry.go` — Registry (per-tenant)
+- `internal/backpressure/queue.go` — BoundedQueue
+- `internal/retry/backoff.go` — ComputeBackoff (FullJitter, EqualJitter, DecorrelatedJitter, NoJitter)
+- `internal/httputil/middleware.go` — RateLimitMiddleware
 
-Research:
-- research/05-report.md (Finding 5)
-- research/02-sources.md (Source 5: Datacenter Traffic Control paper)
+## Code Walkthrough
 
-Implementation:
-- internal/ratelimit/registry.go (Registry struct, Get method)
+Implementation Files:
+- `cmd/demo/main.go` — Demo sections 1-4
+- `internal/httputil/middleware.go:17-40` — Middleware 429 RFC 6585 + Retry-After
 
-Tests:
-- internal/ratelimit/bucket_test.go (TestRegistry_TenantIsolation)
+## What the Tests Prove
 
----
+Engineering:
+- `engineering/03-execution-result.md` — Test results (15/15 pass, race detector clean)
 
-## Bounded Queue Backpressure
+Test Files:
+- `internal/ratelimit/bucket_test.go` — TestTokenBucket_BurstAndRefill, TestLeakyBucket_LeakRate, TestRegistry_TenantIsolation, TestTokenBucket_RetryAfterSeconds, TestTokenBucket_ConcurrencyRace, TestLeakyBucket_ConcurrencyRace, TestRegistry_ConcurrentSameKeyGet, TestTokenBucket_EdgeCases
+- `internal/backpressure/queue_test.go` — TestBoundedQueue_RejectionUnderLoad, TestBoundedQueue_ConcurrencySafety, TestBoundedQueue_SubmitAfterStop, TestBoundedQueue_ConcurrentStopAndSubmit
+- `internal/retry/backoff_test.go` — TestComputeBackoff_Bounds, TestDecorrelatedJitter_Bounds, TestComputeBackoff_UnknownStrategy
+- `internal/httputil/middleware_test.go` — TestRateLimitMiddleware_RFC6585, TestRateLimitMiddleware_AnonymousFallbackAndBody
 
-Research:
-- research/05-report.md (Finding 3, Finding 7)
-- research/02-sources.md (Source 9: Little's Law Wikipedia)
-
-Implementation:
-- internal/backpressure/queue.go (BoundedQueue, TrySubmit, ErrQueueFull)
-
-Tests:
-- internal/backpressure/queue_test.go (TestBoundedQueue_RejectionUnderLoad, TestBoundedQueue_ConcurrencySafety)
-
-Demo:
-- cmd/demo/main.go (Phase 3: Bounded Queue Backpressure)
-
----
-
-## Exponential Backoff with Jitter (AWS)
-
-Research:
-- research/05-report.md (Finding 4)
-- research/02-sources.md (Source 10: AWS Architecture Blog)
+## Recovery / Rollback
 
 Implementation:
-- internal/retry/backoff.go (ComputeBackoff, 4 strategy variants)
+- `internal/backpressure/queue.go:91-103` — `Stop()` graceful shutdown
+- `internal/ratelimit/bucket.go:54-79` — `RetryAfterSeconds()`
 
-Tests:
-- internal/retry/backoff_test.go (TestComputeBackoff_Bounds, TestDecorrelatedJitter_Bounds)
-
-Demo:
-- cmd/demo/main.go (Phase 4: AWS Retry Backoff Strategies)
-
----
-
-## Little's Law & Capacity Planning
+## Production Considerations
 
 Research:
-- research/05-report.md (Finding 3, Finding 7)
-- research/02-sources.md (Source 9: Little's Law Wikipedia)
+- `research/05-report.md` — Finding 7 (Redis as Backend), Finding 9 (Client-Side Throttling and Retry Budget)
 
-Notes:
-- Contoh perhitungan backlog 5M / 2000/sec = 2500 detik di dalam research/05-report.md
-- Demo CLI tidak menjalankan contoh ini (hanya visualisasi queue bounded)
+Research Sources:
+- [11] Redis rate limiter documentation (https://redis.io/docs/latest/develop/use-cases/rate-limiter/)
+- [9] AWS SDK Documentation: Retry behavior
+- [10] Google SRE Workbook: Handling Overload
 
----
+Research Revision:
+- `research-revision/03-revision-result.md` — AWS SDK constants contextualized as implementation-specific defaults
 
-## CGNAT / IP Limitation (RFC 6598)
+Engineering Revision:
+- `engineering-revision/03-revision-result.md` — Resolved all gaps (high/medium/low)
 
-Research:
-- research/05-report.md (Finding 2 Notes)
-- research/02-sources.md (tidak terdaftar secara eksplisit, dikutip dari lab document)
-
-Implementation:
-- internal/httputil/middleware.go (ekstrak X-API-Key, fallback "anonymous")
-
----
-
-## Reactive Streams / Backpressure Standard
+## Common Mistakes
 
 Research:
-- research/05-report.md (Finding 6)
-- research/02-sources.md (Source 8: Reactive Streams Wikipedia)
+- `research/05-report.md` — Finding 2, Finding 8, Finding 9
 
-Notes:
-- Konsep referensi; implementasi lab menggunakan bounded queue Go channel, bukan Reactive Streams API
+Research Sources:
+- [6] RFC 6585
+- [10] Google SRE Workbook: retry budgets
+- Engineering revision: CGNAT RFC 6598 per-tenant key limiting
 
----
+## Case Study: Stripe
 
-## Research Gaps / Caveats (Preserved from Audits)
+Research:
+- `research/05-report.md` — Finding 6
 
-Research-Audit:
-- research-audit/06-gaps.md (Gap 1: 5/10 sources Wikipedia; Gap 2: Missing empirical benchmarks)
-- research-audit/07-verdict.md (APPROVED dengan 2 non-blocking issues)
+Research Sources:
+- [7] Stripe Engineering Blog: Scaling your API with rate limiters
 
-Engineering-Audit:
-- engineering-audit/06-verdict.md (APPROVED, 0 failures, 0 warnings, race detector PASS)
+## Case Study: Google SRE
 
-Engineering Notes:
-- engineering/02-implementation-notes.md (Known Limitations: in-memory state only, no distributed sync)
-- engineering/03-execution-result.md (Full test + race detector + demo output)
+Research:
+- `research/05-report.md` — Finding 8, Finding 9
 
----
+Research Sources:
+- [10] Google SRE Workbook: Handling Overload
 
-## File Inventory (Verified)
+## Audit Status
 
-Source Code:
-- internal/ratelimit/bucket.go (121 lines)
-- internal/ratelimit/registry.go (37 lines)
-- internal/ratelimit/bucket_test.go (98 lines)
-- internal/backpressure/queue.go (80 lines)
-- internal/backpressure/queue_test.go (68 lines)
-- internal/retry/backoff.go (63 lines)
-- internal/retry/backoff_test.go (49 lines)
-- internal/httputil/middleware.go (40 lines)
-- internal/httputil/middleware_test.go (43 lines)
-- cmd/demo/main.go (65 lines)
-- go.mod, README.md
-
-Audit Artifacts:
-- research-audit/01-audit-plan.md through 07-verdict.md
-- engineering-audit/01-audit-plan.md through 06-verdict.md
-- engineering/01-design.md through 03-execution-result.md
+Research Audit Verdict: APPROVED (`research-audit/07-verdict.md`)
+Engineering Audit Verdict: APPROVED (`engineering-audit/06-verdict.md`, `engineering-audit-opensource/06-verdict.md`)
+Research Revision: READY_FOR_RESEARCH_REAUDIT → re-audit completed, APPROVED
+Engineering Revision: READY_FOR_ENGINEERING_REAUDIT → re-audit completed, APPROVED

@@ -1,19 +1,16 @@
 # Code Snippets
 
-## Snippet 1 — Token Bucket Core Logic
+Semua snippet diambil verbatim dari implementasi yang lulus Engineering Audit (APPROVED).
 
-Source File: `internal/ratelimit/bucket.go`
-Purpose: Implementasi thread-safe token bucket dengan refill terus-menerus dan metode `RetryAfterSeconds`.
+## Snippet 1 — Token Bucket: Allow dengan Replenish + Debit
+
+Source File:
+`internal/ratelimit/bucket.go`
+
+Purpose:
+Menunjukkan replenishment token berbasis elapsed time (monotonic), cap ke capacity, lalu debit satu token.
 
 ```go
-type TokenBucket struct {
-	mu         sync.Mutex
-	capacity   float64
-	tokens     float64
-	refillRate float64
-	lastRefill time.Time
-}
-
 func (tb *TokenBucket) AllowN(n float64) bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -32,7 +29,20 @@ func (tb *TokenBucket) AllowN(n float64) bool {
 	}
 	return false
 }
+```
 
+Explanation:
+Interval antar-panggilan dikonversi ke detik dan dikalikan `refillRate` untuk menambah token. Token dibatasi maksimum `capacity` sehingga idle panjang tidak menghasilkan burst tanpa batas. Jika token cukup, dikurangi dan request diizinkan; jika tidak, request ditolak tanpa blocking.
+
+## Snippet 2 — Retry-After untuk HTTP 429
+
+Source File:
+`internal/ratelimit/bucket.go`
+
+Purpose:
+Menghitung detik tunggu minimum agar `n` token tersedia, dipakai middleware untuk header `Retry-After`.
+
+```go
 func (tb *TokenBucket) RetryAfterSeconds(n float64) int {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -60,24 +70,18 @@ func (tb *TokenBucket) RetryAfterSeconds(n float64) int {
 }
 ```
 
-Explanation: Token bucket menggunakan mutex untuk keamanan konkurensi. Token diisi secara berkala berdasarkan waktu elapsed. `RetryAfterSeconds` menghitung waktu tunggu hingga token cukup tersedia — digunakan middleware HTTP untuk header `Retry-After`.
+Explanation:
+Kekurangan token dibagi `refillRate` lalu dibulatkan ke atas, sehingga `Retry-After` selalu membumikan ke waktu tunggu yang memadai. Per audit, method ini membutuhkan `refillRate > 0`; nilai nol menyebabkan panic (dokumentasi precondition, non-blocking gap).
 
----
+## Snippet 3 — Leaky Bucket: Drain Konstan + Tolak Saat Penuh
 
-## Snippet 2 — Leaky Bucket Core Logic
+Source File:
+`internal/ratelimit/bucket.go`
 
-Source File: `internal/ratelimit/bucket.go`
-Purpose: Implementasi leaky bucket untuk traffic smoothing dengan drain rate konstan.
+Purpose:
+Menunjukkan perilaku smoothing: air dikeluarkan konstan, request baru ditolak ketika level air mencapai kapasitas.
 
 ```go
-type LeakyBucket struct {
-	mu       sync.Mutex
-	capacity float64
-	water    float64
-	leakRate float64
-	lastLeak time.Time
-}
-
 func (lb *LeakyBucket) Allow() bool {
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
@@ -98,23 +102,18 @@ func (lb *LeakyBucket) Allow() bool {
 }
 ```
 
-Explanation: Leaky bucket mengalirkan beban dengan laju konstan. `water` mewakili "air" dalam bucket yang terus berkurang seiring waktu. Permintaan ditolak jika menambahkan 1 unit akan melebihi kapasitas.
+Explanation:
+Air berkurang sebesar `elapsed × leakRate` pada setiap panggilan. Request hanya diterima bila setelah penambahan air masih `<= capacity`, memaksa laju keluaran tetap konstan berbeda dari token bucket yang mentolerir burst.
 
----
+## Snippet 4 — Registry Per-Tenant (Double-Checked Locking)
 
-## Snippet 3 — Multi-tenant Registry
+Source File:
+`internal/ratelimit/registry.go`
 
-Source File: `internal/ratelimit/registry.go`
-Purpose: Registry per-tenant token bucket untuk isolasi (menggunakan API key/tenant ID, bukan IP).
+Purpose:
+Menyediakan satu token bucket per tenant key agar pembatasan tidak berbagi state antar-tenant (hindari tabrakan IP di balik CGNAT/RFC 6598).
 
 ```go
-type Registry struct {
-	mu          sync.RWMutex
-	buckets     map[string]*TokenBucket
-	capacity    float64
-	refillRate  float64
-}
-
 func (r *Registry) Get(tenantKey string) *TokenBucket {
 	r.mu.RLock()
 	tb, exists := r.buckets[tenantKey]
@@ -134,29 +133,29 @@ func (r *Registry) Get(tenantKey string) *TokenBucket {
 }
 ```
 
-Explanation: Double-checked locking pattern — baca dengan `RLock`, tulis dengan `Lock` hanya saat bucket belum ada. Ini memastikan tenant A dan B punya kuota mandiri.
+Explanation:
+Pembacaan pertama memakai `RLock` agar jalur normal murah. Jika key belum ada, fallback ke `Lock` dengan pemeriksaan ulang sehingga hanya satu bucket dibuat per key walau ada akses konkuren.
 
----
+## Snippet 5 — Bounded Queue: Fast Rejection (Backpressure)
 
-## Snippet 4 — Bounded Queue dengan Fast Rejection
+Source File:
+`internal/backpressure/queue.go`
 
-Source File: `internal/backpressure/queue.go`
-Purpose: Worker pool dengan channel bounded, menolak cepat saat penuh (load shedding).
+Purpose:
+Menerima job bila buffer tersedia, menolak seketika dengan `ErrQueueFull` bila penuh — tanpa memblokir pemanggil.
 
 ```go
-var ErrQueueFull = errors.New("backpressure: queue capacity exceeded")
-
-type BoundedQueue struct {
-	capacity int
-	queue    chan Job
-	workers  int
-	wg       sync.WaitGroup
-	ctx      context.Context
-	cancel   context.CancelFunc
-}
-
 func (bq *BoundedQueue) TrySubmit(job Job) error {
+	bq.stopMu.RLock()
+	defer bq.stopMu.RUnlock()
+
+	if bq.stopped {
+		return ErrQueueStopped
+	}
+
 	select {
+	case <-bq.ctx.Done():
+		return ErrQueueStopped
 	case bq.queue <- job:
 		bq.accepted.Add(1)
 		return nil
@@ -167,49 +166,93 @@ func (bq *BoundedQueue) TrySubmit(job Job) error {
 }
 ```
 
-Explanation: Pola `select-default` pada channel Go memastikan `TrySubmit` tidak blocking. Jika channel penuh, segera mengembalikan `ErrQueueFull`. Worker loop memproses job dari channel dan menghitung `processed`.
+Explanation:
+Pola `select-default` memberi penolakan non-blocking (zero-allocation) saat kanal penuh, yang merupakan inti backpressure: sinyal overload dikembalikan ke pemanggil alih-alih antrean tumbuh tanpa batas.
 
----
+## Snippet 6 — Worker Loop dengan Shutdown via Context
 
-## Snippet 5 — AWS Jitter Backoff Strategies
+Source File:
+`internal/backpressure/queue.go`
 
-Source File: `internal/retry/backoff.go`
-Purpose: Implementasi 4 varian exponential backoff dengan jitter mengikuti spesifikasi AWS (Marc Brooker).
+Purpose:
+Konsumer yang memproses job sampai context dibatalkan, dengan penghitung `processed`.
 
 ```go
-type BackoffStrategy string
+func (bq *BoundedQueue) workerLoop() {
+	defer bq.wg.Done()
+	for {
+		select {
+		case <-bq.ctx.Done():
+			return
+		case job, ok := <-bq.queue:
+			if !ok {
+				return
+			}
+			_ = job(bq.ctx)
+			bq.processed.Add(1)
+		}
+	}
+}
+```
 
-const (
-	NoJitter           BackoffStrategy = "NoJitter"
-	FullJitter         BackoffStrategy = "FullJitter"
-	EqualJitter        BackoffStrategy = "EqualJitter"
-	DecorrelatedJitter BackoffStrategy = "DecorrelatedJitter"
-)
+Explanation:
+`select` dua-arah antara cancellation dan job masuk memungkinkan shutdown bersih. Per audit, return error dari `job` dibuang (`_ = job(...)`) dan tidak ada pemisahan panic — semantik worker dicatat sebagai known gap, bukan perilaku terverifikasi.
 
-func ComputeBackoff(strategy BackoffStrategy, attempt int, cfg Config, prevSleep time.Duration) time.Duration {
-	baseFloat := float64(cfg.Base)
-	capFloat := float64(cfg.Cap)
+## Snippet 7 — Full Jitter (Formula AWS)
 
+Source File:
+`internal/retry/backoff.go`
+
+Purpose:
+Menghitung sleep `random(0, min(cap, base × 2^attempt))` — varian jitter yang distandardisasi AWS SDK.
+
+```go
+	// temp = min(cap, base * 2^attempt)
 	expBackoff := baseFloat * math.Pow(2, float64(attempt))
 	temp := math.Min(capFloat, expBackoff)
 
-	switch strategy {
-	case NoJitter:
-		return time.Duration(temp)
-
 	case FullJitter:
+		// sleep = random_between(0, min(cap, base * 2^attempt))
 		if temp <= 0 {
 			return 0
 		}
 		sleep := rand.Float64() * temp
 		return time.Duration(sleep)
+```
 
+Explanation:
+Bagian eksponensial dibatasi `cap` lebih dulu, lalu dikalikan `random(0,1)`. Hasilnya interval tersebar merata di `[0, temp]`, menghindari sinkronisasi retry. Angka default AWS (50ms/1000ms/20s) adalah pilihan spesifik AWS SDK, bukan aturan universal.
+
+## Snippet 8 — Equal Jitter
+
+Source File:
+`internal/retry/backoff.go`
+
+Purpose:
+Varian kedua: separuh nilai eksponensial tetap, separuh lagi dirandom.
+
+```go
 	case EqualJitter:
+		// sleep = min(cap, base * 2^attempt) / 2 + random_between(0, min(cap, base * 2^attempt) / 2)
 		half := temp / 2.0
 		sleep := half + rand.Float64()*half
 		return time.Duration(sleep)
+```
 
+Explanation:
+Menjamin delay minimum setengah dari eksponensial sekaligus memberi sebaran acak pada separuhnya, mengurangi tapi tidak menghilangkan korelasi antar klien dibanding Full Jitter.
+
+## Snippet 9 — Decorrelated Jitter
+
+Source File:
+`internal/retry/backoff.go`
+
+Purpose:
+Varian berbasis sleep sebelumnya: `min(cap, random(base, prevSleep × 3))`.
+
+```go
 	case DecorrelatedJitter:
+		// sleep = min(cap, random_between(base, prevSleep * 3))
 		prevFloat := float64(prevSleep)
 		if prevFloat < baseFloat {
 			prevFloat = baseFloat
@@ -217,31 +260,20 @@ func ComputeBackoff(strategy BackoffStrategy, attempt int, cfg Config, prevSleep
 		rangeMax := prevFloat * 3.0
 		sleep := baseFloat + rand.Float64()*(rangeMax-baseFloat)
 		return time.Duration(math.Min(capFloat, sleep))
-
-	default:
-		return time.Duration(temp)
-	}
-}
 ```
 
-Explanation: Setiap varian mengikuti formula AWS:
-- **FullJitter**: `random(0, min(cap, base * 2^attempt))` — distribusi paling merata
-- **EqualJitter**: setengah tetap + setengah acak
-- **DecorrelatedJitter**: menggunakan `prevSleep * 3` sebagai upper bound baru
+Explanation:
+Range acak tumbuh dari sleep sebelumnya (multiplier 3), bukan dari eksponensial tetap. Sifat statistik rantai jitter decorrelated tidak dibuktikan oleh test (gap LOW per audit).
 
----
+## Snippet 10 — Middleware 429 RFC 6585 + Retry-After
 
-## Snippet 6 — HTTP 429 Middleware (RFC 6585)
+Source File:
+`internal/httputil/middleware.go`
 
-Source File: `internal/httputil/middleware.go`
-Purpose: Middleware HTTP yang menegakkan rate limit tenant dan mengembalikan 429 standar.
+Purpose:
+Ekstraksi tenant via header, cek bucket, dan respons 429 standar dengan header `Retry-After` serta body JSON.
 
 ```go
-type RateLimitResponse struct {
-	Error      string `json:"error"`
-	RetryAfter int    `json:"retry_after"`
-}
-
 func RateLimitMiddleware(registry *ratelimit.Registry, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tenantKey := r.Header.Get("X-API-Key")
@@ -254,7 +286,7 @@ func RateLimitMiddleware(registry *ratelimit.Registry, next http.Handler) http.H
 			retryAfter := bucket.RetryAfterSeconds(1.0)
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-			w.WriteHeader(http.StatusTooManyRequests)
+			w.WriteHeader(http.StatusTooManyRequests) // 429
 
 			_ = json.NewEncoder(w).Encode(RateLimitResponse{
 				Error:      "rate_limit_exceeded",
@@ -268,36 +300,43 @@ func RateLimitMiddleware(registry *ratelimit.Registry, next http.Handler) http.H
 }
 ```
 
-Explanation: Ekstrak tenant dari header `X-API-Key` (fallback "anonymous"). Jika bucket menolak, tulis status 429, header `Retry-After`, dan body JSON standar. Klien dapat membaca `Retry-After` untuk menentukan kapan retry.
+Explanation:
+Mengikuti RFC 6585: status 429 dan header `Retry-After`. Nilai header dan field `retry_after` di body diisi dari sumber yang sama (`RetryAfterSeconds`), meski test belum memastikan keduanya identik (gap LOW per audit).
 
----
+## Snippet 11 — Demo: Token Bucket Burst Lalu Tolak
 
-## Snippet 7 — Demo Output (Verified Behavior)
+Source File:
+`cmd/demo/main.go`
 
-Source File: `cmd/demo/main.go`
-Purpose: Menampilkan perilaku nyata dari keempat komponen dalam satu eksekusi.
+Purpose:
+Membuktikan perilaku burst hingga kapasitas lalu penolakan, serta pemulihan token setelah jeda.
 
 ```go
-func main() {
-	fmt.Println("=== 1. Token Bucket Burst & Rate Limiting ===")
-	tb := ratelimit.NewTokenBucket(3, 5)
+	tb := ratelimit.NewTokenBucket(3, 5) // Cap 3, refill 5/s
 	for i := 1; i <= 5; i++ {
 		allowed := tb.Allow()
 		fmt.Printf("Request #%d: Allowed=%v (Remaining Tokens: %.1f)\n", i, allowed, tb.Tokens())
 	}
+
 	time.Sleep(300 * time.Millisecond)
 	fmt.Printf("After 300ms pause: Allowed=%v (Remaining Tokens: %.1f)\n", tb.Allow(), tb.Tokens())
+```
 
-	fmt.Println("\n=== 2. Leaky Bucket Traffic Smoothing ===")
-	lb := ratelimit.NewLeakyBucket(3, 10)
-	for i := 1; i <= 5; i++ {
-		allowed := lb.Allow()
-		fmt.Printf("Request #%d: Allowed=%v (Current Water Level: %.1f)\n", i, allowed, lb.Water())
-	}
+Explanation:
+Dengan kapasitas 3 dan refill 5/s, tiga request pertama lolos, request ke-4 dan ke-5 ditolak, lalu setelah jeda 300ms refill menghasilkan token kembali (sample demo: `Allowed=true`, sisa token ~0.5).
 
-	fmt.Println("\n=== 3. Bounded Queue Backpressure (Load Shedding) ===")
-	bq := backpressure.NewBoundedQueue(3, 1)
+## Snippet 12 — Demo: Backpressure Load Shedding
+
+Source File:
+`cmd/demo/main.go`
+
+Purpose:
+Menunjukkan penolakan cepat ketika buffer penuh dan statistik accepted/rejected/processed.
+
+```go
+	bq := backpressure.NewBoundedQueue(3, 1) // 3 queue cap, 1 worker
 	defer bq.Stop()
+
 	for i := 1; i <= 6; i++ {
 		jobID := i
 		err := bq.TrySubmit(func(ctx context.Context) error {
@@ -310,53 +349,7 @@ func main() {
 			fmt.Printf("Job #%d: ACCEPTED into bounded buffer\n", jobID)
 		}
 	}
-	// ... stats output
-
-	fmt.Println("\n=== 4. AWS Retry Backoff Strategies (Attempts 0..3) ===")
-	cfg := retry.Config{Base: 100 * time.Millisecond, Cap: 1000 * time.Millisecond}
-	for attempt := 0; attempt < 4; attempt++ {
-		noJitter := retry.ComputeBackoff(retry.NoJitter, attempt, cfg, 0)
-		fullJitter := retry.ComputeBackoff(retry.FullJitter, attempt, cfg, 0)
-		equalJitter := retry.ComputeBackoff(retry.EqualJitter, attempt, cfg, 0)
-		fmt.Printf("Attempt %d -> NoJitter: %-6v | FullJitter: %-6v | EqualJitter: %-6v\n",
-			attempt, noJitter.Round(time.Millisecond), fullJitter.Round(time.Millisecond), equalJitter.Round(time.Millisecond))
-	}
-}
 ```
 
-Explanation: Demo menunjukkan: (1) token bucket burst 3 lalu tolak, refill setelah jeda; (2) leaky bucket tolak burst; (3) bounded queue tolak job ke-4+; (4) perbandingan jitter variants.
-
----
-
-## Snippet 8 — Test Verifikasi Bounds Jitter
-
-Source File: `internal/retry/backoff_test.go`
-Purpose: Test memastikan semua varian jitter menghasilkan sleep dalam batas yang ditetapkan.
-
-```go
-func TestComputeBackoff_Bounds(t *testing.T) {
-	cfg := Config{
-		Base: 100 * time.Millisecond,
-		Cap:  2 * time.Second,
-	}
-
-	for attempt := 0; attempt < 10; attempt++ {
-		sleepFull := ComputeBackoff(FullJitter, attempt, cfg, 0)
-		if sleepFull < 0 || sleepFull > cfg.Cap {
-			t.Fatalf("FullJitter sleep out of bounds: %v", sleepFull)
-		}
-
-		sleepEqual := ComputeBackoff(EqualJitter, attempt, cfg, 0)
-		if sleepEqual < 0 || sleepEqual > cfg.Cap {
-			t.Fatalf("EqualJitter sleep out of bounds: %v", sleepEqual)
-		}
-
-		sleepNo := ComputeBackoff(NoJitter, attempt, cfg, 0)
-		if sleepNo < cfg.Base || sleepNo > cfg.Cap {
-			t.Fatalf("NoJitter sleep out of bounds: %v", sleepNo)
-		}
-	}
-}
-```
-
-Explanation: Test memverifikasi bahwa untuk 10 percobaan, FullJitter berada dalam `[0, cap]`, EqualJitter dalam `[0, cap]`, NoJitter dalam `[base, cap]`. Race detector tidak menemukan masalah.
+Explanation:
+Buffer 3 + worker 1 yang memproses 50ms per job membuat sebagian job ditolak `backpressure: queue capacity exceeded` saat pemanggil menyalip kecepatan konsumer — demonstrasi langsung dari mekanisme backpressure.

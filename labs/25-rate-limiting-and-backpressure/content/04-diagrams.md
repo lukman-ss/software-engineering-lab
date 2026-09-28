@@ -1,201 +1,124 @@
 # Diagrams
 
-## System Flow
+Semua diagram diturunkan dari implementasi dan arsitektur yang terverifikasi. Tidak ada komponen yang ditemukan selain yang ada di kode.
 
-```
+## Diagram 1 — Arsitektur Lapisan (dari engineering/01-design.md)
+
+```text
 [Incoming Request]
         │
         ▼
-[HTTP Middleware / Tenant Extractor]
-        │ (X-API-Key / "anonymous")
+[HTTP Middleware / Tenant Extractor] ── (RFC 6598 Tenant Key via X-API-Key)
+        │
         ▼
-[Token Bucket / Rate Limiter]
-        │
-        ├─> Gagal? ──YES──> [HTTP 429 + Retry-After]
-        │
-        ▼ (Lulus)
-[Bounded Queue / Backpressure]
-        │
-        ├─> Penuh? ──YES──> [ErrQueueFull / 503]
-        │
-        ▼ (Dienqueue)
-[Worker Pool / Consumer]
-        │ (L = λW steady state)
+[Token Bucket / Rate Limiter] ── (Exceeded? → HTTP 429 + Retry-After)
+        │ (Passed)
         ▼
-[Job Selesai]
+[Bounded Queue / Backpressure Channel] ── (Queue Full? → 503 Overloaded)
+        │ (Enqueued)
+        ▼
+[Worker Pool / Consumer] ── (Little's Law L = λW steady state)
+        │
+        ▼
+[Client with Full Jitter Retry] ── (AWS Jitter Backoff)
 ```
 
-## Token Bucket State Machine
+Komponen nyata dalam kode:
+- `internal/httputil/middleware.go` — HTTP Middleware
+- `internal/ratelimit/bucket.go` + `internal/ratelimit/registry.go` — Token Bucket
+- `internal/backpressure/queue.go` — Bounded Queue
+- `internal/retry/backoff.go` — Jitter Backoff
+- `cmd/demo/main.go` — CLI demo
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Token Bucket                         │
-│                                                             │
-│  Capacity: B         Refill Rate: R tokens/detik            │
-│                                                             │
-│  ┌──────────────┐    Allow()       ┌──────────────┐         │
-│  │  Tokens = B  │ ────────────────>│  Tokens >= 1 │─ YES ──>│
-│  └──────────────┘                  └──────────────┘         │
-│       │                                   │                  │
-│       │ refill                            │                  │
-│       ▼                                   ▼                  │
-│  ┌──────────────┐                     ┌──────────────┐      │
-│  │  Tokens < 1  │◄───────────────────│  Tokens -= 1 │      │
-│  └──────────────┘                     └──────────────┘      │
-│       │                                   │                  │
-│       └───────────────── NO ──────────────┘                  │
-│                                                             │
-│                └─> Reject & RetryAfterSeconds()             │
-└─────────────────────────────────────────────────────────────┘
-```
+## Diagram 2 — Token Bucket State Transitions
 
-## Leaky Bucket State Machine
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Leaky Bucket                         │
-│                                                             │
-│  Capacity: C         Leak Rate: R units/detik               │
-│                                                             │
-│  ┌──────────────┐    Allow()       ┌──────────────┐         │
-│  │ Water = C    │ ────────────────>│ Water + 1 ≤ C│─ YES ──>│
-│  └──────────────┘                  └──────────────┘         │
-│       │                                   │                  │
-│       │ leak                              │                  │
-│       ▼                                   ▼                  │
-│  ┌──────────────┐                     ┌──────────────┐      │
-│  │ Water < C    │◄───────────────────│ Water += 1   │      │
-│  └──────────────┘                     └──────────────┘      │
-│       │                                   │                  │
-│       └───────────────── NO ──────────────┘                  │
-│                                                             │
-│                └─> Reject                                   │
-└─────────────────────────────────────────────────────────────┘
+```text
+       Capacity (B)
+   ┌──────────────┐
+   │ █████████████│ ← Bucket Full (burst allowed)
+   │ ████████░░░░░│ ← Partial
+   │ ███░░░░░░░░░░│ ← Low
+   │ ░░░░░░░░░░░░░│ ← Empty (reject until refill)
+   └──────────────┘
+         ▲
+         │  refill tokens at rate R per second
+         │  tokens += elapsed × R
+         │  tokens = min(tokens, B)
 ```
 
-## Bounded Queue Backpressure
+Berdasarkan `internal/ratelimit/bucket.go:34-38` — `AllowN()` replenishes berdasarkan elapsed time dan meng-cap ke capacity.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Bounded Queue                          │
-│                                                             │
-│  Capacity: 3         Workers: 1                             │
-│                                                             │
-│  ┌───────────────────────────────────────────────────┐      │
-│  │  ┌─────┐ ┌─────┐ ┌─────┐                          │      │
-│  │  │Job 1│ │Job 2│ │Job 3│  [Channel Buffer]        │      │
-│  │  └─────┘ └─────┘ └─────┘                          │      │
-│  └─────────────────────���─────────────────────────────┘      │
-│          │                   │                              │
-│          ▼                   ▼                              │
-│    ┌─────────────┐     ┌─────────────┐                     │
-│    │  Worker #1  │     │  Worker #2  │   ...               │
-│    └─────────────┘     └─────────────┘                     │
-│                                                             │
-│  TrySubmit() → Full? ──YES──> [ErrQueueFull] (Fast Drop)   │
-│  TrySubmit() → Empty? ──NO──> [Enqueue]                    │
-└─────────────────────────────────────────────────────────────┘
+## Diagram 3 — Leaky Bucket State Transitions
+
+```text
+   Capacity (B)
+   ┌──────────────┐
+   │ █████████████│ ← Reject (water + 1 > B)
+   │ ████████░░░░░│ ← Partial
+   │ ███░░░░░░░░░░│ ← Draining
+   │ ░░░░░░░░░░░░░│ ← Empty
+   └──────────────┘
+         ▲
+         │  leak water at rate R per second
+         │  water -= elapsed × R
+         │  water = max(water, 0)
 ```
 
-## Retry Backoff Distribution (FullJitter)
+Berdasarkan `internal/ratelimit/bucket.go:104-114` — `Allow()` mengurangi water dengan elapsed × leakRate, menolak jika `water + 1 > capacity`.
 
-```
-Attempt 0: base=100ms, cap=1000ms
-├─────────────────────────────────────────────────────────────┤
-│[random(0, 100ms)]                                           │
-└─────────────────────────────────────────────────────────────┘
+## Diagram 4 — Bounded Queue Backpressure
 
-Attempt 1: base=100ms, cap=1000ms, 2^1=200ms
-├─────────────────────────────────────────────────────────────┤
-│[random(0, 200ms)]                                           │
-└─────────────────────────────────────────────────────────────┘
-
-Attempt 2: base=100ms, cap=1000ms, 2^2=400ms
-├─────────────────────────────────────────────────────────────┤
-│[random(0, 400ms)]                                           │
-└─────────────────────────────────────────────────────────────┘
-
-Attempt 3: base=100ms, cap=1000ms, 2^3=800ms
-├─────────────────────────────────────────────────────────────┤
-│[random(0, 800ms)]                                           │
-└─────────────────────────────────────────────────────────────┘
-
-Attempt 4+: capped at cap=1000ms
-├─────────────────────────────────────────────────────────────┤
-│[random(0, 1000ms)]                                          │
-└─────────────────────────────────────────────────────────────┘
+```text
+    Producer          BoundedQueue          Worker Pool
+   ┌──────┐        ┌──────────┐        ┌──────────┐
+   │      │──Try──▶│  buffer  │──deque──▶│ worker 1 │
+   │      │  Submit│  [cap=N] │        │ worker 2 │
+   │      │        │          │        │ worker 3 │
+   └──────┘        └──────────┘        └──────────┘
+     │                    │
+     │  if full:          │  context cancel /
+     │  return ErrQueueFull│  Stop()
+     ▼                    ▼
+  Fast rejection     Graceful shutdown
 ```
 
-## Little's Law Capacity Planning
+Berdasarkan `internal/backpressure/queue.go`:
+- `TrySubmit()` (line 67-85): pola `select-default` → fast rejection
+- `workerLoop()` (line 49-63): `select` antara `ctx.Done()` dan channel receive
+- `Stop()` (line 91-103): cancel context, close channel, tunggu worker selesai
 
-```
-Little's Law: L = λ × W
+## Diagram 5 — Full Jitter Distribution
 
-L = Average number in system (queue depth)
-λ = Arrival rate (requests per second)
-W = Average time in system (service time)
-
-Contoh:
-λ = 2000 requests/detik
-W = 1.25 detik (pemrosesan + antrian)
-L = 2000 × 1.25 = 2500 jobs dalam sistem
-
-Jika λ meningkat menjadi 2500/detik:
-- Queue depth meningkat
-- W meningkat (antrian lebih panjang)
-- Latency meningkat
-
-Jika λ melebihi service rate R:
-- Queue tumbuh tak terbatas
-- Sistem runtuh
-
-Mitigasi:
-- Rate limiting → turunkan λ masuk
-- Scaling → naikkan service rate R
+```text
+Sleep Duration
+    │
+    │  ██
+    │  ██  ██
+    │  ██  ██  ██
+    │  ██  ██  ██  ██
+    └─────────────────────▶ Attempt
+    Attempt 0  Attempt 1  Attempt 2  Attempt 3
+    [0, base]  [0, 2×base]  [0, 4×base]  [0, 8×base]
+    (capped at Cap)
 ```
 
-## Tenant Isolation
+Berdasarkan `internal/retry/backoff.go:36-41` — `FullJitter` menghasilkan `rand.Float64() × min(cap, base × 2^attempt)`. Interval tersebar merata dari 0 ke cap eksponensial, berbeda dengan `NoJitter` yang selalu menghasilkan nilai maksimum.
 
+## Diagram 6 — Retry Budget (Google SRE Model)
+
+```text
+   ┌──────────────────┐
+   │  Retry Budget    │
+   ├──────────────────┤
+   │ Per-request:     │
+   │   max 3 attempts │
+   ├──────────────────┤
+   │ Per-client:      │
+   │   max 10% retries│
+   └──────────────────┘
+         ▲
+         │  Google SRE: Handling Overload (Source 10)
+         │  Mencegah retry storm saat cascading overload
 ```
-Tenant A (API Key: "tenant-a")          Tenant B (API Key: "tenant-b")
-          │                                       │
-          ▼                                       ▼
-  ┌─────────────────┐                     ┌─────────────────┐
-  │   Token Bucket  │                     │   Token Bucket  │
-  │  Capacity: 10   │                     │  Capacity: 10   │
-  │  Refill: 5/s    │                     │  Refill: 5/s    │
-  └─────────────────┘                     └─────────────────┘
-          │                                       │
-          ▼                                       ▼
-   [Registry] ──────────────────────────────────> [Tenant Isolation]
-          │
-          ▼
-   IP-only = ❌ (CGNAT affects many users)
-   API key = ✓ (Per-tenant bucket, fair sharing)
-```
 
-## Complete System Flow with Timing
-
-```
-Time Sequence (t0 → t1000ms):
-
-t0:   [R1] ──> Token Bucket (3 tokens) ──> [Allow, tokens=2]
-t1:   [R2] ──> Token Bucket (2 tokens) ──> [Allow, tokens=1]
-t2:   [R3] ──> Token Bucket (1 tokens) ──> [Allow, tokens=0]
-t3:   [R4] ──> Token Bucket (0 tokens) ──> [429, Retry-After=1]
-t4:   [R5] ──> Token Bucket (0 tokens) ──> [429, Retry-After=1]
-
-t500: [R6] ──> Token Bucket (refill ~2.5) ──> [Allow, tokens=1.5]
-
-t0:   [J1] ──> Bounded Queue (cap=3) ──> [Enqueue] ──> [Worker processes]
-t1:   [J2] ──> Bounded Queue (cap=3) ──> [Enqueue]
-t2:   [J3] ──> Bounded Queue (cap=3) ──> [Enqueue]
-t3:   [J4] ──> Bounded Queue (full) ───> [ErrQueueFull]
-t4:   [J5] ──> Bounded Queue (full) ───> [ErrQueueFull]
-t5:   [J6] ──> Bounded Queue (full) ───> [ErrQueueFull]
-
-t0:   Client retry ──> FullJitter(0ms)     ──> [Wait 0ms, retry]
-t1:   Client retry ──> FullJitter(100ms)   ──> [Wait ~50ms, retry]
-t2:   Client retry ──> FullJitter(200ms)   ──> [Wait ~150ms, retry]
-t3:   Client retry ──> FullJitter(400ms)   ──> [Wait ~300ms, retry]
-```
+Berdasarkan `research/05-report.md` Finding 9 — per-request budget max 3 attempts, per-client retry ratio below 10%.
