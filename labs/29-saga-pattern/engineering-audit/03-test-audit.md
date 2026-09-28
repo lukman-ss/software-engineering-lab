@@ -2,80 +2,63 @@
 
 ## Test Suite Overview
 
-File: `tests/saga_test.go`
-Package: `tests`
-Execution Command: `go test -v -count=1 -race ./...`
+Test file: `tests/saga_test.go`
+All tests execute without external infrastructure dependencies.
 
-## Test Cases Analysis
+## Test Coverage Breakdown
 
-1. `TestOrchestrator_HappyPath`
-   - Purpose: Verifies full forward pipeline (Order -> Payment -> Inventory -> Approval).
-   - Assertions: Order state `APPROVED`, payment recorded, inventory decremented from 10 to 8, zero errors returned.
-   - Assessment: PASS
+### 1. TestOrchestrator_HappyPath
+- Path: Happy Path
+- Verification: Verifies forward sequential execution through Order -> Payment -> Inventory -> Order Approval. Verifies final approved state, payment record, and inventory deduction.
+- Assessment: PASS
 
-2. `TestOrchestrator_FailureCompensatesLIFO`
-   - Purpose: Verifies compensation sequence when step 3 (`ReserveInventory`) fails.
-   - Assertions: Order state `CANCELLED`, payment refunded, inventory stock remains 1, step logs verify exact LIFO order: `Executed -> Executed -> Failed -> Compensated -> Compensated`.
-   - Assessment: PASS
+### 2. TestOrchestrator_FailureCompensatesLIFO
+- Path: Failure and Rollback
+- Verification: Triggers intentional out-of-stock inventory failure. Confirms executed steps are rolled back in LIFO order (Payment refunded, Order cancelled). Asserts step logs match expected order `[EXECUTED, EXECUTED, FAILED, COMPENSATED, COMPENSATED]`.
+- Assessment: PASS
 
-3. `TestPayment_Idempotency`
-   - Purpose: Verifies that re-executing payment with identical transaction ID does not fail or duplicate charges.
-   - Assertions: Second call returns `nil`.
-   - Assessment: PASS
+### 3. TestPayment_Idempotency
+- Path: Idempotency
+- Verification: Calls payment service twice with identical payment ID; asserts duplicate call succeeds without side effects.
+- Assessment: PASS
 
-4. `TestSemanticLock`
-   - Purpose: Verifies semantic lock countermeasure prevents concurrent saga operation from overwriting pending order.
-   - Assertions: Second creation call fails with semantic lock error.
-   - Assessment: PASS
+### 4. TestSemanticLock
+- Path: Concurrency / Semantic Lock
+- Verification: Creates order with order ID, attempts second concurrent/duplicate creation, asserts second call fails due to active lock.
+- Assessment: PASS
 
-5. `TestOrchestrator_Concurrency`
-   - Purpose: Stress tests 10 concurrent orchestrator workers updating shared services under race detector.
-   - Assertions: All routines finish cleanly, inventory decremented accurately by 10 (from 100 to 90), zero race conditions reported.
-   - Assessment: PASS
+### 5. TestOrchestrator_Concurrency
+- Path: Concurrency & Thread-safety
+- Verification: Spawns 10 parallel goroutines executing concurrent sagas against shared services; verifies thread safety under race detector.
+- Assessment: PASS
 
-6. `TestChoreography_Flow`
-   - Purpose: Verifies event-driven choreography happy path (OrderCreated -> PaymentCompleted -> InventoryReserved -> OrderApproved).
-   - Assertions: Order reaches `APPROVED` state purely via published events.
-   - Assessment: PASS
+### 6. TestChoreography_Flow
+- Path: Happy Path (Choreography)
+- Verification: Tests event-driven choreography coordination through `OrderCreated` -> `PaymentCompleted` -> `InventoryReserved` -> Approval.
+- Assessment: PASS
 
-7. `TestChoreography_FailureCompensates`
-   - Purpose: Verifies event-driven choreography failure path (InventoryFailed -> Payment Refund + Order Cancel).
-   - Assertions: Order state `CANCELLED`, payment refunded when inventory is depleted.
-   - Assessment: PASS
+### 7. TestChoreography_FailureCompensates
+- Path: Failure Path (Choreography)
+- Verification: Tests out-of-stock failure generating `InventoryFailed`, triggering compensation handlers to refund payment and cancel order.
+- Assessment: PASS
 
-8. `TestOrchestrator_CompensationErrorPropagated`
-   - Purpose: Verifies behavior when compensation action itself returns an error.
-   - Assertions: Error returned contains compensation error; orchestrator logs status `COMPENSATE_FAILED`.
-   - Assessment: PASS
+### 8. TestOrchestrator_CompensationErrorPropagated
+- Path: Negative / Failure Edge Case
+- Verification: Tests behavior when a compensation step returns an error; asserts compensation failure status is recorded and error is propagated.
+- Assessment: PASS
 
-9. `TestOrchestrator_ContextCancellation`
-   - Purpose: Verifies early termination when context is cancelled mid-saga.
-   - Assertions: Subsequent steps do not execute; executed preceding step is properly compensated.
-   - Assessment: PASS
+### 9. TestOrchestrator_ContextCancellation
+- Path: Context Cancellation / Timeout
+- Verification: Cancels context mid-saga; verifies subsequent steps abort and executed steps roll back.
+- Assessment: PASS
 
-## Test Execution Results
+## Execution Results
 
-```text
-=== RUN   TestOrchestrator_HappyPath
---- PASS: TestOrchestrator_HappyPath (0.00s)
-=== RUN   TestOrchestrator_FailureCompensatesLIFO
---- PASS: TestOrchestrator_FailureCompensatesLIFO (0.00s)
-=== RUN   TestPayment_Idempotency
---- PASS: TestPayment_Idempotency (0.00s)
-=== RUN   TestSemanticLock
---- PASS: TestSemanticLock (0.00s)
-=== RUN   TestOrchestrator_Concurrency
---- PASS: TestOrchestrator_Concurrency (0.00s)
-=== RUN   TestChoreography_Flow
---- PASS: TestChoreography_Flow (0.00s)
-=== RUN   TestChoreography_FailureCompensates
---- PASS: TestChoreography_FailureCompensates (0.00s)
-=== RUN   TestOrchestrator_CompensationErrorPropagated
---- PASS: TestOrchestrator_CompensationErrorPropagated (0.00s)
-=== RUN   TestOrchestrator_ContextCancellation
---- PASS: TestOrchestrator_ContextCancellation (0.00s)
-PASS
-ok  	labs/29-saga-pattern/tests	1.122s
-```
+Command: `go test -v ./...`
+Result: PASS (9 test cases passed)
 
-All 9 tests pass cleanly under `-race` with no memory leaks or race warnings.
+Command: `go test -race ./...`
+Result: PASS (0 race conditions detected)
+
+Command: `go run ./cmd/demo`
+Result: PASS (Scenarios 1 and 2 executed with expected output)

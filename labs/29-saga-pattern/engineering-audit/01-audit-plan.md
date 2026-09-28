@@ -6,36 +6,25 @@ Implementation Files:
 - internal/saga/choreography.go
 - internal/services/services.go
 - cmd/demo/main.go
-- go.mod
-
 Tests:
 - tests/saga_test.go
-
 Executable/Demo:
 - cmd/demo/main.go
-
 Approved Research Inputs:
-- research/05-report.md (Finding 2: Local transactions sequence; Finding 3: Orchestration vs Choreography; Finding 4 & 9: Compensating transactions & LIFO rollback; Finding 7: Semantic lock countermeasure; Finding 8: Idempotency)
+- research/05-report.md
 - engineering/01-design.md
 - engineering/02-implementation-notes.md
-
 Main Claims To Verify:
-1. Orchestrator executes forward steps in sequential order and performs LIFO compensation on failure.
-2. Choreography operates via decoupled EventBus pub/sub event dispatching with compensations.
-3. Services provide idempotency keys (PaymentService) and semantic locking countermeasure (OrderService).
-4. Compensation failure propagates errors and logs `StatusCompensateFailed`.
-5. Context cancellation triggers rollback of executed steps and ceases forward execution.
-6. Concurrent saga execution does not trigger data races under `-race`.
-7. Demo executes cleanly and mirrors claimed output.
-8. README accurately reflects components, usage, and behavior.
-
+1. Orchestrated Saga executes forward steps sequentially and rolls back completed steps in LIFO order upon failure or context cancellation.
+2. Choreography Saga model operates via event bus routing for success and rollback flows.
+3. Idempotency is preserved on duplicated payment processing.
+4. Semantic locking prevents invalid state transitions / concurrent modifications.
+5. Implementation passes thread-safety checks with `go test -race ./...`.
 Commands To Run:
-- `go test -v -count=1 ./...`
-- `go test -v -count=1 -race ./...`
-- `go run ./cmd/demo`
-
+- go test -v ./...
+- go test -race ./...
+- go run ./cmd/demo
 Primary Risks:
-- Thread-safety of shared service instances across concurrent sagas.
-- LIFO ordering correctness when a step fails mid-pipeline.
-- Concurrency race conditions in Orchestrator logs or EventBus subscribers.
-- Documentation divergence between README/notes and actual code signatures/behaviors.
+- Race conditions during state modification or compensation log tracking.
+- Partial/incomplete compensation handling or failure to propagate compensation errors.
+- Unhandled context cancellation during saga execution steps.

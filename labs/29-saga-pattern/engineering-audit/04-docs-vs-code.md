@@ -2,16 +2,19 @@
 
 ## Comparison Matrix
 
-| Component / Claim | README & Notes Claim | Observed in Code / Execution | Status |
+| Component / Claim | Documented Claim | Code Implementation | Status |
 |---|---|---|---|
-| Module name | `labs/29-saga-pattern` in `go.mod` | Match (`go.mod`) | PASS |
-| Orchestrator Step Engine | `internal/saga/orchestrator.go` managing forward steps & LIFO compensation | Fully implemented in `orchestrator.go` | PASS |
-| Choreography Bus | `internal/saga/choreography.go` event bus pub/sub | Fully implemented in `choreography.go` | PASS |
-| Domain Services | `internal/services/services.go` with Order, Payment, Inventory | Fully implemented with Mutex safety | PASS |
-| Semantic Lock | Described in README, design, research | Implemented in `OrderService.locks` | PASS |
-| Idempotency Key | Described in README, design, research | Implemented in `PaymentService.processedID` | PASS |
-| Demo Output | Scenario 1 & Scenario 2 in `cmd/demo/main.go` | Exactly reproduces claimed output | PASS |
-| Test Coverage | Unit, concurrency, rollback, idempotency | 9 test cases in `tests/saga_test.go` | PASS |
+| Orchestrator Architecture | Centralized coordinator executing steps sequentially | `internal/saga/orchestrator.go` defines `Step` and `Orchestrator` | MATCH |
+| LIFO Rollback | Rollback completed steps in reverse order | `orchestrator.go:compensate` iterates backwards (`len(executed)-1` down to 0) | MATCH |
+| Choreography Architecture | Event-driven decoupled pub/sub | `internal/saga/choreography.go` defines `EventBus`, `Event`, `Publish`, `Subscribe` | MATCH |
+| Idempotency Key | Prevent duplicate charges on retries | `internal/services/services.go` tracks `processedID` map | MATCH |
+| Semantic Locking | Countermeasure against dirty reads/concurrent updates | `internal/services/services.go` tracks `locks` map on order pending | MATCH |
+| Context Propagation | Handle timeouts and cancellation | `orchestrator.go:Execute` checks `ctx.Done()` before executing step | MATCH |
+| Demo Execution | Illustrates Happy Path and Rollback on Failure | `cmd/demo/main.go` runs Scenario 1 and Scenario 2 with exact console output | MATCH |
+| README Instructions | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | Commands exist and execute cleanly as described | MATCH |
 
-## Identified Mismatches
-None. All components referenced in `README.md` and `engineering/` correspond directly to existing packages, types, and behaviors.
+## Audit Discrepancy Findings
+
+- DOC_CODE_MISMATCH: None. All file paths and instructions in README and design docs accurately correspond to source files.
+- TEST_CLAIM_MISMATCH: None. Tests validate all claimed mechanisms (orchestration, choreography, LIFO compensation, idempotency, semantic locks, context cancellation, error propagation).
+- RESEARCH_IMPLEMENTATION_MISMATCH: None. Implementation directly demonstrates the patterns documented in research notes.
