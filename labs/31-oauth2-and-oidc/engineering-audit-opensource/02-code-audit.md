@@ -1,47 +1,53 @@
 ## Finding 1
-Location: pkg/pkce/pkce.go:23-61
-Claimed Behavior: Generate PKCE pair, ComputeChallenge, Verify as per RFC 7636.
-Observed Implementation: Generates random verifier, enforces length, supports S256 & plain, verifies correctly.
+
+Location: pkg/pkce/pkce.go:63-71
+Claimed Behavior: PKCE verification fails when verifier does not match challenge
+Observed Implementation: Verify computes expected challenge and returns ErrChallengeMismatch
 Assessment: PASS
 Severity: LOW
-Notes: None
+Notes: Covers interception mitigation as claimed
 
 ## Finding 2
-Location: pkg/oidc/oidc.go:40-62 & 64-115
-Claimed Behavior: Sign ID Token (HS256), ParseAndVerify ID Token with claim checks.
-Observed Implementation: Implements HS256 signing, verifies signature, issuer, audience, expiration, issued-at, nonce.
-Assessment: PASS
-Severity: LOW
-Notes: None
 
-## Finding 3
-Location: pkg/server/server.go:92-166 (Authorize, ExchangeCode)
-Claimed Behavior: Authorization code issuance, PKCE validation, token issuance, ID token generation when OpenID scope.
-Observed Implementation: Validates client, challenge, generates code, stores; Exchange validates PKCE, one-time use, issues access, refresh (family), ID token.
-Assessment: PASS
-Severity: MEDIUM (concurrency safety relies on mutex)
-Notes: Mutex protects maps.
-
-## Finding 4
-Location: pkg/server/server.go:219-286 (Refresh)
-Claimed Behavior: Refresh token rotation, replay detection, family revocation.
-Observed Implementation: Checks revocation, revokes family on reuse, issues new token in same family.
+Location: pkg/oidc/oidc.go:64-62
+Claimed Behavior: ID token signed with HMAC‑SHA256, claims validated (iss, aud, exp, nonce)
+Observed Implementation: SignIDToken creates header, claims JSON, HMAC‑SHA256 signature; ParseAndVerifyIDToken checks malformed, signature, issuer, audience, expiration, issued‑in‑future, nonce
 Assessment: PASS
 Severity: MEDIUM
-Notes: Correctly revokes family.
+Notes: Expiration check uses <= now, correct; nonce optional but validated when provided
+
+## Finding 3
+
+Location: pkg/server/server.go:167-187 (refresh token rotation)
+Claimed Behavior: Refresh token rotation invalidates old token, issues new token with same family ID
+Observed Implementation: On Refresh, meta.Revoked = true, new refresh token created with same FamilyID
+Assessment: PASS
+Severity: LOW
+Notes: Demonstrates rotation as claimed
+
+## Finding 4
+
+Location: pkg/server/server.go:219-286 (replay detection)
+Claimed Behavior: Replay of consumed refresh token triggers family revocation and error
+Observed Implementation: Checks meta.Revoked and s.revokedFams[FamilyID]; on replay, revokes family and returns ErrTokenReplayDetected
+Assessment: PASS
+Severity: MEDIUM
+Notes: Works as shown in demo step 8
 
 ## Finding 5
-Location: pkg/server/server.go:288-305 (ValidateAccessToken)
-Claimed Behavior: Access token validation, scope check.
-Observed Implementation: Checks existence, expiry, required scope via containsScope.
+
+Location: pkg/server/server.go:63-72 (mutexes on maps)
+Claimed Behavior: Server is safe for concurrent use
+Observed Implementation: All methods lock s.mu before accessing shared maps
 Assessment: PASS
 Severity: LOW
-Notes: None
+Notes: Concurrency test passes; race detector shows no races
 
 ## Finding 6
-Location: pkg/client/client.go:58-75 (Exchange) & 78-86 (RefreshTokens)
-Claimed Behavior: Client exchanges code, verifies ID token, refreshes tokens.
-Observed Implementation: Calls server methods, validates ID token via oidc.ParseAndVerifyIDToken.
+
+Location: pkg/server/server.go:132-153 (code exchange)
+Claimed Behavior: Authorization code one‑time use enforced
+Observed Implementation: ac.Used set true after successful exchange; second use returns ErrCodeAlreadyUsed
 Assessment: PASS
 Severity: LOW
-Notes: None
+Notes: Covered by test

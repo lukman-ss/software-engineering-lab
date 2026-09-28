@@ -1,51 +1,46 @@
 # Code Audit
 
-Target Lab: labs/31-oauth2-and-oidc
-
 ## Finding 1
 
-Location: `pkg/pkce/pkce.go:23-71`
-Claimed Behavior: RFC 7636 PKCE pair generation and verification using S256 and plain methods.
-Observed Implementation: Verifier generated via `crypto/rand` (32 bytes base64url encoded -> 43 characters). Challenge correctly hashes with SHA256 and encodes to base64url without padding. Method validation and length checks (43 to 128 characters) enforced.
+Location: `pkg/pkce/pkce.go:23-45`
+Claimed Behavior: Generate PKCE verifier and S256/plain challenge per RFC 7636.
+Observed Implementation: Verifiers are 32 cryptographically random bytes base64raw-url encoded (43 chars). `ComputeChallenge` correctly handles S256 (SHA-256 base64url) and plain.
 Assessment: PASS
 Severity: LOW
-Notes: Compliant with RFC 7636.
+Notes: Complies fully with RFC 7636 specs.
 
 ## Finding 2
 
 Location: `pkg/oidc/oidc.go:40-116`
-Claimed Behavior: ID Token signing and claims validation (iss, aud, exp, iat, nonce) with HMAC-SHA256.
-Observed Implementation: Standard HS256 JWT generation with base64url encoding. Verification parses parts, recomputes HMAC signature, uses `hmac.Equal` to prevent timing attacks, and validates issuer, audience, expiration, clock skew for iat, and nonce.
+Claimed Behavior: HMAC-SHA256 JWT ID token signing and verification with strict claims validation.
+Observed Implementation: Signs header and claims with HMAC-SHA256. Validates signature via constant-time `hmac.Equal`, checks issuer, audience, expiration, future issued-at (+300s skew), and nonce.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles tamper detection and claim mismatches.
+Notes: Timing attack safe using `hmac.Equal`.
 
 ## Finding 3
 
-Location: `pkg/server/server.go:63-74, 92-217`
-Claimed Behavior: Authorization Server enforces client registration, mandatory PKCE, one-time auth code usage, and scopes.
-Observed Implementation: `s.mu.Lock()` protects all server state operations. Auth codes expire after 5 minutes and cannot be reused (`ac.Used` check). Code exchange verifies PKCE challenge with supplied verifier before minting access, refresh, and ID tokens.
+Location: `pkg/server/server.go:132-217`
+Claimed Behavior: Single-use Auth Code exchange with PKCE validation and token generation.
+Observed Implementation: Server locks state, checks code expiry, checks `ac.Used`, validates PKCE verifier, marks `ac.Used = true`, and issues access, refresh, and OIDC ID tokens.
 Assessment: PASS
 Severity: LOW
-Notes: Thread-safe in-memory implementation.
+Notes: Replay of auth code is blocked.
 
 ## Finding 4
 
 Location: `pkg/server/server.go:219-286`
-Claimed Behavior: Refresh Token Rotation with token family tracking and reuse detection (RFC 9700 Section 4.14).
-Observed Implementation: Each initial refresh token is tagged with a unique `FamilyID`. When a refresh token is presented:
-1. Checks if `s.revokedFams[meta.FamilyID]` is true. If so, rejects.
-2. Checks if `meta.Revoked` is true (reuse of consumed token). If so, marks `s.revokedFams[meta.FamilyID] = true` and rejects.
-3. If valid, marks `meta.Revoked = true`, issues a new refresh token sharing the same `FamilyID`, and issues a new access token.
+Claimed Behavior: Refresh token rotation with family revocation on replay detection.
+Observed Implementation: Checks if token exists, if family is revoked, or if specific token was already revoked. On reuse of revoked token, marks `revokedFams[familyID] = true` and rejects request. Active tokens in the same family subsequently fail.
 Assessment: PASS
 Severity: LOW
-Notes: Properly models family revocation upon replay attack detection.
+Notes: Fully aligns with RFC 9700 Section 4.14.
 
 ## Finding 5
 
-Location: `pkg/server/server.go:288-322`
-Claimed Behavior: Resource server token validation and space-delimited scope checks.
-Observed Implementation: Validates existence, expiry, and required scope subsets using custom space-tokenization helper.
+Location: `pkg/server/server.go:63-349`
+Claimed Behavior: Concurrency safety across server operations.
+Observed Implementation: All stateful operations (`Authorize`, `ExchangeCode`, `Refresh`, `ValidateAccessToken`, `RegisterClient`) lock `s.mu`.
 Assessment: PASS
 Severity: LOW
-Notes: Scope parsing handles whitespace and multiple scopes properly.
+Notes: No race conditions detected under `go test -race`.
