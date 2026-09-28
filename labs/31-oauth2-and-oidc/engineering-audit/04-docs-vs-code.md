@@ -1,21 +1,21 @@
-# Docs vs Code Audit: labs/31-oauth2-and-oidc
+# Docs vs Code Audit
 
-## Documents Reviewed
-- `README.md`
-- `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
-- `engineering/03-execution-result.md`
-- Source code in `pkg/`, `cmd/demo/`, and `tests/`
+Target Lab: `labs/31-oauth2-and-oidc`
 
 ## Comparison Matrix
 
-| Claim / Feature | Source Document | Implementation Reality | Status |
-|---|---|---|---|
-| PKCE S256 & Plain support | `README.md`, `01-design.md` | `pkg/pkce/pkce.go` implements S256 & plain verification with 43-128 char bounds. | MATCH |
-| OIDC ID Token Verification | `README.md`, `01-design.md` | `pkg/oidc/oidc.go` validates HMAC-SHA256 signature, iss, aud, exp, nonce, iat. | MATCH |
-| Refresh Token Rotation & Family Revocation | `README.md`, `01-design.md` | `pkg/server/server.go` invalidates entire family ID upon replay. | MATCH |
-| Commands documented | `README.md` (`go test ./...`, `go test -race ./...`, `go run ./cmd/demo`) | All documented commands run successfully with zero errors. | MATCH |
-| Demo output | `03-execution-result.md` | Real execution output matches recorded demo steps and security blocks verbatim. | MATCH |
+| Item | Documented Claim | Code / Test Reality | Match Status |
+| --- | --- | --- | --- |
+| Zero-dependency | Pure Go standard library | `go.mod` has 0 third-party dependencies | PASS |
+| PKCE Method | `S256` default, RFC 7636 | Implemented in `pkg/pkce`, tested in `tests/` | PASS |
+| ID Token Verification | HMAC-SHA256 JWT, claims verification (`iss`, `sub`, `aud`, `exp`, `nonce`) | Implemented in `pkg/oidc/oidc.go`, tested in `tests/` | PASS |
+| Refresh Token Rotation | Token family lineage, reuse detection revokes entire family | Implemented in `pkg/server/server.go:220-286`, tested in `tests/` | PASS |
+| Commands in README | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | All 3 commands execute without error | PASS |
+| Demo Output | Shows step 1 through step 8 walkthrough | Real terminal execution matches demo logs exactly | PASS |
 
-## Discrepancies
-None detected. No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH`.
+## Identified Mismatches
+
+None.
+- No `DOC_CODE_MISMATCH`
+- No `TEST_CLAIM_MISMATCH`
+- No `RESEARCH_IMPLEMENTATION_MISMATCH`

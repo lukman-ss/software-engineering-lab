@@ -5,12 +5,19 @@ Audit Date: 2026-09-28
 
 ## Summary
 
-Code Files Reviewed: 4 (`pkg/pkce/pkce.go`, `pkg/oidc/oidc.go`, `pkg/server/server.go`, `pkg/client/client.go`)
-Tests Reviewed: 1 (`tests/oauth_test.go`)
+Code Files Reviewed:
+- `pkg/pkce/pkce.go`
+- `pkg/oidc/oidc.go`
+- `pkg/server/server.go`
+- `pkg/client/client.go`
+- `cmd/demo/main.go`
+- `go.mod`
+Tests Reviewed:
+- `tests/oauth_test.go` (13 test functions)
 Commands Executed:
-- `go test -v -count=1 ./...` (PASS)
-- `go test -race -count=1 ./...` (PASS)
-- `go run ./cmd/demo` (PASS)
+- `go test ./...`
+- `go test -v -race ./tests`
+- `go run ./cmd/demo`
 Failures: 0
 Warnings: 0
 

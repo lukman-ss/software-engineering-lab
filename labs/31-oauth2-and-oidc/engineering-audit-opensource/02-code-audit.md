@@ -1,91 +1,82 @@
-# Code Audit
+# Code Audit — labs/31-oauth2-and-oidc
 
-## Finding 1 — PKCE verifier/challenge correctness (S256)
+## Finding 1
 
-Location: `pkg/pkce/pkce.go:23-71`
-Claimed Behavior: Generates a 43–128 char verifier; S256 base64url challenge = BASE64URL(SHA256(verifier)); rejects mismatch.
-Observed Implementation: `crypto/rand` 32 bytes → 43-char base64url verifier; SHA256 then RawURLEncoding for challenge; length check 43–128; `Verify` recomputes and compares exact strings.
+Location: `pkg/pkce/pkce.go:23-72`
+Claimed Behavior: PKCE S256/plain generation and verification per RFC 7636; mandatory challenge.
+Observed Implementation: `GeneratePKCEPair` rejects non-S256/plain; 32 random bytes → 43-char base64url verifier; `ComputeChallenge` enforces 43–128 length, SHA256+RawURLEncoding for S256, identity for plain; `Verify` recomputes and compares.
 Assessment: PASS
 Severity: LOW
-Notes: Correct per RFC 7636 §4.1. Only concern: 32-byte input → 43-char verifier is exactly at the lower bound (acceptable).
+Notes: String `!=` compare in `Verify` is not constant-time; acceptable here since challenge is not a long-lived secret and HMAC path uses `hmac.Equal`. No correctness impact.
 
-## Finding 2 — PKCE `plain` method accepted
-
-Location: `pkg/pkce/pkce.go:24`, `pkg/server/server.go:105`
-Claimed Behavior: README states S256 PKCE. Server accepts both `plain` and `S256`.
-Observed Implementation: `GeneratePKCEPair("plain")` returns challenge == verifier. Server `Authorize` accepts `plain`.
-Assessment: WARNING
-Severity: LOW
-Notes: RFC 9700 & RFC 8252 deprecate `plain` for native/public clients; S256 is strongly recommended. Server allowing `plain` is a downgrade surface. By-design in the package but contradicts README emphasis on S256.
-
-## Finding 3 — ID Token HMAC-SHA256 signing & verification
+## Finding 2
 
 Location: `pkg/oidc/oidc.go:40-116`
-Claimed Behavior: HS256 JWT signed with shared secret; verification validates signature (hmac.Equal constant-time), iss, aud, exp, iat skew (300s), nonce.
-Observed Implementation: Header `{"alg":"HS256","typ":"JWT"}`; HMAC-SHA256 over `b64(header).b64(claims)`; constant-time sig compare; claims decoded & checked.
+Claimed Behavior: ID Token HS256 signing + strict claims validation (iss/aud/exp/iat/nonce).
+Observed Implementation: `SignIDToken` JSON→base64url→HMAC-SHA256; `ParseAndVerifyIDToken` enforces 3-part JWT, base64 decode, `hmac.Equal` signature check, JSON unmarshal, iss/aud equality, `exp <= now` reject, `iat > now+300` reject, nonce check when expected non-empty.
 Assessment: PASS
 Severity: LOW
-Notes: OIDC production typically uses RS256/JWKS. HS256 acceptable for a reference impl w/ shared signing key, but should be documented as dev-only. `aud` modeled as single string (OIDC allows array) — scoped simplification. No `jti`/`nbf`/`azp` validation.
+Notes: `alg` header not explicitly validated (always HS256 assumed). Safe in this closed lab because any header mutation invalidates HMAC; no `none` bypass possible. Documented HS256-for-RS256 substitution in engineering notes is correctly scoped.
 
-## Finding 4 — Authorization code single-use & expiry
+## Finding 3
 
-Location: `pkg/server/server.go:132-217`
-Claimed Behavior: Code is `Used=true` after exchange; second exchange returns `ErrCodeAlreadyUsed`; expired codes rejected.
-Observed Implementation: `ac.Used` checked before PKCE verification; set true before issuing tokens; expiry checked via `time.Now().After(ac.ExpiresAt)`.
+Location: `pkg/server/server.go:92-130` (`Authorize`)
+Claimed Behavior: Auth request validates client, redirect, mandatory PKCE.
+Observed Implementation: Mutex-protected; `Clients[clientID]` + redirect exact match else `ErrUnauthorizedClient`; empty challenge → `ErrInvalidRequest`; method must be S256/plain; 16-byte random code, 5-min expiry, `Used=false`.
 Assessment: PASS
 Severity: LOW
-Notes: Correct ordering — expiry checked before `Used` flag. Attacker replay of stale-but-unexpired code is blocked.
+Notes: Correct state transition (create unconsumed code). Failure handling and error propagation clean.
 
-## Finding 5 — Refresh Token Rotation with family revocation
+## Finding 4
 
-Location: `pkg/server/server.go:219-286`
-Claimed Behavior: Consumed refresh token marked `Revoked=true`; new token issued in same `FamilyID`; replay of consumed token sets `revokedFams[familyID]=true` and returns `ErrTokenReplayDetected`; any later use of family token returns family-revoked error.
-Observed Implementation: Matches claimed flow exactly. Family revoked check precedes per-token `Revoked` check, so all family members are invalidated atomically.
+Location: `pkg/server/server.go:132-217` (`ExchangeCode`)
+Claimed Behavior: One-time code, PKCE proof-of-possession, token issuance.
+Observed Implementation: Checks existence/expiry → `ErrInvalidGrant`; `Used` → `ErrCodeAlreadyUsed`; client/redirect match → `ErrUnauthorizedClient`; `pkce.Verify` failure → `ErrInvalidPKCE`; sets `Used=true` before issuance; issues 24-byte access + refresh tokens, family ID, 1h/30d expiry; mints ID Token only when `openid` scope present with correct iss/aud/exp/iat/auth_time/nonce.
 Assessment: PASS
 Severity: LOW
-Notes: Correct per RFC 9700 §4.14 reuse detection & family revocation.
+Notes: Mark-used-before-issue prevents double-redeem on partial failure. No timeout/recovery needed beyond expiry. Cleanup: expired codes/tokens never purged (unbounded map growth) — acceptable for in-memory lab, noted as limitation.
 
-## Finding 6 — Access token scope validation
+## Finding 5
 
-Location: `pkg/server/server.go:288-321`
-Claimed Behavior: `ValidateAccessToken` verifies existence, expiry, and that required scope subset of granted.
-Observed Implementation: `containsScope` splits on whitespace; requires all required scopes present.
+Location: `pkg/server/server.go:219-286` (`Refresh`)
+Claimed Behavior: Single-use rotation; replay revokes entire family (RFC 9700 §4.14).
+Observed Implementation: Not-found → `ErrRefreshTokenNotFound`; `revokedFams[family]` → `ErrTokenReplayDetected`; `meta.Revoked` → sets `revokedFams[family]=true` + `ErrTokenReplayDetected`; then client-match, expiry checks; marks old revoked, issues new token in same family + new access token.
 Assessment: PASS
 Severity: LOW
-Notes: Correct subset semantics for space-delimited scopes.
+Notes: Check order (family-revoked before client-match) leaks no secret. Behavior proven by test + demo. Concurrency safe under single `sync.Mutex`.
 
-## Finding 7 — Concurrency safety
+## Finding 6
 
-Location: `pkg/server/server.go:63-84`, all handlers use `s.mu sync.Mutex` + Lock/Unlock
-Claimed Behavior: Thread-safe under `-race`.
-Observed Implementation: Every public method (`Authorize`, `ExchangeCode`, `Refresh`, `ValidateAccessToken`, `RegisterClient`) holds `s.mu`. Token strings generated with `crypto/rand` (non-blocking, no shared state).
-Assessment: PASS (under -race)
-Severity: LOW
-Notes: Demo Step 8 relies on the rotated token carrying the same FamilyID so family revocation propagates — verified by race test + demo.
-
-## Finding 8 — Error wrapping uses `%v` (not unwrappable)
-
-Location: `pkg/server/server.go:150`, `pkg/oidc/oidc.go:95,99,112`
-Claimed Behavior: Errors carry sentinel via `%w`.
-Observed Implementation: e.g. `fmt.Errorf("%w: %v", ErrInvalidPKCE, err)` — sentinel wraps, but inner error uses `%v`.
-Assessment: WARNING
-Severity: LOW
-Notes: Inner cause is not unwrappable. Sentinel errors ARE chainable; only the nested detail is lost. Tests check via string `Contains`, so they pass. Minor hygiene issue.
-
-## Finding 9 — Demo produces real output
-
-Location: `cmd/demo/main.go`
-Claimed Behavior: Walkthrough of legitimate flows + attack defenses.
-Observed Implementation: Demo exits non-zero on failure, prints actual token substrings (not hardcoded placeholders — tokens are random per run but structure is deterministic).
+Location: `pkg/server/server.go:288-306`, `308-349` (`ValidateAccessToken`, scope helpers)
+Claimed Behavior: Bearer token + scope enforcement; separation of Access Token (authorization) vs ID Token (authentication).
+Observed Implementation: Existence + expiry check; `containsScope` requires all requested scopes present; custom `splitSpaces` handles space/tab.
 Assessment: PASS
 Severity: LOW
-Notes: See `02-code-audit.md#step8` capture. Output is genuinely generated, not fabricated.
+Notes: No complexity issue. Error strings generic, no secret leak.
 
-## Finding 10 — Client nonce/state stored unguarded
+## Finding 7
 
-Location: `pkg/client/client.go:19-24`
-Claimed Behavior: Single-use client; holds transient `Verifier`, `State`, `Nonce`.
-Observed Implementation: Plain fields, no mutex. Not used concurrently in tests/demo (each goroutine builds its own `Client`).
-Assessment: PASS (not in concurrent use)
+Location: `pkg/server/server.go:63-90` + all methods (concurrency)
+Claimed Behavior: Thread-safe in-memory AS.
+Observed Implementation: Single `sync.Mutex` guards `Clients/authCodes/tokens/refreshMeta/revokedFams` on every read/write path (`RegisterClient/Authorize/ExchangeCode/Refresh/ValidateAccessToken`).
+Assessment: PASS
 Severity: LOW
-Notes: No action needed; each worker instantiates a fresh `Client`.
+Notes: `go test -race` passed; 20-worker concurrency test passed. No race observed. Coarse lock is correct for lab scale.
+
+## Finding 8
+
+Location: `pkg/client/client.go:36-86`
+Claimed Behavior: Correct flow parameters, verifier storage, ID Token validation.
+Observed Implementation: `BuildAuthorizationRequest` generates S256 pair, stores verifier, random state+nonce, returns challenge; `Exchange` calls `ExchangeCode` then verifies ID Token against `Server.Issuer/ClientID/Nonce`; `RefreshTokens` updates stored tokens.
+Assessment: PASS
+Severity: LOW
+Notes: Client holds `SigningKey` symmetric to server — matches documented lab simplification. No state/nonce mismatch handling beyond server binding; adequate.
+
+## Finding 9
+
+Location: `cmd/demo/main.go:1-112`
+Claimed Behavior: End-to-end walkthrough of legitimate flows + attack defenses.
+Observed Implementation: Real calls to `Authorize/Exchange/ValidateAccessToken/Refresh`; interception with wrong verifier must fail; rotation then replay must fail; post-revocation active token must fail; `os.Exit(1)` on unexpected success.
+Assessment: PASS
+Severity: LOW
+Notes: Demo output verified real by re-execution (see 03-test-audit.md). No fabricated output, no benchmark claims.

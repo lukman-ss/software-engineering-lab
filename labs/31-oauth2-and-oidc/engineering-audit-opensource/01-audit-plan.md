@@ -1,42 +1,31 @@
 # Engineering Audit Plan
 
-Target Lab: `labs/31-oauth2-and-oidc`
+Target Lab: labs/31-oauth2-and-oidc
 Implementation Files:
-- `pkg/pkce/pkce.go` — PKCE code verifier/challenge generation & verification
-- `pkg/oidc/oidc.go` — ID Token signing (HS256) & claims validation
-- `pkg/server/server.go` — In-memory OAuth2 Authorization Server (Auth Code + PKCE + OIDC + Refresh Token Rotation)
-- `pkg/client/client.go` — Client orchestrator (request build, exchange, refresh)
-- `cmd/demo/main.go` — Executable demonstration
-
+- pkg/pkce/pkce.go
+- pkg/oidc/oidc.go
+- pkg/server/server.go
+- pkg/client/client.go
+- cmd/demo/main.go
 Tests:
-- `tests/oauth_test.go`
-
+- tests/oauth_test.go (13 tests)
 Executable/Demo:
-- `go run ./cmd/demo`
-
-Approved Research Inputs:
-- `research/01-plan.md`, `research/02-sources.md`, `research/03-evidence.md`, `research/04-contradictions.md`, `research/05-report.md`, `research/06-open-questions.md`
-- Key RFCs referenced: RFC 6749, RFC 7519, RFC 7636, RFC 8252, RFC 9700, OpenID Connect Core 1.0
-
+- cmd/demo/main.go
+Approved Research Inputs: (pipeline override — research/content not audited in this stage)
 Main Claims To Verify:
-1. OAuth2 Authorization Code Flow + PKCE (S256) works end-to-end.
-2. PKCE intercepts code-injection attacks (wrong verifier rejected).
-3. ID Token (JWT) signed & verified with iss/aud/exp/iat/nonce claims.
-4. Authorization code single-use (redemption blocked on reuse).
-5. Refresh Token Rotation: new token issued, old one becomes single-use.
-6. Refresh Token Replay Detection: family revocation on reuse of consumed token.
-7. Access token scope validation (granted vs required).
-8. Concurrency-safe state transitions under `-race`.
-9. Demo output reflects real, reproducible behavior.
-10. README matches code & tests.
-
+1. Authorization Code flow with mandatory PKCE (S256) blocks code interception
+2. Auth code single-use enforcement
+3. OIDC ID Token (HS256 JWT) signature + claims (iss/aud/exp/iat/nonce) validation
+4. Access Token scope enforcement (authorization vs authentication separation)
+5. Refresh token rotation with family revocation on replay
+6. Concurrency safety under race detector
+7. Demo output is real and reproducible
 Commands To Run:
-- `go test -v ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
-
+- go test -v ./...
+- go test -race ./...
+- go run ./cmd/demo
 Primary Risks:
-- PKCE `plain` method still accepted (RFC 9700 deprecates it for native apps).
-- ID Token signed HS256 (reference impl with shared key) — non-standard alg vs OIDC typical RS256.
-- Error wrapping uses `%v` for inner errors (not unwrappable).
-- Coverage gaps in boundary times (auth-code expiry, refresh expiry, skew).
+- Token family revocation bypass
+- Race on shared maps
+- Claim validation bypass (iss/aud/exp/nonce)
+- Fake demo / unverified results

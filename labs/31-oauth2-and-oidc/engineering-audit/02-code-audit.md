@@ -1,46 +1,59 @@
-# Code Audit: labs/31-oauth2-and-oidc
+# Code Audit
 
-## Finding 1
+Target Lab: `labs/31-oauth2-and-oidc`
 
-Location: `pkg/pkce/pkce.go:47-61`
-Claimed Behavior: PKCE RFC 7636 / RFC 9700 S256 verification and character constraint enforcement (43-128 chars).
-Observed Implementation: Verifier length is bounded within `[43, 128]`. SHA-256 is computed and raw URL-safe base64 encoded.
+## Finding 1: Standard Library Zero-Dependency Implementation
+
+Location: `go.mod`, `pkg/pkce/pkce.go`, `pkg/oidc/oidc.go`, `pkg/server/server.go`, `pkg/client/client.go`
+Claimed Behavior: Pure Go standard library implementation without third-party external dependencies.
+Observed Implementation: `go.mod` specifies `module labs/31-oauth2-and-oidc` with Go 1.22.0 and no external `require` directives. Imports use standard packages (`crypto/hmac`, `crypto/sha256`, `crypto/rand`, `encoding/base64`, `encoding/json`, `sync`, `time`, `errors`, `fmt`).
 Assessment: PASS
 Severity: LOW
-Notes: Correctly rejects non-compliant verifiers and invalid methods.
+Notes: Clean, minimal, zero-dependency design.
 
-## Finding 2
+## Finding 2: PKCE Challenge Generation & Verification (RFC 7636)
 
-Location: `pkg/oidc/oidc.go:64-116`
-Claimed Behavior: OIDC Core 1.0 ID Token claims validation including cryptographic signature, issuer, audience, expiration, clock skew, and nonce.
-Observed Implementation: Checks header/payload/signature format, verifies HMAC-SHA256 with constant-time `hmac.Equal`, checks `claims.Issuer == expectedIssuer`, `claims.Audience == expectedAudience`, `claims.Expiration <= unixNow`, future `iat` tolerance (+300s), and `nonce` match.
+Location: `pkg/pkce/pkce.go`
+Claimed Behavior: Generates base64url-encoded code verifiers and S256 code challenges; rejects mismatched verifiers and invalid methods.
+Observed Implementation:
+- `GeneratePKCEPair` validates method (`S256` or `plain`), reads 32 random bytes, encodes with `base64.RawURLEncoding` (yielding 43 chars), and computes challenge.
+- `ComputeChallenge` checks verifier length (43..128) and calculates standard SHA-256 raw URL base64 digest for `S256`.
+- `Verify` re-computes challenge and compares string equality.
 Assessment: PASS
 Severity: LOW
-Notes: Matches OIDC specifications for symmetrically-signed ID tokens.
+Notes: Correct standard implementation of RFC 7636 PKCE validation.
 
-## Finding 3
+## Finding 3: OIDC ID Token JWT Generation and Claim Validation
 
-Location: `pkg/server/server.go:132-217`
-Claimed Behavior: Auth Code exchange enforces single-use redemption, client binding, redirect URI verification, PKCE verification, and conditional ID token issuance.
-Observed Implementation: Single lock `s.mu.Lock()` guards map access. Re-used authorization codes return `ErrCodeAlreadyUsed`. Verifier is checked with `pkce.Verify`. ID Token is only added if `openid` scope is present.
+Location: `pkg/oidc/oidc.go`
+Claimed Behavior: Signs ID Tokens using HMAC-SHA256 (HS256) and verifies claims (`iss`, `aud`, `exp`, `nonce`, future `iat`).
+Observed Implementation:
+- `SignIDToken` constructs standard 3-part JWT (`header.claims.signature`) with `base64.RawURLEncoding`.
+- `ParseAndVerifyIDToken` verifies HMAC-SHA256 signature using `hmac.Equal` (constant-time protection), validates `iss` equality, `aud` equality, expiration (`claims.Expiration <= unixNow`), future `iat` check (`unixNow+300`), and optional `nonce` equality.
 Assessment: PASS
 Severity: LOW
-Notes: Implemented without deadlocks or race windows.
+Notes: Secure signature comparison using `hmac.Equal` avoids timing attack vectors.
 
-## Finding 4
+## Finding 4: Authorization Server State and Concurrency Safety
+
+Location: `pkg/server/server.go`
+Claimed Behavior: State transitions for Auth Codes, Access Tokens, and Refresh Token family lineages are protected by mutex locking.
+Observed Implementation:
+- `AuthorizationServer` uses `s.mu.Lock()` and `defer s.mu.Unlock()` across all exported methods: `RegisterClient`, `Authorize`, `ExchangeCode`, `Refresh`, and `ValidateAccessToken`.
+- `AuthCode` validation marks `ac.Used = true` while under mutex lock.
+- `Refresh` checks `revokedFams`, marks token `Revoked = true`, and updates maps while under mutex lock.
+Assessment: PASS
+Severity: LOW
+Notes: No race conditions found under Go race detector.
+
+## Finding 5: Refresh Token Rotation & Family Revocation (RFC 9700)
 
 Location: `pkg/server/server.go:219-286`
-Claimed Behavior: Refresh Token Rotation with token family tracking and revocation on reuse (RFC 9700 §4.14).
-Observed Implementation: Each lineage has `FamilyID`. Consumed refresh tokens have `meta.Revoked = true`. If a revoked token is presented, `s.revokedFams[meta.FamilyID] = true` and `ErrTokenReplayDetected` is returned. Any subsequent attempt using any token in `s.revokedFams` returns `ErrTokenReplayDetected`.
+Claimed Behavior: Single-use refresh token rotation issuing new tokens in the same family, with replay detection revoking the entire token family.
+Observed Implementation:
+- When a refresh token is presented, `Refresh` checks if `revokedFams[meta.FamilyID]` is true, returning `ErrTokenReplayDetected`.
+- If `meta.Revoked` is true (indicating replay of a consumed refresh token), `s.revokedFams[meta.FamilyID] = true` is set, blocking all future tokens in that family.
+- On valid refresh, original token is marked `meta.Revoked = true`, and a new refresh token is stored with identical `FamilyID`.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately implements RFC 9700 §4.14 family invalidation semantics.
-
-## Finding 5
-
-Location: `pkg/server/server.go:63-73`
-Claimed Behavior: Concurrency safe state mutations across all endpoint handlers.
-Observed Implementation: All exported stateful operations (`RegisterClient`, `Authorize`, `ExchangeCode`, `Refresh`, `ValidateAccessToken`) acquire `s.mu.Lock()`.
-Assessment: PASS
-Severity: LOW
-Notes: No unsynchronized memory reads or writes detected.
+Notes: Implementation matches RFC 9700 Section 4.14 specs.
