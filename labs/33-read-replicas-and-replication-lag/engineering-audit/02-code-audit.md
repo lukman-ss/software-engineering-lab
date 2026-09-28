@@ -1,55 +1,66 @@
 # Code Audit
 
+Target Lab: `labs/33-read-replicas-and-replication-lag`
+
 ## Finding 1
 
-Location: `internal/cluster/cluster.go:79-96`
-Claimed Behavior: `WaitForLSN` blocks until target LSN is reached or context times out.
-Observed Implementation: Uses `sync.Cond` within a separate goroutine. If context is cancelled before LSN is reached, the goroutine remains blocked on `n.cond.Wait()` until the next `Broadcast()` or node update.
-Assessment: WARNING
+Location: `internal/cluster/cluster.go:36-46` and `internal/cluster/cluster.go:79-107`
+Claimed Behavior: Replicas notify waiters upon catching up to target LSN via condition variable with context timeout support.
+Observed Implementation: `newNode` initializes `n.cond = sync.NewCond(&n.mu)`. `WaitForLSN` launches a waiter goroutine waiting on `n.cond.Wait()` holding `n.mu`, while the parent goroutine selects between context cancellation and waiter completion. On context cancellation, `stop` is closed, and `n.cond.Broadcast()` is triggered under lock to wake the waiter.
+Assessment: PASS
 Severity: LOW
-Notes: Minor background goroutine leak potential if a replica never receives further WAL updates; acceptable in simulation test lab boundaries.
+Notes: Synchronization pattern properly avoids lost wakeups and handles context expiration cleanly.
 
 ## Finding 2
 
-Location: `internal/cluster/cluster.go:220-226`
-Claimed Behavior: Asynchronous streaming of WAL entries to replica channels.
-Observed Implementation: Uses non-blocking channel send `select { case replica.walChannel <- entry: default: }` with buffer size 1024. If buffer overflows, entries are dropped silently without resync.
+Location: `internal/cluster/cluster.go:193-240`
+Claimed Behavior: Writes commit to primary, increment monotonic LSN, and replicate synchronously or asynchronously.
+Observed Implementation: `c.currentLSN.Add(1)` atomically increments LSN. Primary writes are protected by `c.primary.mu`. In synchronous mode, writes sequentially iterate over replicas, apply sleep simulation, update replica map, and broadcast catch-up under replica lock. In asynchronous mode, WAL entries are dispatched to replica `walChannel` buffers non-blockingly (`select ... default`).
 Assessment: PASS
 Severity: LOW
-Notes: Safe for expected simulation throughput under test parameters.
+Notes: Monotonicity guaranteed by `atomic.Uint64`. Channel buffer of 1024 prevents writer starvation.
 
 ## Finding 3
 
-Location: `internal/cluster/cluster.go:137-168`
-Claimed Behavior: Replicas consume WAL stream with configurable artificial lag and update applied LSN.
-Observed Implementation: `replicaWorker` respects context cancellation during lag sleep and correctly signals waiting goroutines via `replica.cond.Broadcast()`. Mutex protection around state and `appliedLSN` is strictly maintained.
+Location: `internal/cluster/cluster.go:148-179` and `internal/cluster/cluster.go:252-263`
+Claimed Behavior: Background replication workers process WAL entries with configurable simulated lag and terminate gracefully on cluster close.
+Observed Implementation: `replicaWorker` listens on `c.ctx.Done()` and `replica.walChannel`. Lag delay is handled via `time.After` checking `c.ctx.Done()`. `Cluster.Close()` triggers `c.cancel()` and waits on `c.wg.Wait()`.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrency safety verified.
+Notes: Cluster shutdown cleanly releases all goroutines.
 
 ## Finding 4
 
 Location: `internal/router/router.go:53-65`
-Claimed Behavior: Session write tracking for sticky routing.
-Observed Implementation: Thread-safe `sync.Map` stores session timestamp and LSN atomically upon write.
+Claimed Behavior: Session write records last write timestamp and LSN in thread-safe map.
+Observed Implementation: `r.sessions.Store(sessionID, SessionState{LastWriteTime: time.Now(), LastWriteLSN: lsn})` uses standard library `sync.Map`.
 Assessment: PASS
 Severity: LOW
-Notes: Clean thread-safe implementation.
+Notes: Concurrency-safe without lock contention across sessions.
 
 ## Finding 5
 
 Location: `internal/router/router.go:80-90`
-Claimed Behavior: Sticky read routes to primary within duration, falls back to lag-aware read afterward.
-Observed Implementation: Evaluates `time.Since(state.LastWriteTime) < r.config.StickyDuration`. If valid, routes directly to primary. If expired or unknown session, delegates to `ReadLagAware`.
+Claimed Behavior: Reads within `StickyDuration` of a write route to primary; after expiration, reads route to replicas via lag-aware routing.
+Observed Implementation: Checks `time.Since(state.LastWriteTime) < r.config.StickyDuration`. If true, queries `r.cluster.Primary().Read(key)`; if false or session unknown, calls `r.ReadLagAware(key)`.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately mirrors claimed design.
+Notes: Directly mirrors the design and research recommendations.
 
 ## Finding 6
 
-Location: `internal/router/router.go:117-141`
-Claimed Behavior: Dynamic lag-aware replica routing with primary fallback.
-Observed Implementation: Compares `primaryLSN - appliedLSN <= MaxLSNDiff`. If all replicas exceed lag, safely routes to primary with `(fallback-lag)` marker.
+Location: `internal/router/router.go:92-115`
+Claimed Behavior: `ReadWithToken` guarantees Read-Your-Own-Writes by checking replica LSN, waiting with timeout if not caught up, and falling back to primary.
+Observed Implementation: Iterates over replicas; if any replica has `AppliedLSN() >= minLSN`, reads immediately. Otherwise waits on replica 0 up to `WaitTimeout`. If timeout or wait failure, routes to primary with `(fallback)` designation.
 Assessment: PASS
 Severity: LOW
-Notes: Clean boundary checking and fallback semantics.
+Notes: Satisfies causal consistency SLA without compromising primary protection.
+
+## Finding 7
+
+Location: `internal/router/router.go:117-141`
+Claimed Behavior: `ReadLagAware` filters replicas where `primaryLSN - replicaLSN <= MaxLSNDiff`. If no replica meets SLA, falls back to primary.
+Observed Implementation: Reads `primaryLSN = r.cluster.CurrentLSN()`. Computes difference with `replica.AppliedLSN()`. Replicas within `MaxLSNDiff` are collected in `eligible` slice and round-robined via atomic counter. If empty, routes to primary.
+Assessment: PASS
+Severity: LOW
+Notes: Correctly handles dynamic replica exclusion and failover.

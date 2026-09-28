@@ -1,29 +1,36 @@
 # Engineering Audit Plan
 
-Target Lab: labs/33-read-replicas-and-replication-lag
+Target Lab: `labs/33-read-replicas-and-replication-lag`
 Implementation Files:
-- internal/cluster/cluster.go
-- internal/router/router.go
+- `internal/cluster/cluster.go`
+- `internal/router/router.go`
+- `cmd/demo/main.go`
+- `go.mod`
+
 Tests:
-- tests/replication_test.go
+- `tests/replication_test.go`
+
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
+
 Approved Research Inputs:
-- engineering/01-design.md
-- engineering/02-implementation-notes.md
-- engineering/03-execution-result.md
+- `research/05-report.md`
+- `research-audit/07-verdict.md` (Research verdict: `APPROVED`)
+
 Main Claims To Verify:
-- Asynchronous replication lag causes stale reads under naive round-robin read routing.
-- Time-based sticky session routing guarantees read-your-own-writes by routing to primary for configured duration.
-- Causal token / LSN wait blocks or routes to catch-up node to ensure read freshness.
-- Lag-aware routing filters out lagging replicas exceeding max LSN threshold and falls back to primary.
-- Synchronous replication (`remote_apply`) guarantees replica freshness at the cost of write duration.
-- Code compiles, tests pass, race detector passes, demo works, and no fake results exist.
+1. Asynchronous replication produces observable stale read anomalies under naive replica read routing.
+2. Read-Your-Own-Writes is guaranteed via session LSN causal token tracking (`ReadWithToken`) by waiting for replica WAL catch-up or falling back to primary.
+3. Read-Your-Own-Writes is guaranteed via time-based sticky routing (`ReadWithStickySession`) during the sticky TTL window.
+4. Lag-aware routing dynamically detects replicas exceeding acceptable LSN lag thresholds and routes queries to fresh replicas or primary fallback.
+5. Synchronous replication (`SyncReplication` / `remote_apply`) eliminates replica lag visibility anomalies at the expense of higher write latency.
+6. Concurrent read and write workloads execute cleanly without data races under Go race detector.
+
 Commands To Run:
-- go test -count=1 -v ./...
-- go test -count=1 -race ./...
-- go run ./cmd/demo
+- `go test -v ./...`
+- `go test -race ./...`
+- `go run ./cmd/demo`
+
 Primary Risks:
-- Race conditions or deadlocks in node synchronization (`sync.Cond`, `walChannel`, channel select drop).
-- Non-deterministic channel buffer overflow behavior (`select default:` drop WAL entry).
-- Unhandled context timeout / cancellation in `WaitForLSN` leading to leaked goroutines.
+- Race conditions or deadlocks in cluster synchronization and replica condition variables (`sync.Cond`, `sync.RWMutex`, `atomic.Uint64`).
+- Goroutine leaks during `WaitForLSN` or cluster shutdown (`Cluster.Close`).
+- Mismatches between documentation, research findings, and actual code implementation.
