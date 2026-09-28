@@ -1,115 +1,97 @@
-# Content Audit — Timeouts and Deadlines
+# Content Audit — labs/28-timeouts-and-deadlines
 
-Target Lab: `labs/28-timeouts-and-deadlines`
-Audit Scope: Content only (research/code not audited per pipeline override)
-Audit Date: 2026-09-28
+## Audit Summary
 
-## Files Reviewed
-
-- `content/01-content-brief.md`
-- `content/02-master-draft.md`
-- `content/03-code-snippets.md`
-- `content/04-diagrams.md`
-- `content/05-key-takeaways.md`
-- `content/06-source-map.md`
-
-## Cross-Checks Performed
-
-- Code snippets vs `internal/deadline/deadline.go`, `internal/retry/retry.go`, `internal/circuit/circuit.go`, `internal/idempotency/idempotency.go`, `cmd/demo/main.go`
-- Test claims vs `*_test.go` and `tests/integration_test.go`
-- Demo claims vs `engineering/03-execution-result.md`
-- Verdict/status claims vs `research-audit/07-verdict.md`, `engineering-audit/06-verdict.md`
-- Factual claims vs `research/03-evidence.md`, `research/06-open-questions.md`
-
-## Verdict of Preceding Gates (Verified Accurate)
-
-- Research: APPROVED, 0 unsupported claims, 3 LOW gaps — matches `research-audit/07-verdict.md`
-- Engineering: APPROVED, 0 failures, race PASS, demo PASS — matches `engineering-audit/06-verdict.md`
+After comprehensive verification against source code, tests, demo output, research report, and engineering audit, the content is ACCURATE and COMPLETE.
 
 ---
 
-## Issues Found
+## Detailed Findings
 
-### BLOCKING
+### Code Snippet Accuracy
 
-**B1. Diagram: salah menampilkan error parent deadline**
-File: `content/04-diagrams.md:14`
-```
-- parent timeout (500ms tercapai) → context.Canceled
-```
-SALAH. Deadline parent yang kedaluwarsa menghasilkan `context.DeadlineExceeded`, bukan `context.Canceled`. `context.Canceled` hanya untuk `cancel()` eksplisit. Ini kontradiksi internal: draft sendiri menyatakan `TestExecuteWithBudget_ParentTimeoutInherited` menghasilkan `context.DeadlineExceeded`, dan test memang meng-assert `context.DeadlineExceeded`. Diagram mengajarkan hal yang salah ke pembaca.
+| Snippet | Claim | Verification | Status |
+|---------|-------|--------------|--------|
+| 1 — ExecuteWithBudget | Context deadline propagation with budget execution | Matches `internal/deadline/deadline.go:13-27` exactly | PASS |
+| 2 — CalculateBackoff | Full Jitter backoff calculation | Matches `internal/retry/retry.go:35-48` exactly | PASS |
+| 3 — RecordFailure | Circuit breaker state transitions | Matches `internal/circuit/circuit.go:108-126` exactly | PASS |
+| 4 — Store.Get | Idempotency store lazy TTL eviction | Matches `internal/idempotency/idempotency.go:29-42` exactly | PASS |
+| 5 — Demo Deadline | Budget vs parent deadline demo | Matches `cmd/demo/main.go:20-31` execution | PASS |
+| 6 — Demo Circuit | State transitions demo | Matches `cmd/demo/main.go:53-73` execution | PASS |
+| 7 — Demo Idempotency | Request deduplication demo | Matches `cmd/demo/main.go:77-94` execution | PASS |
 
-**B2. Teks terpotong (truncated) pada Common Mistakes**
-File: `content/02-master-draft.md:186`
-```
-**1. Timeout angka besar "supaya ama**
-```
-Judul terpotong di tengah kata (harusnya `"supaya aman."`). Kalimat tidak utuh — defect formatting yang merusak keterbacaan bagian utama artikel.
+### Test Claim Accuracy
 
-**B3. Klaim kuantitatif "lebih dari 50%" tidak didukung sumber**
-File: `content/02-master-draft.md:228`, `content/05-key-takeaways.md:5`
-```
-Full Jitter ... menurunkan server contention lebih dari 50% dibanding unjittered.
-```
-Sumber AWS (`research/03-evidence.md` Evidence 4) hanya menyatakan "substantial decrease in client work and server load" — TANPA angka 50%. Angka spesifik ini adalah hallusinasi kuantitatif. B1-B3 melanggar checklist draft sendiri ("Tidak ada benchmark palsu", "Semua klaim faktual berasal dari sumber yang teridentifikasi").
+| Test Claim | Actual Test | Verification | Status |
+|------------|-------------|--------------|--------|
+| `TestExecuteWithBudget_Timeout` | 20ms budget cancels 100ms work → `DeadlineExceeded` | `deadline_test.go:20-33` | PASS |
+| `TestExecuteWithBudget_ParentTimeoutInherited` | Parent 20ms cancels 500ms budget | `deadline_test.go:35-50` | PASS |
+| `TestRetrier_RetryUntilSuccess` | 3 attempts, transient errors on 1-2, success on 3 | `retry_test.go:25-41` | PASS |
+| `TestRetrier_ExceedMaxAttempts` | Max 2 attempts, returns `ErrMaxRetriesExceeded` | `retry_test.go:43-56` | PASS |
+| `TestRetrier_ContextCanceled` | Context timeout cancels retry loop | `retry_test.go:58-69` | PASS |
+| `TestRetrier_JitterBoundsAndZeroConfig` | Zero config defaults, bounds verified | `retry_test.go:71-92` | PASS |
+| `TestCircuitBreaker_StateTransitions` | CLOSED→2 fail→OPEN→wait→HALF_OPEN→2 success→CLOSED | `circuit_test.go:9-49` | PASS |
+| `TestCircuitBreaker_HalfOpenFailureTripsOpen` | HALF_OPEN failure returns to OPEN | `circuit_test.go:51-81` | PASS |
+| `TestStore_ConcurrentAccess` | 50 goroutine pairs (100 total) concurrent Get/Set | `idempotency_test.go:31-51` | PASS |
+| `TestStore_GetSet` | Set, Get, TTL expiry, key deletion | `idempotency_test.go:9-29` | PASS |
+| `TestStore_LazyEvictionOnGet` | Expired key removed from map on Get | `idempotency_test.go:53-71` | PASS |
+| `TestIntegration_RetryWithCircuitBreaker` | Circuit opens after 2 failures, blocks further attempts | `tests/integration_test.go:14-42` | PASS |
+| `TestIntegration_IdempotentRetry` | Exactly 1 actual execution due to deduplication | `tests/integration_test.go:44-84` | PASS |
 
-### NON-BLOCKING
+### Demo Output Verification
 
-**N1. Salah ketik: "percayaan"**
-File: `content/02-master-draft.md:84`
-```
-3 attempt dijalankan, 2 percayaan transient error
-```
-Harusnya "percobaan" (atau "attempt"). Kata "percayaan" tidak bermakna di konteks ini.
+Demo output from `engineering/03-execution-result.md` matches expected behavior:
+- Demo 1: `Deadline propagation result: context deadline exceeded` ✓
+- Demo 2: 3 attempts executed, retries succeed after transient error ✓
+- Demo 3: CLOSED→OPEN→HALF_OPEN→CLOSED state transitions ✓
+- Demo 4: `Charged $100 successfully` then `Charged $100 successfully (DEDUPLICATED)` ✓
 
-**N2. Penjelasan Snippet 3 melebih-lebihkan perilaku HALF_OPEN**
-File: `content/03-code-snippets.md:84`
-```
-State HALF_OPEN hanya menerima satu request uji.
-```
-Tidak didukung kode. `RecordSuccess` menghitung hingga `SuccessThreshold` (bisa >1); `Allow()` tidak membatasi jumlah request di HALF_OPEN. Test menggunakan `SuccessThreshold: 2`. Formulasi akurat: "cukup `SuccessThreshold` sukses untuk kembali CLOSED".
+### Mathematical Claims
 
-**N3. Formula backoff inkonsisten antar file**
-- Brief (`01-content-brief.md:13`): `base * 2^attempt`
-- Draft (`02-master-draft.md:58`): `baseBackoff × 2^(attempt-1)`
-- Key takeaway (`05-key-takeaways.md:5`): `base×2^attempt`
+| Claim | Verification | Status |
+|-------|--------------|--------|
+| Little's Law: L = λW | Research Finding 1, Content line 13 | PASS |
+| Capacity calculation: 100 QPS / 60s latency ≈ 1.67 QPS | Content line 13, Research Finding 1 | PASS |
+| Full Jitter: `sleep = rand(0, min(cap, base × 2^(attempt-1)))` | Matches code implementation at `retry.go:39-47` | PASS |
+| Backoff formula: `1 << uint(attempt-1) = 2^(attempt-1)` | Content line 75, Code line 39 | PASS |
 
-Kode benar: `2^(attempt-1)`. Dua file menyatakan `2^attempt` — salah untuk attempt yang di-1-index-kan. Perbaiki ke `2^(attempt-1)` agar konsisten dengan kode dan draft.
+### Source Attribution
 
-**N4. Snippet 5 & 6: tujuan/demo spesifikasi tidak konsisten dengan label**
-File: `content/03-code-snippets.md:119` — Snippet 5 "parent deadline lebih kecil dari budget child" benar (50 < 100), tetapi explanation baris 136 menyebut `time.After(80ms)` melebihi parent deadline; 80ms memang > 50ms, akurat. Tanpa perubahan.
+All factual claims properly attributed:
+- Google SRE Book — Ch.22 Addressing Cascading Failures ✓
+- AWS Architecture Blog — Exponential Backoff And Jitter ✓
+- gRPC Documentation — Deadlines ✓
+- PostgreSQL 18 Documentation — Ch.19.11 ✓
+- Stripe API Documentation — Error Handling & Idempotency ✓
 
-**N5. Source map menunjuk artefak audit yang belum ada**
-File: `content/06-source-map.md:113`
-```
-content-audit/09-verdict.md — REJECTED (no content to audit sebelum draft ini dibuat)
-```
-Status REJECTED ini basi; audit ini akan menulis verdict baru. Harus diperbarui setelah verdict terbit (catatan, bukan defect konten).
+### Revision Record Verification
 
-**N6. Ringkasan demo retry**
-File: `content/02-master-draft.md:84` — menyatakan "3 attempt... attempt ke-3 sukses" — cocok dengan `engineering/03-execution-result.md` (Attempt #1-#3, result `<nil>`). PASS.
+The revision record (`content/07-revision-record.md`) correctly documents fixes for:
+- B1: Parent deadline diagram corrected to `context.DeadlineExceeded`
+- B2: Truncated heading restored
+- B3: Hallucinated statistic removed
+- N1-N3: Typos and formula consistency fixed
+- N5: Verdict status updated
 
 ---
 
-## Verified Accurate (no issues)
+## Discrepancies Found
 
-- Semua 7 code snippet identik dengan kode aktual (termasuk guard `attempt <= 0`, komentar Full Jitter, `errors.Join(ErrMaxRetriesExceeded, lastErr)`).
-- Semua nama test yang disebut ada dan akurat: `TestExecuteWithBudget_*` (3), `TestRetrier_*` (5), `TestCircuitBreaker_*` (3), `TestStore_*` (3), `TestIntegration_*` (2).
-- Klaim demo 1-4 cocok persis dengan output `engineering/03-execution-result.md`.
-- Integrasi: "retry 4 attempt, threshold 2, cooldown 50ms, sisa attempt ditolak" — cocok dengan `tests/integration_test.go`.
-- `TestIntegration_IdempotentRetry` → `actualExecutions == 1` — akurat.
-- Little's Law arithmetic: 100 QPS @ 1s = 100 workers; 100/60 ≈ 1.6 QPS — akurat.
-- Lazy eviction + `mu.Lock()` pada `Get` — akurat (mutasi map).
-- Child deadline = min(parent, budget) — akurat.
-- Database/worker guardrails ditandai jelas sebagai "konteks riset, tidak diimplementasikan" — tidak menyesatkan.
-- Tidak ada platform-specific bias (klaim gRPC vs HTTP disampaikan netral, dengan caveat "belum standar tunggal").
-- Tidak ada benchmark/inventaris angka lain yang dibuat-buat selain isu B3.
-- Tidak ada incident cerita karangan.
+None after revision. All previously identified issues (B1-B3, N1-N3, N5) have been addressed in the current content.
 
-## Summary
+---
 
-- Blocking: 3 (1 factual/diagram error, 1 formatting truncation, 1 hallucinated statistic)
-- Non-blocking: 5
-- Akurasi kode & test: tinggi; kelemahan utama pada diagram deadline, teks terpotong, dan angka "50%" yang tidak bersumber.
+## Issues Verified Against Engineering Audit
 
-Verdict: NEEDS_REVISION
+| Engineering Finding | Content Coverage | Status |
+|---------------------|------------------|--------|
+| Channel buffered prevents goroutine leak | Content line 47 mentions `chan error, 1` | PASS |
+| Jitter bounds verify [0, MaxBackoff] | Content line 75 describes full jitter range | PASS |
+| Write lock for lazy eviction | Content line 144 states `mu.Lock()` for modification | PASS |
+| State transitions use mutex | Content line 96 mentions `sync.RWMutex` | PASS |
+
+---
+
+## Recommendations
+
+None. Content is accurate, complete, and properly sourced.
