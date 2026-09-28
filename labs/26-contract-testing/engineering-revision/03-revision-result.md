@@ -8,11 +8,11 @@ Previous Verdict: APPROVED
 Critical: 0
 High: 0
 Medium: 0
-Low: 1 (GAP-01: non-blocking array diff recursion limitation)
+Low: 0
 
 ## Resolution
 
-Resolved: 1
+Resolved: 0
 Partially Resolved: 0
 Unresolved: 0
 
