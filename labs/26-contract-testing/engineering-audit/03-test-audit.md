@@ -1,63 +1,60 @@
-# Engineering Test Audit
+# Test Audit
 
 Target Lab: labs/26-contract-testing
 
-## Test Suite Overview
+## Test Suite Analysis
 
 Test file: `tests/contract_test.go`
 
-Coverage includes:
-1. `TestContractVerification_V1Provider_Pass`: Verifies baseline V1 provider passes contract check.
-2. `TestContractVerification_BreakingProvider_Fails`: Verifies casing change, missing field, and type mutation cause contract failure.
-3. `TestContractVerification_DualProvider_Pass`: Verifies backwards-compatible dual provider passes V1 contract.
-4. `TestConsumerClient_Integration`: Tests full consumer HTTP fetch against running server.
-5. `TestContractVerifier_ConcurrentExecutions`: Tests concurrent verification requests to ensure race safety.
+### Test Cases Evaluated
 
-## Required Execution Results
+1. `TestConsumerContractGeneration`:
+   - Validates generated contract metadata and interactions.
+   - Coverage: Happy path schema generation.
+   - Status: PASS
 
-### Unit / Integration Tests (`go test -v ./...`)
+2. `TestProviderV1_ContractVerification_Success`:
+   - Runs `verifier.Verify()` on compliant V1 provider and validates mobile client end-to-end.
+   - Coverage: Verification success, client parsing, correct status, total, and customer name extraction.
+   - Status: PASS
+
+3. `TestProviderBreaking_ContractVerification_Fails`:
+   - Verifies that breaking changes trigger verification failure with >= 3 distinct errors.
+   - Confirms that consumer client fails to parse breaking provider payload.
+   - Coverage: Negative verification path, CI gate blockage assertion, client failure assertion.
+   - Status: PASS
+
+4. `TestProviderDual_ContractVerification_Success`:
+   - Tests dual-stack provider backwards compatibility on V1 path with contract verifier and consumer client.
+   - Coverage: Safe API evolution verification.
+   - Status: PASS
+
+5. `TestConcurrentContractVerification`:
+   - Runs 20 parallel goroutines executing verification on provider instance.
+   - Coverage: Race detection, thread safety, connection pooling.
+   - Status: PASS
+
+## Execution Output
+
+Command: `go test -v -count=1 ./...`
 ```text
-=== RUN   TestContractVerification_V1Provider_Pass
---- PASS: TestContractVerification_V1Provider_Pass (0.00s)
-=== RUN   TestContractVerification_BreakingProvider_Fails
---- PASS: TestContractVerification_BreakingProvider_Fails (0.00s)
-=== RUN   TestContractVerification_DualProvider_Pass
---- PASS: TestContractVerification_DualProvider_Pass (0.00s)
-=== RUN   TestConsumerClient_Integration
---- PASS: TestConsumerClient_Integration (0.00s)
-=== RUN   TestContractVerifier_ConcurrentExecutions
---- PASS: TestContractVerifier_ConcurrentExecutions (0.00s)
+=== RUN   TestConsumerContractGeneration
+--- PASS: TestConsumerContractGeneration (0.00s)
+=== RUN   TestProviderV1_ContractVerification_Success
+--- PASS: TestProviderV1_ContractVerification_Success (0.00s)
+=== RUN   TestProviderBreaking_ContractVerification_Fails
+--- PASS: TestProviderBreaking_ContractVerification_Fails (0.00s)
+=== RUN   TestProviderDual_ContractVerification_Success
+--- PASS: TestProviderDual_ContractVerification_Success (0.00s)
+=== RUN   TestConcurrentContractVerification
+--- PASS: TestConcurrentContractVerification (0.00s)
 PASS
-ok  	github.com/software-engineering-lab/labs/26-contract-testing/tests	0.279s
+ok  	labs/26-contract-testing/tests	0.119s
 ```
 
-### Race Detector (`go test -race ./...`)
+Command: `go test -count=1 -race ./...`
 ```text
-PASS
-ok  	github.com/software-engineering-lab/labs/26-contract-testing/tests	0.384s
+ok  	labs/26-contract-testing/tests	1.151s
 ```
 
-### Demo Execution (`go run ./cmd/demo`)
-```text
-=== Contract Testing Lab: Consumer-Driven Contracts & CI Verification ===
-
-[Stage 1] Consumer generates contract:
-Generated Contract (MobileApp -> OrderService):
-...
-[Stage 2] Running Provider V1 Contract Verification:
-Result: PASSED. Provider V1 satisfies Mobile consumer contract.
-CI Deployment Gate: ALLOWED.
-
-[Stage 3] Running Breaking Provider Contract Verification:
-Result: BLOCKED! Breaking changes detected before deployment:
-...
-[Stage 4] Running Dual Provider (V1 + V2) Verification:
-Result: PASSED. Dual provider maintains backwards-compatible V1 contract.
-CI Deployment Gate: ALLOWED for independent canary/migration.
-
-=== Contract Testing Demonstration Complete ===
-```
-
-## Assessment
-
-All test scenarios pass cleanly under race detection. Demo output matches claimed behavior exactly.
+Assessment: PASS. Test suite thoroughly validates functional claims and concurrency behavior.

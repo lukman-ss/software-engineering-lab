@@ -1,39 +1,51 @@
-# Engineering Code Audit
+# Code Audit
 
 Target Lab: labs/26-contract-testing
 
 ## Finding 1
 
-Location: internal/contract/verifier.go:58-115
-Claimed Behavior: Verifier issues HTTP requests, validates status code, decodes JSON with `UseNumber()`, and performs recursive subset comparison against consumer expectations.
-Observed Implementation: `Verify` checks status code, checks response body JSON formatting, and calls `diffValues` to verify that all fields expected by the consumer match both type and value.
+Location: internal/contract/verifier.go:46-115
+Claimed Behavior: Verifier executes HTTP requests against target provider and performs contract assertion.
+Observed Implementation:
+- Uses `http.Client{}` to issue requests defined in `Interaction.Request`.
+- Properly closes response body (`_ = resp.Body.Close()`).
+- Uses `decoder.UseNumber()` to prevent float64 coercion issues on numbers.
+- Handles HTTP errors, status code mismatches, invalid JSON payloads, and value/type differences.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly handles nested JSON objects, primitive mismatches, and numeric representations via `json.Number`.
+Notes: Robust implementation using standard library HTTP and JSON tools.
 
 ## Finding 2
 
 Location: internal/contract/verifier.go:117-176
-Claimed Behavior: Verification diff detects missing expected fields, type mismatches, and value mismatches while ignoring extra fields produced by provider.
-Observed Implementation: `diffValues` iterates over keys in expected map; extra keys present in `actMap` but absent from `expMap` are ignored, satisfying the consumer-driven contract principle.
+Claimed Behavior: Recursive diff algorithm detects missing fields, value mismatches, and primitive type mismatches without requiring full schema parity (supports subset matching / Postel's Law).
+Observed Implementation:
+- Map traversal verifies expected fields exist in actual map while ignoring extra provider fields (consumer subset verification).
+- Compares `json.Number` values strictly and flags type mismatch if one side is a string or non-number.
+- Correctly reports nested field paths (e.g. `customer.name`).
 Assessment: PASS
 Severity: LOW
-Notes: Correctly identifies case changes (`IN_PROGRESS` vs `in_progress`), type changes (`number` vs `string`), and missing objects (`customer.name`).
+Notes: Matches consumer-driven contract design principles where consumer dictates required subset.
 
 ## Finding 3
 
-Location: internal/provider/server.go:1-68
-Claimed Behavior: HTTP server handlers provide V1 baseline, Breaking provider, and backwards-compatible Dual provider implementations.
-Observed Implementation: Clean standard library `net/http` implementations. Uses `http.Handler` routing for `/v1/orders/` and `/v2/orders/`.
+Location: internal/consumer/client.go:21-79
+Claimed Behavior: Mobile consumer client parses expected subset and fails on contract violations.
+Observed Implementation:
+- Enforces strict parsing and validates required fields (`customer.name`) and enum bounds (`IN_PROGRESS` or `COMPLETED`).
+- Directly returns typed `MobileOrderSummary`.
 Assessment: PASS
 Severity: LOW
-Notes: No unneeded dependencies; conforms strictly to Go standard library conventions.
+Notes: Validates consumer behavior when interacting with compliant vs breaking payloads.
 
 ## Finding 4
 
-Location: internal/consumer/client.go:1-73
-Claimed Behavior: Mobile consumer defines contract schema and provides client implementation consuming provider responses.
-Observed Implementation: `BuildContract` explicitly declares required fields (`id`, `status`, `total`, `customer.name`). `GetOrder` parses response into `MobileOrderDetail`.
+Location: internal/provider/server.go:11-131
+Claimed Behavior: Providers implement compliant V1, breaking schema modifications, and dual V1+V2 backward-compatible handlers.
+Observed Implementation:
+- `ProviderV1` outputs canonical V1 JSON format.
+- `ProviderBreaking` outputs lowercase enum (`in_progress`), renamed field (`full_name`), and stringified total (`"150000"`).
+- `ProviderDual` multiplexes `/v1/orders/` and `/v2/orders/` paths seamlessly.
 Assessment: PASS
 Severity: LOW
-Notes: Correct implementation demonstrating consumer-driven schema definition.
+Notes: Concrete and clean demonstration of breaking mutations versus evolutionary versioning.

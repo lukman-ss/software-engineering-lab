@@ -1,18 +1,18 @@
-# Docs vs Code Audit
+# Documentation vs Code Verification
 
 Target Lab: labs/26-contract-testing
 
 ## Comparison Matrix
 
-| Documented Item | Source Code / Tests | Match Status | Notes |
-|---|---|---|---|
-| Project Structure in README | Root files and directories | MATCH | All referenced paths exist |
-| Test Commands | `tests/contract_test.go` | MATCH | `go test -v ./...` and `go test -race ./...` execute as documented |
-| Demo Command | `cmd/demo/main.go` | MATCH | `go run ./cmd/demo` executes successfully with 4 stages |
-| Consumer Contract Specification | `internal/consumer/client.go` | MATCH | Fields match documented schema in engineering notes |
-| Provider Handlers | `internal/provider/server.go` | MATCH | Handlers match V1, Breaking, and Dual paths |
-| Breaking Change Error Handling | `internal/contract/verifier.go` | MATCH | Verification errors catch status casing, missing customer.name, and total type change |
+| Claim / Command in README | Observed Implementation | Match Status |
+| :--- | :--- | :--- |
+| Project structure listing `cmd/demo/main.go`, `internal/`, `tests/` | Identical file and directory layout present | PASS |
+| `go test -v ./...` | Runs successfully and passes all unit tests | PASS |
+| `go test -race ./...` | Passes with 0 data races detected | PASS |
+| `go run ./cmd/demo` | Runs multi-stage verification demo outputting 4 stages | PASS |
+| CDC Engine verifies subset matching | `diffValues` in `internal/contract/verifier.go` implements subset check | PASS |
+| Detects breaking changes (casing, field rename, type mutation) | `ProviderBreaking` triggers all 3 breaking errors in demo & tests | PASS |
 
-## Findings
+## Discrepancies Found
 
-None. Documentation strictly reflects implementation.
+None. README description, commands, and expected demo outputs completely match the source code and runtime execution behavior.
