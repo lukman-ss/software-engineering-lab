@@ -6,13 +6,13 @@ Audit Date: 2026-09-28
 
 ## Summary
 
-Major Claims Reviewed: 11
-Sources Reviewed: 8 (7 in source catalogue, 1 additional in report)
+Major Claims Reviewed: 7
+Sources Reviewed: 8
 Unsupported Claims: 0
-Contradictions: 1 (overgeneralized sticky session claim across proxies)
-Code Issues: NOT_APPLICABLE (research-only audit per pipeline override)
-Test Failures: NOT_APPLICABLE (research-only audit per pipeline override)
-Research Gaps: 3 (1 MEDIUM, 2 LOW)
+Contradictions: 2 (Editorial / standards currency)
+Code Issues: 0 (N/A)
+Test Failures: 0 (N/A)
+Research Gaps: 4 (Low / Medium)
 
 ## Quality Gates
 
@@ -40,16 +40,15 @@ None.
 
 ## Non-Blocking Issues
 
-1. **Sticky Session Generalization (`05-report.md: Finding 10`)**: The claim that WebSocket requires sticky sessions on load balancers while SSE does not is an oversimplification. Once established, WebSocket connections are pinned to the TCP socket regardless of sticky cookies; sticky sessions are only relevant if client reconnects must reach node-local state. Similarly, stateful SSE implementations require stickiness unless backed by a pub/sub bus.
-2. **Citation Source for 100k Scaling (`03-evidence.md: Evidence 12 & 13`, `05-report.md: Finding 11`)**: Resource scaling numbers and patterns rely on the internal lab specification rather than external empirical benchmark citations. The Research Agent properly disclosed this limitation in `05-report.md` and `06-open-questions.md`.
-3. **HTTP/2 Spec Reference & Typo (`05-report.md: Finding 8`)**: Cited URL has a typo (`rfc7541` instead of `rfc7540`). Also RFC 7540 was superseded by RFC 9113.
+1. **Self-referential source for 100k scaling claims**: Evidence 12 & 13 cite the internal lab specification rather than primary OS/kernel documentation or empirical benchmarks. Properly quarantined by the author in `Limitations` and `Open Questions`.
+2. **RFC 7540 obsoletion**: RFC 7540 is cited without mentioning RFC 9113 (June 2022).
+3. **URL typo**: `05-report.md` line 138 lists `rfc7541` URL for an RFC 7540 reference.
 
 ## Required Revisions
 
-1. During lab implementation / content authoring, qualify sticky session recommendations to distinguish between connection persistence and reconnection routing to stateful nodes.
-2. Benchmark runtime memory per connection (Go goroutine vs Node event loop) directly during the implementation phase.
-3. Update HTTP/2 citations to RFC 9113 and fix the minor URL typo in Finding 8.
+1. Before publishing a formal whitepaper or external article, replace internal lab prompt citations in Evidence 12/13 with OS networking references (`epoll`, `fs.file-max`, socket buffer memory sizing).
+2. Fix the minor URL typo in `05-report.md` from `rfc7541` to `rfc7540` / `rfc9113`.
 
 ## Final Status
 
-APPROVED_WITH_WARNINGS
+**APPROVED_WITH_WARNINGS**

@@ -1,135 +1,199 @@
-# Claim Audit: Lab 35 (WebSocket vs SSE Research)
+# Claim Audit
 
-## Claim 1: Full-Duplex Bidirectional Channel for WebSocket
-Claim: WebSocket is a two-way, bidirectional communication channel over a single TCP connection that operates outside standard HTTP/1.1 request-response lifecycle.
-Location: `05-report.md: Finding 1`, `03-evidence.md: Evidence 1`
-Evidence Provided: RFC 6455 Section 1.1 & 1.2
-Source: RFC 6455
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Supported by RFC 6455 Section 1.1.
+Target Lab: `labs/35-websocket-and-sse`
 
 ---
 
-## Claim 2: Payloads Supported by WebSocket
-Claim: The base WebSocket protocol defines distinct frame types for binary data and text (UTF-8) data.
-Location: `05-report.md: Finding 2`, `03-evidence.md: Evidence 3`
-Evidence Provided: RFC 6455 Section 1.2 & Section 5.2 (Opcodes for text frame 0x1, binary frame 0x2)
-Source: RFC 6455
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fully supported.
+## Claim 1: WebSocket Full-Duplex Bidirectional Communication
 
----
+Claim:
+WebSocket provides a two-way (full-duplex) communication channel over a single TCP connection initiated via HTTP/1.1 Upgrade resulting in `101 Switching Protocols`.
 
-## Claim 3: Automatic Reconnection in WebSocket
-Claim: The WebSocket protocol and browser API do not mandate automatic reconnection; the client must implement reconnect logic.
-Location: `05-report.md: Finding 3`, `03-evidence.md: Evidence 4`
-Evidence Provided: RFC 6455 Section 7.2.3, MDN WebSocket
-Source: RFC 6455 / MDN
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Accurate. Third-party wrappers (e.g. reconnecting-websocket) are required for auto-reconnection in vanilla browser environments.
+Location:
+`05-report.md` (Finding 1), `03-evidence.md` (Evidence 1, Evidence 2)
 
----
+Evidence Provided:
+RFC 6455 Section 1.1, Section 1.2, Section 4.2.2.
 
-## Claim 4: Unidirectional Nature of Server-Sent Events (SSE)
-Claim: Server-Sent Events deliver data only from the server to the client; there is no native mechanism for client-to-server messaging over the SSE stream.
-Location: `05-report.md: Finding 4`, `03-evidence.md: Evidence 5`
-Evidence Provided: WHATWG HTML Standard Section 9.2, MDN EventSource
-Source: WHATWG HTML / MDN
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Accurate. Client-to-server communication requires separate HTTP requests (e.g., fetch/POST).
+Source:
+RFC 6455
 
----
+Source Actually Supports Claim:
+YES
 
-## Claim 5: SSE Native Reconnection and Last-Event-ID
-Claim: The browser-managed `EventSource` object automatically reconnects on dropped connections, supports a configurable reconnection time, and transmits the last event ID (`Last-Event-ID`) to the server on reconnection.
-Location: `05-report.md: Finding 5`, `03-evidence.md: Evidence 6`
-Evidence Provided: WHATWG HTML Standard Section 9.2.3, 9.2.4
-Source: WHATWG HTML Living Standard
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fully specified in the living standard.
+Classification:
+FACT
 
----
+Severity:
+LOW
 
-## Claim 6: SSE Payload Character Encoding Limitation
-Claim: Server-Sent Events are restricted to UTF-8 text; the spec provides no mechanism for binary payloads.
-Location: `05-report.md: Finding 6`, `03-evidence.md: Evidence 7`
-Evidence Provided: WHATWG HTML Standard Section 9.2.1 ("Event streams are always decoded as UTF-8. There is no way to specify another character encoding.")
-Source: WHATWG HTML Living Standard
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Binary data requires encoding (such as Base64) at the application layer, adding size overhead.
-
----
-
-## Claim 7: WebSocket over HTTP/2 via RFC 8441 Extended CONNECT
-Claim: Because HTTP/2 forbids connection-wide headers such as `Upgrade` and `Connection`, the WebSocket handshake cannot operate over plain HTTP/2. RFC 8441 defines a new Extended CONNECT method using `:protocol = websocket` on a single HTTP/2 stream.
-Location: `05-report.md: Finding 7`, `03-evidence.md: Evidence 8`
-Evidence Provided: RFC 8441 Section 1 & Section 5, RFC 7540 Section 8.3
-Source: RFC 8441 / RFC 7540
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Accurate technical breakdown of why standard WebSocket upgrade fails on HTTP/2 multiplexing without RFC 8441.
-
----
-
-## Claim 8: Native SSE Operation over HTTP/2
-Claim: Because SSE uses standard HTTP semantics (`text/event-stream`), it runs natively over HTTP/2 with stream multiplexing without requiring protocol extensions like RFC 8441.
-Location: `05-report.md: Finding 8`, `03-evidence.md: Evidence 9`
-Evidence Provided: WHATWG HTML Standard, RFC 7540
-Source: WHATWG HTML / RFC 7540
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Accurate. Minor typo in URL citation in report (points to `rfc7541` instead of `rfc7540`), but factual content is correct.
-
----
-
-## Claim 9: Browser HTTP/1.1 6-Connection Limit for SSE vs HTTP/2
-Claim: Browsers enforce a maximum number of simultaneous HTTP/1.1 connections per origin (~6), limiting concurrent SSE tabs/streams. HTTP/2 removes this bottleneck via negotiated stream limits (default 100).
-Location: `05-report.md: Finding 9`, `03-evidence.md: Evidence 10`
-Evidence Provided: MDN EventSource, RFC 7540 Section 5.1.2
-Source: MDN / RFC 7540
-Source Actually Supports Claim: YES
-Classification: FACT / IMPLEMENTATION-SPECIFIC
-Severity: LOW
-Notes: 6-connection cap is a browser client implementation policy (Chrome, Firefox, Safari) rather than an RFC mandate, properly identified as such in MDN.
-
----
-
-## Claim 10: Reverse Proxy Buffering and Sticky Session Behavior
-Claim: Reverse proxies buffer responses by default, requiring tuning of `proxy_buffering` and `proxy_read_timeout`. WebSocket requires sticky sessions on load balancers, whereas SSE does not.
-Location: `05-report.md: Finding 10`, `03-evidence.md: Evidence 11`
-Evidence Provided: NGINX Docs (`ngx_http_proxy_module`), AWS ELB Docs
-Source: NGINX / AWS Docs
-Source Actually Supports Claim: PARTIAL
-Classification: INTERPRETATION / IMPLEMENTATION-SPECIFIC
-Severity: MEDIUM
 Notes:
-- Buffering/timeout claim: Supported by NGINX docs (`proxy_buffering off` is standard for SSE/streaming).
-- Sticky session claim: Overgeneralized. Established WebSocket connections are long-lived TCP/stream channels pinned to an instance anyway; sticky sessions on load balancers are only required if reconnects must reach the exact same backend state. Similarly, SSE streams holding state or local event offsets without a shared broker also require sticky routing.
+Accurately reflects normative specification.
 
 ---
 
-## Claim 11: Scaling to 100k Concurrent Connections Constraints
-Claim: Operating at ~100,000 concurrent connections is constrained by OS file descriptor limits (`ulimit -n`), runtime memory overhead per connection buffer (e.g. Go goroutine stacks vs Node.js event loop), and requires a pub/sub message broker (e.g. Redis Pub/Sub) for multi-node broadcast.
-Location: `05-report.md: Finding 11`, `03-evidence.md: Evidence 12 & 13`
-Evidence Provided: Internal lab specification #35
-Source: Lab specification (Internal)
-Source Actually Supports Claim: PARTIAL
-Classification: HYPOTHESIS / ARCHITECTURAL PATTERN
-Severity: MEDIUM
+## Claim 2: Payload Types Supported
+
+Claim:
+WebSocket data frames support UTF-8 text and arbitrary binary payloads, whereas SSE supports UTF-8 text only.
+
+Location:
+`05-report.md` (Finding 2, Finding 6), `03-evidence.md` (Evidence 3, Evidence 7)
+
+Evidence Provided:
+RFC 6455 Section 1.2; WHATWG HTML Standard Section 9.2.1.
+
+Source:
+RFC 6455, WHATWG HTML Living Standard
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
 Notes:
-- The principles (file descriptors, per-connection memory, pub/sub for clustering) are standard distributed systems knowledge.
-- However, using the internal lab specification as the sole cited source for empirical scaling behavior lacks external primary benchmark evidence. The report appropriately acknowledges this in "Limitations" and "Open Questions".
+Normative references accurately support both protocol framing rules.
+
+---
+
+## Claim 3: Automatic Reconnection Support
+
+Claim:
+Browser `EventSource` (SSE) provides built-in standardized auto-reconnection with `Last-Event-ID` tracking, whereas `WebSocket` has no native browser auto-reconnect or backpressure mechanism.
+
+Location:
+`05-report.md` (Finding 3, Finding 5), `03-evidence.md` (Evidence 4, Evidence 6)
+
+Evidence Provided:
+WHATWG HTML Standard Section 9.2.3 / 9.2.4; MDN EventSource & WebSocket.
+
+Source:
+WHATWG HTML Living Standard, MDN
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+Accurate distinction between the two web APIs.
+
+---
+
+## Claim 4: HTTP/2 Integration (RFC 8441 vs Native SSE)
+
+Claim:
+WebSocket requires RFC 8441 (Extended CONNECT method with `:protocol = websocket`) to run over HTTP/2 because HTTP/2 forbids connection-wide headers (`Upgrade`, `Connection`). In contrast, SSE is standard HTTP semantics and runs natively over HTTP/2 multiplexed streams without extension.
+
+Location:
+`05-report.md` (Finding 7, Finding 8), `03-evidence.md` (Evidence 8, Evidence 9)
+
+Evidence Provided:
+RFC 8441 Section 1 & Section 5; RFC 7540; WHATWG HTML Standard Section 9.2.
+
+Source:
+RFC 8441, RFC 7540, WHATWG
+
+Source Actually Supports Claim:
+YES
+
+Classification:
+FACT
+
+Severity:
+LOW
+
+Notes:
+RFC 8441 text and HTTP/2 stream multiplexing constraints are accurately cited. (Minor URL typo in Finding 8 notes `rfc7541` instead of `rfc7540`).
+
+---
+
+## Claim 5: Browser Connection Limits on HTTP/1.1
+
+Claim:
+Browsers enforce a maximum limit of roughly 6 simultaneous HTTP/1.1 connections per origin, constraining SSE over HTTP/1.1 across multiple tabs, which HTTP/2 resolves via negotiated stream limits (default 100).
+
+Location:
+`05-report.md` (Finding 9), `03-evidence.md` (Evidence 10)
+
+Evidence Provided:
+MDN EventSource documentation; RFC 7540 Section 5.1.2.
+
+Source:
+MDN, RFC 7540
+
+Source Actually Supports Claim:
+PARTIAL
+
+Classification:
+IMPLEMENTATION-SPECIFIC
+
+Severity:
+MEDIUM
+
+Notes:
+The 6-connection limit is a de facto browser implementation rule (Chrome, Firefox), not an IETF standard requirement. The research acknowledges this in limitations, which is appropriate.
+
+---
+
+## Claim 6: Reverse Proxy Buffering & Timeout Requirements
+
+Claim:
+Reverse proxies (e.g. NGINX) buffer responses by default, requiring `proxy_buffering off` and tuned `proxy_read_timeout` to prevent buffering or dropping long-lived streaming connections (SSE/WebSocket).
+
+Location:
+`05-report.md` (Finding 10), `03-evidence.md` (Evidence 11)
+
+Evidence Provided:
+NGINX ngx_http_proxy_module documentation.
+
+Source:
+NGINX Docs
+
+Source Actually Supports Claim:
+PARTIAL
+
+Classification:
+FACT / IMPLEMENTATION-SPECIFIC
+
+Severity:
+LOW
+
+Notes:
+`proxy_buffering off` is specific to NGINX/reverse proxy behavior. The source confirms the directive and mechanism.
+
+---
+
+## Claim 7: 100,000 Concurrent Connections Resource Constraints
+
+Claim:
+Scaling WebSocket or SSE to ~100,000 concurrent connections is constrained by OS file descriptor limits (`ulimit -n`), runtime per-connection memory allocation, and requires a centralized broker (Redis Pub/Sub) for multi-node broadcast.
+
+Location:
+`05-report.md` (Finding 11), `03-evidence.md` (Evidence 12, Evidence 13)
+
+Evidence Provided:
+Internal lab specification citation; C10K/C10M networking principles.
+
+Source:
+Internal Lab Specification
+
+Source Actually Supports Claim:
+PARTIAL
+
+Classification:
+HYPOTHESIS / ARCHITECTURAL PRINCIPLE
+
+Severity:
+MEDIUM
+
+Notes:
+While technically accurate from systems engineering principles, citing internal lab prompts as the primary source is self-referential. No empirical memory numbers or OS benchmark citations are provided. The research report appropriately classifies this under `Limitations` and `Confidence: MEDIUM`.

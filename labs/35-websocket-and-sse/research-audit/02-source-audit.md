@@ -1,4 +1,8 @@
-# Source Audit: Lab 35 (WebSocket vs SSE Research)
+# Source Audit
+
+Target Lab: `labs/35-websocket-and-sse`
+
+---
 
 ## Source 1
 
@@ -19,7 +23,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Normative specification defining frame format, HTTP/1.1 Upgrade handshake, masking, close handshake, and error handling.
+- None. Normative specification for WebSocket protocol framing, handshake, masking, and closing procedures.
 
 Assessment:
 PASS
@@ -45,7 +49,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative standard for running WebSocket over HTTP/2 via Extended CONNECT method with `:protocol = websocket`.
+- None. Normative specification defining Extended CONNECT method for running WebSocket over HTTP/2.
 
 Assessment:
 PASS
@@ -71,7 +75,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Living standard specifying the `EventSource` web interface, `text/event-stream` parser, reconnection algorithm, and `Last-Event-ID` mechanism.
+- None. Definitive web standard specification for EventSource, text/event-stream syntax, reconnection algorithm, and Last-Event-ID processing.
 
 Assessment:
 PASS
@@ -97,7 +101,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Accurately documents browser implementation details, including the 6-connection per origin limit under HTTP/1.1 and stream multiplexing over HTTP/2.
+- Mentions 6-connection limit per browser+domain. While true for browser implementations (Chrome/Firefox), it is browser implementation policy rather than an IETF/WHATWG normative requirement.
 
 Assessment:
 PASS
@@ -123,7 +127,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Accurately documents browser `WebSocket` constructor, lack of native backpressure controls, and absence of standardized auto-reconnection in the browser interface.
+- None. Authoritative developer documentation describing the browser WebSocket interface and missing built-in auto-reconnect.
 
 Assessment:
 PASS
@@ -149,10 +153,11 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Minor: In `05-report.md` Finding 8, the citation URL is given as `https://datatracker.ietf.org/doc/html/rfc7541` (which is HPACK - Header Compression for HTTP/2) instead of `rfc7540`. In `02-sources.md`, the URL is correct (`rfc7540`). Also note RFC 7540 has been obsoleted by RFC 9113 (HTTP/2 core spec, June 2022), though the technical stream semantics cited remain identical.
+- Note: RFC 7540 was obsoleted by RFC 9113 in June 2022. While core stream multiplexing and connection-header prohibitions remain identical, citing RFC 9113 as the current standard is preferred.
+- Typo in `05-report.md` line 138 references `https://datatracker.ietf.org/doc/html/rfc7541` (HPACK) under Source 6 instead of `rfc7540`.
 
 Assessment:
-PASS
+WARNING
 
 ---
 
@@ -166,7 +171,7 @@ Reachable:
 YES
 
 Source Type:
-PRIMARY (Software Vendor Specification)
+PRIMARY
 
 Relevant:
 YES
@@ -175,36 +180,33 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Contains standard definitions for `proxy_buffering` and `proxy_read_timeout`. The Research Agent properly noted in limitations that specific standalone WebSocket proxy guide page returned 404, so this general module doc was used.
+- Covers HTTP proxy buffering (`proxy_buffering`) and timeouts (`proxy_read_timeout`). Does not cover WebSocket-specific connection upgrade proxy directives (`proxy_set_header Upgrade $http_upgrade`), which are documented in NGINX websocket guide.
 
 Assessment:
 PASS
 
 ---
 
-## Additional Sources Cited in Report
+## Source 8 (Inline in Evidence 12/13 & Finding 11)
 
-### Source 8 (AWS ELB Documentation - Cited in 05-report.md Finding 10)
-
-Claimed Title: AWS ELB User Guide: WebSocket support
-Claimed Publisher: AWS Docs
-URL: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/websockets-support.html
+Claimed Title: Lab specification (Senior Software Engineer Lab #35)
+Claimed Publisher: Internal Project
+URL: N/A
 
 Reachable:
-YES
+NO (Self-referential / Unverifiable external artifact)
 
 Source Type:
-PRIMARY (Vendor Documentation)
+COMMUNITY / UNKNOWN
 
 Relevant:
-YES
+PARTIAL
 
 Supports Claimed Topic:
 PARTIAL
 
 Problems:
-- Missing from `02-sources.md`. Cited only in `05-report.md`.
-- Claim mentions "AWS Elastic Load Balancing documentation confirms WebSocket (but not SSE) requires sticky session support". In Application Load Balancers, sticky sessions are typically needed if handshakes/reconnections must map to a specific target server maintaining state, but established WebSocket connections are pinned to the target instance for the life of the TCP connection once upgraded. SSE also requires sticky sessions if stateful server-side event tracking is pinned to a single server instance without a shared broker.
+- Circular evidence. Using lab prompt / internal spec as evidence for factual scaling claims (file descriptor consumption, memory overhead, Redis pub/sub necessity) without citing external systems literature (e.g. Linux socket man pages, POSIX file descriptor specs, or published benchmarks).
 
 Assessment:
 WARNING

@@ -1,48 +1,40 @@
-# Audit Plan: Lab 35 (WebSocket vs SSE Research)
+# Audit Plan
 
 ## Target Lab
 `labs/35-websocket-and-sse`
 
-## Scope of Audit
-Research Agent outputs under `labs/35-websocket-and-sse/research/`:
-- `01-plan.md`
-- `02-sources.md`
-- `03-evidence.md`
-- `04-contradictions.md`
-- `05-report.md`
-- `06-open-questions.md`
-
-*(Note: Per pipeline instruction, audit scope is research-only; implementation and code execution are skipped in this stage).*
-
 ## Files Reviewed
-1. `labs/35-websocket-and-sse/research/01-plan.md`
-2. `labs/35-websocket-and-sse/research/02-sources.md`
-3. `labs/35-websocket-and-sse/research/03-evidence.md`
-4. `labs/35-websocket-and-sse/research/04-contradictions.md`
-5. `labs/35-websocket-and-sse/research/05-report.md`
-6. `labs/35-websocket-and-sse/research/06-open-questions.md`
+- `labs/35-websocket-and-sse/research/01-plan.md`
+- `labs/35-websocket-and-sse/research/02-sources.md`
+- `labs/35-websocket-and-sse/research/03-evidence.md`
+- `labs/35-websocket-and-sse/research/04-contradictions.md`
+- `labs/35-websocket-and-sse/research/05-report.md`
+- `labs/35-websocket-and-sse/research/06-open-questions.md`
 
 ## Claims To Verify
-1. WebSocket is a full-duplex protocol over a single TCP connection initiated via HTTP/1.1 Upgrade handshake (`101 Switching Protocols`) (RFC 6455).
-2. WebSocket supports both UTF-8 text and binary payloads (RFC 6455).
-3. WebSocket does not have native/mandated auto-reconnection in the browser API (RFC 6455 / MDN).
-4. Server-Sent Events (SSE) via `EventSource` is strictly unidirectional (server → client) over standard HTTP using `text/event-stream` (WHATWG HTML / MDN).
-5. `EventSource` provides automatic reconnection with `Last-Event-ID` tracking (WHATWG HTML).
-6. SSE supports UTF-8 text payloads only (WHATWG HTML).
-7. WebSocket over HTTP/2 requires RFC 8441 Extended CONNECT (`:protocol = websocket`) because HTTP/2 bans connection-specific headers like `Upgrade` (RFC 8441 / RFC 7540).
-8. SSE runs natively over HTTP/2 multiplexing without protocol extensions (RFC 7540 / WHATWG).
-9. HTTP/1.1 browsers enforce a ~6 connections-per-origin limit which restricts SSE concurrent tabs, whereas HTTP/2 allows multiplexing up to negotiated stream limits (default 100) (MDN / RFC 7540).
-10. Reverse proxies (e.g. NGINX) buffer responses by default, requiring tuning of `proxy_buffering` and `proxy_read_timeout` for real-time streams (NGINX docs).
-11. 100k concurrent connections resource scaling depends on OS file descriptors (`ulimit -n`), runtime memory per connection/goroutine/event-loop, and multi-node broker architecture (Redis Pub/Sub) (Architectural patterns / internal lab spec).
+1. WebSocket is a bidirectional full-duplex protocol over a single TCP connection initiated via HTTP/1.1 Upgrade (RFC 6455).
+2. WebSocket frame format supports text (UTF-8) and binary payloads (RFC 6455).
+3. WebSocket specification does not mandate client auto-reconnect or backpressure mechanisms (RFC 6455, MDN).
+4. SSE (`EventSource`) is strictly unidirectional (server-to-client) using `text/event-stream` MIME type (WHATWG, MDN).
+5. SSE specifies native browser auto-reconnect, reconnection delay, and `Last-Event-ID` tracking (WHATWG HTML Standard Section 9.2).
+6. SSE is restricted to UTF-8 text framing only (WHATWG HTML Standard Section 9.2).
+7. WebSocket over HTTP/2 cannot use HTTP/1.1 Upgrade headers and requires RFC 8441 Extended CONNECT method with `:protocol = websocket` (RFC 8441, RFC 7540).
+8. SSE runs natively over HTTP/2 multiplexed streams without protocol extension (RFC 7540, WHATWG).
+9. Browsers enforce a ~6 connection per domain limit over HTTP/1.1 for SSE, mitigated to default 100 streams under HTTP/2 (MDN, RFC 7540).
+10. Reverse proxies require specific configuration (disabling buffering via `proxy_buffering off`, tuning read timeouts) for real-time streaming (NGINX docs).
+11. 100,000 concurrent connection scaling requirements (OS file descriptors `ulimit -n`, per-connection runtime memory, Redis pub/sub broker).
+
+## Code To Execute
+None. PIPELINE OVERRIDE: Audit research only. No code or implementation files exist in this stage.
 
 ## Primary Risks
-- Use of internal lab specification as a primary source for scaling/architecture claims without external peer-reviewed benchmark sources.
-- RFC 7541 cited instead of RFC 7540 in Report Finding 8 URL (`rfc7541` is HPACK, whereas text references RFC 7540 HTTP/2).
-- Verification of external URL availability and correctness of cited normative text.
+- Untracked or arbitrary claims regarding 100k scaling numbers (file descriptors, memory footprint per connection).
+- Lack of independent primary source for internal lab references cited in Evidence 12 and 13.
+- Inaccurate RFC references or invalid URLs (e.g. RFC 7541 cited in Finding 8 when RFC 7540 was meant).
+- Overgeneralization of browser connection caps (HTTP/1.1 6-connection limit treated as universal standard rather than browser implementation policy).
 
 ## Audit Strategy
-1. Cross-reference all 7 sources in `02-sources.md` against authoritative IETF RFCs, WHATWG standards, and MDN specifications.
-2. Audit all 13 evidence items in `03-evidence.md` and 11 findings in `05-report.md` for factual correctness, classification, and source fidelity.
-3. Check for internal contradictions, scope overgeneralizations, and undocumented assumptions across report files.
-4. Evaluate research limitations and open questions in `06-open-questions.md`.
-5. Produce final verdict based on quality gates.
+1. Source verification: Verify reachability, authenticity, publisher, and relevance of all 7 cited sources in `02-sources.md` plus inline sources in `05-report.md`.
+2. Claim validation: Cross-reference findings in `05-report.md` and evidence entries in `03-evidence.md` against official normative standards (RFC 6455, RFC 8441, RFC 7540, WHATWG).
+3. Contradiction & gap detection: Evaluate internal consistency between research documents and pinpoint unverified assumptions (especially regarding 100k scaling and proxy behavior).
+4. Verdict determination: Formulate objective verdict based on evidence reliability and pipeline readiness.
