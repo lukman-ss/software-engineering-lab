@@ -1,56 +1,55 @@
 # Test Audit
 
-## Finding 1
-- Location: tests/slo_test.go:13 (TestMetricsWindowTracker)
-- Claimed Behavior: Verifies bucket aggregation, eviction after window expiry.
-- Observed Implementation: Records 10 good, 1 slow good, 1 bad (200 duration 200ms but threshold=100ms -> bad? Wait: isGood uses Duration <= 100*time.Millisecond; 200ms => bad. Status 500 => bad. So good=10, bad=2). Correct. Eviction test after 20s expects zero.
-- Assessment: PASS
-- Severity: NONE
-- Notes: Tests basic functionality.
+Target Lab: `labs/24-slo-sli-error-budget`
+Test File: `tests/slo_test.go` (6 tests, 236 lines)
 
-## Finding 2
-- Location: tests/slo_test.go:61 (TestSLOEvaluator)
-- Claimed Behavior: Boundary SLI = SLO threshold, CanDeploy true; one more bad flips CanDeploy false.
-- Observed Implementation: Uses 99% SLO, 99 good 1 bad -> SLI exactly 0.99; then another 500 pushes below. Test passes.
-- Assessment: PASS
-- Severity: NONE
-- Notes: Core SLO boundary validated.
+## Coverage Matrix
 
-## Finding 3
-- Location: tests/slo_test.go:93 (TestAlertEngineBurnRate)
-- Claimed Behavior: Alert triggers when short and long burn >= factor.
-- Observed Implementation: 100 requests, 2 errors = 2% error rate, SLO 99.9% -> allowed=0.1%, burn=0.02/0.001=20 > 14.4 triggers. Negative test: transient spike in short window only, long window error low => no alert. Both pass.
-- Assessment: PASS
-- Severity: NONE
-- Notes: Multi-window burn logic verified.
+| Requirement | Test | Result |
+|---|---|---|
+| Happy path: bucket aggregation (10 good + 2 bad) | TestMetricsWindowTracker | PASS |
+| Window expiry / eviction to zero | TestMetricsWindowTracker | PASS |
+| SLO boundary: 99/100 deploys, 2nd bad freezes | TestSLOEvaluator | PASS |
+| Burn-rate fires at 20x > 14.4x PAGE | TestAlertEngineBurnRate | PASS |
+| Negative: short-only spike, clean long window → no alert | TestAlertEngineBurnRate | PASS |
+| Out-of-order insert + partial eviction | TestOutOfOrderTimestamps | PASS |
+| Zero traffic → SLI 1.0, CanDeploy=true | TestEvaluatorZeroTraffic | PASS |
+| Concurrency: 20x100 records, no loss, race clean | TestConcurrencyMetrics | PASS |
 
-## Finding 4
-- Location: tests/slo_test.go:154 (TestOutOfOrderTimestamps)
-- Claimed Behavior: Bucket insertion in correct time order and eviction.
-- Observed Implementation: Records out-of-order events (later, earlier, earlier+fraction) and checks totals and eviction. Pass.
-- Assessment: PASS
-- Severity: NONE
-- Notes: Validates ordering logic.
+## Execution (lab dir, actual)
 
-## Finding 5
-- Location: tests/slo_test.go:179 (TestEvaluatorZeroTraffic)
-- Claimed Behavior: Zero traffic yields SLI=1.0, CanDeploy=true.
-- Observed Implementation: Returns good/bad=0 => SLI=1.0, CanDeploy true. Pass.
-- Assessment: PASS
-- Severity: NONE
-- Notes: Edge case.
+```text
+go build ./...              → BUILD_EXIT=0 (no output, no errors)
+go test -count=1 -v ./...   → all 6 tests PASS (tests package ok)
+go test -count=1 -race ./...→ ok labs/24-slo-sli-error-budget/tests (no races)
+go run ./cmd/demo           → matches engineering/03-execution-result.md numerically
+```
 
-## Finding 6
-- Location: tests/slo_test.go:200 (TestConcurrencyMetrics)
-- Claimed Behavior: Concurrent updates to WindowTracker maintain correct counts under race detector.
-- Observed Implementation: 20 goroutines * 100 requests each, 10% errors; validates total and good+bad == total. Pass with -race.
-- Assessment: PASS
-- Severity: NONE
-- Notes: Concurrency safety verified.
+Note: `./...` only matches packages when run from the lab dir (module-scoped). From outside
+(e.g. `scripts/orchestrator`) it correctly matches nothing — not a repo defect.
 
-## Finding 7
-- Coverage: No explicit coverage tests; unit tests cover happy path, failure, edge cases, ordering, zero traffic, concurrency.
-- Observed: No negative tests for malformed input (e.g. negative window) but constructor guards.
-- Assessment: WARNING
-- Severity: LOW
-- Notes: Could add tests for invalid Config, but not required per spec. Core paths covered.
+## Strengths
+
+- Boundary test is exact (budget == 0 still deploys; first negative freezes) — proves the `<= 0` policy.
+- Negative alert test is the strongest asset: proves dual-window gating, not just threshold firing.
+- Out-of-order + partial-eviction test proves the sorted-insert path, the trickiest code in the tracker.
+- Concurrency test uses identical timestamps across goroutines (same-bucket contention) under `-race`.
+
+## Weaknesses
+
+1. No 100%-error test, although `engineering/01-design.md` Test Strategy explicitly lists "100% errors"
+   as a planned edge case. Only mixed ratios are exercised. → MISSING_TEST (LOW).
+2. `CalculateBurnRate` guards (`total == 0`, `targetSLO == 1.0`) have no direct unit test; the zero case
+   is reached only indirectly via `TestEvaluatorZeroTraffic` (evaluator, not burn rate). → MISSING_TEST (LOW).
+3. Concurrency test asserts `total == 2000` and `good+bad == total` but not the exact deterministic split
+   (1800 good / 200 bad, since `i%10==0` fails). A miscount preserving the total would pass. → weak
+   assertion (LOW).
+4. No test touches `BurnRateRule.LongWindow/ShortWindow/BudgetConsumedPct` — unsurprising, since the
+   engine ignores them (see code Finding 5). Untestable dead fields. → consequence of WARNING (MEDIUM).
+
+## Assessment
+
+Suite is honest and above-average for scope: happy path, failure path, eviction, out-of-order,
+zero-traffic, concurrency, and a true negative alert case all execute green under `-race`.
+Gaps are additive (missing 100%-error case, weak exact-count assertion), none invalidate what is proven.
+A passing suite here is backed by boundary-exact and negative-case tests, not just happy paths.

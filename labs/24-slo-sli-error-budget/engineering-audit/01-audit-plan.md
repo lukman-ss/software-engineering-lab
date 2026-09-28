@@ -1,11 +1,12 @@
 # Engineering Audit Plan
 
-Target Lab: labs/24-slo-sli-error-budget
+Target Lab: `labs/24-slo-sli-error-budget`
 Implementation Files:
 - `internal/metrics/tracker.go`
 - `internal/slo/evaluator.go`
 - `internal/alerting/engine.go`
 - `cmd/demo/main.go`
+- `go.mod`
 
 Tests:
 - `tests/slo_test.go`
@@ -17,23 +18,24 @@ Approved Research Inputs:
 - `research/05-report.md`
 - `research-audit/07-verdict.md`
 - `engineering/01-design.md`
-- `engineering/02-implementation-notes.md`
 
 Main Claims To Verify:
-1. SLI is evaluated as a quantitative ratio of good requests divided by total requests (`good / total`).
-2. Error Budget is calculated based on `(1 - SLO) * total` events and correctly decrements upon bad events.
-3. Multi-window multi-burn-rate alerting triggers when both short and long windows exceed defined burn rate thresholds.
-4. Deployment gating policy (`CanDeploy`) halts releases when remaining error budget is depleted (`<= 0`).
-5. Concurrency safety is upheld across all metric tracking components under parallel goroutine traffic.
-6. Execution outputs in `engineering/03-execution-result.md` match live command outputs.
+1. SLI is calculated strictly as `good_events / total_events` across a time window.
+2. Error budget is calculated as `(1 - SLO) * total_events`, budget consumed equals `bad_events`, and negative remaining budget enforces `CanDeploy = false`.
+3. Out-of-order events are inserted and aggregated into correct time buckets rather than appended or dropped.
+4. Window eviction drops buckets older than `windowSize` relative to query/record timestamps.
+5. Multi-window multi-burn-rate alerting requires both short window and long window burn rates to exceed the burn rate threshold before triggering.
+6. Endpoint criticality differentiation correctly configures different SLO targets (99.9% vs 95.0%) with distinct error tolerance thresholds.
+7. Concurrency safety: metrics aggregation via `WindowTracker` is safe under concurrent reader/writer goroutines without data races.
+8. Demo executes realistically without mocked or hardcoded static output.
 
 Commands To Run:
-- `go test -v -count=1 ./...`
-- `go test -race -count=1 ./...`
+- `go test -count=1 -v ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions or data races in sliding window state updates.
-- Inaccurate time-bucket aggregation or out-of-order event handling anomalies.
-- Incorrect burn rate math causing false positives or missing alerts.
-- Discrepancies between demo execution output and documented execution results.
+- Slice re-allocation/reslicing bugs in `WindowTracker.Record` during out-of-order insertion.
+- Eviction bounds calculation during sliding window evaluation.
+- Division by zero in SLI or BurnRate calculations under zero traffic.
+- Discrepancies between demo output and README / engineering claims.
