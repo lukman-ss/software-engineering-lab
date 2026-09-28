@@ -1,67 +1,64 @@
-# Code Audit Report
-
-## Target Lab
-`labs/25-rate-limiting-and-backpressure`
+# Code Audit
 
 ## Finding 1
 
-Location: `internal/ratelimit/bucket.go:8-46`
-Claimed Behavior: Token Bucket allows burst up to capacity and refills at constant rate without background tickers.
-Observed Implementation: State is calculated lazily via `now.Sub(tb.lastRefill).Seconds() * refillRate`, capped at capacity. Thread-safety is guarded with `sync.Mutex`.
+Location: `internal/ratelimit/bucket.go:30-46` (TokenBucket.AllowN)
+Claimed Behavior: Token bucket refills fractional tokens based on elapsed wall clock time and caps at capacity $B$, allowing atomic token subtraction.
+Observed Implementation: Mutex-guarded calculation using `now.Sub(tb.lastRefill).Seconds() * refillRate`, capped at `tb.capacity`. Correctly validates remaining tokens $\ge n$.
 Assessment: PASS
 Severity: LOW
-Notes: Lazy calculation avoids background goroutines and ticker leaks. Correct handling of token clamping to capacity.
+Notes: Clean standard library implementation with monotonic time safety.
 
 ## Finding 2
 
-Location: `internal/ratelimit/bucket.go:55-79`
-Claimed Behavior: `RetryAfterSeconds` calculates necessary wait time in whole integer seconds for client retry guidance.
-Observed Implementation: Calculates needed tokens divided by `refillRate`, rounding up to the next ceiling integer. Returns 0 when tokens are already available.
+Location: `internal/ratelimit/bucket.go:98-115` (LeakyBucket.Allow)
+Claimed Behavior: Leaky bucket drains water continuously at constant rate and admits new requests only if adding 1 unit does not exceed capacity.
+Observed Implementation: Mutex-guarded calculation decrementing water by `elapsed * leakRate`, bounded below by 0. Rejects when `lb.water + 1.0 > lb.capacity`.
 Assessment: PASS
 Severity: LOW
-Notes: Complies with HTTP RFC 6585 `Retry-After` seconds integer format.
+Notes: Accurately demonstrates traffic smoothing without burst capacity above ceiling.
 
 ## Finding 3
 
-Location: `internal/ratelimit/bucket.go:81-121`
-Claimed Behavior: Leaky Bucket acts as a traffic smoother enforcing leak rate $R$, rejecting bursts exceeding water capacity.
-Observed Implementation: Calculates drained water via elapsed time multiplied by `leakRate`, clamped at zero. Accepts requests if `water + 1 <= capacity`, otherwise returns false.
+Location: `internal/ratelimit/registry.go:21-37` (Registry.Get)
+Claimed Behavior: Thread-safe per-tenant limiter retrieval preventing shared IP / CGNAT collisions (RFC 6598).
+Observed Implementation: Uses double-checked locking with `RWMutex` (read lock fast path, upgrade to write lock if missing). Prevents race condition during bucket instantiation.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly implements the leaky bucket as a meter/traffic smoother.
+Notes: Verified by `TestRegistry_ConcurrentSameKeyGet`.
 
 ## Finding 4
 
-Location: `internal/ratelimit/registry.go:21-37`
-Claimed Behavior: Registry manages per-tenant rate limiters to avoid CGNAT / shared IP cross-tenant starvation (RFC 6598).
-Observed Implementation: Double-checked locking pattern using `sync.RWMutex` to retrieve or lazily create a `TokenBucket` per tenant key.
+Location: `internal/backpressure/queue.go:67-85` (BoundedQueue.TrySubmit)
+Claimed Behavior: Non-blocking enqueue that drops excess requests immediately with `ErrQueueFull` when capacity is reached.
+Observed Implementation: Uses a non-blocking `select` on buffered channel with `default` fallback updating atomic counters (`accepted` vs `rejected`). Includes `stopMu` guard against submission during queue shutdown.
 Assessment: PASS
 Severity: LOW
-Notes: Safe against concurrent reads and initializations. In a high-churn multi-tenant production environment, an eviction strategy (LRU/TTL) would be needed to prevent unbounded memory growth, but for this lab scope it is clean and correct.
+Notes: Implements fast load shedding preventing unbounded latency accumulation.
 
 ## Finding 5
 
-Location: `internal/backpressure/queue.go:30-94`
-Claimed Behavior: Bounded Queue enforces backpressure through fast drop rejection (`TrySubmit`), graceful worker loop shutdown, and telemetry tracking.
-Observed Implementation: `TrySubmit` uses non-blocking `select` channel send with a `default` case returning `ErrQueueFull`. Shutdown uses `atomic.Bool.CompareAndSwap`, context cancellation, channel close, and `sync.WaitGroup.Wait`.
+Location: `internal/backpressure/queue.go:91-103` (BoundedQueue.Stop)
+Claimed Behavior: Graceful shutdown draining/canceling workers without deadlocks or double-close panics.
+Observed Implementation: Protected by `stopMu` with `stopped` bool flag. Calls `cancel()`, closes channel, and waits for `sync.WaitGroup` worker completion.
 Assessment: PASS
 Severity: LOW
-Notes: No blocking on full buffer. Atomic counters accurately track accepted, rejected, and processed counts.
+Notes: Robust lifecycle management.
 
 ## Finding 6
 
-Location: `internal/httputil/middleware.go:17-39`
-Claimed Behavior: Middleware extracts tenant key from header, evaluates rate limit, returns HTTP 429 with JSON payload and `Retry-After` header when limited.
-Observed Implementation: Reads `X-API-Key` (falling back to "anonymous"), evaluates bucket, sets `Retry-After` header and returns status code `429 Too Many Requests`.
+Location: `internal/retry/backoff.go:24-63` (ComputeBackoff)
+Claimed Behavior: Computes backoff duration matching AWS Architecture blog (Marc Brooker) for NoJitter, FullJitter, EqualJitter, and DecorrelatedJitter.
+Observed Implementation: Accurately evaluates `temp = min(cap, base * 2^attempt)`. Full jitter generates uniform random in $[0, temp]$; equal jitter generates $temp/2 + [0, temp/2]$; decorrelated jitter generates $[base, prevSleep * 3]$.
 Assessment: PASS
 Severity: LOW
-Notes: Matches RFC 6585 requirements.
+Notes: Implementation strictly mirrors AWS specifications.
 
 ## Finding 7
 
-Location: `internal/retry/backoff.go:23-63`
-Claimed Behavior: AWS Architecture exponential backoff strategies (NoJitter, FullJitter, EqualJitter, DecorrelatedJitter) matching Marc Brooker specifications.
-Observed Implementation: Implements exact formulas bounded by `cfg.Cap` and `cfg.Base`.
+Location: `internal/httputil/middleware.go:17-40` (RateLimitMiddleware)
+Claimed Behavior: HTTP middleware returning standard RFC 6585 status 429 and `Retry-After` header when rate limit is exceeded.
+Observed Implementation: Extracts tenant key from header `X-API-Key` (falls back to `anonymous`), calls `bucket.Allow()`, and upon failure sets `Retry-After: <seconds>` header and writes HTTP 429 JSON response.
 Assessment: PASS
 Severity: LOW
-Notes: Mathematical definitions match AWS Architecture reference.
+Notes: Verified by HTTP handler unit tests.
