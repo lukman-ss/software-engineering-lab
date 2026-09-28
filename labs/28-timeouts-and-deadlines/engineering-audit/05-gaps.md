@@ -1,11 +1,24 @@
 # Gap Analysis
 
-Target Lab: labs/28-timeouts-and-deadlines
+Target Lab: `labs/28-timeouts-and-deadlines`
 
-## Discovered Gaps
+## Audit Checklist
+- MISSING_TEST: None. All unit and composite integration behaviors have active test cases.
+- BROKEN_IMPLEMENTATION: None. All packages compile and execute as intended.
+- DOC_CODE_MISMATCH: None. README and engineering notes mirror the code and demo outputs.
+- RACE_CONDITION: None. Tested with `go test -race ./...` with 0 warnings or data races.
+- UNHANDLED_ERROR: None. All contexts, timeouts, and channel reads handle terminations cleanly.
+- MISSING_EDGE_CASE: Minor / Informational:
+  - If a worker function passed into `deadline.ExecuteWithBudget` ignores `ctx.Done()` and runs an infinite busy-loop, its goroutine remains running in background (though unblocked). Standard Go idiom expects workers to observe context cancellation.
+  - Expired keys in `idempotency.Store` are lazily ignored upon read, but not actively purged by a background sweeper. Acceptable for lab scope.
+- IMPLEMENTATION_OVERCLAIM: None.
+- RESEARCH_MISMATCH: None.
+- FAKE_DEMO: None. Live terminal execution matches recorded demo output exactly.
+- FAKE_BENCHMARK: None. No fake benchmarks found.
+- UNVERIFIED_RESULT: None.
 
-No critical, high, or medium gaps identified across the implementation and test suites.
-
-## Minor Notes / Observations
-- `internal/deadline.ExecuteWithBudget`: Relies on caller-provided `WorkerFunc` respecting `childCtx.Done()` to prevent goroutines from running after caller returns. Buffered channel `done := make(chan error, 1)` correctly ensures no leak occurs from channel blocking.
-- `internal/idempotency.Store`: In-memory storage without background garbage collection of expired keys. For production systems, a background cleanup loop or TTL-backed Redis is typical, but current design is intentionally scoped and documented in `engineering/02-implementation-notes.md`.
+## Severity Summary
+- CRITICAL: 0
+- HIGH: 0
+- MEDIUM: 0
+- LOW: 0
