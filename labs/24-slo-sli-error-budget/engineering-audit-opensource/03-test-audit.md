@@ -1,15 +1,19 @@
-## Test Coverage Overview
+## Test Coverage
+- happy path SLO evaluation (TestSLOEvaluator)
+- zero traffic SLO (TestEvaluatorZeroTraffic)
+- concurrency safety (TestConcurrencyMetrics)
+- out‑of‑order timestamps (TestOutOfOrderTimestamps)
+- burn‑rate alert triggering and negative case (TestAlertEngineBurnRate)
+- metrics eviction logic (TestMetricsWindowTracker)
 
-- `TestMetricsWindowTracker`: verifies window tracking, good/bad counts, eviction.
-- `TestSLOEvaluator`: validates SLI calculation, budget remaining logic, deployment gating.
-- `TestAlertEngineBurnRate`: checks burn‑rate alert triggering and negative scenario.
-- `TestOutOfOrderTimestamps`: ensures correct handling of out‑of‑order events.
-- `TestEvaluatorZeroTraffic`: confirms zero‑traffic edge case.
-- `TestConcurrencyMetrics`: stress‑tests thread‑safety with 20 goroutines recording 100 events each.
+All tests pass, race detector clean.
 
-All tests compile and pass (`go test ./...`), race detector reports no data races.
+Assessment: PASS
+Severity: LOW
 
-**Missing Aspects**
-- No performance benchmarks for large traffic volumes.
-- No tests for `BurnRateRule.LongWindow`/`ShortWindow` fields (currently unused).
-- No integration test exercising the demo binary end‑to‑end.
+## Missing Checks
+- No test for multi‑window alert requiring BOTH windows to exceed factor (current tests only check single‑window high burn rate).
+- No explicit test for CanDeploy false when budgetRemaining <= 0 on exact zero boundary.
+- No benchmark for performance under high event rate.
+
+Overall test suite strong but could improve edge‑case coverage.

@@ -1,11 +1,19 @@
-## README vs Implementation
+# Docs vs Code Comparison
 
-| README claim | Status |
-|--------------|--------|
-| `internal/metrics` implements sliding‑window tracker | PASS – tracker.go present and implemented |
-| `internal/slo` implements SLI, Error Budget, release freeze policy | PASS – evaluator.go implements evaluator and deployment gating |
-| `internal/alerting` implements multi‑window burn‑rate | PASS – engine.go implements burn rate alerts |
-| `cmd/demo` runnable executable | PASS – `go run ./cmd/demo` runs successfully |
-| `go test ./...` / `go test -race ./...` commands listed | PASS – README documents exact commands |
+## README Claims
+- Implements SLI/SLO, error budget, multi‑window burn‑rate alerts.
+- Provides demo illustrating baseline traffic, incident, alerts, endpoint comparison.
+- Tests ensure thread‑safety and correctness.
 
-No DOC_CODE_MISMATCH or TEST_CLAIM_MISMATCH identified.
+## Code Reality
+- SLI/SLO logic present in internal/slo/evaluator.go.
+- Multi‑window alert in internal/alerting/engine.go.
+- Demo prints exactly described phases.
+- Tests cover listed scenarios.
+
+## Mismatches
+- README does not mention edge‑case handling for zero traffic (implemented). No conflict.
+- No false claim detected.
+
+Assessment: PASS
+Severity: LOW
