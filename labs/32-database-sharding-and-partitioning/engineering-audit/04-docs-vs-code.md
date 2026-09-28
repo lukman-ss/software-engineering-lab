@@ -1,20 +1,28 @@
-# Docs vs Code Audit
+# Documentation vs Code Verification
+
+Target Lab: `labs/32-database-sharding-and-partitioning`
 
 ## Comparison Matrix
 
-| Component / Claim | Research / Design Claim | Implementation in Code | Demo / Test Behavior | Status |
-|---|---|---|---|---|
-| Single-Node Partitioning | Partition pruning on time ranges | `partitioning.Table.QueryRange` checks interval overlap | `QueryRange` scans 1/4 partitions, prunes 3 | MATCH |
-| Partition Dropping | Instant partition DROP operation | `Table.DropPartition` removes partition slice entry | Tested in `TestPartitionPruning` | MATCH |
-| Modulo Routing Relocation | Naive hash modulo relocates ~M/(M+1) (~80% for 4->5) | `ModuloRouter.GetShard` uses `hashKey(k) % N` | Demo relocates 79.84% (7984/10000) | MATCH |
-| Consistent Hashing Relocation | Ring buffer relocates ~1/(M+1) (~20% for 4->5) | `ConsistentHashRouter` uses virtual nodes and binary search ring | Demo relocates 12.00% (1200/10000) | MATCH |
-| Monotonic Hotspot | Sequential keys cause write hotspot | Ingesting date keys produces all writes on 1 shard | Demo shows 1000/1000 on shard-2 | MATCH |
-| Scatter-Gather Broadcast | Querying without shard key broadcasts to all shards | `ScatterGatherBroadcast` concurrently queries all shards | Demo queries 4/4 shards | MATCH |
-| Global Secondary Index | Secondary index enables direct point lookup | `GlobalSecondaryIndex` maps secondary key to ShardKey | Demo performs point lookup without broadcast (1 shard) | MATCH |
-| Distributed IDs (UUIDv7 & Sequence) | UUIDv7 time-ordered, chunked sequence allocation | `NewUUIDv7` RFC 9562 & `SequenceBlockAllocator` | Validated in test and demo | MATCH |
+| Claim Source | Claimed Behavior | Implementation Status | Verified In Code / Demo / Tests | Discrepancy |
+| :--- | :--- | :--- | :--- | :--- |
+| `README.md` | Range partitioning with partition pruning and fast partition drop | Implemented in `internal/partitioning/table.go` | Verified in `TestPartitionPruning` & Demo Sec 1 | None |
+| `README.md` | `ModuloRouter` vs `ConsistentHashRouter` relocation behavior | Implemented in `internal/sharding/sharding.go` | Verified in `TestRoutingAndConsistentHashRelocation` & Demo Sec 2/3 | None |
+| `README.md` | Scatter-gather parallel execution vs GSI point lookups | Implemented in `internal/sharding/sharding.go` | Verified in `TestClusterScatterGatherAndGSI` & Demo Sec 4 | None |
+| `README.md` | UUIDv7 time-ordered ID and Vitess sequence block allocation | Implemented in `internal/idgen/idgen.go` | Verified in `TestIDGenerators` & Demo Sec 5 | None |
+| `README.md` | Run instructions (`go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo`) | All CLI commands work without failure | Verified by direct execution | None |
 
-## Documentation Accuracy
-- `README.md` accurately describes architecture, components, test commands, and demo commands.
-- `engineering/01-design.md` matches the implemented package structures and interfaces.
-- `engineering/02-implementation-notes.md` accurately identifies limitations and trade-offs (e.g. no 2PC, in-memory transport).
-- No misleading or inflated claims detected.
+## Findings
+
+1. `DOC_CODE_MISMATCH`: None detected.
+2. `TEST_CLAIM_MISMATCH`: None detected.
+3. `RESEARCH_IMPLEMENTATION_MISMATCH`: None detected.
+
+## Demo Output Verification
+
+Output produced by `go run ./cmd/demo` matches all described metrics in design documentation:
+- Range pruning scanned 1/4 partitions (pruned 3).
+- Monotonic key sharding resulted in 100% write hotspot on single node, while high-cardinality key distributed writes uniformly across shards.
+- Cluster resize from 4 to 5 shards moved 79.84% keys with hash modulo vs 12.00% keys with consistent hashing.
+- GSI point lookup avoided scatter-gather broadcast (1 node vs 4 nodes).
+- UUIDv7 and sequence allocator generated valid, time-ordered, contiguous IDs.

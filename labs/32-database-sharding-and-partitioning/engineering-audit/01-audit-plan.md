@@ -1,41 +1,41 @@
 # Engineering Audit Plan
 
 Target Lab: `labs/32-database-sharding-and-partitioning`
-
 Implementation Files:
-- `internal/sharding/sharding.go`
-- `internal/partitioning/table.go`
-- `internal/idgen/idgen.go`
-- `cmd/demo/main.go`
+- `internal/partitioning/table.go` (single-node range partitioning and pruning)
+- `internal/sharding/sharding.go` (hash modulo & consistent hash routing, cluster, GSI, scatter-gather)
+- `internal/idgen/idgen.go` (UUIDv7 generator and Vitess-style sequence block allocator)
+- `cmd/demo/main.go` (CLI interactive demonstration)
 
 Tests:
-- `tests/sharding_test.go`
+- `tests/sharding_test.go` (partition pruning, key relocation, scatter-gather/GSI, ID generators, concurrency)
 
 Executable/Demo:
 - `cmd/demo/main.go`
 
 Approved Research Inputs:
-- `research/01-plan.md`
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/05-report.md`
-- `research-audit/07-verdict.md` (Research verdict: APPROVED)
+- `research/01-plan.md` through `research/05-report.md`
+- `research-audit/07-verdict.md` (APPROVED)
+- `engineering/01-design.md`, `engineering/02-implementation-notes.md`, `engineering/03-execution-result.md`
+- `engineering-revision/01-revision-plan.md`, `engineering-revision/02-changes-made.md`
 
 Main Claims To Verify:
-1. In-engine table range partitioning prunes non-matching partitions during range queries.
-2. Modulo hashing suffers from catastrophic key relocation (~(M/(M+1))) on scale-out, whereas consistent hashing relocates only ~(1/(M+1)) keys.
-3. Monotonic shard keys concentrate writes onto a single shard (write hotspot), whereas high-cardinality keys distribute across shards.
-4. Non-shard-key lookups incur full cluster scatter-gather broadcast, whereas Global Secondary Index (GSI) performs point lookups.
-5. Distributed ID generation produces time-ordered UUIDv7 and gapless chunked sequence blocks.
-6. Concurrency safety across shard, cluster, table partition, and ID generator operations under Go race detector.
+1. Logical table partitioning performs deterministic partition pruning and fast partition drops.
+2. Naive hash modulo triggers massive data relocation (~(N-1)/N, ~75-80%) upon scaling shard count.
+3. Consistent hashing with virtual nodes limits relocation to ~1/N during scaling.
+4. Scatter-gather queries broadcast across all shards while Global Secondary Index (GSI) performs direct point-lookup.
+5. Context cancellation is handled cleanly by parallel scatter-gather routines without deadlocks or goroutine leaks.
+6. UUIDv7 produces monotonic time-ordered IDs compliant with RFC 9562 format.
+7. Sequence block allocator provides sequential integers across batch boundaries without gaps.
+8. Concurrent cluster insertions and reads are thread-safe and pass `-race` detector without data races.
 
 Commands To Run:
 - `go test -v ./...`
-- `go test -race ./...`
+- `go test -race -count=1 ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Weak test assertions (e.g. testing lower bound only on relocation).
-- Deadlocks or race conditions on concurrent shard writes or GSI index updates.
-- Discrepancy between stated research conclusions and simplified in-memory simulation behavior.
-- Failure propagation or timeout omissions in scatter-gather query broadcasting.
+- Race conditions during concurrent cluster insertions, shard additions, or scatter-gather aggregation.
+- Inaccurate consistent hashing distribution causing false pass criteria in tests.
+- Goroutine leaks or channel deadlocks in `ScatterGatherBroadcastWithContext`.
+- Discrepancy between demo timings/metrics and actual algorithmic complexity.
