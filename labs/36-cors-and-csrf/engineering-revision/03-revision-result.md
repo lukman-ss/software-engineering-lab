@@ -1,6 +1,6 @@
 # Engineering Revision Result
 
-Target Lab: labs/36-cors-and-csrf
+Target Lab: `labs/36-cors-and-csrf`
 Previous Verdict: APPROVED
 
 ## Issue Summary

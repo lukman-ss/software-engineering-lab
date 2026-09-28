@@ -1,7 +1,7 @@
 # Engineering Revision Plan
 
-Target Lab: labs/36-cors-and-csrf
-Previous Verdict: APPROVED
+Target Lab: `labs/36-cors-and-csrf`
+Previous Verdict: APPROVED (No blocking or non-blocking issues identified in audit)
 
 ## Blocking Issues
 None.
@@ -10,14 +10,15 @@ None.
 None.
 
 ## Files To Change
-None required. Audit passed with 0 issues.
+None. Existing codebase fully satisfies audit criteria and requirements.
 
 ## Tests To Add/Modify
-None required.
+None. Existing tests cover happy paths, attack paths, edge cases, and concurrency without data races.
 
 ## Validation Commands
 ```bash
-go test -count=1 ./...
-go test -race -count=1 ./...
+cd labs/36-cors-and-csrf
+go test ./...
+go test -race ./...
 go run ./cmd/demo
 ```
