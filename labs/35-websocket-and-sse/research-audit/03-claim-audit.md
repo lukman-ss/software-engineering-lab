@@ -1,199 +1,142 @@
 # Claim Audit
 
-Target Lab: `labs/35-websocket-and-sse`
+## Claim 1
+
+Claim: WebSocket is a full-duplex, bidirectional communication channel over a single TCP connection that operates outside of the standard HTTP/1.1 request-response lifecycle.
+Location: `research/05-report.md:Finding 1`
+Evidence Provided: Direct quotes from RFC 6455 Section 1.1 and 1.2 on Upgrade handshake and bidirectional frames.
+Source: RFC 6455
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Core protocol behavior accurately described.
 
 ---
 
-## Claim 1: WebSocket Full-Duplex Bidirectional Communication
+## Claim 2
 
-Claim:
-WebSocket provides a two-way (full-duplex) communication channel over a single TCP connection initiated via HTTP/1.1 Upgrade resulting in `101 Switching Protocols`.
-
-Location:
-`05-report.md` (Finding 1), `03-evidence.md` (Evidence 1, Evidence 2)
-
-Evidence Provided:
-RFC 6455 Section 1.1, Section 1.2, Section 4.2.2.
-
-Source:
-RFC 6455
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Accurately reflects normative specification.
+Claim: The base WebSocket protocol defines distinct frame types for binary data and text (UTF-8) data.
+Location: `research/05-report.md:Finding 2`
+Evidence Provided: RFC 6455 Section 1.2 quote regarding textual and binary data types.
+Source: RFC 6455
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Well-supported.
 
 ---
 
-## Claim 2: Payload Types Supported
+## Claim 3
 
-Claim:
-WebSocket data frames support UTF-8 text and arbitrary binary payloads, whereas SSE supports UTF-8 text only.
-
-Location:
-`05-report.md` (Finding 2, Finding 6), `03-evidence.md` (Evidence 3, Evidence 7)
-
-Evidence Provided:
-RFC 6455 Section 1.2; WHATWG HTML Standard Section 9.2.1.
-
-Source:
-RFC 6455, WHATWG HTML Living Standard
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Normative references accurately support both protocol framing rules.
+Claim: WebSocket protocol and browser API do not mandate automatic reconnection; client must implement reconnect logic.
+Location: `research/05-report.md:Finding 3`
+Evidence Provided: RFC 6455 Section 7.2.3 and MDN WebSocket API documentation.
+Source: RFC 6455, MDN WebSocket
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurate negative claim substantiated by specification absence and MDN documentation.
 
 ---
 
-## Claim 3: Automatic Reconnection Support
+## Claim 4
 
-Claim:
-Browser `EventSource` (SSE) provides built-in standardized auto-reconnection with `Last-Event-ID` tracking, whereas `WebSocket` has no native browser auto-reconnect or backpressure mechanism.
-
-Location:
-`05-report.md` (Finding 3, Finding 5), `03-evidence.md` (Evidence 4, Evidence 6)
-
-Evidence Provided:
-WHATWG HTML Standard Section 9.2.3 / 9.2.4; MDN EventSource & WebSocket.
-
-Source:
-WHATWG HTML Living Standard, MDN
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-Accurate distinction between the two web APIs.
+Claim: Server-Sent Events deliver data only from the server to the client; there is no native mechanism for client-to-server messaging over the SSE stream.
+Location: `research/05-report.md:Finding 4`
+Evidence Provided: MDN EventSource quote and WHATWG HTML Living Standard Section 9.2 MIME type definition.
+Source: MDN EventSource, WHATWG HTML Living Standard
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Accurate protocol directionality constraint.
 
 ---
 
-## Claim 4: HTTP/2 Integration (RFC 8441 vs Native SSE)
+## Claim 5
 
-Claim:
-WebSocket requires RFC 8441 (Extended CONNECT method with `:protocol = websocket`) to run over HTTP/2 because HTTP/2 forbids connection-wide headers (`Upgrade`, `Connection`). In contrast, SSE is standard HTTP semantics and runs natively over HTTP/2 multiplexed streams without extension.
-
-Location:
-`05-report.md` (Finding 7, Finding 8), `03-evidence.md` (Evidence 8, Evidence 9)
-
-Evidence Provided:
-RFC 8441 Section 1 & Section 5; RFC 7540; WHATWG HTML Standard Section 9.2.
-
-Source:
-RFC 8441, RFC 7540, WHATWG
-
-Source Actually Supports Claim:
-YES
-
-Classification:
-FACT
-
-Severity:
-LOW
-
-Notes:
-RFC 8441 text and HTTP/2 stream multiplexing constraints are accurately cited. (Minor URL typo in Finding 8 notes `rfc7541` instead of `rfc7540`).
+Claim: Browser-managed `EventSource` object automatically reconnects on dropped connections, supports configurable reconnection time, and transmits the last event ID to the server on reconnection.
+Location: `research/05-report.md:Finding 5`
+Evidence Provided: WHATWG HTML Living Standard Section 9.2.3 and Section 9.2.4 normative steps.
+Source: WHATWG HTML Living Standard
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Fully supported by authoritative specification.
 
 ---
 
-## Claim 5: Browser Connection Limits on HTTP/1.1
+## Claim 6
 
-Claim:
-Browsers enforce a maximum limit of roughly 6 simultaneous HTTP/1.1 connections per origin, constraining SSE over HTTP/1.1 across multiple tabs, which HTTP/2 resolves via negotiated stream limits (default 100).
-
-Location:
-`05-report.md` (Finding 9), `03-evidence.md` (Evidence 10)
-
-Evidence Provided:
-MDN EventSource documentation; RFC 7540 Section 5.1.2.
-
-Source:
-MDN, RFC 7540
-
-Source Actually Supports Claim:
-PARTIAL
-
-Classification:
-IMPLEMENTATION-SPECIFIC
-
-Severity:
-MEDIUM
-
-Notes:
-The 6-connection limit is a de facto browser implementation rule (Chrome, Firefox), not an IETF standard requirement. The research acknowledges this in limitations, which is appropriate.
+Claim: Server-Sent Events are restricted to UTF-8 text; the spec provides no mechanism for binary payloads.
+Location: `research/05-report.md:Finding 6`
+Evidence Provided: WHATWG HTML Standard Section 9.2.1 quotation ("Event streams are always decoded as UTF-8").
+Source: WHATWG HTML Living Standard
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Direct normative quote.
 
 ---
 
-## Claim 6: Reverse Proxy Buffering & Timeout Requirements
+## Claim 7
 
-Claim:
-Reverse proxies (e.g. NGINX) buffer responses by default, requiring `proxy_buffering off` and tuned `proxy_read_timeout` to prevent buffering or dropping long-lived streaming connections (SSE/WebSocket).
-
-Location:
-`05-report.md` (Finding 10), `03-evidence.md` (Evidence 11)
-
-Evidence Provided:
-NGINX ngx_http_proxy_module documentation.
-
-Source:
-NGINX Docs
-
-Source Actually Supports Claim:
-PARTIAL
-
-Classification:
-FACT / IMPLEMENTATION-SPECIFIC
-
-Severity:
-LOW
-
-Notes:
-`proxy_buffering off` is specific to NGINX/reverse proxy behavior. The source confirms the directive and mechanism.
+Claim: WebSocket over HTTP/2 requires RFC 8441 (Extended CONNECT) using `:protocol = websocket` pseudo-header because HTTP/2 forbids connection-wide headers like `Upgrade`.
+Location: `research/05-report.md:Finding 7`
+Evidence Provided: RFC 8441 Section 1 and Section 5 citations.
+Source: RFC 8441, RFC 9113
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Authoritative protocol requirement accurately cited.
 
 ---
 
-## Claim 7: 100,000 Concurrent Connections Resource Constraints
+## Claim 8
 
-Claim:
-Scaling WebSocket or SSE to ~100,000 concurrent connections is constrained by OS file descriptor limits (`ulimit -n`), runtime per-connection memory allocation, and requires a centralized broker (Redis Pub/Sub) for multi-node broadcast.
+Claim: SSE requires no protocol-level extension for HTTP/2 because it operates as standard persistent HTTP responses with `text/event-stream`.
+Location: `research/05-report.md:Finding 8`
+Evidence Provided: WHATWG HTML Standard Section 9.2 and RFC 9113 multiplexing semantics.
+Source: WHATWG HTML Standard, RFC 9113
+Source Actually Supports Claim: YES
+Classification: FACT
+Severity: LOW
+Notes: Fully valid.
 
-Location:
-`05-report.md` (Finding 11), `03-evidence.md` (Evidence 12, Evidence 13)
+---
 
-Evidence Provided:
-Internal lab specification citation; C10K/C10M networking principles.
+## Claim 9
 
-Source:
-Internal Lab Specification
+Claim: Browsers historically enforce an HTTP/1.1 connection limit of ~6 per domain across all tabs, limiting SSE under HTTP/1.1, whereas HTTP/2 defaults to 100 concurrent streams.
+Location: `research/05-report.md:Finding 9`
+Evidence Provided: MDN EventSource documentation and RFC 7540 / RFC 9113 stream concurrency defaults.
+Source: MDN EventSource, RFC 7540 / RFC 9113
+Source Actually Supports Claim: YES
+Classification: IMPLEMENTATION-SPECIFIC
+Severity: MEDIUM
+Notes: The 6-connection cap is a browser client policy rather than an RFC standard rule. The report properly notes this in Limitations.
 
-Source Actually Supports Claim:
-PARTIAL
+---
 
-Classification:
-HYPOTHESIS / ARCHITECTURAL PRINCIPLE
+## Claim 10
 
-Severity:
-MEDIUM
+Claim: Reverse proxies buffer responses by default; administrators must tune `proxy_buffering` and `proxy_read_timeout`.
+Location: `research/05-report.md:Finding 10`
+Evidence Provided: NGINX documentation and AWS ELB documentation references.
+Source: NGINX Docs, AWS ELB Docs
+Source Actually Supports Claim: PARTIAL
+Classification: IMPLEMENTATION-SPECIFIC
+Severity: MEDIUM
+Notes: Proxy buffering defaults depend on specific reverse proxy software and configuration. Correctly marked as MEDIUM confidence in report.
 
-Notes:
-While technically accurate from systems engineering principles, citing internal lab prompts as the primary source is self-referential. No empirical memory numbers or OS benchmark citations are provided. The research report appropriately classifies this under `Limitations` and `Confidence: MEDIUM`.
+---
+
+## Claim 11
+
+Claim: Operating at ~100,000 concurrent connections requires addressing OS file descriptors (`ulimit -n`, `fs.file-max`), per-connection runtime memory overhead, and message broadcasting (Redis Pub/Sub).
+Location: `research/05-report.md:Finding 11`
+Evidence Provided: Linux epoll(7) man page and Redis Pub/Sub docs.
+Source: Linux kernel docs, Redis docs
+Source Actually Supports Claim: PARTIAL
+Classification: INTERPRETATION
+Severity: MEDIUM
+Notes: General architectural consensus, but lacks empirical benchmarks or measured memory footprints for specific runtimes. The report transparently flags this in its Limitations section.
