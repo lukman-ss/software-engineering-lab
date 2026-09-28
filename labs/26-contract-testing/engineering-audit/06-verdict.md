@@ -1,6 +1,6 @@
 # Engineering Audit Verdict
 
-Target Lab: labs/26-contract-testing
+Target Lab: `labs/26-contract-testing`
 Audit Date: Mon Sep 28 2026
 
 ## Summary
@@ -11,15 +11,14 @@ Code Files Reviewed:
 - `internal/provider/server.go`
 - `internal/model/order.go`
 - `cmd/demo/main.go`
-
+- `go.mod`
+- `README.md`
 Tests Reviewed:
 - `tests/contract_test.go`
-
 Commands Executed:
-- `go test -count=1 ./...`
-- `go test -count=1 -race ./...`
+- `go test -v -count=1 ./...`
+- `go test -race ./...`
 - `go run ./cmd/demo`
-
 Failures: 0
 Warnings: 0
 

@@ -1,18 +1,36 @@
-# Documentation vs Code Verification
+# Documentation vs Code Audit
 
-Target Lab: labs/26-contract-testing
+## Review Checklist
 
-## Comparison Matrix
+1. **README Directory Structure vs Reality**:
+   - `cmd/demo/main.go`: Matches actual filesystem.
+   - `internal/consumer/client.go`: Matches actual filesystem.
+   - `internal/contract/verifier.go`: Matches actual filesystem.
+   - `internal/model/order.go`: Matches actual filesystem.
+   - `internal/provider/server.go`: Matches actual filesystem.
+   - `tests/contract_test.go`: Matches actual filesystem.
+   - `engineering/`: Matches actual filesystem.
+   - Assessment: PASS.
 
-| Claim / Command in README | Observed Implementation | Match Status |
-| :--- | :--- | :--- |
-| Project structure listing `cmd/demo/main.go`, `internal/`, `tests/` | Identical file and directory layout present | PASS |
-| `go test -v ./...` | Runs successfully and passes all unit tests | PASS |
-| `go test -race ./...` | Passes with 0 data races detected | PASS |
-| `go run ./cmd/demo` | Runs multi-stage verification demo outputting 4 stages | PASS |
-| CDC Engine verifies subset matching | `diffValues` in `internal/contract/verifier.go` implements subset check | PASS |
-| Detects breaking changes (casing, field rename, type mutation) | `ProviderBreaking` triggers all 3 breaking errors in demo & tests | PASS |
+2. **README Run Commands**:
+   - `go test -v ./...`: Works as documented.
+   - `go test -race ./...`: Works as documented.
+   - `go run ./cmd/demo`: Works as documented.
+   - Assessment: PASS.
 
-## Discrepancies Found
+3. **Engineering Design vs Code**:
+   - CDC Minimal Subset Rule: Implemented in `diffValues` (`internal/contract/verifier.go`).
+   - Breaking changes matching design: Enum casing change, missing field `customer.name`, primitive type change (`total` int -> str) all implemented and tested.
+   - Dual DTO / Safe API Evolution: Implemented in `ProviderDual` and asserted in tests/demo.
+   - Assessment: PASS.
 
-None. README description, commands, and expected demo outputs completely match the source code and runtime execution behavior.
+4. **Demo Execution Output vs Code**:
+   - Demo output printed by `go run ./cmd/demo` matches the designed 4-stage pipeline exactly.
+   - Assessment: PASS.
+
+## Findings
+
+No documentation discrepancies or unproven claims detected.
+- DOC_CODE_MISMATCH: None.
+- TEST_CLAIM_MISMATCH: None.
+- RESEARCH_IMPLEMENTATION_MISMATCH: None.
