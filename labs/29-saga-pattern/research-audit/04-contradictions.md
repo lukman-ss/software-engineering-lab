@@ -1,14 +1,13 @@
 # Contradiction Audit: Saga Pattern Research
 
-## Review Summary
+Target Lab: labs/29-saga-pattern
+Audit Date: 2026-09-28
 
-The research documents (`01-plan.md` through `06-open-questions.md`) were cross-analyzed against authoritative literature and internal references.
+No material contradictions found.
 
-## Contradiction Analysis
+## Comparative Analysis
 
-No material internal contradictions or conflicting technical assertions were found across the research documents.
-
-- **Terminology consistency:** The distinction between ACID rollback vs business compensating action is consistently maintained across `01-plan.md`, `03-evidence.md`, and `05-report.md`.
-- **Coordination styles:** Choreography and Orchestration trade-offs match standard architectural consensus without conflicting claims.
-- **ACID properties:** Every document consistently underscores that Saga gives up distributed isolation ("I") in exchange for availability and independent schema evolution.
-- **Source alignment:** Citations from Microsoft Azure and Chris Richardson complement each other: Microsoft emphasizes anomaly taxonomy and formal countermeasure definitions, while Chris Richardson highlights the dual-write problem (Transactional Outbox) and microservice boundaries.
+1. **Research Plan vs Report:** Findings in `05-report.md` directly answer questions framed in `01-plan.md`.
+2. **Evidence vs Sources:** All quotes and assertions in `03-evidence.md` correspond to cited documents in `02-sources.md`.
+3. **Azure Documentation vs Microservices.io:** Both primary sources align on definition, taxonomy (compensable/pivot/retryable), lack of isolation, and choreography vs orchestration trade-offs.
+4. **Open Questions vs Report Limitations:** Items marked as unverified (quantitative performance benchmarks, concrete framework comparisons) in `06-open-questions.md` are consistently marked as limitations in `05-report.md`.
