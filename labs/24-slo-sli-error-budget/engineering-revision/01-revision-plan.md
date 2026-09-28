@@ -10,14 +10,14 @@ None.
 None.
 
 ## Files To Change
-None (all implementation and tests meet requirements).
+None.
 
 ## Tests To Add/Modify
 None.
 
 ## Validation Commands
 ```bash
-go test -count=1 ./...
-go test -count=1 -race ./...
+go test ./...
+go test -race ./...
 go run ./cmd/demo
 ```
