@@ -2,7 +2,7 @@
 
 2. Timeout harus dibuat berdasarkan distribusi P95/P99 latency dan budget end-to-end, bukan angka arbitrer besar. Timeout besar mengubah bimodal latency menjadi system-wide outage.
 
-3. Full Jitter (`sleep = random(0, min(cap, base×2^attempt))`) menurunkan server contention lebih dari 50% dengan mendistribusikan retry secara uniform, mencegah thundering herd.
+3. Full Jitter (`sleep = random(0, min(cap, base×2^(attempt-1)))`) menurunkan server contention secara substantial dengan mendistribusikan retry secara uniform, mencegah thundering herd.
 
 4. Timeout adalah *state indeterminate*, bukan kegagalan. Retry non-idempotent operations tanpa idempotency key berisiko double charge — server mungkin sudah memproses request sebelum response hilang.
 

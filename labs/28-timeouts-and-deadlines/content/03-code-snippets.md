@@ -81,7 +81,7 @@ func (b *Breaker) RecordFailure() {
 }
 ```
 
-Explanation: State HALF_OPEN hanya menerima satu request uji. Jika gagal, circuit langsung kembali OPEN tanpa menunggu cooldown. State CLOSED menghitung gagal berturut-turut; setelah mencapai `FailureThreshold`, circuit OPEN. Semua state checks dan write mutex (`mu.Lock()`) memastikan thread-safety di banyak goroutine.
+Explanation: State HALF_OPEN menerima request uji. `SuccessThreshold` sukses berturut-turut diperlukan untuk kembali CLOSED. Di HALF_OPEN, satu kegagalan langsung mengembalikan OPEN. State CLOSED menghitung gagal berturut-turut; setelah mencapai `FailureThreshold`, circuit OPEN. Semua state checks dan write mutex (`mu.Lock()`) memastikan thread-safety di banyak goroutine.
 
 ---
 

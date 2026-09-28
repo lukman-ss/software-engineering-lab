@@ -10,7 +10,7 @@ Main Concepts:
 - Resource exhaustion via Little's Law (L = λW)
 - Granular network timeout vs total timeout
 - Timeout budgeting dari distribusi P95/P99
-- Retry storm dan Full Jitter (`sleep = rand_between(0, min(cap, base * 2^attempt))`)
+- Retry storm dan Full Jitter (`sleep = rand_between(0, min(cap, base * 2^(attempt-1)))`)
 - Timeout ambiguity dan idempotency key
 - Deadline propagation (relatif, bukan timestamp absolut)
 - Guardrail database (`statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout`) dan worker (execution timeout, DLQ) sebagai konteks riset — tidak diimplementasikan di lab ini

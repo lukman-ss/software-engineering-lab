@@ -81,7 +81,7 @@ Bit-shift `1 << uint(attempt-1)` menghasilkan 2^(attempt-1). Setiap retry, sleep
 - `TestRetrier_JitterBoundsAndZeroConfig`: backoff tidak negatif dan tidak melebihi `MaxBackoff`; zero config menghasilkan default (3 attempts, 10ms base, 100ms max)
 
 **Yang dibuktikan demo:**
-3 attempt dijalankan, 2 percayaan transient error, attempt ke-3 sukses tanpa error.
+3 attempt dijalankan, 2 percobaan transient error, attempt ke-3 sukses tanpa error.
 
 ### 3. Circuit Breaker — Tiga State
 
@@ -183,7 +183,7 @@ Integration test `TestIntegration_RetryWithCircuitBreaker` menggabungkan retrier
 
 ## Common Mistakes
 
-**1. Timeout angka besar "supaya ama**
+**1. Timeout angka besar "supaya aman."**
 
 `context.WithTimeout(ctx, 30*time.Second)` untuk semua request. Dengan 100 QPS dan latency normal 200ms, hanya 20 request in-flight. Saat latency naik ke 30s, jumlah in-flight naik menjadi 3000 — melebihi kapasitas thread pool, mengubah slow dependency menjadi system-wide outage.
 
@@ -224,10 +224,10 @@ Query PostgreSQL tanpa `statement_timeout` tetap menahan connection meskipun HTT
 ## Key Takeaways
 
 1. Slow dependencies lebih berbahaya daripada failed dependencies — Little's Law menjelaskan mengapa.
-2. Timeout harus dibuat dari distribusi latency P95/P99, bukan angka "supaya ama."
-3. Full Jitter (`rand(0, base × 2^attempt)`) menurunkan server contention lebih dari 50% dibanding unjittered.
+2. Timeout harus dibuat dari distribusi latency P95/P99, bukan angka "supaya aman."
+3. Full Jitter (`rand(0, base × 2^(attempt-1))`) menurunkan server contention secara substantial dibanding unjittered dengan mendistribusikan retry secara uniform, mencegah thundering herd.
 4. Timeout adalah *state indeterminate*, bukan kegagalan — idempotency key melindungi operasi mutasi.
-5. Context deadline diwariskan ke child; parent timeout ≤ child timeout.
+5. Context deadline diwariskan ke child: child timeout ≤ parent timeout.
 6. Circuit breaker memotong chain retry segera setelah downstream diketahui gagal.
 7. `statement_timeout` dan `lock_timeout` PostgreSQL melindungi connection pool dari query runaway — HTTP timeout saja tidak cukup.
 

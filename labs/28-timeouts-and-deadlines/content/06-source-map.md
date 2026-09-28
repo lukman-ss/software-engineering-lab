@@ -110,4 +110,6 @@ Engineering:
 - `engineering-revision/03-revision-result.md` — 0 issues, re-validation PASS
 
 Content:
-- `content-audit/09-verdict.md` — REJECTED (no content to audit sebelum draft ini dibuat)
+- `content-audit/09-verdict.md` — NEEDS_REVISION (3 blocking, 5 non-blocking)
+- `content-audit/08-content-audit.md` — Full findings (B1-B3 blocking, N1-N5 non-blocking)
+- `content-revision/` — Revisi berdasarkan audit (B1-B3, N1-N3, N5)

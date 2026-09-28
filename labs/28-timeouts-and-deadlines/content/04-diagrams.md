@@ -11,7 +11,7 @@ Downstream Service Call
         │
         ▼
 Jika childCtx.Done() terjadi karena:
-  - parent timeout (500ms tercapai) → context.Canceled
+  - parent timeout (500ms tercapai) → context.DeadlineExceeded
   - budget lokal timeout (300ms tercapai) → context.DeadlineExceeded
   - function selesai dengan error/nil → done channel
 ```
