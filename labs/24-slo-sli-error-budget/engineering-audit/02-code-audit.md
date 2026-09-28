@@ -1,37 +1,39 @@
 # Code Audit
 
+Target Lab: `labs/24-slo-sli-error-budget`
+
 ## Finding 1
 
 Location: `internal/metrics/tracker.go:22-128`
-Claimed Behavior: Thread-safe sliding-window event aggregation with out-of-order timestamp insertion and stale bucket eviction.
-Observed Implementation: `WindowTracker` protects `buckets` slice with `sync.RWMutex`. `Record` acquires write lock, runs `evictStaleLocked`, finds/inserts bucket into ordered slice, and updates counts. `Summary` acquires write lock and cleans up stale buckets before accumulating totals.
+Claimed Behavior: Thread-safe sliding-window event aggregation with time-bucket eviction and out-of-order insertion.
+Observed Implementation: `WindowTracker` uses a `sync.RWMutex` protecting `buckets []Bucket`. On `Record(e Event)`, it locks, evicts stale buckets relative to `e.Timestamp - windowSize`, truncates to `bucketSize`, and either appends or inserts sorted by `StartTime`. On `Summary(now)`, it evicts relative to `now - windowSize` and sums total, good, and bad counts.
 Assessment: PASS
 Severity: LOW
-Notes: Implementation uses slice reallocation on sorted insertion (`append(w.buckets[:i], append([]Bucket{b}, w.buckets[i:]...)...)`), which is safe under mutex and performant for expected window bucket sizes.
+Notes: Correctly handles chronological and reverse-chronological event arrival; race detector verified with 20 concurrent goroutines.
 
 ## Finding 2
 
 Location: `internal/slo/evaluator.go:41-71`
-Claimed Behavior: Accurate calculation of SLI ratio, remaining error budget, and deployment gate flag based on Google SRE error budget formulas.
-Observed Implementation: Evaluates `sli = good / total` (defaulting to 1.0 on zero traffic). Error budget allowed is `(1 - target) * total`, consumed is `bad`, and remaining is `allowed - consumed`. Sets `CanDeploy = false` when `total > 0 && budgetRemaining <= 0`.
+Claimed Behavior: Calculates SLI ratio `good/total`, remaining budget `((1 - Target) * total) - bad`, and determines deployment freeze `CanDeploy = false` when budget is depleted.
+Observed Implementation: `Evaluate(now)` handles `total == 0` safely with default SLI `1.0` and `canDeploy = true`. When `total > 0`, correctly calculates remaining budget and flags `canDeploy = false` when `budgetRemaining <= 0`.
 Assessment: PASS
 Severity: LOW
-Notes: Values are cleanly rounded to standard decimal places for reporting while preserving evaluation correctness.
+Notes: Output numbers are cleanly rounded using `math.Round` for stability.
 
 ## Finding 3
 
 Location: `internal/alerting/engine.go:51-88`
-Claimed Behavior: Multi-window multi-burn-rate alerting requiring both short and long rolling windows to breach threshold before firing.
-Observed Implementation: `CalculateBurnRate` computes `actualErrorRate / allowedErrorRate`. `Check(now)` fetches totals from both `shortTracker` and `longTracker` and triggers alert only if `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
+Claimed Behavior: Multi-window multi-burn-rate alerting requiring both short and long window burn rates to breach the factor threshold.
+Observed Implementation: `CalculateBurnRate` returns `(bad / total) / (1 - targetSLO)`. `Check(now)` fetches summaries from `shortTracker` and `longTracker` and evaluates `shortBurn >= rule.BurnRateFactor && longBurn >= rule.BurnRateFactor`.
 Assessment: PASS
 Severity: LOW
-Notes: Prevents alert flapping on transient spikes while detecting sustained error budget consumption.
+Notes: Handles `total == 0` and zero allowed error rate edge cases cleanly.
 
 ## Finding 4
 
 Location: `cmd/demo/main.go:1-151`
-Claimed Behavior: Executable demonstration proving baseline traffic, incident impact, burn rate alerts, and criticality comparison.
-Observed Implementation: Simulates real sequential phases feeding concrete events into `sloTracker`, `shortTracker`, and `longTracker`, demonstrating deployment lock and alert firing.
+Claimed Behavior: Executable demonstration covering baseline traffic, severe incident budget burn, burn-rate alerting, and multi-endpoint criticality comparison.
+Observed Implementation: 4 distinct phases executed with realistic request events, demonstrating SLI degradation, error budget depletion below zero, deployment blocking, slow burn alert triggering, and endpoint comparison between Payment (99.9%) and Reports (95.0%).
 Assessment: PASS
 Severity: LOW
-Notes: Output is fully deterministic and derived from actual struct evaluations.
+Notes: Output is fully reproducible and matches documented execution logs.

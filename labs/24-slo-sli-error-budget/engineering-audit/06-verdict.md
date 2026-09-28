@@ -1,7 +1,7 @@
 # Engineering Audit Verdict
 
 Target Lab: `labs/24-slo-sli-error-budget`
-Audit Date: Mon Sep 28 2026
+Audit Date: 2026-09-28
 
 ## Summary
 
@@ -15,8 +15,9 @@ Tests Reviewed:
 - `tests/slo_test.go`
 
 Commands Executed:
-- `go test -v ./...`
-- `go test -race ./...`
+- `go build ./...`
+- `go test -v -count=1 ./...`
+- `go test -race -count=1 ./...`
 - `go run ./cmd/demo`
 
 Failures: 0
