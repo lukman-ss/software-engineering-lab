@@ -1,22 +1,13 @@
 # Docs vs Code Audit
 
-## README vs Implementation Comparison
+## Documentation Verification
 
-1. **Architecture Claim**:
-   - `internal/cors`: Spec-compliant CORS middleware (`OPTIONS` preflight, allowed origins, method/header safelists, credential checks).
-   - Code reality: Implemented exactly in `internal/cors/middleware.go`. Matches.
-   - `internal/csrf`: Anti-CSRF mechanisms including HMAC-SHA256 signed session-bound tokens, Fetch Metadata (`Sec-Fetch-Site`), and API custom header middleware.
-   - Code reality: Implemented in `internal/csrf/token.go` and `internal/csrf/middleware.go`. Matches.
-   - `internal/bank`: Bank application service simulating cookie-authenticated balance inquiries, vulnerable transfer endpoints, and protected transfer endpoints.
-   - Code reality: Implemented in `internal/bank/app.go`. Matches.
-   - `cmd/demo`: Runnable CLI program showcasing attacks against vulnerable vs. protected configurations.
-   - Code reality: Implemented in `cmd/demo/main.go`. Output reproduces identical results to documentation notes.
+| Documented Item | Source Code / Test / Executable | Match Status | Notes |
+|---|---|---|---|
+| Architecture layout | `README.md:5-12` vs directory structure | MATCH | `internal/cors`, `internal/csrf`, `internal/bank`, `cmd/demo`, `tests` directories exist and match descriptions. |
+| Test Commands | `README.md:17-25` (`go test -v ./...`, `go test -race ./...`) | MATCH | Both commands run cleanly and pass 100%. |
+| Demo Command | `README.md:31-33` (`go run ./cmd/demo`) | MATCH | Executes deterministically, demonstrating vulnerable vs protected flows. |
+| Spec Compliance | `internal/cors/middleware.go` vs CORS spec | MATCH | Disallows wildcard credentials, returns proper Vary and preflight response headers. |
+| Token Mechanism | `internal/csrf/token.go` vs research notes | MATCH | HMAC-SHA256 session-bound token implementation directly aligns with research requirements. |
 
-2. **Test Instructions**:
-   - Instructions specify `go test -v ./...`, `go test -race ./...`, and `go run ./cmd/demo`.
-   - All documented commands run with exit code 0 and exact expected outputs.
-
-## Mismatch Inventory
-- `DOC_CODE_MISMATCH`: None observed.
-- `TEST_CLAIM_MISMATCH`: None observed.
-- `RESEARCH_IMPLEMENTATION_MISMATCH`: None observed.
+No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH` identified.

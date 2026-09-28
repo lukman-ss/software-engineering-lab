@@ -1,30 +1,18 @@
 # Engineering Audit Verdict
 
-Target Lab: `labs/36-cors-and-csrf`
+Target Lab: labs/36-cors-and-csrf
 Audit Date: Mon Sep 28 2026
 
 ## Summary
 
-Code Files Reviewed:
-- `internal/cors/middleware.go`
-- `internal/csrf/middleware.go`
-- `internal/csrf/token.go`
-- `internal/bank/app.go`
-- `cmd/demo/main.go`
-
-Tests Reviewed:
-- `internal/cors/middleware_test.go`
-- `internal/csrf/token_test.go`
-- `internal/bank/app_test.go`
-- `tests/integration_test.go`
-
+Code Files Reviewed: 5 (`internal/cors/middleware.go`, `internal/csrf/token.go`, `internal/csrf/middleware.go`, `internal/bank/app.go`, `cmd/demo/main.go`)
+Tests Reviewed: 4 test suites (14 unit and integration tests total)
 Commands Executed:
-- `go test ./...`
-- `go test -count=1 -race -v ./...`
+- `go test -count=1 -v ./...`
+- `go test -count=1 -race ./...`
 - `go run ./cmd/demo`
-
-Failures: None
-Warnings: None
+Failures: 0
+Warnings: 0
 
 ## Quality Gates
 
