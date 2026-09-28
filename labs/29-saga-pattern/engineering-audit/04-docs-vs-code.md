@@ -1,24 +1,32 @@
 # Docs vs Code Audit
 
-## Comparisons
+## Consistency Checklist
 
-1. **README Component Index**:
-   - `README.md` lists `internal/saga/orchestrator.go`, `internal/saga/choreography.go`, `internal/services/services.go`, `cmd/demo/main.go`, and `tests/saga_test.go`.
-   - Verified: All listed files exist and implement claimed components.
+1. **README.md Components vs File Tree**
+   - Listed files:
+     - `internal/saga/orchestrator.go` -> Exists & matches description.
+     - `internal/saga/choreography.go` -> Exists & matches description.
+     - `internal/services/services.go` -> Exists & matches description.
+     - `cmd/demo/main.go` -> Exists & matches description.
+     - `tests/saga_test.go` -> Exists & matches description.
+   - Status: PASS
 
-2. **README Command Accuracy**:
-   - `README.md` documents `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo`.
-   - Verified: All commands execute successfully and produce the claimed outputs.
+2. **README.md Commands vs Execution Behavior**
+   - `go test -v ./...` -> Executes and passes.
+   - `go test -race ./...` -> Executes cleanly with race detector.
+   - `go run ./cmd/demo` -> Runs without error.
+   - Status: PASS
 
-3. **Engineering Design vs Implementation**:
-   - `engineering/01-design.md` specifies Orchestrator struct, EventBus struct, domain services, semantic locking, and LIFO rollback.
-   - Verified: Implementation exactly adheres to design specs without deviation or phantom features.
+3. **Design / Implementation Notes vs Actual Code**
+   - Claim: LIFO compensation rollback implemented.
+   - Reality: Observed in `internal/saga/orchestrator.go:94` and verified in `TestOrchestrator_FailureCompensatesLIFO`.
+   - Claim: Idempotency keys in payment processing.
+   - Reality: Observed in `internal/services/services.go:86` and verified in `TestPayment_Idempotency`.
+   - Claim: Semantic lock countermeasure on OrderService.
+   - Reality: Observed in `internal/services/services.go:33` and verified in `TestSemanticLock`.
+   - Claim: Choreography model with event bus.
+   - Reality: Observed in `internal/saga/choreography.go` and verified in `TestChoreography_Flow`.
+   - Status: PASS
 
-4. **Claimed Demo Output**:
-   - `cmd/demo/main.go` runs Scenario 1 (happy path) and Scenario 2 (failure with rollback).
-   - Verified: Demo outputs match console runs accurately.
-
-## Assessment
-- DOC_CODE_MISMATCH: None detected.
-- TEST_CLAIM_MISMATCH: None detected.
-- RESEARCH_IMPLEMENTATION_MISMATCH: None detected.
+4. **Discrepancy Findings**
+   - None found.

@@ -1,49 +1,59 @@
 # Test Audit
 
-## Overview
-Test suite in `tests/saga_test.go` verifies orchestrator, choreography, semantic lock, idempotency, and concurrency safety.
+## Test Suite Overview
 
-## Test Cases Evaluated
+Test file: `labs/29-saga-pattern/tests/saga_test.go`
+Framework: Go standard library `testing`
 
-1. `TestOrchestrator_HappyPath`:
-   - Verifies end-to-end forward execution of 4 steps (Order -> Payment -> Inventory -> Approval).
-   - Validates state mutations across all services (Order=APPROVED, HasPayment=true, Stock reduced).
-   - Result: PASS.
+## Test Cases Analyzed
 
-2. `TestOrchestrator_FailureCompensatesLIFO`:
-   - Triggers failure at step 3 (`ReserveInventory`).
-   - Verifies LIFO rollback calls (`PaymentService.RefundPayment`, `OrderService.CancelOrder`).
-   - Verifies orchestrator logs sequence: `EXECUTED`, `EXECUTED`, `FAILED`, `COMPENSATED`, `COMPENSATED`.
-   - Result: PASS.
+1. `TestOrchestrator_HappyPath`
+   - Covers: Sequential step execution (CreateOrder -> ProcessPayment -> ReserveInventory -> ApproveOrder).
+   - Verifications: State transitioned to APPROVED, payment registered, stock deducted.
+   - Assessment: PASS
 
-3. `TestPayment_Idempotency`:
-   - Repeated payment with same ID succeeds without duplicating charge.
-   - Result: PASS.
+2. `TestOrchestrator_FailureCompensatesLIFO`
+   - Covers: Step failure at inventory reservation step triggers LIFO rollback.
+   - Verifications: Reverse rollback of payment and order, stock preserved, step status log reflects `[EXECUTED, EXECUTED, FAILED, COMPENSATED, COMPENSATED]`.
+   - Assessment: PASS
 
-4. `TestSemanticLock`:
-   - Secondary `CreateOrder` on locked ID fails.
-   - Result: PASS.
+3. `TestPayment_Idempotency`
+   - Covers: Repeated payment processing calls with same ID.
+   - Verifications: Second call succeeds idempotently without error.
+   - Assessment: PASS
 
-5. `TestOrchestrator_Concurrency`:
-   - 10 concurrent goroutines executing sagas across shared services.
-   - Checked with `go test -race`.
-   - Result: PASS (no data races detected).
+4. `TestSemanticLock`
+   - Covers: Double creation attempt on locked order.
+   - Verifications: Second creation call fails with lock error.
+   - Assessment: PASS
 
-6. `TestChoreography_Flow`:
-   - End-to-end event-driven saga happy path.
-   - Result: PASS.
+5. `TestOrchestrator_Concurrency`
+   - Covers: 10 concurrent saga workers executing distinct orders and inventory reservations against shared services.
+   - Verifications: Clean execution without race conditions; total stock correctly decremented.
+   - Assessment: PASS
 
-7. `TestChoreography_FailureCompensates`:
-   - Failure event triggering compensating events in event bus.
-   - Result: PASS.
+6. `TestChoreography_Flow`
+   - Covers: Decoupled event propagation for successful checkout saga via `EventBus`.
+   - Verifications: Final order state is APPROVED upon chained event receipts.
+   - Assessment: PASS
 
-## Execution Output
+7. `TestChoreography_FailureCompensates`
+   - Covers: Event-driven compensation when inventory fails due to out-of-stock condition.
+   - Verifications: Order CANCELLED, payment refunded.
+   - Assessment: PASS
 
-```
-$ go test -count=1 ./...
-ok  	labs/29-saga-pattern/tests	0.095s
+8. `TestOrchestrator_CompensationErrorPropagated`
+   - Covers: Failure during compensation itself.
+   - Verifications: Logs record `COMPENSATE_FAILED`, composite error returned.
+   - Assessment: PASS
 
-$ go test -count=1 -race ./...
-ok  	labs/29-saga-pattern/tests	1.118s
-```
-All tests pass cleanly under Go race detector.
+9. `TestOrchestrator_ContextCancellation`
+   - Covers: Context cancelled mid-saga.
+   - Verifications: Subsequent steps aborted, previously executed steps compensated.
+   - Assessment: PASS
+
+## Execution Results
+
+- `go test -v ./...`: PASS (9/9 tests passed in 0.087s)
+- `go test -count=1 -race ./...`: PASS (0 race conditions detected)
+- `go run ./cmd/demo`: PASS (Scenarios 1 and 2 output real results matching expectations)
