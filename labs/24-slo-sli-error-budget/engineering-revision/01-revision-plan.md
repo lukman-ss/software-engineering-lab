@@ -1,6 +1,6 @@
 # Engineering Revision Plan
 
-Target Lab: `labs/24-slo-sli-error-budget`
+Target Lab: labs/24-slo-sli-error-budget
 Previous Verdict: APPROVED
 
 ## Blocking Issues
@@ -10,14 +10,12 @@ None.
 None.
 
 ## Files To Change
-None.
+None. Existing implementation and tests pass all verification criteria cleanly.
 
 ## Tests To Add/Modify
-None.
+None. Existing test suite covers happy paths, edge cases (zero traffic, out-of-order timestamps), transient alert suppression, and concurrent metrics ingestion.
 
 ## Validation Commands
-```bash
-go test ./...
-go test -race ./...
-go run ./cmd/demo
-```
+- `go test -v -count=1 ./...`
+- `go test -race -count=1 ./...`
+- `go run ./cmd/demo`
