@@ -1,4 +1,4 @@
-# Gap Analysis
+# Engineering Gap Analysis
 
 Target Lab: labs/35-websocket-and-sse
 
@@ -6,8 +6,19 @@ Target Lab: labs/35-websocket-and-sse
 
 No critical, high, or medium gaps identified.
 
-### Minor Observational Notes (Low Severity)
-1. **Pong/Ping frame echo**: Server echoes WebSocket text and reverses binary payloads, and handles ping by replying pong. A dedicated test case for Ping/Pong control frame round-trip could be added in future test expansions, though text and binary framing are already verified.
-2. **Buffer growth**: SSE Hub in-memory `history` slice grows monotonically across the server lifecycle. For a production server a bounded ring buffer or eviction TTL would be used; for this educational lab, the slice is well-scoped and thread-safe.
+### Scope Considerations (Low Severity / Documented Limitations)
 
-No `BROKEN_IMPLEMENTATION`, `RACE_CONDITION`, `DOC_CODE_MISMATCH`, or `FAKE_DEMO` gaps detected.
+1. RFC 6455 Frame Fragmentation (FIN=0):
+   - Type: MISSING_EDGE_CASE
+   - Severity: LOW
+   - Impact: Handled in implementation notes as out of scope for a minimalist comparison lab. Complete single-frame packets (FIN=1) are fully supported.
+2. In-memory SSE history buffer:
+   - Type: MISSING_EDGE_CASE
+   - Severity: LOW
+   - Impact: Unbounded in-memory slice for event history. Acceptable for lab demonstration scope.
+
+## Fabrication & Integrity Check
+
+- FAKE_DEMO: None. Demo runs live server over loopback socket and verifies actual network responses.
+- FAKE_BENCHMARK: None.
+- UNVERIFIED_RESULT: None.

@@ -2,27 +2,33 @@
 
 Target Lab: labs/35-websocket-and-sse
 Implementation Files:
-- `internal/sse/sse.go`
-- `internal/ws/ws.go`
-- `internal/server/server.go`
+- internal/sse/sse.go
+- internal/ws/ws.go
+- internal/server/server.go
+- cmd/demo/main.go
+
 Tests:
-- `tests/protocol_test.go`
+- tests/protocol_test.go
+
 Executable/Demo:
-- `cmd/demo/main.go`
+- cmd/demo/main.go
+
 Approved Research Inputs:
-- `research/05-report.md`
-- `research-audit/07-verdict.md`
+- research/05-report.md
+- research-revision/03-revision-result.md
+
 Main Claims To Verify:
-- SSE unidirectional server push with `text/event-stream` framing (`id`, `event`, `retry`, multi-line `data`).
-- SSE buffer replay and automatic resumption via `Last-Event-ID` header.
-- Pure Go RFC 6455 WebSocket handshake (`Sec-WebSocket-Accept` computation using GUID `258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).
-- WebSocket binary (0x2) and text (0x1) framing and masking/unmasking.
-- Thread-safe SSE Hub broadcasting and connection lifecycle.
+1. WHATWG SSE unidirectional streaming with custom events, multi-line data, retry headers, keep-alive comments, and Last-Event-ID replay.
+2. RFC 6455 WebSocket handshake (HTTP 101, Sec-WebSocket-Accept calculation), text frame (0x1), binary frame (0x2), Ping (0x9), Pong (0xA), and Close (0x8) handling with payload masking/unmasking.
+3. Clean execution of tests (`go test ./...` and `go test -race ./...`) and demo (`go run ./cmd/demo`).
+4. Correctness of concurrency controls in SSE Hub and WS Conn.
+
 Commands To Run:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+- go test -v -count=1 ./...
+- go test -race -v -count=1 ./...
+- go run ./cmd/demo
+
 Primary Risks:
-- Data race conditions in `sse.Hub` client map or buffer history operations.
-- Incorrect WebSocket frame masking/unmasking or binary length parsing (16-bit / 64-bit extended length fields).
-- Deadlocks or unbuffered write blocks on SSE broadcast channels under heavy client load.
+- Race conditions during SSE broadcast / subscribe / unsubscribe under high concurrency.
+- Incomplete WebSocket RFC 6455 framing (e.g. unhandled fragmentation bit, mask key fixed values, partial reads).
+- Unbounded memory accumulation in SSE history buffer.

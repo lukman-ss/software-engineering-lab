@@ -1,7 +1,7 @@
 # Engineering Audit Verdict
 
 Target Lab: labs/35-websocket-and-sse
-Audit Date: Mon Sep 28 2026
+Audit Date: 2026-09-28
 
 ## Summary
 
@@ -9,12 +9,16 @@ Code Files Reviewed:
 - `internal/sse/sse.go`
 - `internal/ws/ws.go`
 - `internal/server/server.go`
+- `cmd/demo/main.go`
+
 Tests Reviewed:
 - `tests/protocol_test.go`
+
 Commands Executed:
-- `go test ./...`
-- `go test -race ./...`
-- `go run ./cmd/demo`
+- `go test -v -count=1 ./...` (PASS)
+- `go test -race -v -count=1 ./...` (PASS)
+- `go run ./cmd/demo` (PASS)
+
 Failures: 0
 Warnings: 0
 
