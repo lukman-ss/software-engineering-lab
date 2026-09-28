@@ -25,7 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None. Implementation is robust, concurrency-safe, and passes all edge cases.
+- None identified.
 
 ## Re-Audit Status
 

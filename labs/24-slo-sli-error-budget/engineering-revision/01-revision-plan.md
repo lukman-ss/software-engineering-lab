@@ -1,7 +1,7 @@
 # Engineering Revision Plan
 
 Target Lab: `labs/24-slo-sli-error-budget`
-Previous Verdict: APPROVED (No blocking issues identified in audit)
+Previous Verdict: APPROVED
 
 ## Blocking Issues
 None.
@@ -10,15 +10,17 @@ None.
 None.
 
 ## Files To Change
-None (implementation and tests confirmed accurate and sound).
+- `labs/24-slo-sli-error-budget/engineering-revision/01-revision-plan.md`
+- `labs/24-slo-sli-error-budget/engineering-revision/02-changes-made.md`
+- `labs/24-slo-sli-error-budget/engineering-revision/03-revision-result.md`
 
 ## Tests To Add/Modify
-None (all existing test suites cover concurrency, mathematical correctness, edge cases, out-of-order timestamps, zero-traffic safely).
+None required.
 
 ## Validation Commands
 ```bash
 cd labs/24-slo-sli-error-budget
-go test -count=1 -v ./...
-go test -count=1 -race ./...
+go test ./...
+go test -race ./...
 go run ./cmd/demo
 ```
