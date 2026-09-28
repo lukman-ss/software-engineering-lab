@@ -139,6 +139,28 @@
 
 ---
 
+## Evidence 9a: Operational Remediation When Compensations Fail
+
+**Claim:** When compensating transactions fail or cannot restore consistency automatically, operational architecture relies on monitoring, alert triggers, dead-letter queues, manual administrative reconciliation, and out-of-band adjustments.
+
+**Evidence:**
+- "Limitations of compensating transactions: Compensating transactions might not always succeed, which can leave the system in an inconsistent state." — Microsoft Azure Architecture Center
+- "Need for monitoring and tracking sagas: Monitoring and tracking the workflow of a saga are essential tasks to maintain operational oversight." — Microsoft Azure Architecture Center
+
+**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+
+**Confidence:** HIGH
+
+**Notes:**
+Because compensating transactions can fail permanently (leaving intermediate state committed), industry-standard operational recovery relies on:
+1. Dead-letter queues (DLQs) to quarantine failed compensation events
+2. Alerting & monitoring to trigger on-call response
+3. Operational dashboards / admin consoles for manual reconciliation
+4. Out-of-band financial or state adjustments as business remedies
+Detailed implementation recipes for these recovery mechanisms are deferred to the implementation and design phase.
+
+---
+
 ## Evidence 10: Atomicity Guarantee di Level Saga
 
 **Claim:** Saga menjamin atomicity di level saga, bukan di level individual transaction - semua steps harus selesai atau compensations harus dieksekusi

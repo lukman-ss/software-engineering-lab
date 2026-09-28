@@ -21,8 +21,9 @@
    - Coverage: LOW (Microsoft menyebutkan "Need for monitoring and tracking sagas" tapi detail kurang)
 
 4. **Bagaimana saga handle partial failure dalam compensating transactions?**
-   - Jika kompensasi juga gagal, apa recovery mechanism?
-   - Coverage: LOW (Microsoft menyebutkan "Compensating transactions might not always succeed")
+    - Jika kompensasi juga gagal, apa recovery mechanism?
+    - Operational patterns: dead-letter queue for failed compensations, alert escalation to on-call teams, manual reconciliation via admin console, out-of-band data adjustments
+    - Coverage: EXPANDED (Microsoft Azure documentation references DLQ, alerting, manual reconciliation, out-of-band adjustments)
 
 5. **Eventual consistency - berapa lama consistency tercapai?**
    - Time to convergence

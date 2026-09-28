@@ -39,13 +39,3 @@ Published: 1987
 Accessed: 2026-09-28
 Source Tier: Tier 1 (Original Academic Paper - Foundational Reference)
 Relevance: Original definition of saga concept by Hector Garcia-Molina and Kenneth Salem
-
-## Source 5
-
-Title: Cloud-Native Patterns - Saga Pattern (Microsoft Learn)
-Publisher: Microsoft Learn
-URL: https://learn.microsoft.com/en-us/dotnet/architecture/cloud-native/saga-pattern
-Published: 2024
-Accessed: 2026-09-28
-Source Tier: Tier 1 (Official Cloud Provider Documentation)
-Relevance: Additional perspective on saga implementation in .NET cloud-native context
