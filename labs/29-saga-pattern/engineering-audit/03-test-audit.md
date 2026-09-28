@@ -1,23 +1,12 @@
 # Test Audit
 
-## Overview
-The test suite in `labs/29-saga-pattern/tests/saga_test.go` contains 9 test functions covering both Orchestrator and Choreography models, idempotency, semantic locking, concurrency, context cancellation, and compensation error handling.
+Target Lab: labs/29-saga-pattern
 
-## Coverage Checklist
+## Execution Results
 
-- [x] Happy Path (Orchestrator): `TestOrchestrator_HappyPath`
-- [x] Failure Path / Rollback (LIFO): `TestOrchestrator_FailureCompensatesLIFO`
-- [x] Edge Case (Compensation Error): `TestOrchestrator_CompensationErrorPropagated`
-- [x] Context Cancellation / Timeout: `TestOrchestrator_ContextCancellation`
-- [x] Idempotency Key: `TestPayment_Idempotency`
-- [x] Isolation Countermeasure (Semantic Lock): `TestSemanticLock`
-- [x] Concurrency / Race Safety: `TestOrchestrator_Concurrency`
-- [x] Choreography Happy Path: `TestChoreography_Flow`
-- [x] Choreography Failure Rollback: `TestChoreography_FailureCompensates`
-
-## Test Execution Verification
-
-Command: `go test -v ./...`
+### Unit and Integration Tests
+Command: `go test -v -count=1 ./...`
+Result: PASS
 Output:
 ```text
 === RUN   TestOrchestrator_HappyPath
@@ -39,14 +28,49 @@ Output:
 === RUN   TestOrchestrator_ContextCancellation
 --- PASS: TestOrchestrator_ContextCancellation (0.00s)
 PASS
-ok  	labs/29-saga-pattern/tests	0.015s
+ok  	labs/29-saga-pattern/tests	0.073s
 ```
 
-Command: `go test -race ./...`
+### Race Detector
+Command: `go test -race -count=1 ./...`
+Result: PASS
 Output:
 ```text
-PASS
-ok  	labs/29-saga-pattern/tests	1.012s
+ok  	labs/29-saga-pattern/tests	1.096s
 ```
 
-Assessment: PASS. All 9 tests are robust, execute real assertion checks against state invariants, and pass under race detector.
+### Demo Execution
+Command: `go run ./cmd/demo`
+Result: PASS
+Output:
+```text
+=== Saga Pattern Demonstration ===
+
+--- Scenario 1: Happy Path (Orchestrator) ---
+ -> [OrderService] Creating order: ord-success
+ -> [PaymentService] Processing payment for: ord-success
+ -> [InventoryService] Reserving 1 laptop
+ -> [OrderService] Finalizing order approval
+Scenario 1 Result: error=<nil>, OrderState=APPROVED, Remaining Stock=0
+
+--- Scenario 2: Rollback on Failure (Orchestrator) ---
+ -> [OrderService] Creating order: ord-failed
+ -> [PaymentService] Processing payment for: ord-failed
+ -> [InventoryService] Reserving 1 laptop (current stock: 0 )
+ <- [PaymentService] Compensating: Refunding payment for: ord-failed
+ <- [OrderService] Compensating: Cancelling order: ord-failed
+Scenario 2 Result: error=step ReserveInventory failed: out of stock, OrderState=CANCELLED, HasPayment=false, Stock=0
+
+=== Demo Completed Successfully ===
+```
+
+## Coverage & Quality Assessment
+- Happy path coverage: `TestOrchestrator_HappyPath`, `TestChoreography_Flow`
+- Failure & LIFO rollback coverage: `TestOrchestrator_FailureCompensatesLIFO`, `TestChoreography_FailureCompensates`
+- Compensation failure propagation: `TestOrchestrator_CompensationErrorPropagated`
+- Context cancellation handling: `TestOrchestrator_ContextCancellation`
+- Idempotency verification: `TestPayment_Idempotency`
+- Isolation / Semantic lock verification: `TestSemanticLock`
+- Concurrency & Race detection: `TestOrchestrator_Concurrency` under `-race`
+
+All test assertions accurately verify post-execution system invariants.
