@@ -1,32 +1,24 @@
 # Docs vs Code Audit
 
-## Consistency Checklist
+## Consistency Check
 
-1. **README.md Components vs File Tree**
-   - Listed files:
-     - `internal/saga/orchestrator.go` -> Exists & matches description.
-     - `internal/saga/choreography.go` -> Exists & matches description.
-     - `internal/services/services.go` -> Exists & matches description.
-     - `cmd/demo/main.go` -> Exists & matches description.
-     - `tests/saga_test.go` -> Exists & matches description.
-   - Status: PASS
+1. `README.md` vs Code:
+   - Claims component layout matches:
+     - `internal/saga/orchestrator.go` -> Verified
+     - `internal/saga/choreography.go` -> Verified
+     - `internal/services/services.go` -> Verified
+     - `cmd/demo/main.go` -> Verified
+     - `tests/saga_test.go` -> Verified
+   - Commands in README (`go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo`) execute cleanly and match documented behavior.
 
-2. **README.md Commands vs Execution Behavior**
-   - `go test -v ./...` -> Executes and passes.
-   - `go test -race ./...` -> Executes cleanly with race detector.
-   - `go run ./cmd/demo` -> Runs without error.
-   - Status: PASS
+2. `engineering/01-design.md` & `engineering/02-implementation-notes.md` vs Code:
+   - Design specified LIFO rollback algorithm, idempotency keys, and semantic locks. Code implements all three directly without external frameworks.
 
-3. **Design / Implementation Notes vs Actual Code**
-   - Claim: LIFO compensation rollback implemented.
-   - Reality: Observed in `internal/saga/orchestrator.go:94` and verified in `TestOrchestrator_FailureCompensatesLIFO`.
-   - Claim: Idempotency keys in payment processing.
-   - Reality: Observed in `internal/services/services.go:86` and verified in `TestPayment_Idempotency`.
-   - Claim: Semantic lock countermeasure on OrderService.
-   - Reality: Observed in `internal/services/services.go:33` and verified in `TestSemanticLock`.
-   - Claim: Choreography model with event bus.
-   - Reality: Observed in `internal/saga/choreography.go` and verified in `TestChoreography_Flow`.
-   - Status: PASS
+3. Claims vs Test Proof:
+   - Orchestration happy path & rollback: Proven by `TestOrchestrator_HappyPath` & `TestOrchestrator_FailureCompensatesLIFO`.
+   - Choreography happy path & rollback: Proven by `TestChoreography_Flow` & `TestChoreography_FailureCompensates`.
+   - Idempotency & Semantic Locking: Proven by `TestPayment_Idempotency` & `TestSemanticLock`.
+   - Thread safety: Proven by `TestOrchestrator_Concurrency` under `go test -race ./...`.
 
-4. **Discrepancy Findings**
-   - None found.
+4. Mismatches Detected:
+   - None. Zero doc/code or claim mismatches.
