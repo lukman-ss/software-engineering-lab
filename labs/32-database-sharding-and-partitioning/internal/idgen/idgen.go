@@ -2,7 +2,6 @@ package idgen
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"sync"
 	"time"
@@ -86,7 +85,7 @@ func (m *MemoryCentralSequence) AllocateBlock(size int64) (int64, error) {
 	return start + 1, nil
 }
 
-// EncodeTimeFromUUIDv7 extracts millisecond timestamp from UUIDv7 string.
+// ExtractTimeFromUUIDv7 extracts millisecond timestamp from UUIDv7 string.
 func ExtractTimeFromUUIDv7(u string) (time.Time, error) {
 	var clean string
 	for _, c := range u {
@@ -97,18 +96,13 @@ func ExtractTimeFromUUIDv7(u string) (time.Time, error) {
 	if len(clean) != 32 {
 		return time.Time{}, fmt.Errorf("invalid uuid length")
 	}
-	var high [8]byte
-	n, err := fmt.Sscanf(clean[:12], "%12x", &high)
-	if err != nil && n == 0 {
-		// Parse byte by byte manually
-		var b []byte
-		for i := 0; i < 12; i += 2 {
-			var val byte
-			fmt.Sscanf(clean[i:i+2], "%02x", &val)
-			b = append(b, val)
+	var ms uint64
+	for i := 0; i < 12; i += 2 {
+		var val byte
+		if _, err := fmt.Sscanf(clean[i:i+2], "%02x", &val); err != nil {
+			return time.Time{}, err
 		}
-		ms := uint64(binary.BigEndian.Uint32(b[0:4]))<<16 | uint64(binary.BigEndian.Uint16(b[4:6]))
-		return time.UnixMilli(int64(ms)), nil
+		ms = (ms << 8) | uint64(val)
 	}
-	return time.Time{}, nil
+	return time.UnixMilli(int64(ms)), nil
 }

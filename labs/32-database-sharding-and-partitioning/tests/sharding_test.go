@@ -184,6 +184,11 @@ func TestIDGenerators(t *testing.T) {
 		t.Fatalf("expected u1 < u2 lexicographically for time-ordered UUIDv7")
 	}
 
+	t1, err := idgen.ExtractTimeFromUUIDv7(u1)
+	if err != nil || t1.IsZero() {
+		t.Fatalf("failed to extract timestamp from UUIDv7 %s: %v", u1, err)
+	}
+
 	// Central sequence allocator
 	central := &idgen.MemoryCentralSequence{}
 	allocator := idgen.NewSequenceBlockAllocator(10, central.AllocateBlock)
