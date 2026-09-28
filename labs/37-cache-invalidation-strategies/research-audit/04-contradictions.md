@@ -1,104 +1,61 @@
-# 04 — Contradiction Audit
+# 04 — Contradictions / Tensions Audit
 
-## Contradiction 1
+Target Lab: labs/37-cache-invalidation-strategies
 
-Statement A:
-Lab specification formula: `Δ · β · ln(rand()) > TTL_remaining`
-Location: `research/04-contradictions.md`, C1 (citing lab specification)
+## Contradiction 1: XFetch Formula Sign in Lab Prompt vs Mathematical Reality
 
-Statement B:
-Wikipedia / Vattani et al. formula: `(time() - delta * beta * log(rand(0,1))) ≥ expiry`, rearranged as `-Δ·β·ln(rand(0,1)) ≥ TTL_remaining`
-Location: `research/04-contradictions.md`, C1 (citing Wikipedia Cache stampede)
+Statement A (Lab Prompt):
+`Δ · β · ln(rand()) > TTL_remaining`
 
-Type:
-FORMULA_ERROR / SPEC_MISMATCH
+Statement B (Mathematical Reality / Wikipedia PVLDB 2015):
+`-Δ · β · ln(rand()) > TTL_remaining` (or `(time() - delta * beta * log(rand(0,1))) ≥ expiry`)
 
-Impact:
-HIGH — If an engineer implements `Δ · β · ln(rand()) > TTL_remaining` verbatim where `rand() ∈ (0,1)`, `ln(rand())` evaluates to a negative number, resulting in `negative > positive` which is ALWAYS FALSE. Early refresh will NEVER be triggered, silently failing the probabilistic expiration mechanism.
-
-Assessment:
-Auditor confirms the Research Agent's contradiction analysis is correct. The lab formula contains a missing negative sign or requires `ln(1/rand())`. The research correctly identified this bug and documented it as a blocker/finding for engineering.
+Location: `04-contradictions.md` C1; `05-report.md` Finding 6 Warning.
+Type: INTERNAL / SPECIFICATION_ERROR
+Impact: Critical if uncaught (formula would never trigger early refresh for `rand() ∈ (0,1)`).
+Assessment: RESOLVED. The research report contains an explicit, prominent WARNING block explaining why the unnegated formula is mathematically broken and directing the engineering phase to use the negated formula `-Δ·β·ln(rand()) > TTL_remaining`.
 
 ---
 
-## Contradiction 2
+## Contradiction 2: RFC 5861 "Standard" vs "Informational" Status
 
 Statement A:
-Informational header on RFC 5861: "This RFC was published on the Independent Submission stream... not endorsed by the IETF and has no formal standing in the IETF standards process."
-Location: `RFC 5861` status block
+Informal engineering references often refer to RFC 5861 as an "IETF standard".
 
 Statement B:
-Common industry material / blog descriptions calling RFC 5861 an "Internet Standard for stale-while-revalidate".
-Location: `research/04-contradictions.md`, C3
+RFC 5861 header states: "Published on the Independent Submission stream. This RFC is not endorsed by the IETF and has no formal standing in the IETF standards process."
 
-Type:
-STATUS_MISMATCH
-
-Impact:
-LOW — Standard informational accuracy issue. RFC 5861 is an informational extension, not an IETF Standards Track RFC.
-
-Assessment:
-Auditor verified RFC 5861 header via web fetch. The document category is `Informational` and the stream is `Independent Submission`. Calling it an IETF standard is technically incorrect. Research Agent correctly recorded this distinction.
+Location: `04-contradictions.md` C3; `05-report.md` Finding 7.
+Type: SOURCE_CONFLICT
+Impact: Minor nuance regarding formal standardization.
+Assessment: RESOLVED. Report and evidence correctly designate RFC 5861 as an Informational RFC / Independent Submission.
 
 ---
 
-## Contradiction 3
+## Contradiction 3: Write-Through "Same Write Operation" vs Distributed Realities
 
-Statement A:
-Wikipedia Cache stampede Locking section: "requires an extra write for the locking mechanism... doubling the number of writes".
-Location: `research/04-contradictions.md`, C4 (citing Wikipedia)
+Statement A (Vendor Docs):
+Write-through updates data store and cache "in the same write operation".
 
-Statement B:
-Go `singleflight` package: in-process mutex-based dedup; no separate cache write for lock management.
-Location: `research/04-contradictions.md`, C4 (citing `pkg.go.dev/golang.org/x/sync/singleflight`)
+Statement B (Distributed Systems Fact):
+Database and cache (e.g. Postgres and Redis) are independent systems without 2PC/distributed transaction support in standard web stacks.
 
-Type:
-SCOPE_CONFUSION
-
-Impact:
-MEDIUM — Readers conflating distributed locking (Redis SET NX PX) with in-process singleflight might miscalculate operational write costs.
-
-Assessment:
-Auditor confirms research resolution: distributed locks add cache write overhead; in-process singleflight adds local memory/mutex cost with ZERO cache write overhead. Explicit scope clarification in the report correctly resolves this tension.
+Location: `04-contradictions.md` C6; `05-report.md` Finding 2.
+Type: INTERNAL / SCOPE_CLARIFICATION
+Impact: Engineers could falsely assume transactional atomicity across DB + Redis.
+Assessment: RESOLVED. Research explicitly documents that "same write operation" means application-level sequential writing with best-effort cache set and TTL safety net.
 
 ---
 
-## Contradiction 4
+## Contradiction 4: Request-Triggered vs Background Cron SWR
 
-Statement A:
-RFC 5861 §5 security guidance: validation SHOULD be request-triggered to avoid amplification/prefetch attacks.
-Location: `research/04-contradictions.md`, C5 (citing RFC 5861 §5)
+Statement A (RFC 5861 §5):
+Revalidation should be predicated upon an incoming request to prevent amplification attacks.
 
-Statement B:
-Lab description: "sambil memicu asynchronous job untuk update data baru di latar belakang".
-Location: `research/04-contradictions.md`, C5 (citing lab specification)
+Statement B (Loose SWR Descriptions):
+SWR described as an independent periodic background worker refreshing expired keys.
 
-Type:
-DESIGN_TENSION
-
-Impact:
-MEDIUM — An unconstrained background refresh loop risks amplification attacks if detached from user request traffic.
-
-Assessment:
-Auditor verified RFC 5861 §5 text: "suggested that such validation be predicated upon an incoming request, to avoid the possibility of an amplification attack". Research correctly flagged that SWR implementation should tie background jobs to incoming request triggers rather than running autonomous periodic background jobs.
-
----
-
-## Contradiction 5
-
-Statement A:
-Microsoft Learn: "write-through caching... updates the data store and the cache in the same write operation".
-Location: `research/04-contradictions.md`, C6 (citing Microsoft Learn)
-
-Statement B:
-Application reality: Database and Redis are separate network services without an atomic cross-system commit (two-phase commit/distributed ACID transaction).
-Location: `research/04-contradictions.md`, C6 (citing `labs/04-caching/write_through.go`)
-
-Type:
-TERMINOLOGY_OVERGENERALIZATION
-
-Impact:
-MEDIUM — "Same write operation" in documentation could be misunderstood as ACID atomicity across store and cache.
-
-Assessment:
-Research correctly resolves this: vendor documentation means application-level sequential writes, not distributed ACID atomicity. If cache.Set fails post DB commit, staleness/inconsistency can still occur until TTL expires.
+Location: `04-contradictions.md` C5; `05-report.md` Finding 7.
+Type: ARCHITECTURAL_DESIGN_TENSION
+Impact: Request fan-out vs worker complexity.
+Assessment: RESOLVED. Research clarifies that request-triggered revalidation is the canonical RFC 5861 model, while independent background refresh represents the external recomputation pattern.
