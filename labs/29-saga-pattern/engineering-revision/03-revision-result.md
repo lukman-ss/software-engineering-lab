@@ -19,7 +19,7 @@ Unresolved: 0
 ## Validation
 
 Compilation: PASS
-Tests: PASS (9/9 passed)
+Tests: PASS
 Race Detector: PASS
 Demo: PASS
 
