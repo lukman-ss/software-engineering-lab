@@ -59,7 +59,8 @@ Demo:
 ## Lag-Aware Routing & Primary Fallback
 
 Research:
-- `research/05-report.md` — Finding 4: "Middleware Supports Automatic Splitting", Finding 5: monitoring metrics
+- `research/05-report.md` — Finding 4: "Middleware Supports Automatic Splitting" (context for replica filtering concept), Finding 5: lag monitoring metrics
+- `engineering/01-design.md` — Lag-aware routing as design pattern synthesis from research themes (ΔLSN threshold + primary fallback)
 
 Implementation:
 - `internal/router/router.go` — `ReadLagAware()` (filter ΔLSN ≤ MaxLSNDiff, fallback `primary (fallback-lag)`)

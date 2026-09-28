@@ -187,7 +187,7 @@ Tidak ada operasi rollback data: lab adalah simulasi, bukan transaksi database n
 - Lag-aware routing memberi perlindungan graceful degradation, bukan fail total.
 
 **Kekurangan / trade-off:**
-- Sticky window 5 detik bersifat heuristik. Di lingkungan dengan latency tinggi atau traffic spike, jendela bisa terlalu pendek (stale read berulang) atau terlalu panjang (primary terbebani).
+- Sticky window 5 detik (default kode `StickyDuration`) bersifat heuristik. Di lingkungan dengan latency tinggi atau traffic spike, jendela bisa terlalu pendek (stale read berulang) atau terlalu panjang (primary terbebani). Demo memakai 500ms khusus agar deterministik — bukan default kode.
 - Memanggil `pg_last_wal_receive_lsn` / `SHOW REPLICA STATUS` per-query menambah round-trip; alternatif yang lebih baik adalah caching heartbeat LSN di connection pool.
 - Session map di router adalah state yang perlu didistribusikan pada arsitektur stateless horizontal scaling;JWT atau Redis perlu dipakai di produksi.
 - Sync replication meningkatkan write latency sebesar RTT × N (N = jumlah replica). Tidak cocok untuk write-heavy workload.
