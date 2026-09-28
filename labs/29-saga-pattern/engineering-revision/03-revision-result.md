@@ -1,31 +1,31 @@
 # Engineering Revision Result
 
 Target Lab: labs/29-saga-pattern
-Previous Verdict: APPROVED
+Previous Verdict: APPROVED_WITH_WARNINGS
 
 ## Issue Summary
 
 Critical: 0
 High: 0
-Medium: 0
-Low: 1
+Medium: 1
+Low: 2
 
 ## Resolution
 
-Resolved: 1
+Resolved: 3
 Partially Resolved: 0
 Unresolved: 0
 
 ## Validation
 
 Compilation: PASS
-Tests: PASS (7/7 passed)
+Tests: PASS (9/9 passed)
 Race Detector: PASS
 Demo: PASS
 
 ## Remaining Risks
 
-None.
+- None.
 
 ## Re-Audit Status
 

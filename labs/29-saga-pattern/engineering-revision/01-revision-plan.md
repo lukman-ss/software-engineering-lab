@@ -1,19 +1,23 @@
 # Engineering Revision Plan
 
 Target Lab: labs/29-saga-pattern
-Previous Verdict: APPROVED (with 1 non-blocking test gap warning)
+Previous Verdict: APPROVED_WITH_WARNINGS
 
 ## Blocking Issues
 None.
 
 ## Non-Blocking Issues
-1. `tests/saga_test.go`: Choreography architecture lacked unit test coverage for failure and compensation event handling.
+1. `internal/saga/orchestrator.go`: Compensation errors discarded silently; inconsistent state risk. (Severity: MEDIUM)
+2. `internal/saga/orchestrator.go`: No context cancellation checks during step iteration. (Severity: LOW)
+3. `tests/saga_test.go`: Missing test coverage for compensation failures and context cancellation. (Severity: MEDIUM / LOW)
 
 ## Files To Change
-- `tests/saga_test.go`: Add `TestChoreography_FailureCompensates` to exercise choreography compensation flow.
+- `internal/saga/orchestrator.go`
+- `tests/saga_test.go`
 
 ## Tests To Add/Modify
-- Add `TestChoreography_FailureCompensates`: Tests `OrderCreated` -> `PaymentCompleted` -> `InventoryFailed` -> triggers compensation (`RefundPayment` + `CancelOrder`), asserting terminal state `OrderCancelled` and refund status.
+- `TestOrchestrator_CompensationErrorPropagated`: Asserts compensation failure records `COMPENSATE_FAILED` status and returns aggregated error.
+- `TestOrchestrator_ContextCancellation`: Asserts context cancellation halts subsequent step execution and invokes compensation on already executed steps.
 
 ## Validation Commands
 ```bash

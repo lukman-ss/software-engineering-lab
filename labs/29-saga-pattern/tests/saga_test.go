@@ -314,3 +314,72 @@ func TestChoreography_FailureCompensates(t *testing.T) {
 		t.Fatal("expected payment refunded in choreography failure")
 	}
 }
+
+func TestOrchestrator_CompensationErrorPropagated(t *testing.T) {
+	ctx := context.Background()
+	orch := saga.NewOrchestrator()
+
+	orch.AddStep(saga.Step{
+		Name: "Step1",
+		Execute: func(ctx context.Context) error {
+			return nil
+		},
+		Compensate: func(ctx context.Context) error {
+			return fmt.Errorf("rollback failed intentionally")
+		},
+	})
+
+	orch.AddStep(saga.Step{
+		Name: "Step2",
+		Execute: func(ctx context.Context) error {
+			return fmt.Errorf("step 2 trigger error")
+		},
+	})
+
+	err := orch.Execute(ctx)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	logs := orch.Logs()
+	if len(logs) != 3 {
+		t.Fatalf("expected 3 logs, got %d", len(logs))
+	}
+	if logs[0].Status != saga.StatusExecuted || logs[1].Status != saga.StatusFailed || logs[2].Status != saga.StatusCompensateFailed {
+		t.Fatalf("unexpected logs: %+v", logs)
+	}
+}
+
+func TestOrchestrator_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	orch := saga.NewOrchestrator()
+
+	step1Compensated := false
+	orch.AddStep(saga.Step{
+		Name: "Step1",
+		Execute: func(ctx context.Context) error {
+			cancel() // cancel context before step 2
+			return nil
+		},
+		Compensate: func(ctx context.Context) error {
+			step1Compensated = true
+			return nil
+		},
+	})
+
+	orch.AddStep(saga.Step{
+		Name: "Step2",
+		Execute: func(ctx context.Context) error {
+			t.Fatal("step 2 should not execute when context cancelled")
+			return nil
+		},
+	})
+
+	err := orch.Execute(ctx)
+	if err == nil {
+		t.Fatal("expected error due to cancellation, got nil")
+	}
+	if !step1Compensated {
+		t.Fatal("expected step 1 to be compensated upon cancellation")
+	}
+}
