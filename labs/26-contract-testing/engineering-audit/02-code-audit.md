@@ -1,37 +1,51 @@
 # Code Audit
 
-## Finding 1 — Consumer Contract Schema & Minimal Subset Rule Verification
+Target Lab: labs/26-contract-testing
 
-Location: `internal/contract/verifier.go:117-176`, `internal/consumer/client.go:82-111`
-Claimed Behavior: Verification engine verifies that provider responses fulfill the minimal schema subset required by consumer contract, ignoring unrequested provider fields.
-Observed Implementation: `diffValues` iterates over keys present in `expected` map and verifies their existence, type, and value in `actual` map. Unrequested provider fields present in `actual` but absent in `expected` are ignored. `json.Number` handling preserves exact numeric comparison between consumer expectation and parsed provider JSON.
-Assessment: PASS
-Severity: LOW
-Notes: Fully aligns with Consumer-Driven Contract minimal subset specification.
-
-## Finding 2 — Error Propagation and Reporting
+## Finding 1
 
 Location: `internal/contract/verifier.go:58-115`
-Claimed Behavior: Verification runner accumulates all contract violations per interaction without panicking or returning prematurely.
-Observed Implementation: `Verify` appends all status mismatches, HTTP connection/read errors, missing fields, type mismatches, and value mismatches to `result.Errors` while setting `result.Passed = false`.
+Claimed Behavior: Verifier executes HTTP request against baseURL and compares returned payload against contract expectations, failing when contract expectations are violated.
+Observed Implementation: Verifier handles request creation, status code validation, JSON decoding with `decoder.UseNumber()`, and field-by-field recursive diffing via `diffValues`.
 Assessment: PASS
 Severity: LOW
-Notes: Provides clear actionable diagnostic strings for CI/CD deployment gates.
+Notes: `io.ReadAll` and response body close handled properly.
 
-## Finding 3 — Concurrency Safety and Resource Cleanup
+## Finding 2
 
-Location: `internal/contract/verifier.go:74-88`, `internal/provider/server.go`
-Claimed Behavior: Contract verification runner is safe for concurrent use across routines.
-Observed Implementation: `http.Client` is shared safely across concurrent goroutines without mutating internal shared state. `resp.Body` is closed immediately after reading (`_ = resp.Body.Close()`). No race conditions detected under `go test -race`.
+Location: `internal/contract/verifier.go:117-176`
+Claimed Behavior: Detects structural missing keys, primitive type mismatches, and value mismatches while tolerating additive provider fields not declared in consumer contract.
+Observed Implementation: `diffValues` checks key presence recursively. Extra fields on `actual` map not present in `expected` map are ignored, adhering to consumer-driven contract principles. Type differences and value differences are captured with descriptive path strings.
 Assessment: PASS
 Severity: LOW
-Notes: Verified with 20 parallel worker goroutines in `TestConcurrentContractVerification`.
+Notes: Correctly utilizes `json.Number` comparisons to prevent int/float float64 coercion quirks.
 
-## Finding 4 — Failure Handling & Invalid JSON Input
+## Finding 3
 
-Location: `internal/contract/verifier.go:95-102`
-Claimed Behavior: Non-JSON or malformed provider responses are handled gracefully with verification errors.
-Observed Implementation: Decoder checks `json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&actualBody)` and records descriptive error if response is not a valid JSON object.
+Location: `internal/consumer/client.go:34-79`
+Claimed Behavior: Mobile client fetches order and fails when breaking provider schema (missing `customer.name`, unexpected status, type failure) is returned.
+Observed Implementation: Strict unmarshalling and runtime validation of required contract constraints (`raw.Customer.Name == ""` and status enums) ensures consumer-side failure matches verifier failure.
 Assessment: PASS
 Severity: LOW
-Notes: Solid defensive handling against invalid HTTP response payloads.
+Notes: Client behaves identically to production consumer expectations.
+
+## Finding 4
+
+Location: `internal/provider/server.go:12-131`
+Claimed Behavior: Provides three HTTP handlers representing V1 compliant provider, breaking change provider, and dual-version evolutionary provider.
+Observed Implementation:
+- `ProviderV1`: returns contract-matching JSON (`status: "IN_PROGRESS"`, `total: 150000`, `customer.name: "Budi Santoso"`).
+- `ProviderBreaking`: introduces casing mismatch (`"in_progress"`), type mismatch (`"150000"` string), and field rename (`full_name`).
+- `ProviderDual`: serves V1 contract compliant payload on `/v1/orders/` and new schema on `/v2/orders/`.
+Assessment: PASS
+Severity: LOW
+Notes: Handlers are stateless, robust, and return standard Content-Type and HTTP status codes.
+
+## Finding 5
+
+Location: `tests/contract_test.go:96-114`
+Claimed Behavior: Concurrent verification runs safely without race conditions.
+Observed Implementation: Spawns 20 parallel goroutines invoking `verifier.Verify(srv.URL, c)` concurrently against `httptest.Server`. Verified with `go test -race ./...`.
+Assessment: PASS
+Severity: LOW
+Notes: No shared mutable state in Verifier. Safe for concurrent CI runner simulations.

@@ -1,36 +1,17 @@
-# Documentation vs Code Audit
+# Docs vs Code Audit
 
-## Review Checklist
+Target Lab: labs/26-contract-testing
 
-1. **README Directory Structure vs Reality**:
-   - `cmd/demo/main.go`: Matches actual filesystem.
-   - `internal/consumer/client.go`: Matches actual filesystem.
-   - `internal/contract/verifier.go`: Matches actual filesystem.
-   - `internal/model/order.go`: Matches actual filesystem.
-   - `internal/provider/server.go`: Matches actual filesystem.
-   - `tests/contract_test.go`: Matches actual filesystem.
-   - `engineering/`: Matches actual filesystem.
-   - Assessment: PASS.
+## Comparison Summary
 
-2. **README Run Commands**:
-   - `go test -v ./...`: Works as documented.
-   - `go test -race ./...`: Works as documented.
-   - `go run ./cmd/demo`: Works as documented.
-   - Assessment: PASS.
+| Document Element | Claimed in README / Engineering Notes | Observed in Implementation | Status |
+|---|---|---|---|
+| Project Structure | Lists `cmd/demo/main.go`, `internal/...`, `tests/contract_test.go` | Tree structure matches exact path layout | MATCH |
+| Test Command | `go test -v ./...` & `go test -race ./...` | All commands run successfully and pass | MATCH |
+| Demo Command | `go run ./cmd/demo` | Demo output prints 4 stages matching described workflow | MATCH |
+| Contract Schema | `id`, `status`, `customer.name`, `total` | Exact fields in `GenerateMobileContract` | MATCH |
+| Breaking Changes | Casing, type mutation int->str, field rename | Exact 3 violations emitted by `ProviderBreaking` | MATCH |
 
-3. **Engineering Design vs Code**:
-   - CDC Minimal Subset Rule: Implemented in `diffValues` (`internal/contract/verifier.go`).
-   - Breaking changes matching design: Enum casing change, missing field `customer.name`, primitive type change (`total` int -> str) all implemented and tested.
-   - Dual DTO / Safe API Evolution: Implemented in `ProviderDual` and asserted in tests/demo.
-   - Assessment: PASS.
+## Discrepancy Findings
 
-4. **Demo Execution Output vs Code**:
-   - Demo output printed by `go run ./cmd/demo` matches the designed 4-stage pipeline exactly.
-   - Assessment: PASS.
-
-## Findings
-
-No documentation discrepancies or unproven claims detected.
-- DOC_CODE_MISMATCH: None.
-- TEST_CLAIM_MISMATCH: None.
-- RESEARCH_IMPLEMENTATION_MISMATCH: None.
+No mismatches found between `README.md`, `engineering/` design documents, and actual Go code implementation.
