@@ -106,42 +106,40 @@ Legitimate Client                 Bank Server                  Attacker (evil.co
 
 ## 4. Pipeline Middleware Backend (`labs/36-cors-and-csrf`)
 
-Urutan eksekusi middleware pada bank server:
+Implementasi lab menyediakan middleware modular. Pada endpoint transfer terproteksi (`/api/transfer/protected`), middleware CSRF dipasangkan setelah layer CORS:
 
 ```text
-                       [ HTTP Request ]
-                              │
-                              ▼
-               +─────────────────────────────+
-               |       CORS Middleware       |
-               |  (internal/cors/middleware) |
-               +─────────────────────────────+
-                 /                         \
-    [ Preflight OPTIONS ]             [ Actual Request ]
-      /               \                        │
-[ Origin OK ]   [ Origin Bad ]                 │
-     │                 │                       │
- 204 No Content   403 Forbidden                ▼
-                               +─────────────────────────────+
-                               |   Fetch Metadata / Custom   |
-                               |      Header Middleware      |
-                               +─────────────────────────────+
-                                 /                         \
-                   [ Sec-Fetch-Site: cross-site ]    [ Header Valid / Same-Origin ]
-                                 │                                 │
-                           403 Forbidden                           ▼
-                                                   +─────────────────────────────+
-                                                   |       CSRF Middleware       |
-                                                   |  (internal/csrf/middleware) |
-                                                   +─────────────────────────────+
-                                                     /                         \
-                                      [ Invalid/Missing Token ]         [ Valid Token ]
-                                                     │                         │
-                                               403 Forbidden                   ▼
-                                                               +─────────────────────────────+
-                                                               |   Bank Business Handler     |
-                                                               |     (internal/bank/app)     |
-                                                               +─────────────────────────────+
-                                                                               │
-                                                                         200 OK Response
+                        [ HTTP Request ]
+                               │
+                               ▼
+                +─────────────────────────────+
+                |       CORS Middleware       |
+                |  (internal/cors/middleware) |
+                +─────────────────────────────+
+                  /                         \
+     [ Preflight OPTIONS ]             [ Actual Request ]
+       /               \                        │
+ [ Origin OK ]   [ Origin Bad ]                 │
+      │                 │                       │
+  204 No Content   403 Forbidden                ▼
+                                +─────────────────────────────+
+                                |       CSRF Middleware       |
+                                |  (internal/csrf/middleware) |
+                                +─────────────────────────────+
+                                  /                         \
+                   [ Invalid/Missing Token ]         [ Valid Token ]
+                                  │                         │
+                            403 Forbidden                   ▼
+                                            +─────────────────────────────+
+                                            |   Bank Business Handler     |
+                                            |     (internal/bank/app)     |
+                                            +─────────────────────────────+
+                                                            │
+                                                      200 OK Response
 ```
+
+Selain alur utama di atas, modul keamanan juga menyediakan middleware pendukung yang diuji pada rute terpisah:
+- **Fetch Metadata Middleware** (`/api/transfer/fetch-metadata`): Memblokir request mutasi state jika `Sec-Fetch-Site: cross-site`.
+- **Custom Header Middleware** (`/api/transfer/custom-header`): Memblokir submit form biasa yang tidak menyertakan custom header (misal: `X-Requested-With`).
+
+Keduanya dapat dikombinasikan ke dalam pipeline global pada arsitektur produksi untuk pertahanan berlapis penuh.

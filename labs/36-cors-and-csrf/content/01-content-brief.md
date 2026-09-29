@@ -40,5 +40,5 @@ Available Case Studies:
 Warnings:
 - Lingkup SOP, CORS, dan CSRF murni berada pada konteks Web Browser. HTTP client non-browser (cURL, script Python, Postman) tidak dibatasi oleh SOP/CORS.
 - Mitigasi CSRF (termasuk Anti-CSRF Token, SameSite, dan Fetch Metadata) tidak dapat melindungi aplikasi jika aplikasi tersebut memiliki kerentanan Cross-Site Scripting (XSS) pada origin yang sama.
-- Implementasi Signed Double-Submit Token pada lab menggunakan delimiter internal dan secret key demo; pada produksi pastikan secret key dikelola melalui KMS/secret manager serta sanitasi input session.
+- Implementasi Signed Double-Submit Token pada lab menggunakan delimiter internal `:` dan secret key demo; jika session ID dapat memuat karakter `:`, parsing token akan terganggu. Pada produksi, gunakan format terstruktur (JSON/Protobuf) atau pastikan sanitasi session ID serta kelola secret key melalui KMS/secret manager.
 - `SameSite=Lax` default browser membantu mengurangi risiko, namun navigasi top-level `GET` tetap mengirim cookie, sehingga endpoint `GET` tidak boleh melakukan mutasi state (*must be safe/idempotent*).

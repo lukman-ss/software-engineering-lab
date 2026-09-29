@@ -91,7 +91,14 @@ Skenario eksploitasi perbankan tanpa perlindungan anti-CSRF:
 
 ## How It Works: Arsitektur Pertahanan Anti-CSRF
 
-Untuk mencegah eksploitasi CSRF secara tuntas, backend memerlukan arsitektur pertahanan berlapis (*defense-in-depth*):
+Untuk mencegah eksploitasi CSRF secara tuntas, backend dapat menerapkan arsitektur pertahanan modular (*defense-in-depth*). Di dalam implementasi lab ini, pertahanan disediakan melalui beberapa komponen middleware independen:
+
+1. **CORS Middleware (`internal/cors`)**: Menangani preflight `OPTIONS` dan menegakkan aturan origin/kredensial browser.
+2. **Anti-CSRF Token Middleware (`csrf.NewMiddleware`)**: Memvalidasi token kriptografis berbasis HMAC-SHA256 pada endpoint terproteksi (`/api/transfer/protected`).
+3. **Fetch Metadata Middleware (`csrf.FetchMetadataMiddleware`)**: Memeriksa header `Sec-Fetch-Site` untuk menolak request lintas situs pada endpoint spesifik (`/api/transfer/fetch-metadata`).
+4. **Custom Header Middleware (`csrf.RequireCustomHeaderMiddleware`)**: Memastikan request menyertakan custom header API (misal `X-Requested-With`) pada endpoint spesifik (`/api/transfer/custom-header`).
+
+Berikut alur eksekusi request pada endpoint terproteksi berbasis Anti-CSRF Token (`/api/transfer/protected`):
 
 ```text
 [ Incoming Request ]
@@ -102,25 +109,30 @@ Untuk mencegah eksploitasi CSRF secara tuntas, backend memerlukan arsitektur per
    - Set ACAO & Credentials untuk legitimate origins
         │
         ▼
-[ 2. Fetch Metadata Middleware ]
-   - Periksa header browser: Sec-Fetch-Site
-   - Tolak jika 'cross-site' pada state-changing method (POST/PUT/DELETE)
-        │
-        ▼
-[ 3. Custom Header Enforcement Middleware ]
-   - Wajibkan header API kustom (misal: X-Requested-With / X-CSRF-Token)
-   - Memaksa browser melakukan preflight dan menggagalkan submit via form HTML biasa
-        │
-        ▼
-[ 4. Signed Double-Submit CSRF Token Validator ]
+[ 2. Signed Double-Submit CSRF Token Validator ]
    - Validasi HMAC-SHA256 signature
    - Validasi kecocokan Session ID (mencegah token reuse lintas sesi)
    - Validasi TTL / masa berlaku token
    - Validasi constant-time compare (mencegah timing attack)
         │
         ▼
-[ 5. Business Logic Handler ]
+[ 3. Business Logic Handler ]
    - Mutasi data / transfer dana dijalankan dengan aman
+```
+
+Di samping endpoint utama tersebut, lab juga mendemonstrasikan middleware modern pelengkap yang dapat dikomposisikan sesuai kebutuhan arsitektur:
+
+```text
+[ Request ke Endpoint Fetch Metadata / Custom Header ]
+        │
+        ▼
+[ CORS Middleware ]
+        │
+        ▼
+[ Fetch Metadata (`Sec-Fetch-Site`) atau Custom Header (`X-Requested-With`) ]
+        │
+        ▼
+[ Business Logic Handler ]
 ```
 
 ### Komponen Pertahanan
@@ -131,10 +143,10 @@ Untuk mencegah eksploitasi CSRF secara tuntas, backend memerlukan arsitektur per
    Validator memverifikasi bahwa token tersebut ditandatangani oleh server, belum kadaluwarsa, dan terikat khusus ke `session_id` pengguna yang sedang aktif. Penyerang dari domain luar tidak dapat membaca token dari domain target (terlindungi oleh SOP).
 
 2. **Fetch Metadata (`Sec-Fetch-Site`)**:
-   Header HTTP yang disetel langsung oleh mesin browser dan tidak dapat dimanipulasi oleh JavaScript frontend. Jika nilainya `cross-site` pada request mutasi state, backend dapat langsung menolaknya.
+   Header HTTP yang disetel langsung oleh mesin browser dan tidak dapat dimanipulasi oleh JavaScript frontend. Jika nilainya `cross-site` pada request mutasi state, middleware dapat langsung menolaknya. Di lab ini diuji pada endpoint `/api/transfer/fetch-metadata`.
 
 3. **Custom Header Enforcement**:
-   Form HTML standar tidak dapat menambahkan custom header HTTP. Mewajibkan header seperti `X-Requested-With: XMLHttpRequest` atau `X-CSRF-Token` otomatis menggagalkan exploitasi via tag `<form>` standar.
+   Form HTML standar tidak dapat menambahkan custom header HTTP. Mewajibkan header seperti `X-Requested-With: XMLHttpRequest` atau `X-CSRF-Token` otomatis menggagalkan exploitasi via tag `<form>` standar. Di lab ini diuji pada endpoint `/api/transfer/custom-header`.
 
 4. **Atribut Cookie `SameSite`**:
    - `SameSite=Strict`: Cookie tidak pernah dikirim pada request lintas situs.
@@ -317,9 +329,11 @@ Rangkaian pengujian pada `internal/cors/middleware_test.go`, `internal/csrf/toke
 2. **Kombinasi Cookie Attribute**:
    Cookie sesi backend wajib dikonfigurasi dengan flag lengkap:
    `Set-Cookie: session_id=...; Secure; HttpOnly; SameSite=Lax; Path=/; Partitioned`
-3. **Hindari State Mutation pada Method GET**:
+3. **Penyusunan Format Payload & Karakter Delimiter Token**:
+   Implementasi referensi lab menggunakan pemisah titik dua (`:`) dalam format `sessionID:ts:nonce:sig` dengan `strings.Split`. Jika `sessionID` sistem produksi dapat memuat karakter delimiter (`:`), parsing akan gagal (menghasilkan jumlah segmen tidak sama dengan 4). Pada sistem produksi, gunakan format serialisasi terstruktur (seperti Protocol Buffers / JSON) atau sanitasi dan pastikan `sessionID` tidak mengandung delimiter.
+4. **Hindari State Mutation pada Method GET**:
    Arsitektur REST mewajibkan method `GET` bersifat *safe* dan *idempotent*. Jangan pernah mengeksekusi mutasi data (seperti transfer dana, aktivasi akun, atau penghapusan data) melalui endpoint `GET`.
-4. **Ancaman XSS Melumpuhkan Anti-CSRF**:
+5. **Ancaman XSS Melumpuhkan Anti-CSRF**:
    Jika aplikasi memiliki celah Cross-Site Scripting (XSS), penyerang dapat menjalankan JavaScript di dalam origin yang sama, membaca token CSRF dari DOM/header, dan mengeksekusi request yang lolos dari seluruh filter CSRF. Pertahanan CSRF harus selalu didampingi mitigasi XSS yang ketat (Content Security Policy, sanitasi HTML).
 
 ## Common Mistakes
