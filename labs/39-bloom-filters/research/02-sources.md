@@ -12,7 +12,7 @@ Relevance: Makalah seminal penemu Bloom Filter (Burton H. Bloom), mendefinisikan
 ## Source 2
 Title: Less Hashing, Same Performance: Building a Better Bloom Filter
 Publisher: Harvard University / European Symposium on Algorithms (ESA 2006, LNCS 4168, pp. 456–467)
-URL: https://www.eecs.harvard.edu/~michaelm/postscripts/esa2006.pdf
+URL: https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
 Published: 2006-09-11
 Accessed: 2026-09-29
 Source Tier: Tier 1 (Academic Paper)
@@ -37,13 +37,13 @@ Source Tier: Tier 1 (Official Engine Documentation)
 Relevance: Menjelaskan implementasi Bloom Filter modern (Block-based & Full Bloom Filter, Ribbon filter) untuk meminimalkan I/O pada LSM-Tree.
 
 ## Source 5
-Title: Apache Cassandra Architecture: Bloom Filters
+Title: Apache Cassandra: Bloom Filters in SSTable Architecture
 Publisher: Apache Software Foundation
-URL: https://cassandra.apache.org/doc/latest/cassandra/operating/bloom_filters.html
+URL: https://cassandra.apache.org/doc/latest/cassandra/architecture/storage_engine.html
 Published: 2024-01-01 (Latest docs)
 Accessed: 2026-09-29
 Source Tier: Tier 1 (Official Database Documentation)
-Relevance: Dokumentasi tuning `bloom_filter_fp_chance`, trade-off konsumsi RAM off-heap SSTable vs disk reads.
+Relevance: Dokumentasi tuning `bloom_filter_fp_chance`, trade-off konsumsi RAM off-heap SSTable vs disk reads pada storage engine Cassandra.
 
 ## Source 6
 Title: Cuckoo Filter: Practically Better Than Bloom
@@ -53,3 +53,21 @@ Published: 2014-12-02
 Accessed: 2026-09-29
 Source Tier: Tier 1 (Academic Paper)
 Relevance: Analisis komparatif varian modern pendukung operasi `delete` dan perbandingan efisiensi memori terhadap Bloom Filter.
+
+## Source 7
+Title: Designing Data-Intensive Applications: The Big Ideas Behind Reliable, Scalable, and Maintainable Systems
+Publisher: O'Reilly Media (Chapter 3: Storage and Retrieval — SSTables and LSM-Trees)
+URL: https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/
+Published: 2017-03-16
+Accessed: 2026-09-29
+Source Tier: Tier 1 (Authoritative Industry Book)
+Relevance: Menjelaskan peran Bloom Filter dalam mengoptimalkan query LSM-Tree dan mencegah pemborosan I/O disk saat mencari kunci yang tidak ada di storage engine.
+
+## Source 8
+Title: Network Applications of Bloom Filters: A Survey
+Publisher: Internet Mathematics (Vol. 1, No. 4, pp. 485–509)
+URL: https://www.eecs.harvard.edu/~michaelm/postscripts/im2005b.pdf
+Published: 2004-10-01
+Accessed: 2026-09-29
+Source Tier: Tier 1 (Academic Survey Paper)
+Relevance: Survey komprehensif oleh Andrei Broder dan Michael Mitzenmacher mengenai analisis matematis Bloom Filter, varian, dan aplikasi pada caching/jaringan.

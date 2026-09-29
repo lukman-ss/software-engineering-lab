@@ -8,7 +8,7 @@ Bloom Filter adalah struktur data probabilistik berbasis bit array yang dirancan
 1. **Pasti Tidak Ada (Definitely Not in Set)**: 100% akurat tanpa kemungkinan false negative.
 2. **Mungkin Ada (Possibly in Set)**: Memiliki probabilitas kecil false positive ($p$), di mana elemen yang tidak ada terdeteksi seolah-olah ada karena tabrakan bit (*hash collision*).
 
-Pada sistem skala besar, karakteristik ini dimanfaatkan untuk mengeliminasi disk lookup yang mahal pada database (seperti LSM-Tree SSTables di RocksDB dan Cassandra) dan mencegah *Cache Penetration* (situasi di mana attacker meminta kunci nonexistent secara masif, memaksa query langsung ke database). Dengan alokasi ~9.6 bit per elemen dan 7 fungsi hash, sistem dapat mencapai 99% akurasi penolakan query nonexistent hanya dengan konsumsi RAM ~1.2 MB per 1.000.000 elemen (dibandingkan ~50-100 MB jika menggunakan Hash Set biasa).
+Pada sistem skala besar, karakteristik ini dimanfaatkan untuk mengeliminasi disk lookup yang mahal pada database (seperti LSM-Tree SSTables di RocksDB dan Cassandra) dan mencegah *Cache Penetration* (situasi di mana attacker meminta kunci nonexistent secara masif, memaksa query langsung ke database). Dengan alokasi ~9.6 bit per elemen dan 7 fungsi hash, sistem dapat mencapai 99% akurasi penolakan query nonexistent hanya dengan konsumsi RAM ~1.2 MB per 1.000.000 elemen (dibandingkan ~50-100 MB jika menggunakan Hash Set konvensional dalam memori, di mana overhead pointer, bucket table, dan string key object umumnya mengonsumsi rata-rata 48-96 byte per entri di runtime seperti Go map atau Java HashSet).
 
 ---
 

@@ -1,31 +1,33 @@
 # Revision Plan
 
-Target Lab: labs/39-bloom-filters
-Previous Audit Status: APPROVED_WITH_WARNINGS
+Target Lab: `labs/39-bloom-filters`
+
+Previous Audit Status: `APPROVED_WITH_WARNINGS`
 
 ## Blocking Issues
 
-1. **Broken Cuckoo Filter URL**: Source 8 URL (`https://www.cs.cmu.edu/~fanzhao/cuckoo-filter.pdf`) returns 404. Replace with ACM DL canonical link (`https://dl.acm.org/doi/10.1145/2674005.2674994`) and public paper (`https://www.cs.cmu.edu/~dga/papers/cuckoo-conext2014.pdf`).
-2. **Erroneous "Ripple filter" name**: References to "Ripple filter" in `03-evidence.md`, `04-contradictions.md`, and `05-report.md` do not exist in data structure literature. Replace with "Ribbon filter" (Dillinger & Walzer, 2022) with accurate attributes, or use standard Counting Bloom/Cuckoo filters for deletion support claim.
+None.
 
 ## Non-Blocking Issues
 
-1. **Percolator vs Bigtable attribution**: Percolator's Bloom filtering is inherited from underlying Bigtable SSTable lookups rather than an application-level cache-penetration barrier. Clarifying in `03-evidence.md` and `05-report.md`.
-2. **Wikipedia over-reliance for theoretical claims**: Add primary source (Bloom 1970) wherever possible, supplement Wikipedia citations.
-3. **Cross-citation disconnect (BitFunnel/Percolator)**: Finding 6 mentions "(Google Percolator analogy)" for BitFunnel claims. Percolator and BitFunnel are independent systems. Remove cross-reference.
-4. **BitFunnel primary source**: Cite SIGIR 2017 paper alongside Wikipedia in Source 5.
-5. **Goel & Gupta (2007) primary source**: Add arxiv/DOI link if retrievable.
+1. **Broken Source URLs**:
+   - Source 2 (`esa2006.pdf`) URL broken (404). Updated to canonical author tech report mirror `tr-02-05.pdf`.
+   - Source 5 (`operating/bloom_filters.html`) URL broken (404). Updated to active Apache Cassandra storage engine architecture documentation permalink.
+2. **Missing Registered Citations**:
+   - Martin Kleppmann (Designing Data-Intensive Applications, O'Reilly) and Broder & Mitzenmacher (2004, Internet Mathematics) cited in evidence/report but missing from formal source catalog (`02-sources.md`).
+3. **Unclarified Heuristic Memory Comparison**:
+   - Heuristic memory estimation "~50-100 MB untuk Hash Set biasa" in Executive Summary lacked explicit memory layout overhead assumptions (pointer/bucket/object overhead in Go map / Java HashSet).
 
 ## Files To Modify
 
-- `research/02-sources.md`
-- `research/03-evidence.md`
-- `research/04-contradictions.md`
-- `research/05-report.md`
+- `labs/39-bloom-filters/research/02-sources.md`
+- `labs/39-bloom-filters/research/05-report.md`
+- `labs/39-bloom-filters/research-revision/01-revision-plan.md`
+- `labs/39-bloom-filters/research-revision/02-changes-made.md`
+- `labs/39-bloom-filters/research-revision/03-revision-result.md`
 
 ## Verification Plan
 
-- source verification (HTTP reachability / URL check)
-- documentation consistency (grep for "Ripple")
-- final audit comparison
-- re-read modified research files for internal consistency
+- Source URL and citation completeness validation.
+- Consistency check across research documentation.
+- Confirmation of zero pending critical/high audit defects.
