@@ -2,31 +2,31 @@
 
 ## Revision 1
 
-Audit Issue: Gap 1 (MISSING_TEST) - Failure paths not exercised for DB errors / not-found
+Audit Issue: Gap 1 (DOC_CODE_MISMATCH) - Design document listed `jitter.go` as a file when `TTLWithJitter` is in `store.go`
 Severity: LOW
-Files Changed: `tests/cache_test.go`
-Action: Added `TestCachePatterns_FailurePaths` testing DB read error propagation for both `CacheAsideService` and `WriteThroughService`.
-Verification: `go test -v -run TestCachePatterns_FailurePaths ./tests/...` passed.
+Files Changed: `engineering/01-design.md`
+Action: Updated architecture list in `01-design.md` to indicate TTL jitter calculation is located in `store.go`.
+Verification: Verified file structure matches doc.
 Status: RESOLVED
 
 ---
 
 ## Revision 2
 
-Audit Issue: Gap 2 (MISSING_TEST) - Missing end-to-end integration unit test for `XFetchService.Get`
+Audit Issue: Gap 2 (MISSING_TEST) - Write-Behind overflow write-drop behavior not asserted at DB backing store
 Severity: LOW
 Files Changed: `tests/cache_test.go`
-Action: Added `TestXFetchService_Get` verifying initial miss fetch, cache hit without recomputation on high random draw, and proactive early recomputation on low random draw using `SetRandFunc`.
-Verification: `go test -v -run TestXFetchService_Get ./tests/...` passed.
+Action: Updated `TestWriteBehindService_QueueOverflow` to close service and assert `db.WriteCount() < 10` after queue burst.
+Verification: `go test -v -run TestWriteBehindService_QueueOverflow ./...` passed.
 Status: RESOLVED
 
 ---
 
 ## Revision 3
 
-Audit Issue: Gap 3 (MISSING_EDGE_CASE) - Write-Behind buffer overflow behavior unexercised
+Audit Issue: Gap 3 (MISSING_TEST) - Missing test verifying SWR deduplication of background revalidation under concurrency
 Severity: LOW
 Files Changed: `tests/cache_test.go`
-Action: Added `TestWriteBehindService_QueueOverflow` verifying rapid write burst exceeding buffer capacity updates memory cache immediately without panicking or deadlock.
-Verification: `go test -v -run TestWriteBehindService_QueueOverflow ./tests/...` passed.
+Action: Added `TestSWRService_ConcurrentRevalidationDeduplication` testing 10 concurrent stale GET calls and asserting `svc.RevalidateCount() == 1`.
+Verification: `go test -v -race -run TestSWRService_ConcurrentRevalidationDeduplication ./...` passed.
 Status: RESOLVED

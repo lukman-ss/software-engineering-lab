@@ -309,7 +309,6 @@ func TestWriteBehindService_QueueOverflow(t *testing.T) {
 	db := cache.NewMockDB(50 * time.Millisecond) // slow DB to keep worker busy
 	bufSize := 2
 	svc := cache.NewWriteBehindService(mem, db, 1*time.Minute, bufSize)
-	defer svc.Close()
 
 	// Fill queue past buffer capacity (1 in flight, 2 queued, remaining dropped)
 	for i := 0; i < 10; i++ {
@@ -321,5 +320,50 @@ func TestWriteBehindService_QueueOverflow(t *testing.T) {
 	val, err := svc.Get(ctx, "overflow-key")
 	if err != nil || val != "overflow-val" {
 		t.Fatalf("expected immediate cache read overflow-val, got %v", val)
+	}
+
+	svc.Close()
+
+	// 10 writes were sent to buffer size 2. Worker processes 1 current + at most 2 queued = 3 total.
+	if db.WriteCount() >= 10 {
+		t.Fatalf("expected overflow to drop writes (< 10 writes), got %d writes", db.WriteCount())
+	}
+}
+
+func TestSWRService_ConcurrentRevalidationDeduplication(t *testing.T) {
+	ctx := context.Background()
+	mem := cache.NewMemoryCache()
+	db := cache.NewMockDB(50 * time.Millisecond)
+	db.SetData("dedup-key", "v1")
+
+	// TTL 10ms, Stale Delta 500ms
+	svc := cache.NewSWRService(mem, db, 10*time.Millisecond, 500*time.Millisecond)
+
+	_, _ = svc.Get(ctx, "dedup-key")
+	time.Sleep(20 * time.Millisecond) // expire TTL into stale window
+
+	db.SetData("dedup-key", "v2")
+
+	// 10 concurrent reads in stale window
+	concurrency := 10
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			val, err := svc.Get(ctx, "dedup-key")
+			if err != nil || val != "v1" {
+				t.Errorf("expected stale v1, got %v, err %v", val, err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Wait for background revalidation worker
+	time.Sleep(100 * time.Millisecond)
+
+	// Deduplication ensures only 1 background revalidation occurred
+	if svc.RevalidateCount() != 1 {
+		t.Fatalf("expected exactly 1 background revalidation, got %d", svc.RevalidateCount())
 	}
 }

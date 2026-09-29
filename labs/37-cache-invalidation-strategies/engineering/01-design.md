@@ -43,7 +43,7 @@ Demonstrate and compare:
   - `repo.go`: Simulated SQL/database repository with query counters and simulated latency.
   - `patterns.go`: Cache-Aside, Write-Through, Write-Behind services.
   - `stampede.go`: Naive vs Single-Flight vs XFetch vs SWR implementations.
-  - `jitter.go`: TTL jitter calculation.
+  - TTL jitter calculation is located in `store.go`.
 - `cmd/demo/main.go`: End-to-end runnable comparison of patterns and stampede mitigations.
 - `tests/`: Integration and concurrency unit tests verifying stampede reduction, XFetch mathematical trigger, SWR behavior, and write policies.
 

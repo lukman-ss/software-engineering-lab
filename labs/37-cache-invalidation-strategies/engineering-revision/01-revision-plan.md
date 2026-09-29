@@ -9,19 +9,19 @@ None.
 
 ## Non-Blocking Issues
 
-1. **Failure Path Tests (MISSING_TEST)**: No unit tests exercise DB errors or `ErrNotFound` on `CacheAsideService` and `WriteThroughService`.
-2. **XFetch Integration Test (MISSING_TEST)**: `XFetchService.Get` integration with probabilistic early expiration is not covered in `tests/cache_test.go` (only math unit test exists).
-3. **Write-Behind Queue Overflow Edge Case (MISSING_EDGE_CASE)**: `WriteBehindService.Update` queue drop behavior on full buffer is unexercised.
+1. **Design Doc Architecture Component Mismatch (DOC_CODE_MISMATCH)**: `engineering/01-design.md` listed `jitter.go` as a file, but `TTLWithJitter` is located in `store.go`.
+2. **Write-Behind Queue Overflow Assertions (MISSING_TEST)**: `TestWriteBehindService_QueueOverflow` did not assert that write drops actually occurred at the DB layer (`db.WriteCount() < 10`).
+3. **SWR Revalidation Deduplication Concurrency Test (MISSING_TEST)**: `SWRService` deduplication via `revalidating` map had no concurrent test asserting `svc.RevalidateCount() == 1` across multiple simultaneous stale reads.
 
 ## Files To Change
 
+- `engineering/01-design.md`
 - `tests/cache_test.go`
 
 ## Tests To Add/Modify
 
-- `TestCachePatterns_FailurePaths`: Verify DB read/write errors propagate properly in `CacheAsideService` and `WriteThroughService`.
-- `TestXFetchService_Get`: Verify end-to-end `XFetchService.Get` hit, miss, and early recompute behaviors using deterministic `SetRandFunc`.
-- `TestWriteBehindService_QueueOverflow`: Verify `WriteBehindService` gracefully handles buffer overflow without panicking or blocking.
+- Modify `TestWriteBehindService_QueueOverflow` to assert write drop semantics (`db.WriteCount() < 10`).
+- Add `TestSWRService_ConcurrentRevalidationDeduplication` to test concurrent stale GET requests triggering exactly 1 background revalidation.
 
 ## Validation Commands
 

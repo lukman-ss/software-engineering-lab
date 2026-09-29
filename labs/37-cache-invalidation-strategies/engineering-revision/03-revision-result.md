@@ -25,8 +25,7 @@ Demo: PASS
 
 ## Remaining Risks
 
-- `SWRService` revalidations run in background goroutines without explicit synchronization `Close()` method (acceptable within educational lab scope).
-- `WriteBehindService` drops writes on buffer overflow by design (explicitly documented as demonstration tradeoff).
+- None.
 
 ## Re-Audit Status
 
