@@ -8,11 +8,11 @@ Previous Verdict: APPROVED
 Critical: 0
 High: 0
 Medium: 0
-Low: 0
+Low: 3
 
 ## Resolution
 
-Resolved: 0 (No issues reported by auditor)
+Resolved: 3
 Partially Resolved: 0
 Unresolved: 0
 
@@ -25,7 +25,8 @@ Demo: PASS
 
 ## Remaining Risks
 
-- None. Minor observations are all documented scope boundaries (SingleFlight in-process limitation, Write-Behind bounded drop policy, in-memory volatility).
+- `SWRService` revalidations run in background goroutines without explicit synchronization `Close()` method (acceptable within educational lab scope).
+- `WriteBehindService` drops writes on buffer overflow by design (explicitly documented as demonstration tradeoff).
 
 ## Re-Audit Status
 

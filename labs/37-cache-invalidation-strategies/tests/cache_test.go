@@ -231,3 +231,95 @@ func TestJitter(t *testing.T) {
 		}
 	}
 }
+
+func TestCachePatterns_FailurePaths(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Cache-Aside DB Read Error", func(t *testing.T) {
+		mem := cache.NewMemoryCache()
+		db := cache.NewMockDB(0) // empty DB produces ErrNotFound
+		svc := cache.NewCacheAsideService(mem, db, 1*time.Minute)
+
+		val, err := svc.Get(ctx, "nonexistent")
+		if err == nil || val != "" {
+			t.Fatalf("expected error on nonexistent key, got val=%q, err=%v", val, err)
+		}
+	})
+
+	t.Run("Write-Through DB Read Error", func(t *testing.T) {
+		mem := cache.NewMemoryCache()
+		db := cache.NewMockDB(0)
+		svc := cache.NewWriteThroughService(mem, db, 1*time.Minute)
+
+		val, err := svc.Get(ctx, "nonexistent")
+		if err == nil || val != "" {
+			t.Fatalf("expected error on nonexistent key, got val=%q, err=%v", val, err)
+		}
+	})
+}
+
+func TestXFetchService_Get(t *testing.T) {
+	ctx := context.Background()
+	mem := cache.NewMemoryCache()
+	db := cache.NewMockDB(50 * time.Millisecond)
+	db.SetData("xf-key", "initial-val")
+
+	svc := cache.NewXFetchService(mem, db, 1*time.Second, 1.0)
+
+	// Inject deterministic randFunc returning 0.99 (high u -> no early recompute)
+	svc.SetRandFunc(func() float64 { return 0.99 })
+
+	// 1. Initial read misses cache, queries DB
+	val, err := svc.Get(ctx, "xf-key")
+	if err != nil || val != "initial-val" {
+		t.Fatalf("expected initial-val, got %v (err %v)", val, err)
+	}
+	if db.QueryCount() != 1 {
+		t.Fatalf("expected 1 query on miss, got %d", db.QueryCount())
+	}
+
+	// 2. Immediate second read hits cache without recompute
+	val, err = svc.Get(ctx, "xf-key")
+	if err != nil || val != "initial-val" {
+		t.Fatalf("expected initial-val from cache, got %v", val)
+	}
+	if db.QueryCount() != 1 {
+		t.Fatalf("expected still 1 query, got %d", db.QueryCount())
+	}
+
+	// Update DB value
+	db.SetData("xf-key", "refreshed-val")
+
+	// Inject deterministic randFunc returning small u (0.00001) -> -50ms * 1.0 * ln(0.00001) = 575ms > ~950ms remaining? Wait, 575ms > remaining only when remaining < 575ms.
+	// Let's set u extremely small (1e-12 -> -50ms * ln(1e-12) = 1381ms > 950ms remaining).
+	svc.SetRandFunc(func() float64 { return 1e-12 })
+
+	// 3. Read triggers early recompute due to low u
+	val, err = svc.Get(ctx, "xf-key")
+	if err != nil || val != "refreshed-val" {
+		t.Fatalf("expected refreshed-val after early recompute, got %v", val)
+	}
+	if db.QueryCount() != 2 {
+		t.Fatalf("expected 2 queries after proactive recompute, got %d", db.QueryCount())
+	}
+}
+
+func TestWriteBehindService_QueueOverflow(t *testing.T) {
+	mem := cache.NewMemoryCache()
+	db := cache.NewMockDB(50 * time.Millisecond) // slow DB to keep worker busy
+	bufSize := 2
+	svc := cache.NewWriteBehindService(mem, db, 1*time.Minute, bufSize)
+	defer svc.Close()
+
+	// Fill queue past buffer capacity (1 in flight, 2 queued, remaining dropped)
+	for i := 0; i < 10; i++ {
+		svc.Update("overflow-key", "overflow-val")
+	}
+
+	// Immediate cache read reflects latest update
+	ctx := context.Background()
+	val, err := svc.Get(ctx, "overflow-key")
+	if err != nil || val != "overflow-val" {
+		t.Fatalf("expected immediate cache read overflow-val, got %v", val)
+	}
+}

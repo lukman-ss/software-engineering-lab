@@ -1,7 +1,7 @@
 # Engineering Revision Plan
 
 Target Lab: labs/37-cache-invalidation-strategies
-Previous Verdict: APPROVED (no blocking or high-severity issues found)
+Previous Verdict: APPROVED
 
 ## Blocking Issues
 
@@ -9,19 +9,19 @@ None.
 
 ## Non-Blocking Issues
 
-None. The three LOW-severity observations from the gaps analysis are all documented scope
-limitations, not defects:
-- SingleFlight operates in-process only (documented)
-- Write-Behind queue drops on overflow (documented as demonstration trade-off)
-- MemoryCache is volatile (appropriate for lab environment)
+1. **Failure Path Tests (MISSING_TEST)**: No unit tests exercise DB errors or `ErrNotFound` on `CacheAsideService` and `WriteThroughService`.
+2. **XFetch Integration Test (MISSING_TEST)**: `XFetchService.Get` integration with probabilistic early expiration is not covered in `tests/cache_test.go` (only math unit test exists).
+3. **Write-Behind Queue Overflow Edge Case (MISSING_EDGE_CASE)**: `WriteBehindService.Update` queue drop behavior on full buffer is unexercised.
 
 ## Files To Change
 
-None. All implementation files pass audit with PASS assessment.
+- `tests/cache_test.go`
 
 ## Tests To Add/Modify
 
-None. All documented behaviors are covered by passing tests. Race detector is clean.
+- `TestCachePatterns_FailurePaths`: Verify DB read/write errors propagate properly in `CacheAsideService` and `WriteThroughService`.
+- `TestXFetchService_Get`: Verify end-to-end `XFetchService.Get` hit, miss, and early recompute behaviors using deterministic `SetRandFunc`.
+- `TestWriteBehindService_QueueOverflow`: Verify `WriteBehindService` gracefully handles buffer overflow without panicking or blocking.
 
 ## Validation Commands
 
@@ -31,5 +31,3 @@ go test ./...
 go test -race ./...
 go run ./cmd/demo
 ```
-
-All commands confirmed passing before revision work began.

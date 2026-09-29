@@ -1,18 +1,32 @@
-# Changes Made
+# Engineering Changes Made
 
-Target Lab: labs/37-cache-invalidation-strategies
-Previous Verdict: APPROVED
+## Revision 1
 
-## Revision 0 (Audit Baseline Verification)
+Audit Issue: Gap 1 (MISSING_TEST) - Failure paths not exercised for DB errors / not-found
+Severity: LOW
+Files Changed: `tests/cache_test.go`
+Action: Added `TestCachePatterns_FailurePaths` testing DB read error propagation for both `CacheAsideService` and `WriteThroughService`.
+Verification: `go test -v -run TestCachePatterns_FailurePaths ./tests/...` passed.
+Status: RESOLVED
 
-Audit Issue: None
-Severity: N/A
-Files Changed: None
-Action: Verified existing implementation against audit findings:
-- `internal/cache/store.go`: thread safety and jitter logic verified PASS
-- `internal/cache/patterns.go`: Cache-Aside, Write-Through, Write-Behind verified PASS
-- `internal/cache/stampede.go`: SingleFlight, XFetch formula, Stale-While-Revalidate verified PASS
-- `tests/cache_test.go`: 5 test suites (patterns, stampede, XFetch, SWR, jitter) verified PASS
-- `cmd/demo/main.go`: end-to-end executable demonstration verified PASS
-Verification: `go test ./...` PASS, `go test -race ./...` PASS, `go run ./cmd/demo` PASS
+---
+
+## Revision 2
+
+Audit Issue: Gap 2 (MISSING_TEST) - Missing end-to-end integration unit test for `XFetchService.Get`
+Severity: LOW
+Files Changed: `tests/cache_test.go`
+Action: Added `TestXFetchService_Get` verifying initial miss fetch, cache hit without recomputation on high random draw, and proactive early recomputation on low random draw using `SetRandFunc`.
+Verification: `go test -v -run TestXFetchService_Get ./tests/...` passed.
+Status: RESOLVED
+
+---
+
+## Revision 3
+
+Audit Issue: Gap 3 (MISSING_EDGE_CASE) - Write-Behind buffer overflow behavior unexercised
+Severity: LOW
+Files Changed: `tests/cache_test.go`
+Action: Added `TestWriteBehindService_QueueOverflow` verifying rapid write burst exceeding buffer capacity updates memory cache immediately without panicking or deadlock.
+Verification: `go test -v -run TestWriteBehindService_QueueOverflow ./tests/...` passed.
 Status: RESOLVED
