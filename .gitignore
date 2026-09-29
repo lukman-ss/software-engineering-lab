@@ -82,6 +82,7 @@ tmp/
 /labs/04-caching/demo
 /labs/04-caching/*.test
 
-# Orchestrator outputs
+# Orchestrator
 runs/
-scripts/orchestrator/*.txt
+scripts/orchestrator/
+patch.js
