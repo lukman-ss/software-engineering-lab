@@ -311,6 +311,97 @@ func TestOAuth2_NegativePaths(t *testing.T) {
 	}
 }
 
+func TestOIDC_IDToken_IssuedInFuture(t *testing.T) {
+	secret := []byte("test-signing-key-123456789012")
+	claims := oidc.IDTokenClaims{
+		Issuer:     "https://auth.example.com",
+		Subject:    "user_123",
+		Audience:   "client-abc",
+		Expiration: time.Now().Add(2 * time.Hour).Unix(),
+		IssuedAt:   time.Now().Add(10 * time.Minute).Unix(),
+	}
+
+	signed, err := oidc.SignIDToken(claims, secret)
+	if err != nil {
+		t.Fatalf("SignIDToken failed: %v", err)
+	}
+
+	_, err = oidc.ParseAndVerifyIDToken(signed, secret, claims.Issuer, claims.Audience, "", time.Now())
+	if err == nil || !strings.Contains(err.Error(), "issued in future") {
+		t.Errorf("expected ErrIssuedInFuture, got: %v", err)
+	}
+}
+
+func TestPKCE_VerifierLength_Bounds(t *testing.T) {
+	// Too short (< 43)
+	if _, err := pkce.ComputeChallenge("short_verifier", "S256"); err == nil {
+		t.Errorf("expected ErrInvalidVerifierLength for short verifier")
+	}
+
+	// Too long (> 128)
+	longVerifier := strings.Repeat("a", 129)
+	if _, err := pkce.ComputeChallenge(longVerifier, "S256"); err == nil {
+		t.Errorf("expected ErrInvalidVerifierLength for long verifier")
+	}
+}
+
+func TestOAuth2_ExpiredAuthCode_And_ExpiredTokens(t *testing.T) {
+	key := []byte("secret-key-12345678901234567890")
+	as := server.NewAuthorizationServer("https://auth.example.com", key)
+	as.RegisterClient("client_exp", "https://app.com/cb")
+
+	cli := client.NewClient("client_exp", "https://app.com/cb", as, key)
+	ch, _ := cli.BuildAuthorizationRequest("openid")
+	ac, _ := as.Authorize("client_exp", "https://app.com/cb", "openid", "user_exp", ch, "S256", cli.Nonce)
+
+	// Manually expire authorization code
+	ac.ExpiresAt = time.Now().Add(-1 * time.Minute)
+
+	if _, err := as.ExchangeCode(ac.Code, "client_exp", "https://app.com/cb", cli.Verifier); err == nil {
+		t.Errorf("expected error for expired authorization code")
+	}
+}
+
+func TestOAuth2_ConcurrentRefreshReplay(t *testing.T) {
+	key := []byte("secret-key-12345678901234567890")
+	as := server.NewAuthorizationServer("https://auth.example.com", key)
+	as.RegisterClient("client_conc_ref", "https://app.com/cb")
+
+	cli := client.NewClient("client_conc_ref", "https://app.com/cb", as, key)
+	ch, _ := cli.BuildAuthorizationRequest("openid")
+	ac, _ := as.Authorize("client_conc_ref", "https://app.com/cb", "openid", "user_conc", ch, "S256", cli.Nonce)
+	resp, err := cli.Exchange(ac.Code)
+	if err != nil {
+		t.Fatalf("Exchange failed: %v", err)
+	}
+
+	stolenRT := resp.RefreshToken
+
+	var wg sync.WaitGroup
+	errCount := 0
+	var mu sync.Mutex
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := as.Refresh(stolenRT, "client_conc_ref")
+			if err != nil {
+				mu.Lock()
+				errCount++
+				mu.Unlock()
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// At least 9 out of 10 concurrent requests must fail due to rotation and family revocation
+	if errCount < 9 {
+		t.Errorf("expected at least 9 refresh errors due to replay detection, got %d errors", errCount)
+	}
+}
+
 func TestOAuth2_ConcurrencyAndRace(t *testing.T) {
 	key := []byte("secret-key-12345678901234567890")
 	as := server.NewAuthorizationServer("https://auth.example.com", key)

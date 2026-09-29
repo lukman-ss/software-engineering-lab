@@ -35,10 +35,24 @@ Result:
 --- PASS: TestOAuth2_FullFlowAndPKCEInterception (0.00s)
 === RUN   TestOAuth2_RefreshTokenRotation_AndReplayDetection
 --- PASS: TestOAuth2_RefreshTokenRotation_AndReplayDetection (0.00s)
+=== RUN   TestPKCE_Plain_Method
+--- PASS: TestPKCE_Plain_Method (0.00s)
+=== RUN   TestOIDC_MalformedJWT
+--- PASS: TestOIDC_MalformedJWT (0.00s)
+=== RUN   TestOAuth2_NegativePaths
+--- PASS: TestOAuth2_NegativePaths (0.00s)
+=== RUN   TestOIDC_IDToken_IssuedInFuture
+--- PASS: TestOIDC_IDToken_IssuedInFuture (0.00s)
+=== RUN   TestPKCE_VerifierLength_Bounds
+--- PASS: TestPKCE_VerifierLength_Bounds (0.00s)
+=== RUN   TestOAuth2_ExpiredAuthCode_And_ExpiredTokens
+--- PASS: TestOAuth2_ExpiredAuthCode_And_ExpiredTokens (0.00s)
+=== RUN   TestOAuth2_ConcurrentRefreshReplay
+--- PASS: TestOAuth2_ConcurrentRefreshReplay (0.00s)
 === RUN   TestOAuth2_ConcurrencyAndRace
 --- PASS: TestOAuth2_ConcurrencyAndRace (0.00s)
 PASS
-ok  	labs/31-oauth2-and-oidc/tests	0.338s
+ok  	labs/31-oauth2-and-oidc/tests	0.317s
 ```
 
 ## Race Detector
