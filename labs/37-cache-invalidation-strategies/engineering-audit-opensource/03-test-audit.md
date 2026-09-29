@@ -1,14 +1,22 @@
-## Test Coverage
+# Test Audit
 
-- Cache patterns: verified read/write counts, cache hits/misses.
-- Stampede mitigation: naive >1 DB queries, singleflight ==1.
-- XFetch: deterministic rand tests confirm formula.
-- SWR: stale serve and async refresh verified.
-- Jitter: range validation test.
+Coverage includes:
+- Cache-Aside read/write happy path.
+- Write-Through read/write happy path.
+- Write-Behind immediate cache and async flush.
+- Naive stampede causing multiple DB queries.
+- SingleFlight coalescing to single query.
+- XFetch logic deterministic tests for formula correctness.
+- Stale-While-Revalidate stale served, async revalidate.
+- TTL jitter range.
 
-All tests pass with race detector.
+Missing negative tests:
+- DB query/write error context cancellation.
+- Cache miss with context timeout.
+- WriteBehind buffer overflow drop path (not tested for dropped writes).
+- SWR revalidation failure path (DB error while refreshing).
+- Expiration edge case exact TTL boundary.
 
-## Gaps
-- WriteBehind queue overflow silently drops writes (MEDIUM risk).
-- SWR test relies on sleeps; could be flaky under load (LOW).
-- No distributed stampede protection (out of scope).
+Passing test suite covers core behaviors; gaps exist in error handling and edge-case failure scenarios.
+
+Assessment: Tests sufficient to verify claimed behavior; warnings on missing negative paths.

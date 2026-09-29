@@ -1,16 +1,17 @@
-## Docs vs Code
-- README feature summary matches implementation.
-- Demo output matches execution-result.md (TTL values differ in jitter sample due to RNG, non‑issue).
-- Engineering notes match code.
+# Docs vs Code Audit
 
-## Mismatches Found
-DOC_CODE_MISMATCH: README mentions `jitter.go` in architecture (line 19) but no such file exists; jitter lives in store.go instead. (LOW)
+## README claims vs implementation
+- Claims list matches actual services and demo output. ✅
+- Descriptions of patterns, stampede mitigations, XFetch formula, SWR, TTL jitter are all present in code and tests. ✅
+- No extra undocumented features.
 
-TEST_CLAIM_MISMATCH: None.
+## Engineering notes vs code
+- Design doc (01-design.md) enumerates expected behavior; implementation aligns.
+- Implementation notes (02-implementation-notes.md) mention queue overflow drop and single-flight scope – both reflected in code.
+- Execution result (03-execution-result.md) shows demo output matching README examples.
 
-RESEARCH_IMPLEMENTATION_MISMATCH: Not audited this stage.
+## Test coverage vs claims
+- Test file exercises all core claims (cache patterns, stampede, XFetch, SWR, jitter). ✅
+- No tests for failure paths (DB errors, context cancellation) – documented as gaps.
 
-## Execution Verification
-go test ./... => PASS
-go test -race ./... => PASS
-go run ./cmd/demo => PASS (output documented)
+Assessment: Documentation accurately reflects code; no mismatches.

@@ -1,19 +1,23 @@
 # Engineering Audit Plan
 
 Target Lab: labs/37-cache-invalidation-strategies
-Implementation Files: internal/cache/*.go, cmd/demo/main.go, tests/cache_test.go
+Implementation Files: internal/cache/*.go, cmd/demo/main.go
 Tests: tests/cache_test.go
 Executable/Demo: cmd/demo/main.go
-Approved Research Inputs: (not audited this stage)
+Approved Research Inputs: N/A (audit stage focuses on implementation)
 Main Claims To Verify:
-- Cache patterns behavior
-- Stampede mitigation
-- XFetch probabilistic refresh
-- SWR stale serve
-- TTL jitter
+- Cache-Aside, Write-Through, Write-Behind behave as described.
+- SingleFlight coalesces concurrent misses.
+- XFetch early expiration logic correct.
+- SWR serves stale data and triggers async revalidation.
+- TTL jitter adds jitter within range.
 Commands To Run:
-- go test ./...
-- go test -race ./...
-- go run ./cmd/demo
+```
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo
+```
 Primary Risks:
-- Timing-sensitive concurrency tests flakiness
+- Concurrency safety in WriteBehind flush.
+- Correctness of XFetch formula.
+- SWR revalidation race conditions.

@@ -1,55 +1,73 @@
-# Code Audit Findings
+# Code Audit
 
 ## Finding 1
 
-Location: internal/cache/stampede.go:125-136
-Claimed Behavior: Probabilistic early refresh follows `-Δ · β · ln(U) > TTL_remaining` where `U ~ Uniform(0,1)`.
-Observed Implementation: `ShouldRecompute` explicitly computes `expiryCompute := -deltaSec * beta * math.Log(u)` and checks `expiryCompute > ttlRemainingSec`, with input bounds checking `u <= 0 || u >= 1`.
+Location: `internal/cache/store.go:31-43`
+Claimed Behavior: Thread-safe cache read with expiration check.
+Observed Implementation: Uses `sync.RWMutex.RLock()`, checks map existence and `time.Now().After(item.ExpiresAt)`.
 Assessment: PASS
 Severity: LOW
-Notes: Mathematical formula accurately implements the research correction, avoiding negative ln evaluation without the minus sign.
+Notes: Correctly handles non-expiring (`ExpiresAt.IsZero()`) and expired keys.
 
 ## Finding 2
 
-Location: internal/cache/stampede.go:62-79
-Claimed Behavior: Singleflight coalesces simultaneous cache misses down to 1 DB query per key.
-Observed Implementation: Uses `golang.org/x/sync/singleflight.Group.Do(key, func() (interface{}, error) {...})` with double-check inside flight execution.
+Location: `internal/cache/store.go:78-86`
+Claimed Behavior: TTL jitter generation to desynchronize expiration times.
+Observed Implementation: Generates random duration using `rand.Int63n(int64(maxJitter))` and adds to `base`.
 Assessment: PASS
 Severity: LOW
-Notes: Safe, clean, thread-safe deduplication per key within process boundary.
+Notes: Correctly guards `maxJitter <= 0` and produces TTL within `[base, base+maxJitter)`. Uses `math/rand` pseudo-random generator, annotated with ponytail comment.
 
 ## Finding 3
 
-Location: internal/cache/patterns.go:120-135, 163-166
-Claimed Behavior: Write-Behind background worker drains queue and shuts down safely.
-Observed Implementation: Worker selects between `writeQueue` and `quit` channel. When `quit` fires, it drains `len(s.writeQueue) > 0` before returning. `Close()` closes `quit` and calls `s.wg.Wait()`.
+Location: `internal/cache/patterns.go:39-47`
+Claimed Behavior: Cache-Aside invalidates cache after DB write.
+Observed Implementation: Performs synchronous DB write first, then deletes key from `MemoryCache`.
 Assessment: PASS
 Severity: LOW
-Notes: Safe shutdown sequence; no orphaned background goroutines.
+Notes: Order of operations guarantees invalidation on DB success.
 
 ## Finding 4
 
-Location: internal/cache/patterns.go:156-160
-Claimed Behavior: Non-blocking enqueue on full write queue.
-Observed Implementation: Uses `select` with `default: // drop or handle overflow`.
+Location: `internal/cache/patterns.go:78-89`
+Claimed Behavior: Write-Through synchronously writes to DB and cache.
+Observed Implementation: Writes to DB, measures elapsed delta, then updates `MemoryCache` with new value.
 Assessment: PASS
 Severity: LOW
-Notes: Explicitly documented as an intentional simplification in implementation notes. Appropriate for lab scope.
+Notes: Read-after-write will hit cache immediately.
 
 ## Finding 5
 
-Location: internal/cache/stampede.go:226-253
-Claimed Behavior: SWR triggers single background revalidation per key without spawning redundant concurrent revalidations.
-Observed Implementation: Protected by `s.mu.Lock()`, checks `revalidating[key]`. If already in flight, exits early. Spawns goroutine with 10s context timeout and cleans up key upon completion in defer.
+Location: `internal/cache/patterns.go:120-135`
+Claimed Behavior: Write-Behind background worker flushes queued writes to DB and handles graceful shutdown.
+Observed Implementation: Worker selects between `writeQueue` channel and `quit` signal; on `quit`, drains remaining buffered items in `writeQueue`.
 Assessment: PASS
 Severity: LOW
-Notes: Properly avoids goroutine explosion under continuous stale read load.
+Notes: `Close()` closes quit channel and waits for `Wait()` group completion. Queue overflow defaults to drop (demonstration decision).
 
 ## Finding 6
 
-Location: internal/cache/store.go:20-76
-Claimed Behavior: Thread-safe in-memory cache operations with TTL expiration.
-Observed Implementation: `RWMutex` correctly guards read (`RLock`/`RUnlock`) and write (`Lock`/`Unlock`) paths across `Get`, `GetRaw`, `Set`, and `Delete`.
+Location: `internal/cache/stampede.go:56-84`
+Claimed Behavior: `SingleFlightService` coalesces concurrent cache misses to 1 DB query.
+Observed Implementation: Uses `golang.org/x/sync/singleflight.Group`. Calls `s.flight.Do(key, ...)` which double-checks cache inside execution function before querying DB and calling `s.cache.Set(...)`.
 Assessment: PASS
 Severity: LOW
-Notes: No race conditions detected under race detector execution.
+Notes: Thread-safe, double-check pattern prevents redundant DB queries for concurrent goroutines.
+
+## Finding 7
+
+Location: `internal/cache/stampede.go:125-136`
+Claimed Behavior: Probabilistic early expiration (XFetch) evaluation.
+Observed Implementation: `ShouldRecompute` evaluates `expiryCompute := -deltaSec * beta * math.Log(u)` and checks `expiryCompute > ttlRemainingSec`. Guards `u <= 0 || u >= 1`.
+Assessment: PASS
+Severity: LOW
+Notes: Formula correctly incorporates negative sign (`-Δ · β · ln(U)`) per research approved revision.
+
+## Finding 8
+
+Location: `internal/cache/stampede.go:226-254`
+Claimed Behavior: Stale-While-Revalidate triggers async background revalidation while guarding concurrent duplicate revalidations for the same key.
+Observed Implementation: `triggerRevalidate` tracks in-flight revalidations in `revalidating map[string]bool` under mutex. Spawns single background goroutine with `context.WithTimeout(10s)` and cleans up map entry on completion.
+Assessment: PASS
+Severity: LOW
+Notes: Prevents goroutine stampede on stale cache hits. Correct atomic increment on revalidation count.
