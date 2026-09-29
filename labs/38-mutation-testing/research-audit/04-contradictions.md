@@ -1,39 +1,36 @@
 # Contradictions Analysis
 
-Target Lab: labs/38-mutation-testing
-Audit Scope: Research Files Only (PIPELINE OVERRIDE)
+## Summary
+No material contradictions were identified across research documents, primary sources, or secondary documentation.
 
----
+## Potential Tension Points Examined
 
-## Analysis of Document Consistency
+### Contradiction 1: Undecidability vs Practical Equivalence Detection
+Statement A: Determining whether a mutant is equivalent is mathematically undecidable (Wikipedia, Harman 2025).
+Location: research/05-report.md Finding 6; research/04-contradictions.md Point 2
+Statement B: ACH achieves 0.95 precision and 0.96 recall in equivalent mutant detection with preprocessing (arXiv:2501.12862).
+Location: research/05-report.md Finding 7; research/03-evidence.md Evidence 12
+Type: INTERNAL / SOURCE_CONFLICT
+Impact: LOW
+Assessment: Not a contradiction. Statement A addresses general theoretical undecidability for arbitrary programs. Statement B describes empirical heuristic classification on specific codebases. The distinction is accurately analyzed in research/04-contradictions.md.
 
-### 1. Research vs. Sources
-- `research/02-sources.md` defines 13 sources.
-- `research/03-evidence.md` cross-references these sources consistently (Evidence 1 through 14 match Sources 1 through 13).
-- `research/05-report.md` synthesizes all 14 evidence statements across 11 clear findings.
-- No discrepancy between source claims and reported findings.
+### Contradiction 2: Mutation Testing Preconditions
+Statement A: Mutation testing cannot exist on its own; it requires existing tests to evaluate (Meta Engineering Blog).
+Location: research/03-evidence.md Evidence 9; research/04-contradictions.md Point 1
+Statement B: ACH generates new tests from unkilled mutants (arXiv:2501.12862).
+Location: research/05-report.md Finding 7
+Type: INTERNAL / SOURCE_CONFLICT
+Impact: LOW
+Assessment: Not a contradiction. ACH uses unkilled mutants as targets for LLM test generation, but relies on the overall test framework and mutant execution as an oracle. The research clearly articulates the workflow extension.
 
-### 2. Theoretical Undecidability vs. Empirical Tool Claims
-- Theoretical fact: Proving equivalence of arbitrary programs is mathematically undecidable (reduction to the Halting Problem).
-- Practical tool behavior: Tools use heuristics (e.g., PIT avoiding enum constructors, Meta ACH using LLM classifiers with static analysis preprocessing) to detect equivalence with practical precision (up to 0.95).
-- Audit Assessment: This represents the classic distinction between formal computability limits and engineering heuristics. The research explicitly highlights this nuance in `research/04-contradictions.md` (Point 2) and `research/05-report.md` (Finding 6). No contradiction exists.
+### Contradiction 3: Computational Cost Perception
+Statement A: Mutation testing is computationally expensive and slow for large systems (PIT FAQ).
+Location: research/03-evidence.md Evidence 9
+Statement B: PIT is fast and runs in minutes (PIT Homepage).
+Location: research/02-sources.md Source 4
+Type: SOURCE_CONFLICT
+Impact: LOW
+Assessment: Relative speedup compared to 1980s-era full re-compilation systems vs absolute wall-clock overhead on modern large enterprise repositories. Fully explained in research/04-contradictions.md Point 3.
 
-### 3. "Mutation Testing Requires Existing Tests" vs. "LLM-Guided Test Generation"
-- Traditional concept: Mutation testing evaluates an existing test suite by mutating code and measuring test failure.
-- Modern expansion (Meta ACH): Mutation testing identifies uncaught mutants, which then serve as targeted prompts for LLMs to generate new tests.
-- Audit Assessment: This is an evolutionary expansion rather than a logical conflict. The research analyzes this distinction in `research/04-contradictions.md` (Point 1). No contradiction exists.
-
-### 4. Computational Cost Claims
-- Earlier historical context: Full mutation testing was computationally prohibitive (recompiling and rerunning all tests for every mutant).
-- Modern tools: Bytecode manipulation in-memory (PIT), AST-based mutating (Stryker), and incremental testing on changed code only allow execution in minutes.
-- Audit Assessment: The research accurately describes how modern tools mitigate computational cost without claiming the problem is eliminated. No contradiction exists.
-
-### 5. Status of Martin Fowler's Bliki
-- Note: Martin Fowler's bliki carries an explicit "This is a draft entry" banner.
-- Audit Assessment: The researcher resolved earlier audit feedback by consistently annotating all in-text citations as `Martin Fowler (pre-publication draft; carries 'This is a draft entry' notice)`. This eliminates any risk of treating pre-publication commentary as definitive finalized doctrine.
-
----
-
-## Verdict
-
-No material contradictions found.
+## Conclusion
+No material contradictions found. All tension points are appropriately analyzed and reconciled.

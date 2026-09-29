@@ -1,69 +1,33 @@
 # Research Gap Analysis
 
-Target Lab: labs/38-mutation-testing
-Audit Scope: Research Files Only (PIPELINE OVERRIDE)
-
----
-
 ## Gap 1
-
 Type: WEAK_SOURCE
 Severity: MEDIUM
-Location: research/02-sources.md (Source 1), research/03-evidence.md (Evidence 1)
-Problem:
-Foundational academic paper by DeMillo, Lipton, and Sayward (1978) — "Hints on test data selection: Help for the practicing programmer" — was not directly read or verified via DOI/IEEE Xplore; claims are secondary-attributed via Wikipedia citations.
-Required Revision:
-None blocking. The research honestly annotates this limitation ("Paper text NOT accessed directly... NOT VERIFIED for direct quotations"). Can be retained as secondary citation with existing disclaimer.
+Location: research/02-sources.md (Source 1, Source 9)
+Problem: Foundational academic papers (DeMillo, Lipton, Sayward 1978; Jia & Harman 2009) were not opened or read directly. Claims are secondary-attributed via Wikipedia citations.
+Required Revision: Direct review of primary papers when access permits. Disclosures in current research are accurate and honest.
 Can Be Approved Without Fix: YES
-
----
 
 ## Gap 2
-
-Type: WEAK_SOURCE
+Type: SCOPE_ERROR
 Severity: MEDIUM
-Location: research/02-sources.md (Source 9)
-Problem:
-Jia & Harman (2009) comprehensive survey paper on mutation testing was cited only by bibliographic metadata from Wikipedia; full text was not directly examined.
-Required Revision:
-None blocking. The research properly disclaims direct access ("Paper NOT opened directly; cite as secondary-attributed only").
+Location: research/05-report.md (Finding 7)
+Problem: Meta ACH metrics (73% acceptance rate, 36% privacy relevance) represent a single corporate trial on Android Kotlin classes for privacy hardening, but could be read as general benchmarks for LLM mutation testing.
+Required Revision: Report already scopes this to Android Kotlin privacy hardening and notes it is implementation-specific. Keep clear scoping in any downstream educational material.
 Can Be Approved Without Fix: YES
-
----
 
 ## Gap 3
-
 Type: WEAK_SOURCE
 Severity: LOW
-Location: research/02-sources.md (Source 3), research/03-evidence.md (Evidence 3)
-Problem:
-Martin Fowler's bliki entry carries an explicit "This is a draft entry" banner on the live web page.
-Required Revision:
-None needed. Resolved in revision phase by explicitly qualifying all in-line references as pre-publication drafts.
+Location: research/02-sources.md (Source 3)
+Problem: Martin Fowler bliki entry is marked with a "draft" notice on the live site.
+Required Revision: Research text already flags this explicitly in multiple places as a pre-publication draft. No further fix required.
 Can Be Approved Without Fix: YES
-
----
 
 ## Gap 4
-
-Type: SCOPE_ERROR
+Type: UNVERIFIED_CLAIM
 Severity: LOW
-Location: research/05-report.md (Finding 7)
-Problem:
-Meta ACH performance figures (73% acceptance, 36% privacy relevance, 0.95/0.96 precision/recall) stem from an internal Meta trial on Kotlin Android code, which may not generalize to other programming languages, domains, or smaller codebases.
-Required Revision:
-None needed. The research report explicitly notes these figures are Kotlin/Android/privacy trial specific and highlights that peer review is pending.
-Can Be Approved Without Fix: YES
-
----
-
-## Gap 5
-
-Type: MISSING_SOURCE
-Severity: LOW
-Location: research/05-report.md (Finding 11), research/06-open-questions.md (Weak Evidence 2)
-Problem:
-Numeric targets often cited colloquially for mutation scores (e.g. 80%, 85%, 90%) lack an authoritative industry or academic consensus standard.
-Required Revision:
-None needed. The research report explicitly documents Finding 11: "No industry-standard mutation score threshold exists", preventing arbitrary recommendations.
+Location: research/05-report.md (Finding 11)
+Problem: Claim that "no industry-standard mutation score threshold exists" is derived from absence in PIT/Stryker documentation rather than a comprehensive survey of testing literature.
+Required Revision: Phrasing is already hedged ("Sources consulted did not establish a consensus standard"). Maintain this qualification.
 Can Be Approved Without Fix: YES

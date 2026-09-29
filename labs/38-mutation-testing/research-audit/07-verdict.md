@@ -1,83 +1,54 @@
 # Audit Verdict
 
 Target Lab: labs/38-mutation-testing
-Audit Date: 2026-09-29
 
----
+Audit Date: 2026-09-29
 
 ## Summary
 
-Major Claims Reviewed: 13
-Sources Reviewed: 13 (7 directly verified via URL; 2 unread academic papers via secondary citation; 2 community GitHub projects; 2 Wikipedia pages)
+Major Claims Reviewed: 11
+Sources Reviewed: 13
 Unsupported Claims: 0
-Contradictions: 0 material contradictions
-Code Issues: NOT_APPLICABLE (Research-only phase)
-Test Failures: NOT_APPLICABLE (Research-only phase)
-Research Gaps: 5 (all LOW or MEDIUM; all non-blocking)
-
----
+Contradictions: 0
+Code Issues: NOT_APPLICABLE (research-only stage)
+Test Failures: NOT_APPLICABLE (research-only stage)
+Research Gaps: 4 (2 MEDIUM, 2 LOW)
 
 ## Quality Gates
 
 Source Integrity:
-PASS
-— All 9 directly-accessible URLs verified and confirmed reachable. Two paywalled/academic papers explicitly disclosed as secondary-attributed only. No fabricated sources or URLs.
+PASS — All cited URLs verified reachable and relevant. Academic papers not opened directly are explicitly disclosed as secondary-attributed and qualified accordingly.
 
 Claim Support:
-PASS
-— All 13 audited claims are supported by accessible sources or explicitly disclosed as unverifiable secondary citations. Confidence levels are accurately assigned. No CRITICAL or HIGH unsupported claims.
+PASS — All major claims are either directly supported by verifiable sources, or are appropriately hedged with source limitation disclosures.
 
 Internal Consistency:
-PASS
-— No material contradictions between research files, evidence log, sources list, and open questions document. Theoretical tension points (undecidability vs. heuristic approximation; LLM test generation vs. "requires existing tests") are clearly resolved and contextualized.
+PASS — No material contradictions across research files. Tension points are acknowledged and correctly reconciled.
 
 Code Correctness:
-NOT_APPLICABLE
-— Pipeline override: research-only audit stage.
+NOT_APPLICABLE (PIPELINE OVERRIDE: research-only audit stage)
 
 Tests:
-NOT_APPLICABLE
-— Pipeline override: research-only audit stage.
+NOT_APPLICABLE (PIPELINE OVERRIDE: research-only audit stage)
 
 Documentation Accuracy:
-PASS
-— Research revision cycle resolved all prior audit flags: Martin Fowler draft properly qualified in-line, Meta ACH stats attributed to arXiv-verifiable abstract, "five barriers" framing attributed to Harman/Meta explicitly, Go tooling gap filled with community sources, subsumed mutants documented, and threshold ambiguity explicitly flagged as unresolved in the literature.
-
----
+PASS — Research files are internally coherent and consistent across 01-plan.md, 02-sources.md, 03-evidence.md, 04-contradictions.md, 05-report.md, 06-open-questions.md, and the revision artifacts.
 
 ## Blocking Issues
 
 None.
 
----
-
 ## Non-Blocking Issues
 
-1. **Foundational papers unread directly**: DeMillo et al. (1978) and Jia & Harman (2009) cited via Wikipedia secondary references. No direct text verification of the original papers. Transparently disclosed in source notes with "NOT VERIFIED for direct quotations."
-
-2. **Draft source**: Martin Fowler bliki entry carries "This is a draft entry" banner. Properly qualified in all inline citations.
-
-3. **Single-vendor trial data for ACH**: Meta ACH performance statistics (73% acceptance, 0.95/0.96 precision/recall) originate from a single internal Meta trial on Kotlin Android privacy testing. The arXiv preprint abstract corroborates the blog post claims. Findings are appropriately scoped as implementation-specific.
-
-4. **FSE 2025 peer review status**: The arXiv preprint (2501.12862) was submitted to FSE 2025 Industry Track. Full peer review outcome is unknown at time of research and is noted in the limitations section.
-
----
+1. DeMillo 1978 and Jia & Harman 2009 (foundational papers) cited via secondary attribution only; primary texts not accessed. Disclosed honestly in source and evidence files.
+2. Martin Fowler bliki is explicitly marked DRAFT by the author. Qualified in-line throughout research text.
+3. Meta ACH statistics are implementation-specific to Android Kotlin privacy testing at Meta. Scoping is disclosed, but downstream educational material should reinforce this boundary.
+4. No industry-standard mutation score threshold claim is based on absence of consensus in a limited set of sources (PIT, Stryker docs). Appropriately hedged in report text.
 
 ## Required Revisions
 
-None. Research is approved as-is.
-
----
+None.
 
 ## Final Status
 
 APPROVED_WITH_WARNINGS
-
-The research for labs/38-mutation-testing is technically sound and ready to serve as the foundation for lab implementation or publication. All major claims are either directly verified against reachable primary/official sources, or transparently disclosed as secondary-attributed with appropriate confidence downgrades. The source inventory is comprehensive for the scope of the topic. Internal consistency is maintained across all research documents. Research gaps are explicitly catalogued in `06-open-questions.md` and were addressed in the prior revision cycle (`research-revision/`).
-
-Warnings are limited to inherent limitations of the research pipeline:
-- Two key historical papers remain unread directly (paywalled academic literature).
-- One industry source is still in editorial draft stage.
-- One industry trial is from a single vendor and is scoped to a specific platform and domain.
-
-None of these warnings undermine the core claims, which are independently corroborated by official tool documentation (PIT, Stryker), Wikipedia, and a publicly accessible arXiv preprint.
