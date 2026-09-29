@@ -103,6 +103,58 @@ func TestCalculateDiscount_Strong(t *testing.T) {
 			expectedFinal:        190.0,
 			expectedFreeShipping: false,
 		},
+		{
+			name: "Degenerate zero amount and zero items",
+			order: Order{
+				TotalAmount: 0.0,
+				ItemCount:   0,
+				Tier:        TierStandard,
+				HasCoupon:   false,
+			},
+			expectedRate:         0.0,
+			expectedDiscount:     0.0,
+			expectedFinal:        0.0,
+			expectedFreeShipping: false,
+		},
+		{
+			name: "Below-boundary amount 499.99 for Premium tier",
+			order: Order{
+				TotalAmount: 499.99,
+				ItemCount:   2,
+				Tier:        TierPremium,
+				HasCoupon:   false,
+			},
+			expectedRate:         0.05,
+			expectedDiscount:     24.9995,
+			expectedFinal:        474.9905,
+			expectedFreeShipping: true,
+		},
+		{
+			name: "Below-boundary amount 99.99 for Standard tier",
+			order: Order{
+				TotalAmount: 99.99,
+				ItemCount:   1,
+				Tier:        TierStandard,
+				HasCoupon:   false,
+			},
+			expectedRate:         0.0,
+			expectedDiscount:     0.0,
+			expectedFinal:        99.99,
+			expectedFreeShipping: false,
+		},
+		{
+			name: "Coupon true with zero items",
+			order: Order{
+				TotalAmount: 150.0,
+				ItemCount:   0,
+				Tier:        TierStandard,
+				HasCoupon:   true,
+			},
+			expectedRate:         0.05,
+			expectedDiscount:     7.5,
+			expectedFinal:        142.5,
+			expectedFreeShipping: false,
+		},
 	}
 
 	for _, tt := range tests {

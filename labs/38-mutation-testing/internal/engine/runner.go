@@ -12,9 +12,7 @@ import (
 type TestFunc func(src []byte) bool
 
 // Runner executes a test suite against all mutation plans and collects a Report.
-type Runner struct {
-	mu sync.Mutex
-}
+type Runner struct{}
 
 func NewRunner() *Runner {
 	return &Runner{}
