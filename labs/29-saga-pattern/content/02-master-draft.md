@@ -20,9 +20,9 @@ Bayangkan sebuah proses estafet atau barisan transaksi mandiri di mana setiap pe
 
 Saga didefinisikan sebagai urutan transaksi lokal (*sequence of local transactions*). Setiap transaksi lokal memperbarui database pada satu layanan dan mempublikasikan event atau pesan untuk memicu langkah berikutnya.
 
-Terdapat tiga jenis transaksi utama dalam saga:
+Terdapat tiga jenis transaksi utama dalam saga, sebuah taksonomi yang diformalisasi oleh Microsoft Azure Architecture Center (tingkat kepercayaan MEDIUM — satu sumber otoritatif yang merinci ini secara eksplisit, bukan standar universal):
 1. **Compensable Transactions:** Transaksi yang dapat dibatalkan atau dikompensasi dengan aksi sebaliknya (*opposite effect*).
-2. **Pivot Transactions:** Titik balik (*point of no return*) dalam saga. Jika transaksi pivot berhasil, maka saga dijamin akan mencapai status akhir (tidak dapat dibatalkan lagi).
+2. **Pivot Transactions:** Titik balik (*point of no return*) dalam saga. Jika transaksi pivot maka saga dijamin akan mencapai status akhir (tidak dapat dibatalkan lagi).
 3. **Retryable Transactions:** Transaksi yang mengikuti pivot transaction dan dijamin sukses (bersifat idempotent).
 
 ## Failure Scenario
