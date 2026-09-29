@@ -21,16 +21,16 @@ Accessed: 2026-09-28
 Source Tier: Tier 2 (crowdsourced encyclopedia; cross-referenced with primary sources)
 Relevance: Overview of definitions, goals, history, hypotheses, RIP model, operators, equivalent mutant problem. Cites primary literature (DeMillo 1978; Ammann & Offutt 2008; Jia & Harman 2009; Offutt 1992; Deng et al. 2013; Madeyski et al. 2014).
 
-## Source 3
+## Source 3 — REMOVED (UNREACHABLE)
 
 Title: Mutation Testing (bliki entry)
 Publisher: Martin Fowler
 URL: https://martinfowler.com/bliki/MutationTesting.html
-Published: Draft (no date shown; page carries "This is a draft entry" notice)
-Accessed: 2026-09-28
-Source Tier: Tier 1 (authoritative expert)
-Relevance: Explains motivation (probing test quality), cost history (Jester era), speedups in modern tools (Pitest, Stryker), manual mutation testing practice, LLM-era relevance.
-Notes: Page is explicitly marked DRAFT by the author; treat as pre-publication source.
+Published: Draft (no date shown; page carried a "This is a draft entry" notice at time of access)
+Accessed: 2026-09-28 (now unreachable)
+Source Tier: N/A — no longer cited as an active source
+Relevance: Previously used as corroborating insight on mutation testing motivation, cost history (Jester era), speedups in modern tools (PIT, Stryker), manual mutation testing practice, and LLM-era relevance.
+Notes: REMOVED from this research. The URL returned HTTP 404 on re-verification; no archived copy is available at web.archive.org. All claims that were previously corroborated by this source are now supported exclusively by reachable primary sources (PIT, Stryker, Wikipedia) or marked NOT VERIFIED where no alternative source exists. The draft page was never finalized for public reference.
 
 ## Source 4
 

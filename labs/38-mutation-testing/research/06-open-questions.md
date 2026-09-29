@@ -16,7 +16,7 @@
 
 1. **Meta ACH statistics**: The 73% acceptance rate and 36% privacy relevance claims come from a single industry blog post (Meta Engineering, September 2025). No independent verification or peer-reviewed publication accessed. Confidence is MEDIUM at best.
 
-2. **Mutation score thresholds**: No consensus found on what mutation score threshold constitutes "good enough" — sources did not agree on a standard target (80%, 85%, 90% variously proposed elsewhere but NOT VERIFIED here).
+2. **Mutation score thresholds**: No consensus found on what mutation score threshold constitutes "good enough" — sources did not establish a standard universal target, leaving teams to balance safety criticality, computational budget, and developer adoption.
 
 3. **Fowler bliki draft status**: Martin Fowler's mutation testing page is explicitly marked as DRAFT at the time of access. It should not be cited as finalized evidence until the author removes that notice.
 

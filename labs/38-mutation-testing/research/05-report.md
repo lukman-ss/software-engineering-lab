@@ -6,7 +6,7 @@ How does mutation testing expose weaknesses in test suites that achieve 100% cod
 
 ## Executive Summary
 
-Mutation testing is a white-box testing technique that systematically injects small faults (mutants) into source code and runs the existing test suite against each mutant. If tests pass despite the mutation, those mutants survive, revealing that the test suite lacks the assertions needed to detect real bugs — even when code coverage metrics report 100%. First proposed by DeMillo, Lipton, and Sayward in 1978, the technique has evolved from academic theory into practical tools like PIT (JVM) and Stryker (JS/TS). Modern developments leverage LLMs (Meta's ACH, September 2025) to scale mutation testing and generate tests for previously unkillable mutants. The central insight is that code coverage measures what is *executed*, while mutation testing measures what is *verified* — a distinction critical for software reliability.
+Mutation testing is a white-box testing technique that systematically injects small faults (mutants) into source code and runs the existing test suite against each mutant. If tests pass despite the mutation, those mutants survive, revealing that the test suite lacks the assertions needed to detect real bugs — even when code coverage metrics report 100%. First proposed by DeMillo, Lipton, and Sayward in 1978, the technique has evolved from academic theory into practical tools like PIT (JVM) and Stryker (JS/TS). Modern developments leverage LLMs (Meta's ACH, September 2025) to scale mutation testing and generate tests for previously unkillable mutants. The central insight is that code coverage measures what is *executed*, while mutation testing measures what is *verified* — a distinction critical for software reliability. Evaluation-focused tools follow a standard execution workflow (generate mutants → run tests → classify outcome), whereas modern generative tools extend this model by using mutants as guides for test synthesis.
 
 ## Findings
 
@@ -128,7 +128,7 @@ Notes: Subsumed mutants are an advanced refinement topic. Core mutation testing 
 
 ### Finding 11: No industry-standard mutation score threshold exists
 
-Claim: There is no universally accepted minimum mutation score threshold; proposed values (80%, 85%, 90%) vary by project and context. Sources consulted did not establish a consensus standard.
+Claim: There is no universally accepted minimum mutation score threshold; recommended targets vary by project risk profile, codebase maturity, and team disincentive risks. Sources consulted did not establish a consensus standard.
 
 Evidence: PIT documentation does not state a recommended minimum score. Stryker documentation focuses on reporting rather than threshold enforcement. No authoritative source was found prescribing a specific threshold value. The absence of a threshold is notable — unlike code coverage where 80%+ is commonly recommended, mutation testing lacks an equivalent benchmark.
 

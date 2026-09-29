@@ -7,7 +7,7 @@ Evidence: "Mutation testing was originally proposed by Richard Lipton as a stude
 Source: Wikipedia (referencing DeMillo, Lipton, Sayward 1978)
 URL: https://en.wikipedia.org/wiki/Mutation_testing
 Confidence: HIGH
-Corroborated By: Martin Fowler's bliki entry (pre-publication draft; carries "This is a draft entry" notice) also references the historical timeline of mutation testing.
+Corroborated By: Wikipedia alone suffices for this historical claim; the Fowler bliki citation has been removed (page unreachable).
 Notes: Original paper NOT directly accessed. Bibliographic reference from Wikipedia: R. A. DeMillo, R. J. Lipton, F. G. Sayward. Hints on test data selection: Help for the practicing programmer. IEEE Computer, 11(4):34-41, April 1978.
 
 ## Evidence 2
@@ -27,7 +27,7 @@ Evidence: "The value of a test suite is measured by the percentage of mutants th
 Source: Wikipedia + Martin Fowler (pre-publication draft; carries "This is a draft entry" notice)
 URL: https://en.wikipedia.org/wiki/Mutation_testing / https://martinfowler.com/bliki/MutationTesting.html
 Confidence: HIGH
-Corroborated By: PIT FAQ: "The quality of your tests can be gauged from the percentage of mutations killed."
+Corroborated By: Wikipedia + PIT FAQ ("The quality of your tests can be gauged from the percentage of mutations killed."). The former Martin Fowler citation has been removed (page unreachable); claim now rests solely on Wikipedia and PIT, both directly verified.
 Notes: The formula Mutation Score = (Killed / Total) × 100% is standard convention; Wikipedia states it as a ratio.
 
 ## Evidence 4
@@ -70,13 +70,13 @@ Notes: Weak mutation testing only requires Reach + Infect (first two conditions)
 
 ## Evidence 8
 
-Claim: All major mutation testing tools follow the same pattern: generate mutants → run tests → classify as killed/survived.
+Claim: All major evaluation-focused mutation testing tools follow the same pattern: generate mutants → run tests → classify as killed/survived (while generative approaches such as Meta ACH extend this by generating tests to target surviving mutants).
 Evidence: "Mutation testing involves making small changes to the program being tested. Each changed version is called a mutant. A test detects, and therefore rejects, a mutant upon test failure –– failure indicating that the test successfully discerned that the behaviour of the mutant differs from the behaviour of the original code. Rejection is called killing the mutant." — Wikipedia (citing DeMillo et al., 1978). PIT states: "PIT runs your unit tests against automatically modified versions of your application code. When the application code changes, it should produce different results and cause the unit tests to fail."
 Source: Wikipedia + PIT
 URL: https://en.wikipedia.org/wiki/Mutation_testing / https://pitest.org/
 Confidence: HIGH
 Corroborated By: Stryker docs: "Bugs, or mutants, are automatically inserted into your production code. Your tests are run for each mutant. If your tests fail then the mutant is killed. If your tests passed, the mutant survived."
-Notes: PIT mutates bytecode in memory (never writes to disk). Stryker may work differently at the AST level.
+Notes: PIT mutates bytecode in memory (never writes to disk). Stryker works at the AST level. Modern generative systems (e.g., Meta ACH) invert or extend this cycle by synthesizing tests targeted at surviving mutants.
 
 ## Evidence 9
 
