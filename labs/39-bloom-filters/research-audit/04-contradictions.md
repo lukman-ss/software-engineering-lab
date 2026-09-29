@@ -1,26 +1,31 @@
-# 04 - Contradictions Audit: Bloom Filters Research
+# Contradictions Audit: Bloom Filters Research
 
 ## Summary
-Tidak ditemukan kontradiksi material internal maupun eksternal yang merusak keabsahan riset Bloom Filters.
+Tidak ditemukan kontradiksi internal maupun kontradiksi sumber pada hasil riset `labs/39-bloom-filters/research/`.
 
 ---
 
-## Analysis of Investigated Trade-offs
+## Contradiction Analysis
 
-### 1. Hash Independence Assumption vs Double Hashing Approximation
-- **Statement A**: Teori orisinal Burton H. Bloom (1970) mengasumsikan $k$ fungsi hash acak independen dan berdistribusi seragam.
-- **Statement B**: Praktik rekayasa (Kirsch & Mitzenmacher 2006) menggunakan dua fungsi hash $h_1(x) + i \cdot h_2(x) \pmod m$ untuk menghemat CPU.
-- **Type**: SOURCE_REFINEMENT (Bukan kontradiksi fatal, melainkan optimasi terbukti).
-- **Assessment**: Teorema Kirsch-Mitzenmacher secara formal membuktikan bahwa laju error asimtotik konvergen ke bound yang sama dengan $k$ hash independen.
+### Contradiction 1: Hash Independence Theory vs Kirsch-Mitzenmacher Practice
+- Statement A: Paper Bloom (1970) mensyaratkan $k$ fungsi hash independen penuh.  
+- Location: `04-contradictions.md` (Divergence 1)  
+- Statement B: Paper Kirsch & Mitzenmacher (2006) mendemonstrasikan bahwa 2 fungsi hash independen $h_1(x)$ dan $h_2(x)$ cukup untuk mendefinisikan $g_i(x) = h_1(x) + i \cdot h_2(x) \pmod m$ tanpa degradasi false positive rate asimtotik.  
+- Location: `04-contradictions.md` (Divergence 1)  
+- Type: DIVERGENCE / OPTIMIZATION_EVOLUTION  
+- Impact: Memberikan optimasi komputasi signifikan untuk implementasi nyata tanpa membatalkan prinsip dasar Bloom Filter.  
+- Assessment: Dokumen riset merekam dan menganalisis trade-off ini dengan tepat. PASS.  
 
-### 2. Cache-Line Misses vs Bit Uniformity (Standard vs Blocked Filter)
-- **Statement A**: Standard Bloom filter menyebarkan $k$ bit secara acak di seluruh array $m$, memicu hingga $k$ cache miss per lookup.
-- **Statement B**: Block-based Bloom Filter (RocksDB) melokalisasi $k$ bit dalam 1 cache line 64-byte untuk lookup berkecepatan tinggi, dengan konsekuensi variasi load factor lokal sedikit menaikkan false positive rate.
-- **Type**: ARCHITECTURAL_TRADEOFF.
-- **Assessment**: Riset mendokumentasikan trade-off ini secara transparan di `04-contradictions.md` dan `06-open-questions.md`.
+### Contradiction 2: CPU Cache Locality (Standard vs Blocked Bloom Filter)
+- Statement A: Standard Bloom Filter menyebar $k$ bit di seluruh $m$ bit array (menimbulkan hingga $k$ cache misses per query).  
+- Location: `04-contradictions.md` (Divergence 2)  
+- Statement B: Block-based / Split Bloom Filter membatasi bit-bit hanya dalam 1 cache line (misal 512 bit), membatasi ke 1 cache miss tetapi sedikit meningkatkan empirical false positive rate.  
+- Location: `04-contradictions.md` (Divergence 2)  
+- Type: ARCHITECTURAL_TRADEOFF  
+- Impact: Relevan untuk tuning performa engine database produksi (seperti RocksDB FastLocalFilter).  
+- Assessment: Dokumen riset dengan cermat mengidentifikasi perbedaan arsitektural ini. PASS.  
 
-### 3. Static Sizing vs Dynamic Resizing
-- **Statement A**: Rumus Bloom filter mensyaratkan estimasi $n$ elemen di awal.
-- **Statement B**: Jika $n$ terlampaui tanpa batas, false positive rate mendekati 100%.
-- **Type**: LIMITATION_CONSISTENCY.
-- **Assessment**: Riset secara eksplisit mencantumkan keterbatasan kapasitas statis pada bagian limitasi di `05-report.md:59` dan menyarankan Scalable Bloom Filter (SBF) pada `06-open-questions.md:9`.
+---
+
+## Conclusion
+No material contradictions found. All theoretical differences are properly classified as architectural trade-offs.

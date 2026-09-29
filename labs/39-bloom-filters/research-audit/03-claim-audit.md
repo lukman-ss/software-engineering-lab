@@ -1,74 +1,71 @@
-# 03 - Claim Audit: Bloom Filters Research
+# Claim Audit: Bloom Filters Research
 
-## Claim 1: Zero False Negative Guarantee
-- **Claim**: Bloom filter menjamin tidak ada false negative (0% false negative rate), namun dapat menghasilkan false positive ($p > 0$).
-- **Location**: `03-evidence.md` (Evidence 1); `05-report.md` (Finding 1).
-- **Evidence Provided**: Setting bit 1 saat insert menjamin pengecekan $k$ hash posisi selalu mengembalikan 1 jika elemen ada.
-- **Source**: Burton H. Bloom (1970).
-- **Source Actually Supports Claim**: YES.
-- **Classification**: FACT.
-- **Severity**: LOW.
-- **Notes**: Asas fundamental struktur data Bloom Filter.
-
----
-
-## Claim 2: Mathematical Formulae for Optimal Bit Size and Hash Count
-- **Claim**:
-  $$m = - \frac{n \ln p}{(\ln 2)^2} \approx -1.4427 \cdot n \log_2 p$$
-  $$k = \frac{m}{n} \ln 2 \approx 0.6931 \cdot \frac{m}{n}$$
-  Untuk $p = 0.01$ (1%), rasio $m/n \approx 9.585$ bit/elemen dan $k \approx 7$.
-- **Location**: `03-evidence.md` (Evidence 2); `05-report.md` (Finding 1).
-- **Evidence Provided**: Derivasi probabilitas false positive $p \approx (1 - e^{-kn/m})^k$ dengan minimasi terhadap $k$.
-- **Source**: Burton H. Bloom (1970); Kirsch & Mitzenmacher (2006).
-- **Source Actually Supports Claim**: YES.
-- **Classification**: FACT.
-- **Severity**: LOW.
-- **Notes**: Kalkulasi matematis diverifikasi akurat. $-1 / (\ln 2)^2 \approx -1 / (0.693147^2) \approx 2.08136 \cdot \ln(1/p) \approx 1.4427 \cdot \log_2(1/p)$. Untuk $p=0.01$, $- \ln(0.01) / (\ln 2)^2 \approx 4.60517 / 0.480453 \approx 9.585$ bits/elemen. $k = 9.585 \times \ln 2 \approx 6.64 \approx 7$.
+## Claim 1
+Claim: Bloom Filter tidak pernah menghasilkan False Negative (garansi 100% akurat tanpa false negative).  
+Location: `05-report.md` (Executive Summary, Finding 1) & `03-evidence.md` (Evidence 1)  
+Evidence Provided: Sifat dasar pengisian bit array. Elemen yang telah di-insert menjamin seluruh $k$ bit bernilai 1.  
+Source: Burton H. Bloom (1970)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: CRITICAL (Key fundamental property of Bloom Filters)  
+Notes: Terverifikasi.  
 
 ---
 
-## Claim 3: Kirsch-Mitzenmacher Double Hashing Optimization
-- **Claim**: Kombinasi linear dua fungsi hash independen $g_i(x) = h_1(x) + i \cdot h_2(x) \pmod m$ cukup untuk mensimulasikan $k$ fungsi hash independen tanpa degradasi false positive rate asimtotik.
-- **Location**: `03-evidence.md` (Evidence 3); `05-report.md` (Finding 2).
-- **Evidence Provided**: Teorema Kirsch-Mitzenmacher (ESA 2006) membuktikan kesetaraan distribusi keanggotaan bit asimtotik.
-- **Source**: Kirsch & Mitzenmacher (2006).
-- **Source Actually Supports Claim**: YES.
-- **Classification**: FACT.
-- **Severity**: LOW.
-- **Notes**: Standar de facto industri (Google Guava, RocksDB, Redis).
+## Claim 2
+Claim: Penentuan $m$ dan $k$ optimal mengikuti rumus $m = - \frac{n \ln p}{(\ln 2)^2} \approx -1.4427 \cdot n \log_2 p$ dan $k = \frac{m}{n} \ln 2 \approx 0.6931 \cdot \frac{m}{n}$. Untuk $p = 0.01$, alokasi adalah $\sim 9.6$ bit/elemen dan $k = 7$ (konsumsi $\sim 1.2$ MB RAM per 1.000.000 elemen).  
+Location: `05-report.md` (Executive Summary, Finding 1) & `03-evidence.md` (Evidence 2)  
+Evidence Provided: Derivasi probabilitas $p \approx (1 - e^{-kn/m})^k$.  
+Source: Bloom (1970), Kirsch & Mitzenmacher (2006)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: HIGH  
+Notes: Turunan matematis tepat secara eksak. Notasi $-1.4427 \cdot n \log_2 p$ menggunakan basis $\log_2$, di mana $\frac{1}{\ln 2} \approx 1.4427$, sehingga $- \frac{\ln p}{(\ln 2)^2} = - \frac{\log_2 p}{\ln 2} = - 1.4427 \log_2 p$. Perhitungan RAM per 1.000.000 elemen ($9.585 \times 10^6$ bit $/ 8 / 1024^2 \approx 1.143$ MB $\approx 1.2$ MB) akurat.  
 
 ---
 
-## Claim 4: Cache Penetration Mitigation
-- **Claim**: Bloom filter mencegah masalah "Cache Penetration" dengan memfilter query untuk kunci nonexistent sebelum query menyentuh cache atau disk database, memotong hingga ~99% beban disk/database untuk nonexistent keys pada $p=0.01$.
-- **Location**: `03-evidence.md` (Evidence 4); `05-report.md` (Finding 3).
-- **Evidence Provided**: Kunci nonexistent yang tidak ada dalam filter dieliminasi 100% saat bit 0 ditemukan, hanya meloloskan fraksi $p$ false positive.
-- **Source**: Martin Kleppmann (DDIA); RocksDB Wiki.
-- **Source Actually Supports Claim**: YES.
-- **Classification**: INTERPRETATION.
-- **Severity**: LOW.
-- **Notes**: Valid pattern in distributed backend architectures.
+## Claim 3
+Claim: Kombinasi dua fungsi hash $g_i(x) = h_1(x) + i \cdot h_2(x) \pmod m$ mensimulasikan $k$ fungsi hash independen tanpa mengorbankan false positive rate secara asimtotik (Kirsch-Mitzenmacher Double Hashing).  
+Location: `05-report.md` (Finding 2) & `03-evidence.md` (Evidence 3)  
+Evidence Provided: Teorema Kirsch-Mitzenmacher 2006.  
+Source: Kirsch & Mitzenmacher (ESA 2006)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: HIGH  
+Notes: Diadopsi secara luas pada mesin industri seperti RocksDB dan Google Guava.  
 
 ---
 
-## Claim 5: LSM-Tree Disk I/O Pruning per SSTable
-- **Claim**: Mesin basis data berbasis Log-Structured Merge-Tree (LSM-Tree) seperti Bigtable, RocksDB, dan Cassandra menggunakan Bloom Filter pada setiap SSTable untuk menghindari pembacaan disk yang tidak perlu.
-- **Location**: `03-evidence.md` (Evidence 5); `05-report.md` (Finding 4).
-- **Evidence Provided**: Bigtable paper (Chang et al., OSDI 2006, p. 7): "A Bloom filter allows us to ask whether an SSTable might contain any data for a specified row/column pair... Drastically reduces the number of disk seeks required for read operations."
-- **Source**: Fay Chang et al. (2006).
-- **Source Actually Supports Claim**: YES.
-- **Classification**: FACT.
-- **Severity**: LOW.
-- **Notes**: Kutipan diverifikasi langsung pada dokumen orisinal Bigtable.
+## Claim 4
+Claim: Bloom Filter memotong 99% query nonexistent sebelum mencapai Cache atau Database, mencegah Cache Penetration.  
+Location: `05-report.md` (Finding 3) & `03-evidence.md` (Evidence 4)  
+Evidence Provided: Analisis arsitektural filter di depan query path database.  
+Source: Martin Kleppmann (DDIA); RocksDB Wiki  
+Source Actually Supports Claim: YES  
+Classification: INTERPRETATION  
+Severity: MEDIUM  
+Notes: Angka 99% berlaku spesifik untuk konfigurasi target false positive rate $p = 0.01$ ($1 - 0.01 = 0.99$). Secara konsep tepat dan terdukung.  
 
 ---
 
-## Claim 6: Standard Bloom Filter Inability to Support Deletion
-- **Claim**: Standard Bloom Filter tidak mendukung operasi penghapusan (`delete`). Menghapus bit 1 menjadi 0 dapat menyebabkan false negative pada elemen lain akibat hash collisions.
-- **Location**: `03-evidence.md` (Evidence 6); `05-report.md` (Limitations & Disagreement).
-- **Evidence Provided**: Cuckoo Filter paper (Fan et al., ACM CoNEXT 2014) Table 1 & Section 1.
-- **Source**: Fan et al. (2014).
-- **Source Actually Supports Claim**: YES.
-- **Classification**: FACT.
-- **Severity**: LOW.
-- **Notes**: Properti intrinsik bit array terbagi.
+## Claim 5
+Claim: Storage engine berbasis LSM-Tree (RocksDB, Cassandra, Google Bigtable) mengandalkan Bloom Filter per-SSTable untuk menghindari disk seek pada point query.  
+Location: `05-report.md` (Finding 4) & `03-evidence.md` (Evidence 5)  
+Evidence Provided: Pengutipan langsung dari paper Bigtable (Chang et al., 2006) dan arsitektur RocksDB/Cassandra.  
+Source: Chang et al. (2006); RocksDB Wiki; Apache Cassandra Docs  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: HIGH  
+Notes: Terverifikasi komprehensif.  
+
+---
+
+## Claim 6
+Claim: Standard Bloom Filter tidak mendukung operasi deletion (`delete`), karena pengosongan bit dapat menyebabkan false negative pada elemen lain.  
+Location: `05-report.md` (Areas of Disagreement) & `03-evidence.md` (Evidence 6)  
+Evidence Provided: Karakteristik bit sharing akibat hash collision.  
+Source: Fan et al. (2014); Broder & Mitzenmacher (2004)  
+Source Actually Supports Claim: YES  
+Classification: FACT  
+Severity: HIGH  
+Notes: Sesuai dengan spesifikasi dasar Bloom Filter.  
