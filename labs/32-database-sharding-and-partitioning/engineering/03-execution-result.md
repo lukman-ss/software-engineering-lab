@@ -3,15 +3,15 @@
 ## Build
 Command:
 ```bash
-go test -v ./...
+go test -v -count=1 ./...
 ```
 Result:
 ```text
 === RUN   TestPartitionPruning
 --- PASS: TestPartitionPruning (0.00s)
 === RUN   TestRoutingAndConsistentHashRelocation
-    sharding_test.go:106: Hash Modulo moved 756 / 1000 keys (75.60%)
-    sharding_test.go:107: Consistent Hash moved 0 / 1000 keys (0.00%)
+    sharding_test.go:107: Hash Modulo moved 3756 / 5000 keys (75.12%)
+    sharding_test.go:108: Consistent Hash moved 800 / 5000 keys (16.00%)
 --- PASS: TestRoutingAndConsistentHashRelocation (0.00s)
 === RUN   TestClusterScatterGatherAndGSI
 --- PASS: TestClusterScatterGatherAndGSI (0.00s)
@@ -20,27 +20,40 @@ Result:
 === RUN   TestConcurrentClusterAccess
 --- PASS: TestConcurrentClusterAccess (0.00s)
 PASS
-ok  	labs/32-database-sharding-and-partitioning/tests	0.604s
+ok  	labs/32-database-sharding-and-partitioning/tests	0.446s
 ```
 
 ## Tests
 Command:
 ```bash
-go test ./...
+go test -count=1 ./...
 ```
 Result:
 ```text
-ok  	labs/32-database-sharding-and-partitioning/tests	0.604s
+ok  	labs/32-database-sharding-and-partitioning/tests	0.446s
 ```
 
 ## Race Detector
 Command:
 ```bash
-go test -race ./...
+go test -race -v -count=1 ./...
 ```
 Result:
 ```text
-ok  	labs/32-database-sharding-and-partitioning/tests	1.360s
+=== RUN   TestPartitionPruning
+--- PASS: TestPartitionPruning (0.00s)
+=== RUN   TestRoutingAndConsistentHashRelocation
+    sharding_test.go:107: Hash Modulo moved 3756 / 5000 keys (75.12%)
+    sharding_test.go:108: Consistent Hash moved 800 / 5000 keys (16.00%)
+--- PASS: TestRoutingAndConsistentHashRelocation (0.02s)
+=== RUN   TestClusterScatterGatherAndGSI
+--- PASS: TestClusterScatterGatherAndGSI (0.00s)
+=== RUN   TestIDGenerators
+--- PASS: TestIDGenerators (0.00s)
+=== RUN   TestConcurrentClusterAccess
+--- PASS: TestConcurrentClusterAccess (0.00s)
+PASS
+ok  	labs/32-database-sharding-and-partitioning/tests	1.405s
 ```
 
 ## Demo
@@ -68,10 +81,10 @@ Records Found: 1 | Partitions Scanned: 1 / 4 (Pruned 3 partitions)
 Result: Severe Write Hotspot! 100% writes hit single shard.
 
 [Scenario B] High-Cardinality Key (user_id) Sharding:
+  Node shard-3: 400 records [############                  ]
   Node shard-0: 400 records [############                  ]
   Node shard-1: 0 records [                              ]
   Node shard-2: 200 records [######                        ]
-  Node shard-3: 400 records [############                  ]
 Result: Uniform distribution across physical shards.
 
 --- 3. Resharding / Scale-out Comparison: Hash Modulo vs Consistent Hashing ---
@@ -84,14 +97,14 @@ Cluster Resize: 4 Shards -> 5 Shards (Total Keys: 10000)
 Scatter-Gather Query (by Email without Shard Key):
   Nodes Broadcasted : 4 / 4
   Records Matched   : 1
-  Execution Time    : 72.958µs
+  Execution Time    : 92µs
 Global Secondary Index (Lookup Vindex) Query:
   Nodes Broadcasted : 1 (Direct Point Lookup via Shard Key mapping)
   Record Found      : ID=usr-342, Email=user_342@company.com, ShardKey=tenant-42
-  Execution Time    : 1.292µs (GSI Avoided Broadcast Overhead!)
+  Execution Time    : 1µs (GSI Avoided Broadcast Overhead!)
 
 --- 5. Distributed Unique ID Generation: UUIDv7 vs Central Sequence Block Allocation ---
-Generated UUIDv7 (Time-Ordered 128-bit) : 01a0e71a-1878-72fb-8ecf-a72767621365
+Generated UUIDv7 (Time-Ordered 128-bit) : 01a0eb21-fc8c-7aba-abc5-bcb4361a5e7b
 Sequence Block Allocator IDs (Block Size=5) : 1 2 3 4 5 6 7 8 
 
 [DEMO COMPLETE] All database sharding & partitioning concepts successfully executed.
