@@ -1,212 +1,270 @@
-# Research Evidence: Saga Pattern
+# Evidence Register: Saga Pattern
 
-## Evidence 1: Saga Menggantikan 2PC untuk Database-Per-Service
+## Evidence 1
 
-**Claim:** Traditional database guarantees (ACID) dan 2PC tidak applicable untuk multiple independently managed data stores di microservices architecture
+**Claim:** Saga pattern originated in 1987 paper by Garcia-Molina & Salem as mechanism for long-lived database transactions using compensating transactions.
 
-**Evidence:** "Because of these limitations, architectures that rely on interprocess communication, or traditional transaction models like two-phase commit protocol, are often better suited for the Saga pattern." — Microsoft Azure Architecture Center
+**Evidence:** Temporal blog footnote states "sagas aren't a trend; they've been around in databases since the 80s" linking to Garcia-Molina paper; Microsoft Azure docs reference saga history as extension of long-running transaction concept. Cornell mirror hosts the original PDF at /andru/cs711/2002fa/reading/sagas.pdf.
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Hector Garcia-Molina & Kenneth Salem — "Sagas" (1987) via Cornell mirror; Temporal Blog 2023-05-24 footnote 2.
+
+**URL:** https://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf ; https://temporal.io/blog/saga-pattern-made-easy
 
 **Confidence:** HIGH
 
-**Corroborated By:**
-- Chris Richardson / Microservices.io: "You have applied the Database per Service pattern... the application cannot simply use a local ACID transaction" (https://microservices.io/patterns/data/saga.html)
+**Corroborated By:** Microsoft Azure Architecture Center (references saga historical context); multiple secondary sources citing DOI 10.1145/62224.62226.
+
+**Notes:** PDF is scanned image with LZW compression; text extraction garbled. Historical claim verified via citation chain rather than direct PDF text parsing. DOI and authorship cross-checked via ACM Digital Library references in multiple sources.
 
 ---
 
-## Evidence 2: Saga = Sequence of Local Transactions
+## Evidence 2
 
-**Claim:** Saga memecah transaksi terdistribusi menjadi sequence of local transactions, dimana setiap local transaction meng-update database dan memicu transaction berikutnya via event/message
+**Claim:** Saga is a sequence of local transactions where each local transaction updates its own database and publishes a message/event to trigger the next; if one fails, compensating transactions undo preceding changes.
 
-**Evidence:** "The Saga pattern manages transactions by breaking them into a sequence of local transactions. Each local transaction: 1. Completes its work atomically within a single service. 2. Updates the service's database. 3. Initiates the next transaction via an event or message." — Microsoft Azure Architecture Center
+**Evidence:** "Implement each business transaction that spans multiple services as a saga. A saga is a sequence of local transactions. Each local transaction updates the database and publishes a message or event to trigger the next local transaction in the saga. If a local transaction fails because it violates a business rule then the saga executes a series of compensating transactions that undo the changes that were made by the preceding local transactions."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Chris Richardson — Microservices.io: Pattern Saga
+
+**URL:** https://microservices.io/patterns/data/saga.html
 
 **Confidence:** HIGH
 
-**Corroborated By:**
-- Chris Richardson / Microservices.io: "A saga is a sequence of local transactions. Each local transaction updates the database and publishes a message or event to trigger the next local transaction in the saga." (https://microservices.io/patterns/data/saga.html)
+**Corroborated By:** Microsoft Azure Architecture Center — "The Saga pattern manages transactions by breaking them into a sequence of local transactions. Each local transaction completes its work atomically within a single service... If a local transaction fails, the saga performs a series of compensating transactions to reverse the changes." ; AWS Prescriptive Guidance Saga Pattern.
+
+**Notes:** Definition consistent across all Tier 1/2 sources opened.
 
 ---
 
-## Evidence 3: Compensating Transactions vs Rollback
+## Evidence 3
 
-**Claim:** Compensating transactions meng-undo perubahan dari local transactions yang sudah completed, TAPI bukan simple rollback - ini adalah business-level corrective action
+**Claim:** Two coordination approaches exist: Choreography (each service publishes domain events triggering next service) and Orchestration (central orchestrator tells participants what to execute).
 
-**Evidence:** "If a local transaction fails, the saga performs a series of compensating transactions to reverse the changes that the preceding local transactions made." — Microsoft Azure Architecture Center
+**Evidence:** Microservices.io: "There are two ways of coordination sagas: Choreography - each local transaction publishes domain events that trigger local transactions in other services; Orchestration - an orchestrator (object) tells the participants what local transactions to execute." Microsoft: "The two typical saga implementation approaches are choreography and orchestration."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microservices.io: Pattern Saga + Microsoft Azure Architecture Center
+
+**URL:** https://microservices.io/patterns/data/saga.html ; https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
 **Confidence:** HIGH
 
-**Corroborated By:**
-- Chris Richardson: "lack of automatic rollback - a developer must design compensating transactions that explicitly undo changes made earlier in a saga rather than relying on the automatic rollback feature of ACID transactions" (https://microservices.io/patterns/data/saga.html)
+**Corroborated By:** Temporal blog "To choreograph or orchestrate your saga" (2023-07-13); AWS Prescriptive Guidance.
+
+**Notes:** Lab specification correctly reflects this dichotomy with matching diagrams.
 
 ---
 
-## Evidence 4: Dua Pendekatan Implementasi (Choreography vs Orchestration)
+## Evidence 4
 
-**Claim:** Dua pendekatan implementasi saga: Choreography (event-driven, loose coordination) dan Orchestration (centralized coordinator)
+**Claim:** Choreography benefits: loose coupling, no coordinator, no SPOF, good for simple workflows; drawbacks: spaghetti events, cyclic dependencies, hard to track/debug, difficult integration testing.
 
-**Evidence:**
-- "Choreography: In the choreography approach, services exchange events without a centralized controller."
-- "Orchestration: In orchestration, a centralized controller, or orchestrator, handles all the transactions and tells the participants which operation to perform based on events."
-— Microsoft Azure Architecture Center
+**Evidence:** Microsoft table: Benefits — "Good for simple workflows that have few services and don't need a coordination logic; Doesn't introduce a single point of failure." Drawbacks — "Workflow can be confusing when you add new steps; risk of cyclic dependency; Integration testing is difficult because all services must run." Temporal: "just from looking at each microservice's individual codebase, it's difficult to understand the order that the system should have."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microsoft Azure Architecture Center + Temporal Blog 2023-07-13
+
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga ; https://temporal.io/blog/to-choreograph-or-orchestrate-your-saga-that-is-the-question
 
 **Confidence:** HIGH
 
-**Corroborated By:**
-- Chris Richardson: "There are two ways of coordination sagas: Choreography - each local transaction publishes domain events that trigger local transactions in other services. Orchestration - an orchestrator (object) tells the participants what local transactions to execute" (https://microservices.io/patterns/data/saga.html)
+**Corroborated By:** Microservices.io related discussion.
+
+**Notes:** Lab spec claim ("Sederhana untuk workflow kecil, loose coupling" / "Sulit di-track jika workflow kompleks - spaghetti event") verified.
 
 ---
 
-## Evidence 5: Three Types of Transactions (Compensable, Pivot, Retryable)
+## Evidence 5
 
-**Claim:** Saga terdiri dari tiga jenis transaksi: Compensable (bisa di-undo), Pivot (point of no return), dan Retryable (idempotent, bisa di-retry)
+**Claim:** Orchestration benefits: better for complex workflows, avoids cyclic dependencies, clear separation of responsibilities, easier debugging; drawbacks: requires coordination logic, introduces single point of failure.
 
-**Evidence:**
-- **Compensable transactions:** "can be undone or compensated for by other transactions with the opposite effect"
-- **Pivot transactions:** "serve as the point of no return in the saga. After a pivot transaction succeeds, compensable transactions are no longer relevant"
-- **Retryable transactions:** "follow the pivot transaction. Retryable transactions are idempotent and help ensure that the saga can reach its final state"
-— Microsoft Azure Architecture Center
+**Evidence:** Microsoft table: Benefits — "Better suited for complex workflows or when you add new services; Avoids cyclic dependencies; Clear separation of responsibilities simplifies service logic." Drawbacks — "Other design complexity requires an implementation of a coordination logic; Introduces a point of failure." AWS: "The saga pattern is difficult to debug and its complexity increases with the number of microservices."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microsoft Azure Architecture Center ; AWS Prescriptive Guidance
+
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga ; https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html
 
 **Confidence:** HIGH
+
+**Corroborated By:** Temporal blog (orchestration centralized control flow easier to understand/debug; SPOF is "glaring Achilles' heel").
+
+**Notes:** Lab spec orchestration diagram and description verified.
 
 ---
 
-## Evidence 6: Lack of Isolation (Tidak Ada Isolation Level 'I' dalam ACID)
+## Evidence 6
 
-**Claim:** Sagas tidak memiliki built-in isolation, yang bisa menyebabkan anomali data (lost updates, dirty reads, fuzzy reads)
+**Claim:** Compensating transactions are semantic undo operations, not automatic rollback; required for each reversible step (e.g., Reserve Stock → Release Stock; Charge Card → Refund).
 
-**Evidence:** "Because each service manages its own data, called participant data, there's no built-in isolation across services. This setup can result in data inconsistencies or durability problems, such as partially applied updates or conflicts between services." — Microsoft Azure Architecture Center
+**Evidence:** Microsoft: "Compensable transactions can be undone or compensated for by other transactions with the opposite effect." Lab spec mapping (Reserve Stock→Release Stock etc.) matches definition. Microservices.io: "a developer must design compensating transactions that explicitly undo changes made earlier in a saga rather than relying on the automatic rollback feature of ACID transactions" and "Lack of isolation (the 'I' in ACID)."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microsoft Azure Architecture Center ; Microservices.io
+
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga ; https://microservices.io/patterns/data/saga.html
 
 **Confidence:** HIGH
 
-**Corroborated By:**
-- Chris Richardson: "Lack of isolation (the 'I' in ACID) - the lack of isolation means that there's risk that the concurrent execution of multiple sagas and transactions can use data anomalies" (https://microservices.io/patterns/data/saga.html)
+**Corroborated By:** AWS Saga Pattern; Temporal compensating-actions blog linked from main saga post.
+
+**Notes:** Lab spec compensation table verified as correct examples.
 
 ---
 
-## Evidence 7: Countermeasures untuk Anomali Data
+## Evidence 7
 
-**Claim:** Untuk mengatasi anomali data, tersedia countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency
+**Claim:** Sagas include compensable, pivot (point of no return), and retryable transaction types.
 
-**Evidence:**
-- **Semantic lock:** Use application-level locks when a saga's compensable transaction uses a semaphore to indicate that an update is in progress
-- **Commutative updates:** Design updates so that they can be applied in any order while still producing the same result
-- **Pessimistic view:** Reorder the sequence of the saga so that data updates occur in retryable transactions to eliminate dirty reads
-- **Reread values:** Confirm that data remains unchanged before you make updates
-- **Version files:** Maintain a log of all operations performed on a record
-— Microsoft Azure Architecture Center
+**Evidence:** Microsoft: "Pivot transactions serve as the point of no return in the saga. After a pivot transaction succeeds, compensable transactions are no longer relevant. All subsequent actions must be completed for the system to achieve a consistent final state." "Retryable transactions follow the pivot transaction... idempotent and help ensure that the saga can reach its final state."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microsoft Azure Architecture Center
 
-**Confidence:** HIGH
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
----
+**Confidence:** MEDIUM
 
-## Evidence 8: Idempotency Requirement
+**Corroborated By:** Garcia-Molina original paper (pivot concept referenced in secondary literature); Temporal implementation shows analogous LIFO compensation ordering.
 
-**Claim:** Transaction dalam saga harus idempotent untuk memastikan reliability
-
-**Evidence:** "Handling transient failures and idempotence: The system must handle transient failures effectively and ensure idempotence, when repeating the same operation doesn't alter the outcome" — Microsoft Azure Architecture Center
-
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-
-**Confidence:** HIGH
-
-**Corroborated By:**
-- Chris Richardson: "retryable transactions are idempotent" and mentions "Idempotent Consumer pattern" (https://microservices.io/patterns/data/saga.html)
+**Notes:** Single authoritative source for this specific taxonomy; not directly corroborated by Microservices.io in opened page. Lab spec does not mention pivot — extended concept.
 
 ---
 
-## Evidence 9: Limitations of Compensating Transactions
+## Evidence 8
 
-**Claim:** Compensating transactions mungkin tidak selalu berhasil, yang bisa meninggalkan sistem dalam inconsistent state
+**Claim:** 2PC is not viable for microservices due to blocking locks, tight coupling, availability reduction; sagas trade ACID isolation for availability and loose coupling with eventual consistency.
 
-**Evidence:** "Limitations of compensating transactions: Compensating transactions might not always succeed, which can leave the system in an inconsistent state" — Microsoft Azure Architecture Center
+**Evidence:** Microservices.io Forces: "2PC is not an option." Microsoft Context: "it can be more complex to achieve ACID compliance across multiple services... architectures that rely on interprocess communication, or traditional transaction models like two-phase commit protocol, are often better suited for the Saga pattern." AWS: "You should consider using this pattern if... There are long-lived transactions and you don't want other microservices to be blocked if one microservice runs for a long time." Microsoft lists sagas sacrifice isolation requiring countermeasures.
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microservices.io ; Microsoft Azure Architecture Center ; AWS Prescriptive Guidance
+
+**URL:** https://microservices.io/patterns/data/saga.html ; https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
 **Confidence:** HIGH
+
+**Corroborated By:** All three sources converge; lab spec ("2PC terlalu lambat atau tidak memungkinkan") verified.
+
+**Notes:** Lab spec claim that sagas use eventual consistency not strict ACID instant consistency is verified — Microsoft explicitly notes compensating transactions might not always succeed leaving inconsistent state.
 
 ---
 
-## Evidence 9a: Operational Remediation When Compensations Fail
+## Evidence 9
 
-**Claim:** When compensating transactions fail or cannot restore consistency automatically, operational architecture relies on monitoring, alert triggers, dead-letter queues, manual administrative reconciliation, and out-of-band adjustments.
+**Claim:** Dual-write problem: atomically updating database and publishing message/event is impossible with distributed transaction across DB and message broker; outbox pattern solves by writing business data + outbox record in single local ACID transaction and relaying via CDC/polling.
 
-**Evidence:**
-- "Limitations of compensating transactions: Compensating transactions might not always succeed, which can leave the system in an inconsistent state." — Microsoft Azure Architecture Center
-- "Need for monitoring and tracking sagas: Monitoring and tracking the workflow of a saga are essential tasks to maintain operational oversight." — Microsoft Azure Architecture Center
+**Evidence:** Debezium: "So how can this situation be avoided? The answer is to only modify one of the two resources... The idea of this approach is to have an 'outbox' table in the service's database. When receiving a request... not only an INSERT into the PurchaseOrder table is done, but, as part of the same transaction, also a record representing the event to be sent is inserted into that outbox table." Microservices.io Related Patterns: "In order to be reliable, a service must atomically update its database and publish a message/event... It cannot use the traditional mechanism of a distributed transaction... Instead, it must use one of the patterns listed below: Event sourcing, Transactional Outbox."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Gunnar Morling / Debezium Blog 2019-02-19 ; Microservices.io Resulting Context
+
+**URL:** https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/ ; https://microservices.io/patterns/data/saga.html
 
 **Confidence:** HIGH
 
-**Notes:**
-Because compensating transactions can fail permanently (leaving intermediate state committed), industry-standard operational recovery relies on:
-1. Dead-letter queues (DLQs) to quarantine failed compensation events
-2. Alerting & monitoring to trigger on-call response
-3. Operational dashboards / admin consoles for manual reconciliation
-4. Out-of-band financial or state adjustments as business remedies
-Detailed implementation recipes for these recovery mechanisms are deferred to the implementation and design phase.
+**Corroborated By:** Both sources describe same mechanism; outbox table schema (id uuid, aggregatetype, aggregateid, type, payload jsonb) documented in Debezium post.
+
+**Notes:** Lab spec implicitly assumes reliable event publication; outbox is prerequisite for production correctness.
 
 ---
 
-## Evidence 10: Atomicity Guarantee di Level Saga
+## Evidence 10
 
-**Claim:** Saga menjamin atomicity di level saga, bukan di level individual transaction - semua steps harus selesai atau compensations harus dieksekusi
+**Claim:** Idempotency mandatory for saga participants; duplicate detection via PROCESSED_MESSAGES table with (subscriberId, messageID) primary key or event UUID header.
 
-**Evidence:** "A saga is a sequence of local transactions. Each local transaction... Completes its work atomically within a single service... If a local transaction fails, the saga performs a series of compensating transactions to reverse the changes" — Microsoft Azure Architecture Center
+**Evidence:** Microservices.io Idempotent Consumer: "After starting the database transaction, the message handler inserts the message's ID into the PROCESSED_MESSAGE table. Since the (subscriberId, messageID) is the PROCESSED_MESSAGE table's primary key the INSERT will fail if the message has been already processed... The message handler can then rollback the transaction and ignore the message." Debezium consumer example: eventId UUID propagated as Kafka header allows efficient duplicate detection. Temporal: compensating activities must handle idempotency key (clientId or clientId+workflowId).
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microservices.io Idempotent Consumer Pattern ; Debezium Blog ; Temporal Blog 2023-05-24
+
+**URL:** https://microservices.io/patterns/data/idempotent-consumer.html ; https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/ ; https://temporal.io/blog/saga-pattern-made-easy
 
 **Confidence:** HIGH
+
+**Corroborated By:** All three sources agree; at-least-once delivery semantics make idempotency essential.
+
+**Notes:** Directly relevant to lab exercise where Payment refund compensation must be idempotent if retried.
 
 ---
 
-## Evidence 11: Anomali Data Types (Lost Updates, Dirty Reads, Fuzzy Reads)
+## Evidence 11
 
-**Claim:** Anomali data yang umum terjadi pada sagas: lost updates, dirty reads, dan fuzzy/nonrepeatable reads
+**Claim:** Sagas lack isolation, causing anomalies: lost updates, dirty reads, fuzzy/nonrepeatable reads.
 
-**Evidence:**
-- **Lost updates:** "When one saga modifies data without considering changes made by another saga, it results in overwritten or missing updates"
-- **Dirty reads:** "When a saga or transaction reads data that another saga has modified, but the modification isn't complete"
-- **Fuzzy/nonrepeatable reads:** "When different steps in a saga read inconsistent data because updates occur between the reads"
-— Microsoft Azure Architecture Center
+**Evidence:** Microsoft: "Typical problems include: Lost updates: When one saga modifies data without considering changes made by another saga... Dirty reads: When a saga or transaction reads data that another saga has modified, but the modification isn't complete. Fuzzy, or nonrepeatable, reads: When different steps in a saga read inconsistent data because updates occur between the reads." Microservices.io: "Lack of isolation (the 'I' in ACID) - the lack of isolation means that there's risk that the concurrent execution of multiple sagas and transactions can use data anomalies."
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microsoft Azure Architecture Center ; Microservices.io
+
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga ; https://microservices.io/patterns/data/saga.html
 
 **Confidence:** HIGH
+
+**Corroborated By:** Both sources list identical anomaly types; Microsoft adds 6 countermeasures (semantic lock, commutative updates, pessimistic view, reread value, version file, value-based concurrency).
+
+**Notes:** Lab spec does not explicitly mention isolation anomalies but states eventual consistency — this is the technical explanation.
 
 ---
 
-## Evidence 12: When NOT to Use Saga
+## Evidence 12
 
-**Claim:** Saga tidak cocok untuk: tightly coupled transactions, cyclic dependencies, atau ketika compensating transactions ada di earlier participants
+**Claim:** Countermeasures for isolation anomalies include semantic lock, commutative updates, pessimistic view, reread values, version file, value-based concurrency.
 
-**Evidence:** "This pattern might not be suitable when: Transactions are tightly coupled. Compensating transactions occur in earlier participants. There are cyclic dependencies." — Microsoft Azure Architecture Center
+**Evidence:** Microsoft Strategies section lists all six countermeasures verbatim with descriptions.
 
-**Source:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+**Source:** Microsoft Azure Architecture Center
 
-**Confidence:** HIGH
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+
+**Confidence:** MEDIUM
+
+**Corroborated By:** Microservices.io chapter 4/section 4.3 reference mentions "countermeasures, which are design techniques that implement isolation. Moreover, careful analysis is needed to select and correctly implement the countermeasures."
+
+**Notes:** Only one source provides detailed enumeration; second source confirms existence of countermeasure concept without enumerating. Lab could mention at least semantic lock concept.
 
 ---
 
-## Evidence 13: Atomically Update State AND Publish Message
+## Evidence 13
 
-**Claim:** Untuk reliable saga, service harus atomically update state DAN publish message/event, tidak bisa pakai traditional distributed transaction yang span database dan message broker
+**Claim:** Orchestration saga can be implemented via AWS Step Functions state machine with Task/Choice/Retry/Catch states; Standard workflows provide exactly-once execution, Express provides at-least-once.
 
-**Evidence:** "In order to be reliable, a service must atomically update its database and publish a message/event. It cannot use the traditional mechanism of a distributed transaction that spans the database and the message broker." — Chris Richardson / Microservices.io
+**Evidence:** AWS: illustration shows order processing with Step Functions; each step has success/failure branches. AWS Docs Welcome page: Standard workflows have exactly-once execution, Express have at-least-once. Temporal alternative uses deterministic replay and avoids orchestrator SPOF.
 
-**Source:** https://microservices.io/patterns/data/saga.html
+**Source:** AWS Prescriptive Guidance + AWS Step Functions Docs
+
+**URL:** https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html ; https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html
 
 **Confidence:** HIGH
+
+**Corroborated By:** AWS Prescriptive Guidance example lists Use Cases including saga; Step Functions docs confirm execution semantics.
+
+**Notes:** Lab exercise maps cleanly to Step Functions orchestration: Create Order → Reserve Payment → Reserve Stock → (on failure) Refund Payment.
+
+---
+
+## Evidence 14
+
+**Claim:** Compensating transactions may themselves fail, leaving system in inconsistent state; monitoring and tracking workflow essential.
+
+**Evidence:** Microsoft Problems and considerations: "Limitations of compensating transactions: Compensating transactions might not always succeed, which can leave the system in an inconsistent state." "Need for monitoring and tracking sagas: Monitoring and tracking the workflow of a saga are essential." AWS Important: "The saga pattern is difficult to debug and its complexity increases with the number of microservices."
+
+**Source:** Microsoft Azure Architecture Center ; AWS Prescriptive Guidance
+
+**URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga ; https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html
+
+**Confidence:** HIGH
+
+**Corroborated By:** Both sources identify same risk; Temporal compensating sample code logs compensation failure but does not auto-resolve — requires operational intervention.
+
+**Notes:** Important lab design consideration: orchestrator must handle compensation failure with retry + dead-letter/alert, not silently ignore.
+
+---
+
+## Evidence 15
+
+**Claim:** Appropriate use cases for saga: multi-service/database transactions requiring eventual consistency; NOT suitable for single-database monolith (use local ACID) or when SERIALIZABLE isolation across services required.
+
+**Evidence:** AWS "You should consider using this pattern if: Application needs to maintain data consistency across multiple microservices without tight coupling; There are long-lived transactions." Microsoft When to use: "You need to ensure data consistency in a distributed system without tight coupling; You need to roll back or compensate if one operation fails." Microsoft Not suitable when: "Transactions are tightly coupled." Lab spec: "Jangan gunakan jika masih dalam satu database monolith" and "Membutuhkan isolation level SERIALIZABLE secara instantaneous across services" — matches authoritative guidance.
+
+**Source:** AWS Prescriptive Guidance ; Microsoft Azure Architecture Center
+
+**URL:** https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html ; https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+
+**Confidence:** HIGH
+
+**Corroborated By:** All sources converge; lab spec correctly captures both positive and negative cases.
+
+**Notes:** Verifies lab spec's "Kapan Memakai Saga?" section is accurate per authoritative sources.
+

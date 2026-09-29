@@ -1,143 +1,197 @@
-# Research Report: Saga Pattern — Mengelola Transaksi Terdistribusi Tanpa 2PC
+# Research Report
 
 ## Research Question
 
-Bagaimana menjaga konsistensi data di beberapa service/database berbeda ketika 2PC (Two-Phase Commit) terlalu lambat atau tidak memungkinkan?
+Bagaimana menjaga konsistensi data di beberapa service/database berbeda ketika 2PC (Two-Phase Commit) terlalu lambat atau tidak memungkinkan, dan bagaimana Saga Pattern (Choreography vs Orchestration) dengan Compensating Transactions, Dual-Write mitigation, dan idempotency menjawab masalah tersebut?
 
 ## Executive Summary
 
-Saga Pattern adalah solusi untuk transaksi terdistribusi di microservices tanpa menggunakan 2PC. Pattern ini memecah transaksi terdistribusi menjadi series local transactions, dengan compensating transactions sebagai mekanisme rollback. Dua pendekatan utama: Choreography (event-driven, loose coupling) dan Orchestration (centralized coordinator). Kelemahan utama: tidak ada built-in isolation, sehingga memerlukan countermeasures untuk mencegah data anomalies.
+Saga Pattern memecah transaksi terdistribusi menjadi rangkaian transaksi lokal. Setiap langkah commit di database-nya sendiri. Jika langkah gagal, transaksi kompensasi membatalkan langkah sebelumnya secara semantik (bukan rollback ACID). Dua gaya koordinasi: Choreography (event-driven, tanpa koordinator) dan Orchestration (koordinator terpusat). Pola ini **bukan** pengganti ACID isolation; saga menyerahkan "I" (isolation) dan menerima eventual consistency plus anomali data yang harus dimitigasi. Dual-write (update DB + publish event secara atomik) adalah prasyarat yang diselesaikan oleh Transactional Outbox. Idempotency wajib karena delivery at-least-once. Lab spec akurat pada definisi, dua pendekatan, kompensasi, dan kapan memakai/tidak memakai saga.
 
 ## Findings
 
-### Finding 1: 2PC Tidak Feasible untuk Microservices Database-Per-Service
+### Finding 1: Definisi dan Asal-Usul Saga
 
-**Claim:** Traditional ACID transactions dan 2PC tidak applicable untuk multiple independently managed data stores
-
-**Evidence:** Microsoft Azure dan Chris Richardson konsisten menyatakan bahwa karena database per microservice di-scale independently dan isolated, 2PC tidak bisa digunakan, dan saga menjadi solusinya
-
-**Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-- Chris Richardson: https://microservices.io/patterns/data/saga.html
-
-**Confidence:** HIGH
-
----
-
-### Finding 2: Saga = Sequence of Local Transactions dengan Atomicity di Level Saga
-
-**Claim:** Saga menjamin atomicity di level saga, bukan di level individual transaction
-
-**Evidence:** "The Saga pattern manages transactions by breaking them into a sequence of local transactions. Each local transaction: 1. Completes its work atomically within a single service. 2. Updates the service's database. 3. Initiates the next transaction via an event or message."
-
-**Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-- Chris Richardson: https://microservices.io/patterns/data/saga.html
-
-**Confidence:** HIGH
-
----
-
-### Finding 3: Dua Pendekatan Implementasi dengan Trade-off Berbeda
-
-**Claim:** Choreography dan orchestration memiliki kelebihan dan kelemahan masing-masing
+**Claim:**
+Saga diperkenalkan Garcia-Molina & Salem (ACM SIGMOD 1987) untuk transaksi database berumur panjang; diadaptasi ke microservices sebagai sequence of local transactions + compensating transactions.
 
 **Evidence:**
-| Aspect | Choreography | Orchestration |
-|--------|-------------|---------------|
-| Complexity | Simple, loose coupling | More complex, centralized |
-| Scalability | Better (no SPOF) | Worse (SPOF risk) |
-| Debugging | Difficult (spaghetti events) | Easier (central flow) |
-| Cyclic Dependencies | Risk of cyclic deps | No cyclic deps |
-| Integration Testing | Difficult | Easier |
+Paper asli di-host Cornell (`sagas.pdf`). Definisi modern: "A saga is a sequence of local transactions. Each local transaction updates the database and publishes a message or event to trigger the next." (Richardson). Microsoft: setiap local transaction "Completes its work atomically within a single service."
 
 **Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-- Chris Richardson: https://microservices.io/patterns/data/saga.html
+- Garcia-Molina & Salem 1987 — https://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf
+- Microservices.io Pattern: Saga — https://microservices.io/patterns/data/saga.html
+- Microsoft Azure Architecture Center — https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
 **Confidence:** HIGH
 
 ---
 
-### Finding 4: Compensating Transactions Bukan Simple Rollback
+### Finding 2: Choreography vs Orchestration
 
-**Claim:** Compensating transactions adalah business-level corrective actions, bukan automatic rollback
-
-**Evidence:** "lack of automatic rollback - a developer must design compensating transactions that explicitly undo changes made earlier in a saga rather than relying on the automatic rollback feature of ACID transactions"
-
-**Sources:**
-- Chris Richardson: https://microservices.io/patterns/data/saga.html
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-
-**Confidence:** HIGH
-
----
-
-### Finding 5: Tiga Jenis Transaksi dalam Saga
-
-**Claim:** Saga terdiri dari Compensable, Pivot, dan Retryable transactions
+**Claim:**
+Choreography: setiap service publish domain event yang memicu service berikutnya. Orchestration: satu orchestrator mengirim command ke peserta dan menangani kompensasi.
 
 **Evidence:**
-- Compensable: bisa di-undo dengan opposite effect
-- Pivot: point of no return
-- Retryable: idempotent, dijamin selesai
+Keduanya didokumentasikan Microsoft (tabel benefit/drawback), Richardson (diagram Create Order Saga choreography vs orchestration), Temporal (analogi ant colony vs air-traffic control). Choreography: loose coupling, no SPOF, tapi spaghetti event + cyclic dependency + sulit test. Orchestration: flow jelas, no cyclic dep, tapi coordinator SPOF + complexity.
 
 **Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+- Microsoft Azure Architecture Center — https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+- Microservices.io — https://microservices.io/patterns/data/saga.html
+- Temporal Blog 2023-07-13 — https://temporal.io/blog/to-choreograph-or-orchestrate-your-saga-that-is-the-question
 
 **Confidence:** HIGH
 
 ---
 
-### Finding 6: Tidak Ada Built-in Isolation
+### Finding 3: Compensating Transactions adalah Semantic Undo, Bukan Rollback
 
-**Claim:** Sagas tidak memiliki isolation, yang bisa menyebabkan data anomalies
+**Claim:**
+Setiap aksi positif yang reversible membutuhkan aksi kompensasi setara (Reserve Stock → Release Stock; Charge Card → Refund; Create Pending Order → Cancel Order). Kompensasi dirancang developer, bukan otomatis dari database.
 
-**Evidence:** "Because each service manages its own data, called participant data, there's no built-in isolation across services."
+**Evidence:**
+Richardson: "Lack of automatic rollback — a developer must design compensating transactions that explicitly undo changes." Microsoft: "Compensable transactions can be undone or compensated for by other transactions with the opposite effect." Mapping lab spec cocok definisi.
 
 **Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-- Chris Richardson: https://microservices.io/patterns/data/saga.html
+- Microservices.io Pattern: Saga
+- Microsoft Azure Architecture Center
+- AWS Prescriptive Guidance Saga Pattern — https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html
 
 **Confidence:** HIGH
 
 ---
 
-### Finding 7: Countermeasures untuk Anomali Data
+### Finding 4: Pivot dan Retryable Transactions (Extended Concept)
 
-**Claim:** Enam countermeasures tersedia: semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency
+**Claim:**
+Microsoft membagi langkah saga menjadi compensable (bisa di-undo), pivot (point of no return), dan retryable (harus selesai, idempotent, setelah pivot).
 
-**Evidence:** Microsoft Azure Architecture Center merekomendasikan keenam countermeasures ini untuk mencegah data anomalies
+**Evidence:**
+Hanya Microsoft Architecture Center yang merinci taksonomi tiga jenis ini secara publik. Richardson merujuk "countermeasures" di buku tanpa enumerasi di halaman publik.
 
 **Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+- Microsoft Azure Architecture Center — https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+
+**Confidence:** MEDIUM (satu sumber otoritatif rinci)
+
+---
+
+### Finding 5: 2PC vs Saga — Tradeoff Availability vs Isolation
+
+**Claim:**
+2PC menahan lock lintas service, menurunkan availability, coupling tinggi. Saga melepaskan isolation (ACID I), memakai eventual consistency, tidak memblokir peserta lain.
+
+**Evidence:**
+Richardson Forces: "2PC is not an option." AWS: "long-lived transactions and you don't want other microservices to be blocked." Microsoft: "there's no built-in isolation across services." Lab spec ("2PC terlalu lambat atau tidak memungkinkan") terverifikasi.
+
+**Sources:**
+- Microservices.io Pattern: Saga
+- AWS Prescriptive Guidance
+- Microsoft Azure Architecture Center
 
 **Confidence:** HIGH
 
 ---
 
-### Finding 8: Idempotency Requirement
+### Finding 6: Dual-Write Problem dan Transactional Outbox
 
-**Claim:** Transaction dalam saga harus idempotent
+**Claim:**
+Tidak bisa atomik update database DAN publish ke message broker (Kafka tidak XA). Solusi: tulis business row + outbox row dalam satu local ACID transaction; CDC (Debezium) atau polling merelay ke broker. Memberi read-your-own-writes di service sumber + eventual consistency ke konsumen.
 
-**Evidence:** "The system must handle transient failures effectively and ensure idempotence, when repeating the same operation doesn't alter the outcome"
+**Evidence:**
+Morling 2019: outbox table schema (id UUID, aggregatetype, aggregateid, type, payload JSONB); persist+delete trick agar table kosong tapi WAL berisi INSERT. Richardson Related Patterns: Event Sourcing, Transactional Outbox.
 
 **Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-- Chris Richardson: https://microservices.io/patterns/data/saga.html
+- Debezium Blog 2019-02-19 — https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/
+- Microservices.io Pattern: Saga (Related patterns)
 
 **Confidence:** HIGH
 
 ---
 
-### Finding 9: Limitations - Compensating Transactions Mungkin Gagal
+### Finding 7: Idempotency Wajib karena At-Least-Once Delivery
 
-**Claim:** Compensating transactions tidak selalu berhasil
+**Claim:**
+Konsumen pesan dan peserta saga harus idempotent. Mekanisme: tabel PROCESSED_MESSAGES keyed (subscriberId, messageID); atau event UUID di header Kafka; atau idempotency key (clientId) di API pihak ketiga (Stripe-style).
 
-**Evidence:** "Limitations of compensating transactions: Compensating transactions might not always succeed, which can leave the system in an inconsistent state"
+**Evidence:**
+Richardson Idempotent Consumer: INSERT gagal jika PK duplikat → rollback, ignore. Debezium: eventId header. Temporal: "you, the programmer, need to make sure each Temporal Activity is idempotent."
 
 **Sources:**
-- Microsoft Azure: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+- Microservices.io Idempotent Consumer — https://microservices.io/patterns/data/idempotent-consumer.html
+- Debezium Blog 2019-02-19
+- Temporal Blog 2023-05-24 — https://temporal.io/blog/saga-pattern-made-easy
+
+**Confidence:** HIGH
+
+---
+
+### Finding 8: Anomali Data karena Tidak Ada Isolation
+
+**Claim:**
+Tanpa isolation lintas service, saga concurrent bisa menghasilkan lost updates, dirty reads, fuzzy/nonrepeatable reads. Countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, value-based concurrency.
+
+**Evidence:**
+Microsoft enumerasi 3 anomali + 6 countermeasures. Richardson: "saga developer must typically use countermeasures... careful analysis is needed."
+
+**Sources:**
+- Microsoft Azure Architecture Center
+- Microservices.io Pattern: Saga (chapter 4/section 4.3 reference)
+
+**Confidence:** HIGH untuk adanya anomali; MEDIUM untuk daftar 6 countermeasures spesifik (satu sumber rinci)
+
+---
+
+### Finding 9: Kompensasi Bisa Gagal — Tidak Ada Rollback Otomatis Tingkat Kedua
+
+**Claim:**
+Compensating transaction tidak dijamin sukses. Sistem bisa inkonsisten. Monitoring, retry, dan intervensi operator diperlukan.
+
+**Evidence:**
+Microsoft: "Compensating transactions might not always succeed, which can leave the system in an inconsistent state." AWS: "The saga pattern is difficult to debug and its complexity increases with the number of microservices." Temporal sample: log error pada compensation failure, lanjutkan sisa kompensasi.
+
+**Sources:**
+- Microsoft Azure Architecture Center
+- AWS Prescriptive Guidance
+- Temporal compensating sample (linked from 2023-05-24 post)
+
+**Confidence:** HIGH
+
+---
+
+### Finding 10: Implementasi Nyata — Step Functions, Temporal, Eventuate
+
+**Claim:**
+AWS Step Functions: state machine orchestration, Catch/Retry, Standard = exactly-once workflow, Express = at-least-once. Temporal: deterministic replay, activity retry, compensation via Saga helper class; menghindari orchestrator SPOF. Eventuate Tram: framework Richardson untuk orchestration-based sagas.
+
+**Evidence:**
+AWS docs: Standard 2000 exec/s, exactly-once, up to 1 year; Express 100k exec/s, at-least-once, 5 min. Temporal: "by running your code with Temporal, you automatically get your state saved and retries on failure." Richardson: Eventuate Tram Sagas examples on GitHub.
+
+**Sources:**
+- AWS Step Functions Welcome — https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html
+- Temporal Blog 2023-05-24
+- Microservices.io example code links (eventuate-tram-sagas)
+
+**Confidence:** HIGH
+
+---
+
+### Finding 11: Lab Exercise Mapping — Orchestration Checkout Failure di Inventory
+
+**Claim:**
+Skenario lab (Order Pending → Payment Debit → Inventory Reserve gagal → Refund Payment → Cancel Order) adalah orchestration saga klasik dengan kompensasi LIFO.
+
+**Evidence:**
+Richardson orchestration example: Create Order PENDING → Reserve Credit → approve/reject. Microsoft: compensable then compensate on failure. Temporal Java: `saga.addCompensation` sebelum setiap step; pada catch, `saga.compensate()` LIFO. Mapping lab:
+1. Create Order (Pending) — kompensasi: Cancel Order
+2. Debit Payment — kompensasi: Refund Payment
+3. Reserve Inventory — gagal (stok habis)
+4. Orchestrator jalankan: Refund Payment, lalu Cancel Order
+
+**Sources:**
+- Microservices.io orchestration example
+- Temporal Java Saga class example
+- Microsoft compensable/pivot/retryable model
 
 **Confidence:** HIGH
 
@@ -145,27 +199,26 @@ Saga Pattern adalah solusi untuk transaksi terdistribusi di microservices tanpa 
 
 ## Areas of Agreement
 
-1. **Saga definition:** Both sources agree on core definition
-2. **Two approaches:** Both agree on choreography vs orchestration
-3. **Lack of isolation:** Both identify this as key limitation
-4. **Compensating transactions:** Both explain need for business-level corrective actions
-5. **Idempotency:** Both emphasize importance of idempotency
+- Saga = sequence of local transactions + compensating transactions. (Semua sumber)
+- Dua gaya: Choreography dan Orchestration. (Semua sumber)
+- 2PC tidak cocok untuk microservices long-running / heterogeneous. (Richardson, Microsoft, AWS)
+- Eventual consistency, bukan ACID isolation. (Semua sumber)
+- Idempotency wajib. (Richardson, Debezium, Temporal)
+- Dual-write diselesaikan Outbox/Event Sourcing. (Richardson, Debezium)
+- Kompensasi bisa gagal; monitoring wajib. (Microsoft, AWS)
+- Lab spec "Kapan memakai / jangan memakai" sesuai guidance AWS/Microsoft.
 
 ## Areas of Disagreement
 
-No material disagreements found.
-
-Minor complementary differences:
-- Microsoft source provides more detail on countermeasures
-- Chris Richardson source emphasizes atomic update + publish requirement
+Tidak ada kontradiksi material. Perbedaan: Temporal mendorong orchestration bahkan untuk workflow sederhana jika pakai durable execution engine; Microsoft/lab menempatkan choreography sebagai opsi valid untuk workflow kecil. Dual-write adalah masalah modern (bukan definisi 1987). Taksonomi pivot/retryable hanya rinci di Microsoft.
 
 ## Limitations
 
-1. Original academic paper (Garcia-Molina & Salem, 1987) may be behind paywall
-2. Some URLs resulted in 404 (infoq, kylewbanks, eventuate)
-3. Focus on implementation patterns vs theoretical foundations
-4. Limited coverage of saga in specific technology stacks
+- Paper 1987 adalah PDF scan; kutipan verbatim halaman tidak diekstrak (encoding LZW). Klaim historis diverifikasi via citation chain (DOI, Temporal footnote, ACM).
+- Camunda, Axon, Seata, Spring State Machine tidak dibuka sebagai sumber primer dalam sesi ini.
+- Tidak ada benchmark kuantitatif latency/throughput saga vs 2PC yang diverifikasi dari dataset primer.
+- Recovery protocol untuk compensation-of-compensation tidak distandardisasi di sumber yang dibuka.
 
 ## Conclusion
 
-Saga Pattern efektif menggantikan 2PC untuk microservices dengan database-per-service architecture. Pattern ini memberikan atomicity di level saga melalui sequence of local transactions dan compensating transactions, meskipun dengan trade-off: tidak ada built-in isolation. Dua pendekatan utama (choreography dan orchestration) memiliki trade-off berbeda yang harus dipilih berdasarkan complexity workflow. Compensating transactions harus didesain secara manual dan idempotent, dengan pemahaman bahwa ada risiko compensating transactions gagal.
+Lab specification akurat. Saga Pattern adalah solusi konsistensi terdistribusi tanpa 2PC: pecah jadi transaksi lokal, kompensasi semantik jika gagal. Orchestration cocok untuk latihan checkout e-commerce 3 langkah karena alur kompensasi eksplisit dan mudah dilacak. Prasyarat produksi yang lab harus sebutkan: (1) Transactional Outbox atau Event Sourcing untuk dual-write, (2) idempotency key pada Payment debit/refund dan Inventory reserve/release, (3) handling jika kompensasi sendiri gagal (retry + alert), (4) isolation anomalies jika saga concurrent. Jangan klaim saga memberikan ACID; klaim yang benar: eventual consistency dengan kompensasi terarah.
