@@ -8,7 +8,7 @@ Reachable: YES
 Source Type: PRIMARY (Authoritative Web Standards Documentation)
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. MDN provides direct authoritative definitions of SOP write/read rules.
 Assessment: PASS
 
 ---
@@ -18,7 +18,7 @@ Claimed Title: Cross-origin request forgery (CSRF) - Security | MDN
 Claimed Publisher: MDN
 URL: https://developer.mozilla.org/en-US/docs/Web/Security/Attacks/CSRF
 Reachable: YES
-Source Type: PRIMARY (Authoritative Web Standards Documentation)
+Source Type: PRIMARY
 Relevant: YES
 Supports Claimed Topic: YES
 Problems: None.
@@ -31,10 +31,10 @@ Claimed Title: Cross-Origin Resource Sharing (CORS) - HTTP | MDN
 Claimed Publisher: MDN
 URL: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS
 Reachable: YES
-Source Type: PRIMARY (Authoritative Web Standards Documentation)
+Source Type: PRIMARY
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. Detailed breakdown of simple requests, preflight OPTIONS, and wildcard rules.
 Assessment: PASS
 
 ---
@@ -44,10 +44,10 @@ Claimed Title: Fetch Standard (WHATWG Living Standard)
 Claimed Publisher: WHATWG
 URL: https://fetch.spec.whatwg.org/
 Reachable: YES
-Source Type: PRIMARY (Formal Web Specification)
+Source Type: PRIMARY (Normative Web Standard)
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. Normative specification for CORS, preflight fetch algorithm, safelisted methods and headers.
 Assessment: PASS
 
 ---
@@ -60,7 +60,7 @@ Reachable: YES
 Source Type: PRIMARY (Industry Security Standard)
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. Definitive guide for Synchronizer Token, Double Submit Cookie (Naive vs Signed), SameSite, and Fetch Metadata.
 Assessment: PASS
 
 ---
@@ -70,10 +70,10 @@ Claimed Title: Set-Cookie header - HTTP | MDN
 Claimed Publisher: MDN
 URL: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie
 Reachable: YES
-Source Type: PRIMARY (Authoritative Web Standards Documentation)
+Source Type: PRIMARY
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. Exact specification of SameSite attributes (Strict, Lax, None) and cookie security prefixes.
 Assessment: PASS
 
 ---
@@ -83,10 +83,10 @@ Claimed Title: SameSite cookies explained | web.dev (Google)
 Claimed Publisher: Google / Chromium
 URL: https://web.dev/articles/samesite-cookies-explained
 Reachable: YES
-Source Type: PRIMARY (Authoritative Browser Vendor Documentation)
+Source Type: PRIMARY (Browser Engine Implementation Doc)
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. Documents Chrome 80 Lax-by-default behavior and top-level navigation context.
 Assessment: PASS
 
 ---
@@ -96,10 +96,10 @@ Claimed Title: What is CORS (cross-origin resource sharing)? | PortSwigger Web S
 Claimed Publisher: PortSwigger
 URL: https://portswigger.net/web-security/cors
 Reachable: YES
-Source Type: SECONDARY (Industry Security Reference)
+Source Type: SECONDARY (Reputable Security Authority)
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: None.
+Problems: None. Authoritative technical reference on CORS misconceptions and exploit vectors.
 Assessment: PASS
 
 ---
@@ -109,10 +109,11 @@ Claimed Title: What is CSRF (Cross-site request forgery)? | PortSwigger Web Secu
 Claimed Publisher: PortSwigger
 URL: https://portswigger.net/web-security/csrf
 Reachable: YES
-Source Type: SECONDARY (Industry Security Reference)
+Source Type: SECONDARY
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: Mentions Chrome enforcing Lax by default since 2021 (minor chronological discrepancy with Chrome 80 rollout in 2020), correctly documented and flagged in open questions.
+Problems:
+- PortSwigger text mentions "Since 2021, Chrome enforces Lax SameSite restrictions by default" whereas Chromium/web.dev notes Chrome 80 released in early 2020. This discrepancy is properly captured and flagged in `04-contradictions.md` and `06-open-questions.md`.
 Assessment: PASS
 
 ---
@@ -122,8 +123,8 @@ Claimed Title: Samesite cookies explained (Chrome Lax-by-default announcement co
 Claimed Publisher: web.dev / Chromium
 URL: https://web.dev/articles/samesite-cookies-explained#changes-to-the-default-behavior-without-samesite
 Reachable: YES
-Source Type: PRIMARY (Browser Vendor Documentation)
+Source Type: PRIMARY
 Relevant: YES
 Supports Claimed Topic: YES
-Problems: Duplicate domain/article anchor of Source 7, but targets specific section for behavioral changes.
+Problems: None. Sub-anchor to Source 7, verified as genuine URL and content.
 Assessment: PASS
