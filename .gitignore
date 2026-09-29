@@ -86,3 +86,4 @@ tmp/
 runs/
 scripts/orchestrator/
 patch.js
+scripts/run-until-writer.sh
