@@ -55,12 +55,12 @@ Source Tier: Tier 1 (BCP)
 Relevance: Implicit flow deprecation; PKCE mandatory for all public clients; refresh token rotation for public clients; exact redirect URI matching; token privilege restriction (audience restriction)
 
 ## Source 7
-Title: OAuth 2.1 (draft summary)
-Publisher: OAuth Working Group / oauth.net
-URL: https://oauth.net/2.1/
+Title: OAuth 2.1 (draft-ietf-oauth-v2-1)
+Publisher: IETF OAuth Working Group
+URL: https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/
 Accessed: 2026-09-29
-Source Tier: Tier 1 (draft spec / summary)
-Relevance: Consolidation of RFCs; PKCE required for all clients; implicit grant omitted; ROPC omitted; refresh token rotation for public clients
+Source Tier: Tier 1 (draft spec)
+Relevance: Consolidation of RFCs; PKCE required for all clients; implicit grant omitted; ROPC omitted; refresh token rotation for public clients (see also community summary at https://oauth.net/2.1/)
 
 ## Source 8
 Title: RFC 10017 / draft-ietf-oauth-browser-based-apps-27 — OAuth 2.0 for Browser-Based Applications

@@ -16,7 +16,7 @@ Source: RFC 6749, Sections 1.2, 1.4
 URL: https://www.rfc-editor.org/rfc/rfc6749.html
 Confidence: HIGH
 Corroborated By: RFC 9700 Sec 2.3 (audience/scope restriction of access tokens)
-Notes: Supports claim that access token answers "what may be accessed".
+Notes: Supports claim that access token answers "what may be accessed". "Usually opaque" reflects the RFC 6749 default; RFC 9068 (October 2021, "JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens", https://www.rfc-editor.org/rfc/rfc9068.html) standardizes structured JWT access tokens widely deployed in modern systems. Even when structured, clients SHOULD treat access tokens as opaque unless the deployment profile explicitly requires introspection.
 
 ## Evidence 3
 Claim: OIDC is an identity layer on top of OAuth 2.0; authentication is signaled by openid scope and returned as an ID Token JWT; profile via UserInfo Endpoint.

@@ -13,6 +13,7 @@ Claim: OAuth 2.0 hanya mendefinisikan delegated access (authorization grant -> a
 Evidence: RFC 6749 Abstract/Sec 1 ("limited access to an HTTP service"); Sec 1.4 (access token "usually opaque to the client"). OIDC Core Sec 1 secara eksplisit: "without profiling OAuth 2.0, it is incapable of providing information about the authentication of an End-User."
 Sources: RFC 6749; OIDC Core Sec 1
 Confidence: HIGH
+Note: RFC 6749 Sec 1.4 menyatakan access token adalah "usually opaque to the client" — ini berlaku untuk bearer tokens. RFC 9068 (October 2021, "JWT Profile for OAuth 2.0 Access Tokens") menstandarisasi structured (non-opaque) access token berformat JWT yang digunakan luas di arsitektur modern. Client tetap SHOULD NOT mengurai access token kecuali ditetapkan oleh profil deployment spesifik.
 
 ### Finding 2 — OIDC menambahkan identity layer via ID Token JWT + UserInfo
 Claim: OIDC = OAuth 2.0 + identity. Verifikasi identity dilakukan oleh RP terhadap ID Token JWT bertanda tangan, bukan terhadap access token.
@@ -35,15 +36,17 @@ Confidence: HIGH
 
 ### Finding 5 — Implicit flow deprecated; Authorization Code Flow + PKCE standar modern
 Claim: Implicit flow (response_type=token/id_token) mengembalikan token di URL fragment, rentan terhadap XSS, referer, history; RFC 9700: SHOULD NOT digunakan; OAuth 2.1: dihapus.
-Evidence: RFC 9700 Sec 2.1.2; OAuth 2.1 summary (implicit omitted); Browser-based-apps draft Sec 7.2 (threat analysis).
-Sources: RFC 9700; https://oauth.net/2.1/
+Evidence: RFC 9700 Sec 2.1.2; draft-ietf-oauth-v2-1 (implicit omitted); Browser-based-apps draft Sec 7.2 (threat analysis).
+Sources: RFC 9700; draft-ietf-oauth-v2-1
 Confidence: HIGH
+Note: Walaupun OIDC Core 1.0 Sec 3.2 dan 3.3 masih mendokumentasikan Implicit Flow dan Hybrid Flow secara historis, konsensus keamanan modern menurut RFC 9700 Sec 2.1.2 dan draft OAuth 2.1 telah mengesampingkannya; Authorization Code Flow + PKCE adalah pendekatan yang wajib diadopsi.
 
 ### Finding 6 — Jebakan umum: (a) tidak verifikasi signature + aud, (b) access token di localStorage, (c) refresh token tidak di-rotate
 Claim: Tanpa verifikasi signature/iss/aud, siapa saja bisa buat JWT palsu. LocalStorage rentan XSS. Refresh token statis meningkatkan dampak pembajakan.
 Evidence: RFC 8725 Sec 2.1 (alg=none / RS256->HS256 confusion); Browser-based-apps draft Sec 5 (malicious JS same privileges, steal from localStorage/IndexedDB); RFC 9700 Sec 4.14 (rotation invalidates old token, detects replay); OIDC Core Sec 2 (aud wajib, else reject).
 Sources: RFC 8725; draft-ietf-oauth-browser-based-apps-27; RFC 9700 Sec 4.14; OIDC Core Sec 2
 Confidence: HIGH
+Note: LocalStorage dilarang secara tegas untuk bearer tokens yang dapat dicuri via XSS. Pengecualian terspesifikasi di `draft-ietf-oauth-browser-based-apps-27` Section 8.5 mengizinkan penyimpanan persisten di browser HANYA jika token bersifat sender-constrained (misalnya menggunakan DPoP atau mTLS) atau dienkripsi sedemikian rupa sehingga skrip jahat tidak dapat mengekstrak kredensial yang dapat digunakan ulang.
 
 ### Finding 7 — Refresh token: rotation wajib untuk public client
 Claim: Rotation = server menerbitkan refresh token baru tiap refresh, lama di-invalidate; jika keduanya dipakai, server deteksi breach dan revoke.
@@ -77,5 +80,5 @@ Oleh karena itu, memisahkan Authorization (OAuth 2.0: access token, apa yang bol
 3. Auth request: response_type=code + scope=openid... + code_challenge + code_challenge_method=S256 + state + nonce.
 4. Token exchange: POST /token grant_type=authorization_code + code + redirect_uri + code_verifier + client_auth.
 5. ID Token validation (13 langkah): decrypt -> iss exact -> aud contains client_id -> signature via issuer JWKS -> alg pinned -> exp -> nonce -> optional auth_time/acr.
-6. Token storage: BFF (httpOnly Secure SameSite cookie) atau in-memory untuk SPA; hindari localStorage.
+6. Token storage: BFF (httpOnly Secure SameSite cookie) atau in-memory untuk SPA; hindari localStorage untuk bearer tokens (sender-constrained seperti DPoP atau encrypted tokens adalah pengecualian terbatas per draft-ietf-oauth-browser-based-apps-27 Sec 8.5).
 7. Refresh: rotasi + invalidasi lama; deteksi reuse -> revoke semua token + force re-auth.
