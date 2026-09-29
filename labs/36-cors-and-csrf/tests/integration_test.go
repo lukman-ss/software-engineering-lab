@@ -206,3 +206,131 @@ func TestIntegration_Concurrency_RaceCondition(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestIntegration_CustomHeader_Protection(t *testing.T) {
+	app, bankServer := setupBankApp()
+
+	form := url.Values{}
+	form.Set("to", "acc-attacker")
+	form.Set("amount", "100")
+
+	// Missing header -> 403
+	req := httptest.NewRequest(http.MethodPost, "/api/transfer/custom-header", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "session_id", Value: "session-victim-secret"})
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for missing custom header, got %d", rec.Code)
+	}
+
+	victim, _ := bankServer.GetAccount("acc-victim")
+	if victim.Balance != 1000 {
+		t.Fatalf("expected balance 1000, got %d", victim.Balance)
+	}
+
+	// Valid header -> 200
+	reqValid := httptest.NewRequest(http.MethodPost, "/api/transfer/custom-header", strings.NewReader(form.Encode()))
+	reqValid.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqValid.Header.Set("X-Requested-With", "XMLHttpRequest")
+	reqValid.AddCookie(&http.Cookie{Name: "session_id", Value: "session-victim-secret"})
+
+	recValid := httptest.NewRecorder()
+	app.ServeHTTP(recValid, reqValid)
+
+	if recValid.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for custom header request, got %d", recValid.Code)
+	}
+
+	victim, _ = bankServer.GetAccount("acc-victim")
+	if victim.Balance != 900 {
+		t.Fatalf("expected balance 900, got %d", victim.Balance)
+	}
+}
+
+func TestIntegration_CSRF_Token_In_Header(t *testing.T) {
+	app, bankServer := setupBankApp()
+
+	// 1. Fetch CSRF token
+	reqToken := httptest.NewRequest(http.MethodGet, "/api/csrf-token", nil)
+	reqToken.AddCookie(&http.Cookie{Name: "session_id", Value: "session-victim-secret"})
+	recToken := httptest.NewRecorder()
+	app.ServeHTTP(recToken, reqToken)
+
+	var resp map[string]string
+	json.NewDecoder(recToken.Body).Decode(&resp)
+	token := resp["csrf_token"]
+
+	// 2. Submit token via X-CSRF-Token header
+	form := url.Values{}
+	form.Set("to", "acc-attacker")
+	form.Set("amount", "100")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/transfer/protected", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-CSRF-Token", token)
+	req.AddCookie(&http.Cookie{Name: "session_id", Value: "session-victim-secret"})
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for header-based CSRF token, got %d", rec.Code)
+	}
+
+	victim, _ := bankServer.GetAccount("acc-victim")
+	if victim.Balance != 900 {
+		t.Fatalf("expected balance 900, got %d", victim.Balance)
+	}
+}
+
+func TestIntegration_CrossSession_Token_Reuse_Rejected(t *testing.T) {
+	app, bankServer := setupBankApp()
+
+	// Token generated for session-victim-secret
+	token := bankServer.TokenManager().GenerateToken("session-victim-secret")
+
+	// Attacker tries to use victim's token with attacker's session
+	form := url.Values{}
+	form.Set("to", "acc-attacker")
+	form.Set("amount", "100")
+	form.Set("csrf_token", token)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/transfer/protected", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "session_id", Value: "session-attacker-secret"})
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for cross-session CSRF token reuse, got %d", rec.Code)
+	}
+}
+
+func TestIntegration_SecFetchSite_SameOrigin_Allowed(t *testing.T) {
+	app, bankServer := setupBankApp()
+
+	form := url.Values{}
+	form.Set("to", "acc-attacker")
+	form.Set("amount", "100")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/transfer/fetch-metadata", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.AddCookie(&http.Cookie{Name: "session_id", Value: "session-victim-secret"})
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for same-origin Sec-Fetch-Site, got %d", rec.Code)
+	}
+
+	victim, _ := bankServer.GetAccount("acc-victim")
+	if victim.Balance != 900 {
+		t.Fatalf("expected balance 900, got %d", victim.Balance)
+	}
+}
