@@ -1,44 +1,56 @@
 # Engineering Audit Verdict
 
-Target Lab: labs/36-cors-and-csrf
-Audit Date: Mon Sep 28 2026
+Target Lab: `labs/36-cors-and-csrf`
+Audit Date: 2026-09-29
 
 ## Summary
 
-Code Files Reviewed: 0 (no .go files found)
-Tests Reviewed: 0 (no test files found)
-Commands Executed: None (lab not runnable due to missing go.mod and source)
-Failures: Compilation impossible; test suite absent; demo absent.
-Warnings: None (all issues are blocking).
+Code Files Reviewed: 5
+- `internal/cors/middleware.go`
+- `internal/csrf/middleware.go`
+- `internal/csrf/token.go`
+- `internal/bank/app.go`
+- `cmd/demo/main.go`
+
+Tests Reviewed: 4
+- `internal/cors/middleware_test.go`
+- `internal/csrf/token_test.go`
+- `internal/bank/app_test.go`
+- `tests/integration_test.go`
+
+Commands Executed:
+- `rtk go test -v ./...` (14 passed)
+- `rtk go test -race ./...` (14 passed, 0 races)
+- `rtk go run ./cmd/demo` (success, clean output matching claims)
+
+Failures: 0
+Warnings: 4 (1 Medium, 3 Low)
 
 ## Quality Gates
 
-Compilation: FAIL (no Go source files, no go.mod)
-Tests: FAIL (no test files)
-Race Detector: NOT_APPLICABLE (no code to analyze)
-Demo: NOT_APPLICABLE (no cmd/demo)
-Research Alignment: FAIL (no implementation to align with research)
-Documentation Accuracy: FAIL (README describes components that do not exist)
+Compilation: PASS
+Tests: PASS
+Race Detector: PASS
+Demo: PASS
+Research Alignment: PASS
+Documentation Accuracy: PASS
 
 ## Blocking Issues
-1. Missing implementation: no internal/cors, internal/csrf, internal/bank directories or .go files.
-2. Missing tests: no tests/ directory.
-3. Missing demo: no cmd/demo.
-4. Missing go.mod: essential for Go toolchain.
-5. DOC_CODE_MISMATCH: README claims existence of code that is absent.
-6. RESEARCH_MISMATCH: Cannot verify research alignment without implementation.
+
+None.
 
 ## Non-Blocking Issues
-None (all identified issues prevent any verification of claimed behavior).
+
+1. **GAP-001 (MEDIUM)**: Missing test for `RequireCustomHeaderMiddleware` at `/api/transfer/custom-header`.
+2. **GAP-002 (LOW)**: `strings.Split` in token validation breaks if `sessionID` contains `:` delimiters.
+3. **GAP-003 (LOW)**: No test verifying negative/zero amount validation in `HandleTransferVulnerable`.
+4. **GAP-004 (LOW)**: Disallowed origin simple request is not tested at the unit level in `internal/cors/middleware_test.go` (covered transitively in integration test).
 
 ## Required Revisions
-1. Implement the components described in README: internal/cors (CORS middleware), internal/csrf (anti-CSRF with HMAC-SHA256 tokens, Fetch Metadata, custom headers), internal/bank (bank service with cookie auth and transfer endpoints), cmd/demo (CLI demo showing attacks vs protections).
-2. Add a proper go.mod file.
-3. Write a comprehensive test suite in tests/ that validates happy path, failure cases, edge cases, concurrency, and attack mitigations.
-4. Ensure demo runs and shows the claimed behaviors.
-5. Update README if any implementation deviates from described design (but preferably implement as described).
-6. Align implementation with approved research in labs/36-cors-and-csrf/research/ (review research to ensure fidelity).
+
+1. Add a test case for `RequireCustomHeaderMiddleware` in `internal/csrf/token_test.go` or `tests/integration_test.go` verifying that requests lacking `X-Requested-With` are rejected with 403 and requests containing the header pass.
+2. Consider switching `strings.Split` to `strings.SplitN(..., 4)` or JSON payload in `TokenManager.ValidateToken` to prevent potential colon collisions in session identifiers.
 
 ## Final Status
 
-REJECTED
+APPROVED_WITH_WARNINGS

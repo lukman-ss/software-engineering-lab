@@ -1,13 +1,32 @@
 # Docs vs Code Audit
 
-## Documentation Verification
+## README Alignment
 
-| Documented Item | Source Code / Test / Executable | Match Status | Notes |
-|---|---|---|---|
-| Architecture layout | `README.md:5-12` vs directory structure | MATCH | `internal/cors`, `internal/csrf`, `internal/bank`, `cmd/demo`, `tests` directories exist and match descriptions. |
-| Test Commands | `README.md:17-25` (`go test -v ./...`, `go test -race ./...`) | MATCH | Both commands run cleanly and pass 100%. |
-| Demo Command | `README.md:31-33` (`go run ./cmd/demo`) | MATCH | Executes deterministically, demonstrating vulnerable vs protected flows. |
-| Spec Compliance | `internal/cors/middleware.go` vs CORS spec | MATCH | Disallows wildcard credentials, returns proper Vary and preflight response headers. |
-| Token Mechanism | `internal/csrf/token.go` vs research notes | MATCH | HMAC-SHA256 session-bound token implementation directly aligns with research requirements. |
+File: `README.md`
+- Claim: Architecture lists `internal/cors`, `internal/csrf`, `internal/bank`, `cmd/demo`, and `tests`.
+  - Observed: All 5 directories and modules exist and match specified roles.
+- Claim: Commands `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo`.
+  - Observed: All 3 commands execute without failures or warnings.
 
-No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH` identified.
+## Engineering Notes Alignment
+
+File: `engineering/01-design.md`, `engineering/02-implementation-notes.md`, `engineering/03-execution-result.md`
+- Claim: Execution outputs match observed execution of `cmd/demo/main.go`.
+  - Observed:
+    - Initial: Victim $1000, Attacker $50
+    - After vulnerable attack: Victim $600, Attacker $450
+    - After protected attack: Blocked 403, Victim $600, Attacker $450
+    - After legit transfer: Victim $500, Attacker $550
+  - Output matches exact recorded output in `engineering/03-execution-result.md`.
+
+## Research Claims Alignment
+
+File: `research/05-report.md`
+- Claim: CORS is an SOP opt-in relaxation mechanism for reads/preflights, NOT a backend authorization barrier.
+  - Code & Demo Proof: Proved in `cmd/demo/main.go` and `TestIntegration_CORS_Does_Not_Prevent_CSRF_Execution`.
+- Claim: Anti-CSRF requires token-based or origin/header-based validation.
+  - Code & Demo Proof: Implemented via HMAC-SHA256 session-bound tokens, `Sec-Fetch-Site`, and custom headers.
+
+## Discrepancies Found
+
+None. Documentation accurately depicts codebase structure, commands, behavior, and output.
