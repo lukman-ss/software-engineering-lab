@@ -1,95 +1,81 @@
-# Research Report: OAuth 2.0 & OIDC --- Authentication vs Authorization and Flow Security
-
-**Research Date:** 2026-09-28
+# Research Report
 
 ## Research Question
-
-What are the fundamental differences between OAuth 2.0 and OpenID Connect (OIDC)? Why is using OAuth 2.0 Access Tokens for authentication considered insecure? How does Authorization Code Flow with PKCE protect against authorization code interception and injection attacks? What are the required validation rules for ID Tokens and Access Tokens according to current standards?
+Mendefinisikan secara preskriptif perbedaan OAuth 2.0 (Authorization) vs OIDC (Authentication), mekanisme Authorization Code Flow + PKCE, struktur dan validasi ID Token JWT, serta jebakan keamanan umum (token storage, rotation, signature/audience validation).
 
 ## Executive Summary
-
-OAuth 2.0 is a pure authorization protocol that enables third-party applications to access resources on behalf of a resource owner. It issues access tokens for resource access, not identity. OpenID Connect (OIDC) is an identity layer on top of OAuth 2.0 that adds authentication by introducing the ID Token (a JWT) containing claims about the end-user's authentication event.
-
-Using an OAuth 2.0 access token for authentication is insecure because it does not contain identity claims and is not designed to prove who the user is. OIDC solves this by providing a standardized ID Token with required claims (`iss`, `sub`, `aud`, `exp`, `iat`, `auth_time`, `nonce`) that must be validated for signature, issuer, audience, and expiration.
-
-Authorization Code Flow + PKCE (RFC 7636) is the current mandatory standard. It protects against authorization code interception attacks by requiring the client to prove possession of a dynamically generated `code_verifier` secret when exchanging the authorization code. The implicit flow is deprecated across all authoritative sources.
+OAuth 2.0 adalah protokol *delegated authorization*: menghasilkan access token yang menjawab "resource apa yang boleh diakses", bukan "siapa penggunanya". OIDC menambahkan identity layer di atas OAuth 2.0 dan menghasilkan ID Token (JWT) berisi klaim autentikasi. Memakai access token OAuth untuk login adalah celah keamanan karena access token tidak terikat ke identity RP dan tidak memiliki validation rule `iss`/`aud`/`exp` yang distandarisasi untuk auth. Standards modern mewajibkan Authorization Code Flow + PKCE untuk semua client (RFC 9700, OAuth 2.1), deprecates implicit flow, dan mewajibkan refresh token rotation/sender-constraining untuk public clients.
 
 ## Findings
 
-### Finding 1: OAuth 2.0 is Authorization; OIDC is Authentication
-
-Claim: OAuth 2.0 as originally defined is purely an Authorization (Delegation) protocol, not an Authentication protocol. OpenID Connect is an identity layer built on top of OAuth 2.0 to enable authentication.
-
-Evidence: RFC 6749 Section 1.1 explicitly defines four roles (resource owner, resource server, client, authorization server) and focuses on authorization grants and access tokens. Section 1.4 states: "Access tokens are credentials used to access protected resources. An access token is a string representing an authorization issued to the client. The string is usually opaque to the client. Tokens represent specific scopes and durations of access, granted by the resource owner, and enforced by the resource server and authorization server." RFC 6749 does not define any standard way to authenticate the resource owner's identity.
-
-OpenID Connect Core 1.0 (Section 1. Introduction) states: "OpenID Connect 1.0 is a simple identity layer on top of the OAuth 2.0 protocol. It enables Clients to verify the identity of the End-User based on the authentication performed by an Authorization Server, as well as to obtain basic profile information about the End-User in an interoperable and REST-like manner." The ID Token is introduced as "a security token that contains Claims about the Authentication of an End-User by an Authorization Server when using a Client."
-
-Sources: RFC 6749 Sections 1.1, 1.4; OpenID Connect Core 1.0 Section 1
+### Finding 1 — OAuth 2.0 bukan protokol autentikasi
+Claim: OAuth 2.0 hanya mendefinisikan delegated access (authorization grant -> access token -> protected resource), tanpa standardisasi siapa pengguna.
+Evidence: RFC 6749 Abstract/Sec 1 ("limited access to an HTTP service"); Sec 1.4 (access token "usually opaque to the client"). OIDC Core Sec 1 secara eksplisit: "without profiling OAuth 2.0, it is incapable of providing information about the authentication of an End-User."
+Sources: RFC 6749; OIDC Core Sec 1
 Confidence: HIGH
 
-### Finding 2: Authorization Code Flow + PKCE is the Modern Standard
-
-Claim: Authorization Code Flow with PKCE (RFC 7636) is the mandatory standard for all OAuth clients. The implicit flow is deprecated due to security vulnerabilities (token exposure in URL fragment).
-
-Evidence: RFC 7636 Section 1 describes the authorization code interception attack where malicious apps can register for the same redirect URI scheme and intercept the authorization code. The solution is PKCE: the client creates a cryptographically random `code_verifier`, derives a `code_challenge` via SHA-256 hashing (S256 method) or plain transformation, sends the challenge in the authorization request, then proves possession by sending the original verifier at the token endpoint. RFC 7636 Section 4.2 states: "If the client is capable of using 'S256', it MUST use 'S256', as 'S256' is Mandatory To Implement (MTI) on the server."
-
-RFC 9700 Section 2.1.1.1 formally mandates: "Public clients MUST use PKCE [RFC7636] to this end... For confidential clients, the use of PKCE [RFC7636] is RECOMMENDED, as it provides strong protection against misuse and injection of authorization codes..." Section 2.1.2 deprecates the implicit flow: "The implicit grant (response type `token`) and other response types causing the authorization server to issue access tokens in the authorization response are vulnerable to access token leakage and access token replay... clients SHOULD NOT use the implicit grant... Use [Authorization Code] + [PKCE] instead."
-
-Sources: RFC 7636 Sections 1, 4.2; RFC 9700 Sections 2.1.1.1, 2.1.2
+### Finding 2 — OIDC menambahkan identity layer via ID Token JWT + UserInfo
+Claim: OIDC = OAuth 2.0 + identity. Verifikasi identity dilakukan oleh RP terhadap ID Token JWT bertanda tangan, bukan terhadap access token.
+Evidence: OIDC Core Abstract/Sec 1.3: "The primary extension... is the ID Token data structure... represented as a JWT." Required claims: iss, sub, aud (must contain client_id), exp, iat. UserInfo Endpoint (REST) berisi profile claims, dilindungi oleh access token.
+Sources: OIDC Core Sec 1, 2, 3, 5.3
 Confidence: HIGH
 
-### Finding 3: ID Token Validation Requirements
+### Finding 3 — ID Token wajib divalidasi multi-langkah (signature + iss + aud + exp + nonce)
+Claim: Validasi ID Token mencakup 13 langkah: decrypt-if-encrypted, iss exact match, aud contains client_id, JWS signature via issuer JWKS, current time before exp, nonce anti-replay, alg pinning, optional acr/auth_time.
+Evidence: OIDC Core Sec 3.1.3.7 (13 verbatim steps), Sec 2 (claim requirements).
+Sources: OIDC Core Sec 3.1.3.7, 2
+Confidence: HIGH
+Corroborated By: RFC 8725 Sec 3.1/3.8/3.9 (algorithm verification, issuer/subject/audience validation)
 
-Claim: ID Tokens MUST be validated for signature, issuer (`iss`), audience (`aud`), expiration time (`exp`), and optionally `nonce` to prevent token substitution and replay attacks.
-
-Evidence: OpenID Connect Core 1.0 Section 2 specifies the required ID Token claims: `iss` (Issuer Identifier, case-sensitive URL), `sub` (Subject Identifier), `aud` (Audience, MUST contain the client ID), `exp` (Expiration time), `iat` (Issued at), and optionally `auth_time`, `nonce`, `acr`, `amr`, `azp`. Section 3.1.3.7 (ID Token Validation) lists specific validation steps: verify the issuer matches the OP's identifier, verify the audience contains the client ID, verify the expiration time is in the future, and verify the signature using the appropriate public key (typically via JWKS endpoint). If the ID Token contains a `nonce` claim, it MUST match the nonce parameter sent in the authentication request.
-
-RFC 7519 Section 4.1 defines these registered JWT claims and their semantics: `iss` identifies the principal that issued the JWT; `sub` identifies the subject; `aud` identifies recipients; `exp` identifies expiration time; `iat` identifies when the JWT was issued.
-
-Sources: OpenID Connect Core 1.0 Sections 2, 3.1.3.7; RFC 7519 Section 4.1
+### Finding 4 — PKCE mencegah authorization-code interception; S256 wajib
+Claim: PKCE binds authorization request to token request via code_verifier/code_challenge (S256 = BASE64URL(SHA256(verifier))); S256 adalah MTI; plain deprecated.
+Evidence: RFC 7636 Sec 4.1/4.2/4.6 formulas + Appendix B worked example; Sec 7.2 plain SHOULD NOT be used; RFC 9700 Sec 2.1.1 public clients MUST use PKCE.
+Sources: RFC 7636; RFC 9700 Sec 2.1.1
 Confidence: HIGH
 
-### Finding 4: Token Storage and Refresh Token Security
+### Finding 5 — Implicit flow deprecated; Authorization Code Flow + PKCE standar modern
+Claim: Implicit flow (response_type=token/id_token) mengembalikan token di URL fragment, rentan terhadap XSS, referer, history; RFC 9700: SHOULD NOT digunakan; OAuth 2.1: dihapus.
+Evidence: RFC 9700 Sec 2.1.2; OAuth 2.1 summary (implicit omitted); Browser-based-apps draft Sec 7.2 (threat analysis).
+Sources: RFC 9700; https://oauth.net/2.1/
+Confidence: HIGH
 
-Claim: Access tokens and ID tokens should not be stored in browser `localStorage` due to XSS vulnerability. Sender-constrained tokens (e.g., mutual TLS, DPoP) and refresh token rotation are mandatory for public clients.
+### Finding 6 — Jebakan umum: (a) tidak verifikasi signature + aud, (b) access token di localStorage, (c) refresh token tidak di-rotate
+Claim: Tanpa verifikasi signature/iss/aud, siapa saja bisa buat JWT palsu. LocalStorage rentan XSS. Refresh token statis meningkatkan dampak pembajakan.
+Evidence: RFC 8725 Sec 2.1 (alg=none / RS256->HS256 confusion); Browser-based-apps draft Sec 5 (malicious JS same privileges, steal from localStorage/IndexedDB); RFC 9700 Sec 4.14 (rotation invalidates old token, detects replay); OIDC Core Sec 2 (aud wajib, else reject).
+Sources: RFC 8725; draft-ietf-oauth-browser-based-apps-27; RFC 9700 Sec 4.14; OIDC Core Sec 2
+Confidence: HIGH
 
-Evidence: While primary RFCs do not explicitly mandate "HttpOnly Secure SameSite cookie vs BFF" wording, the threat model is clear. RFC 6819 Section 10.3 states access tokens are bearer tokens and "SHOULD NOT be placed in page fragments (as they are in the OAuth 2.0 Implicit Flow) as this exposes them to the resulting document and any scripts it may contain." RFC 9700 Section 2.1.2 notes implicit flow tokens are vulnerable to "access token leakage and access token replay" because they are exposed in URL fragments to browser history and JavaScript. The oauth.net implicit flow page explicitly states tokens in URL fragments are exposed to "browser history, referrer headers, and any JavaScript on the page."
-
-RFC 9700 Section 2.2.2 mandates: "Refresh tokens for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." Section 4.14 describes refresh token rotation: "Refresh token rotation involves issuing a new refresh token each time one is used to obtain an access token. The old refresh token is then invalidated. This limits the usefulness of a stolen refresh token to a single use."
-
-Sources: RFC 9700 Sections 2.1.2, 2.2.2, 4.14; RFC 6819 Section 10.3; oauth.net implicit flow documentation
-Confidence: HIGH (threat model consensus); MEDIUM (specific implementation advice like "HttpOnly cookie" is derived best practice, not direct RFC mandate).
+### Finding 7 — Refresh token: rotation wajib untuk public client
+Claim: Rotation = server menerbitkan refresh token baru tiap refresh, lama di-invalidate; jika keduanya dipakai, server deteksi breach dan revoke.
+Evidence: RFC 9700 Sec 4.14.2 (verbatim rotation text); Sec 2.2.2 (MUST).
+Sources: RFC 9700
+Confidence: HIGH
 
 ## Areas of Agreement
-
-All primary sources agree on:
-
-1. OAuth 2.0 is Authorization; OIDC adds Authentication via ID Token.
-2. Authorization Code Flow + PKCE is the mandatory standard for all clients.
-3. Implicit Flow is deprecated due to token exposure vulnerabilities.
-4. ID Tokens must be validated for signature, `iss`, `aud`, `exp`.
-5. PKCE `S256` is MTI; `plain` is legacy/compatibility.
-6. Public clients must use PKCE; confidential clients are recommended to use it.
+- OIDC = OAuth 2.0 + identity (ID Token JWT) — sepakat antara OIDC Core dan RFC 9700.
+- PKCE mandatory — RFC 9700, OAuth 2.1, RFC 7636 sepakat.
+- Implicit flow insecure — sepakat (meskipun OIDC Core masih mendokumentasikannya secara historis).
+- Refresh token harus di-rotate atau sender-constrained — RFC 9700, OAuth 2.1 sepakat; OIDC Core contoh output kompatibel tapi tidak mewajibkan secara eksplisit.
+- JWT validation harus pin alg, validasi iss/aud/exp — RFC 7519, 8725, OIDC Core sepakat.
 
 ## Areas of Disagreement
-
-No material contradictions discovered. Minor evolution noted:
-- RFC 7636 (2015) designed PKCE for public clients only.
-- RFC 9700 (2025) extends recommendation to confidential clients (as layered defense against injection + CSRF).
-This is an evolution of best practice, not a contradiction.
+- OIDC Core masih menyebut implicit/hybrid flow; RFC 9700/OAuth 2.1 mendeprecate/hapus. Status: OIDC Core sudah usang secara praktis untuk browser-based apps; RFC 9700/OAuth 2.1 adalah BCP terkini.
+- OIDC Core Sec 12 menyebut refresh_token pada response tanpa menyebut "rotation"; RFC 9700 mewajibkan rotation. Status: OIDC Core tidak kontradiktif, hanya kurang preskriptif — RFC 9700 berlaku sebagai BCP keamanan.
 
 ## Limitations
-
-1. Token storage recommendations (HttpOnly cookie vs BFF) are best practices derived from threat models in RFC 6819 and RFC 9700 rather than direct normative statements in primary RFCs. Confidence is HIGH due to converging guidance.
-
-2. Specific implementation details of JWKS endpoint discovery and rotation policies are beyond scope but referenced (OpenID Connect Core 1.0 references JWK Set Discovery separately).
-
-3. Cross-platform native app redirect URI handling (iOS, Android, Windows, macOS) is covered in RFC 8252 Appendix B but not detailed in this research.
+- OIDC Core 1.0 (2014/2023 errata) tidak mencerminkan hardening terbaru (RFC 9700 Jan 2025).
+- OAuth 2.1 masih draft (saat penelitian); beberapa terminologi bisa berubah saat final.
+- Browser-based-apps draft (Jul 2026, expires Jan 2027) belum final RFC (RFC 10017 belum diterbitkan saat akses).
+- Studi kasus numerik (SHA256 example) diambil dari RFC 7636 Appendix B — nilai deterministik, bukan benchmark performa.
 
 ## Conclusion
+Oleh karena itu, memisahkan Authorization (OAuth 2.0: access token, apa yang boleh diakses) dari Authentication (OIDC: ID Token JWT, siapa penggunanya) adalah fondasi arsitektur yang aman. Authorization Code Flow + PKCE + ID Token signature/iss/aud/exp validation + refresh token rotation + BFF/token storage yang aman adalah satu set prasyarat berbasis standar yang konsisten antar RFC 6749, 7636, 7519, 8725, 9700, dan OIDC Core.
 
-OAuth 2.0 and OpenID Connect serve fundamentally different purposes: OAuth 2.0 enables delegated authorization via access tokens; OIDC enables authentication via ID Tokens (JWTs). Using an OAuth 2.0 access token for authentication is insecure because it lacks identity claims.
-
-Authorization Code Flow with PKCE is the current mandatory standard, preventing authorization code interception attacks by requiring proof-of-possession of a dynamically generated secret. ID Tokens must be validated for signature, issuer, audience, and expiration time.
-
-Token storage must avoid XSS-vulnerable client-side storage (localStorage). Refresh tokens for public clients must use sender-constraining or rotation. The implicit flow and resource owner password credentials grant are deprecated due to well-documented security flaws.
+## Lab Implementation Guidance (evidence-based)
+1. Buat code_verifier = crypto.random(32 octets) base64url (43 char, >=256-bit entropy).
+2. code_challenge = BASE64URL(SHA256(ASCII(verifier))) (S256, mandatory).
+3. Auth request: response_type=code + scope=openid... + code_challenge + code_challenge_method=S256 + state + nonce.
+4. Token exchange: POST /token grant_type=authorization_code + code + redirect_uri + code_verifier + client_auth.
+5. ID Token validation (13 langkah): decrypt -> iss exact -> aud contains client_id -> signature via issuer JWKS -> alg pinned -> exp -> nonce -> optional auth_time/acr.
+6. Token storage: BFF (httpOnly Secure SameSite cookie) atau in-memory untuk SPA; hindari localStorage.
+7. Refresh: rotasi + invalidasi lama; deteksi reuse -> revoke semua token + force re-auth.

@@ -1,30 +1,39 @@
-# Research Plan: OAuth 2.0 & OIDC --- Authentication vs Authorization and Flow Security
+# Research Plan
 
 ## Research Topic
-OAuth 2.0 & OpenID Connect (OIDC), Authorization Code Flow + PKCE, Token Types (`access_token`, `id_token`, `refresh_token`), and Security Best Practices.
+OAuth 2.0 & OIDC — Perbedaan Authentication vs Authorization dan Mekanisme Keamanan Flow
 
 ## Objective
-Investigate the architectural and security differences between OAuth 2.0 (Authorization) and OIDC (Authentication), evaluate the necessity of Authorization Code Flow + PKCE over deprecated flows (such as Implicit Flow), and establish authoritative evidence regarding token validation (`iss`, `aud`, `exp`, signature/JWKS) and token storage/handling.
+Provide evidence-based understanding of:
+1. Apa perbedaan mendasar antara OAuth 2.0 (Authorization) dan OIDC (Authentication)?
+2. Mengapa access token OAuth 2.0 tidak boleh digunakan untuk login (authentication)?
+3. Bagaimana Authorization Code Flow + PKCE bekerja?
+4. Bagaimana ID Token diverifikasi secara kriptografis?
+5. Apa jebakan umum dan bagaimana mitigasinya?
 
 ## Research Questions
-1. What are the fundamental differences between OAuth 2.0 (`access_token`) and OpenID Connect (`id_token`)?
-2. Why is using an OAuth 2.0 Access Token for authentication considered an anti-pattern or security risk?
-3. How does Authorization Code Flow with PKCE (RFC 7636) mitigate authorization code interception and injection attacks for public and confidential clients?
-4. What are the validation rules and security considerations for ID Tokens and Access Tokens according to RFC 7519, OpenID Connect Core 1.0, and RFC 9700?
-5. What are the current security best practices regarding token storage (e.g., avoiding `localStorage` due to XSS) and refresh token rotation?
+- RQ1: Bagaimana OAuth 2.0 didefinisikan secara resmi dalam RFC 6749?
+- RQ2: Bagaimana OIDC menambahkan identity layer di atas OAuth 2.0?
+- RQ3: Mengapa implicit flow dideprecate dan PKCE diwajibkan?
+- RQ4: Apa saja claim yang wajib ada dalam ID Token dan bagaimana validasinya?
+- RQ5: Mengapa access token tidak boleh digunakan untuk authentication?
+- RQ6: Bagaimana refresh token rotation bekerja?
 
 ## Search Strategy
-- Query IETF standards (RFC 6749, RFC 7636, RFC 8252, RFC 9700, RFC 7519) and OpenID Foundation specifications (OpenID Connect Core 1.0).
-- Cross-reference findings across primary and secondary authoritative sources.
+- Tier 1: IETF RFC (6749, 7636, 7519, 8725, 9700, 10017)
+- Tier 1: OpenID Connect Core 1.0 spec
+- Tier 2: OAuth.net summary (OAuth 2.1 differences)
+- Verified by cross-checking multiple RFCs for consistency
 
 ## Expected Primary Sources
-- RFC 6749: The OAuth 2.0 Authorization Framework
-- OpenID Connect Core 1.0 incorporating errata set 2
-- RFC 7636: Proof Key for Code Exchange by OAuth Public Clients (PKCE)
-- RFC 8252: OAuth 2.0 for Native Apps
-- RFC 9700: Best Current Practice for OAuth 2.0 Security
-- RFC 7519: JSON Web Token (JWT)
+- RFC 6749 (OAuth 2.0)
+- RFC 7636 (PKCE)
+- RFC 7519 (JWT)
+- RFC 8725 (JWT BCP)
+- RFC 9700 (OAuth 2.0 Security BCP)
+- OpenID Connect Core 1.0
 
 ## Risks / Unknowns
-- Potential variations in library implementations of PKCE (`plain` vs `S256`).
-- Evolution of browser cookie security policies (SameSite, Secure, HttpOnly) and BFF (Backend-for-Frontend) architecture patterns.
+- Some OIDC Core sections are very long; evidence extracted via section-specific retrieval
+- OAuth 2.1 is still a draft (not yet RFC)
+- BFF pattern details depend on deployment; not prescriptive in standards

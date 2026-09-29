@@ -1,55 +1,72 @@
 # Sources
 
 ## Source 1
-Title: The OAuth 2.0 Authorization Framework
-Publisher: IETF (Internet Engineering Task Force)
-URL: https://datatracker.ietf.org/doc/html/rfc6749
+Title: RFC 6749 — The OAuth 2.0 Authorization Framework
+Publisher: IETF
+URL: https://www.rfc-editor.org/rfc/rfc6749.html
 Published: October 2012
-Accessed: 2026-09-28
-Source Tier: Tier 1
-Relevance: Defines roles, authorization code flow, implicit flow, access tokens, and refresh tokens.
+Accessed: 2026-09-29
+Source Tier: Tier 1 (RFC Standard)
+Relevance: Defines OAuth 2.0 as authorization framework; roles (resource owner, client, authorization server, resource server); access tokens, refresh tokens, authorization code grant, implicit grant
 
 ## Source 2
+Title: RFC 7636 — Proof Key for Code Exchange by OAuth Public Clients (PKCE)
+Publisher: IETF
+URL: https://www.rfc-editor.org/rfc/rfc7636.html
+Published: September 2015
+Accessed: 2026-09-29
+Source Tier: Tier 1 (RFC Standard)
+Relevance: PKCE mechanism (code_verifier, code_challenge, S256); protects against authorization code interception
+
+## Source 3
 Title: OpenID Connect Core 1.0 incorporating errata set 2
 Publisher: OpenID Foundation
 URL: https://openid.net/specs/openid-connect-core-1_0.html
-Published: December 15, 2023
-Accessed: 2026-09-28
-Source Tier: Tier 1
-Relevance: Defines OIDC identity layer on top of OAuth 2.0, ID Token format (JWT), claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`), validation rules, and UserInfo endpoint.
-
-## Source 3
-Title: Proof Key for Code Exchange by OAuth Public Clients (PKCE)
-Publisher: IETF (Internet Engineering Task Force)
-URL: https://datatracker.ietf.org/doc/html/rfc7636
-Published: September 2015
-Accessed: 2026-09-28
-Source Tier: Tier 1
-Relevance: Defines `code_verifier`, `code_challenge`, transformation methods (`S256`, `plain`), and authorization code interception mitigation.
+Published: December 2023
+Accessed: 2026-09-29
+Source Tier: Tier 1 (Specification Standard)
+Relevance: OIDC as identity layer on top of OAuth 2.0; ID Token definition; required claims (iss, sub, aud, exp, iat); 13-step ID Token validation; Authorization Code Flow steps; UserInfo Endpoint
 
 ## Source 4
-Title: OAuth 2.0 for Native Apps (BCP 212)
-Publisher: IETF (Internet Engineering Task Force)
-URL: https://datatracker.ietf.org/doc/html/rfc8252
-Published: October 2017
-Accessed: 2026-09-28
-Source Tier: Tier 1
-Relevance: Outlines use of external user-agents (browsers), deprecation of embedded web-views, loopback interface and custom URI redirection, and mandatory PKCE.
+Title: RFC 7519 — JSON Web Token (JWT)
+Publisher: IETF
+URL: https://www.rfc-editor.org/rfc/rfc7519.html
+Published: May 2015
+Accessed: 2026-09-29
+Source Tier: Tier 1 (RFC Standard)
+Relevance: JWT claims (iss, sub, aud, exp, nbf, iat, jti); JWS/JWE structure; compact serialization format
 
 ## Source 5
-Title: Best Current Practice for OAuth 2.0 Security (BCP 240 / RFC 9700)
-Publisher: IETF (Internet Engineering Task Force)
-URL: https://datatracker.ietf.org/doc/html/rfc9700
-Published: January 2025
-Accessed: 2026-09-28
-Source Tier: Tier 1
-Relevance: Formally deprecates Implicit Flow and Resource Owner Password Credentials (ROPC); mandates PKCE for public clients and recommends it for confidential clients; specifies exact redirect URI matching, mix-up defenses, sender-constrained tokens, and refresh token rotation.
+Title: RFC 8725 — JSON Web Token Best Current Practices
+Publisher: IETF
+URL: https://www.rfc-editor.org/rfc/rfc8725.html
+Published: February 2020
+Accessed: 2026-09-29
+Source Tier: Tier 1 (BCP)
+Relevance: Algorithm verification; validate issuer/subject/audience; cross-JWT confusion prevention; use explicit typing
 
 ## Source 6
-Title: JSON Web Token (JWT)
-Publisher: IETF (Internet Engineering Task Force)
-URL: https://datatracker.ietf.org/doc/html/rfc7519
-Published: May 2015
-Accessed: 2026-09-28
-Source Tier: Tier 1
-Relevance: Standardizes JWT claims representation, format, header (`typ`, `alg`), registered claims (`iss`, `sub`, `aud`, `exp`, `nbf`, `iat`, `jti`), and cryptographic verification requirements.
+Title: RFC 9700 — Best Current Practice for OAuth 2.0 Security
+Publisher: IETF
+URL: https://www.rfc-editor.org/rfc/rfc9700.html
+Published: January 2025
+Accessed: 2026-09-29
+Source Tier: Tier 1 (BCP)
+Relevance: Implicit flow deprecation; PKCE mandatory for all public clients; refresh token rotation for public clients; exact redirect URI matching; token privilege restriction (audience restriction)
+
+## Source 7
+Title: OAuth 2.1 (draft summary)
+Publisher: OAuth Working Group / oauth.net
+URL: https://oauth.net/2.1/
+Accessed: 2026-09-29
+Source Tier: Tier 1 (draft spec / summary)
+Relevance: Consolidation of RFCs; PKCE required for all clients; implicit grant omitted; ROPC omitted; refresh token rotation for public clients
+
+## Source 8
+Title: RFC 10017 / draft-ietf-oauth-browser-based-apps-27 — OAuth 2.0 for Browser-Based Applications
+Publisher: IETF
+URL: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps-27
+Published: July 2026 (draft)
+Accessed: 2026-09-29
+Source Tier: Tier 1 (BCP draft)
+Relevance: BFF pattern; token storage in browser; XSS threats; malicious JS scenarios; BFF as confidential client hiding tokens from browser
