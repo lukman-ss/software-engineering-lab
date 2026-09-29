@@ -1,158 +1,147 @@
 # Code Audit
 
+Target Lab: labs/37-cache-invalidation-strategies
+
 ## Finding 1
 
-Location: `internal/cache/store.go:31-43` — `MemoryCache.Get`
-Claimed Behavior: Returns item if present and not expired; returns `ErrCacheMiss` otherwise.
-Observed Implementation: Acquires `RLock`, checks existence and expiry. Returns `ErrCacheMiss` for absent or expired items. Items with zero `ExpiresAt` are treated as non-expiring (TTL 0).
+Location: internal/cache/store.go:20-43 (`MemoryCache.Get`, `MemoryCache.Set`)
+Claimed Behavior: Thread-safe in-memory cache with TTL expiration.
+Observed Implementation: `sync.RWMutex` used correctly — `RLock` for reads, `Lock` for writes. Expiry check on `Get` returns `ErrCacheMiss` for expired items. TTL=0 treated as no expiration (non-expiring items).
 Assessment: PASS
 Severity: LOW
-Notes: Expired item is returned as `ErrCacheMiss` but NOT deleted on read. Stale entry persists in map until overwritten. Non-issue for correctness but causes unbounded memory growth over time if no eviction. No TTL eviction background loop — intentional per implementation notes (in-memory demo scope).
-
----
+Notes: Correct mutex discipline throughout all cache operations.
 
 ## Finding 2
 
-Location: `internal/cache/store.go:79-85` — `TTLWithJitter`
-Claimed Behavior: Adds random jitter in `[0, maxJitter)` to base TTL; prevents synchronized expiry.
-Observed Implementation: Uses `rand.Int63n(int64(maxJitter))`. Returns `base + jitter`. Guards `maxJitter <= 0` (returns base unchanged).
+Location: internal/cache/store.go:46-51 (`GetRaw`)
+Claimed Behavior: Returns item regardless of expiration, needed for SWR and XFetch.
+Observed Implementation: Holds `RLock`, returns item and boolean presence flag without expiration check. Used correctly by XFetch and SWR services.
 Assessment: PASS
 Severity: LOW
-Notes: Uses package-level `math/rand` (not seeded per-call, uses default global source). Thread-safe since Go 1.20 (global source auto-seeded). Does not use cryptographic randomness — correct for this use case.
-
----
+Notes: Deliberate design decision, well-documented in implementation notes.
 
 ## Finding 3
 
-Location: `internal/cache/patterns.go:39-47` — `CacheAsideService.Update`
-Claimed Behavior: Write to DB first, then invalidate cache.
-Observed Implementation: `db.Write` then `cache.Delete`. Correct write-then-invalidate sequence. No rollback if DB write succeeds but cache delete fails (impossible for in-memory delete, but conceptually noted).
+Location: internal/cache/store.go:79-85 (`TTLWithJitter`)
+Claimed Behavior: Adds random positive jitter `[0, maxJitter)` to base TTL.
+Observed Implementation: `rand.Int63n(int64(maxJitter))` produces `[0, maxJitter)`. Guard for `maxJitter <= 0` returns base TTL unchanged. Uses `math/rand` standard package (not crypto/rand); marked with `ponytail:` comment acknowledging limitation.
 Assessment: PASS
 Severity: LOW
-Notes: Classic Cache-Aside update pattern correctly implemented. The race window between DB write and cache delete is inherent to Cache-Aside; not a bug.
-
----
+Notes: Non-cryptographic randomness is appropriate for TTL jitter. Ponytail comment correctly identifies upgrade path.
 
 ## Finding 4
 
-Location: `internal/cache/patterns.go:78-89` — `WriteThroughService.Update`
-Claimed Behavior: Write to DB and update cache synchronously.
-Observed Implementation: Calls `db.Write`, then `cache.Set`. If `db.Write` fails, returns early without updating cache — correct. Delta measured across DB write for ReadDelta stored in cache; this is the write time, not the read latency, which is semantically inconsistent with XFetch intent (ReadDelta for XFetch should be DB query time). However, `WriteThroughService` is not used with XFetch.
+Location: internal/cache/patterns.go:22-47 (`CacheAsideService.Get`, `CacheAsideService.Update`)
+Claimed Behavior: Cache-Aside: read from cache → miss → DB query → populate cache. Update: DB write first, then cache invalidation.
+Observed Implementation: Get: cache hit returns early, miss goes to DB, measures `ReadDelta`, sets cache with TTL. Update: DB write first, then `cache.Delete`. Correct "write-DB-then-invalidate" ordering, which avoids serving stale data after write.
 Assessment: PASS
 Severity: LOW
-Notes: ReadDelta for write-through is the DB write latency — semantically wrong for XFetch but not a concern here because WriteThroughService is independent.
-
----
+Notes: No race window between DB write and cache invalidation in sequential operation. Correct pattern implementation.
 
 ## Finding 5
 
-Location: `internal/cache/patterns.go:120-135` — `WriteBehindService.flushWorker`
-Claimed Behavior: Background goroutine flushes pending writes; drains on close.
-Observed Implementation: `select` on `writeQueue` or `quit`. On quit signal, drains remaining items in `writeQueue` using `for len(s.writeQueue) > 0`. There is a race condition: items could be enqueued between `close(quit)` and the drain loop. However, this is a demonstration-scope implementation correctly documented with `ponytail:` comment.
-Assessment: WARNING
-Severity: MEDIUM
-Notes: The drain loop `for len(s.writeQueue) > 0` is not fully safe — a producer calling `Update` after `Close()` initiates will panic (send on closed channel). However, in test usage `Close()` is deferred and no concurrent updates occur after the test assertion. Practically safe in test and demo, but the implementation has an acknowledged durability risk documented in notes. Not a test correctness issue.
-
----
+Location: internal/cache/patterns.go:78-89 (`WriteThroughService.Update`)
+Claimed Behavior: Synchronous write to DB and cache.
+Observed Implementation: DB write first, then cache set with same value. Subsequent reads hit updated cache without DB query. `ReadDelta` is measured from DB write duration and stored — technically this is the write duration, not the read/compute duration for the item, but it is acceptable here since Write-Through does not use XFetch-style probabilistic logic.
+Assessment: PASS
+Severity: LOW
+Notes: Minor semantic note: `ReadDelta` in `WriteThroughService` stores write latency, not fetch latency. Not a correctness issue since Write-Through doesn't use XFetch.
 
 ## Finding 6
 
-Location: `internal/cache/patterns.go:152-161` — `WriteBehindService.Update`
-Claimed Behavior: Write to cache immediately, enqueue DB flush.
-Observed Implementation: `cache.Set` with hardcoded `1*time.Millisecond` ReadDelta, then non-blocking `select` to queue. Drops silently on full queue with a comment.
-Assessment: WARNING
-Severity: MEDIUM
-Notes: Hardcoded `1ms` ReadDelta is a placeholder, not measured. Acceptable for demo. Silent drop on queue overflow is undocumented at call site (documented in implementation notes). Production risk noted correctly.
-
----
+Location: internal/cache/patterns.go:98-166 (`WriteBehindService`)
+Claimed Behavior: Immediate cache update, async DB flush via buffered channel worker.
+Observed Implementation: `Update` writes to cache immediately, sends to channel. `flushWorker` goroutine processes channel in background. `Close()` signals quit channel, then drains remaining items before returning. Buffer overflow handled with `select { default: }` (silently drops), documented with ponytail comment.
+Assessment: PASS
+Severity: LOW
+Notes: Graceful shutdown drain loop (`for len(s.writeQueue) > 0`) is non-atomic with the channel close — in the window between channel close signal and drain loop, items could be added by concurrent Update calls in tests. However for test scenarios and demo, this is safe since Update is not called concurrently with Close.
 
 ## Finding 7
 
-Location: `internal/cache/stampede.go:56-84` — `SingleFlightService.Get`
-Claimed Behavior: Coalesces `N` concurrent misses to 1 DB query.
-Observed Implementation: First checks cache outside flight (fast path). Inside flight function, double-checks cache (prevents redundant DB hit if another goroutine already populated). Uses `singleflight.Group.Do` per key. Correct pattern.
+Location: internal/cache/stampede.go:16-41 (`NaiveStampedeService`)
+Claimed Behavior: Intentionally naive — concurrent cache misses all query DB simultaneously.
+Observed Implementation: No coordination — all goroutines that miss cache call `db.Query` independently. Correctly demonstrates the thundering herd problem.
 Assessment: PASS
 Severity: LOW
-Notes: Double-checked locking pattern is correct and idiomatic for singleflight. The shared `ctx` passed into the flight function is the caller's context — if the first caller's context is cancelled mid-flight, all waiting goroutines receive the error. Acceptable for this scope.
-
----
+Notes: Correct — stampede behavior is intentional.
 
 ## Finding 8
 
-Location: `internal/cache/stampede.go:122-136` — `ShouldRecompute`
-Claimed Behavior: Implements XFetch formula `-Δ · β · ln(U) > TTL_remaining`.
-Observed Implementation:
-```go
-expiryCompute := -deltaSec * beta * math.Log(u)
-return expiryCompute > ttlRemainingSec
-```
-Guards `u <= 0 || u >= 1` returning false (prevents `+Inf` from `log(0)` and meaningless `log(1) = 0`).
+Location: internal/cache/stampede.go:45-84 (`SingleFlightService.Get`)
+Claimed Behavior: Coalesces concurrent miss requests to single DB query using `singleflight.Group`.
+Observed Implementation: Uses `singleflight.Group.Do(key, ...)`. Double-check inside the flight function (re-checks cache before DB query). Correctly shares result across all concurrent callers. All 20 concurrent goroutines get the correct value from a single DB query.
 Assessment: PASS
 Severity: LOW
-Notes: Formula is mathematically correct. Guard clause correctly handles degenerate inputs. Exported function allows direct unit testing of the formula — good design.
-
----
+Notes: Double-check inside `Do` is a good defensive pattern to handle the case where a prior flight already populated the cache while the current flight was waiting.
 
 ## Finding 9
 
-Location: `internal/cache/stampede.go:138-169` — `XFetchService.Get`
-Claimed Behavior: Returns cached value or proactively recomputes based on XFetch condition.
-Observed Implementation: Gets `u` from randFunc/rand, then evaluates `ShouldRecompute`. Falls back to stale item if recompute fails (`ok` check). Correctly handles cache miss (item not present) vs. expired item.
+Location: internal/cache/stampede.go:122-136 (`ShouldRecompute`)
+Claimed Behavior: Implements XFetch formula `-Δ · β · ln(U) > TTL_remaining`. Correct sign: `math.Log(u)` is negative for `u ∈ (0,1)`, so negating produces a positive value.
+Observed Implementation: `expiryCompute := -deltaSec * beta * math.Log(u)`. Guards `u <= 0 || u >= 1` to prevent `+Inf` or zero. Returns true when `expiryCompute > ttlRemainingSec`. This is mathematically correct.
 Assessment: PASS
 Severity: LOW
-Notes: `u` is drawn before the recompute check — correct. One subtle point: `u` is drawn even on a hard miss (no item), which is wasteful but harmless. The stale-fallback on DB error (`if ok { return item.Value }`) is a sound resilience decision.
-
----
+Notes: Formula matches the research-approved correction. Guard on u bounds is correct. Test `TestXFetchLogic` validates the formula numerically with concrete u values.
 
 ## Finding 10
 
-Location: `internal/cache/stampede.go:197-223` — `SWRService.Get`
-Claimed Behavior: Fresh → return; stale within window → return stale + async revalidate; hard miss → sync fetch.
-Observed Implementation: Evaluates `item.ExpiresAt` and `staleUntil`. Triggers `triggerRevalidate` under the stale window. Falls through to synchronous fetch on full expiry or miss.
+Location: internal/cache/stampede.go:138-169 (`XFetchService.Get`)
+Claimed Behavior: Probabilistic early expiration — triggers proactive DB fetch before TTL expiry when formula holds.
+Observed Implementation: Calls `GetRaw`, checks if expired (forced recompute) or `ShouldRecompute`. If no recompute needed, returns cached value. If fetch fails but stale item exists, returns stale as fallback (resilient behavior). Injects `randFunc` for deterministic testing.
 Assessment: PASS
 Severity: LOW
-Notes: SWR correctly implements 3-tier freshness model.
-
----
+Notes: Stale fallback on XFetch recompute failure is a valid, resilient behavior. `SetRandFunc` properly enables deterministic tests.
 
 ## Finding 11
 
-Location: `internal/cache/stampede.go:226-253` — `SWRService.triggerRevalidate`
-Claimed Behavior: Starts one background goroutine per key; prevents multiple concurrent revalidations.
-Observed Implementation: Acquires mutex, checks `revalidating[key]`, returns early if already in-flight. Sets flag, releases mutex. Goroutine clears flag on completion. Uses `context.WithTimeout(10s)` for background fetch.
+Location: internal/cache/stampede.go:173-253 (`SWRService`)
+Claimed Behavior: Fresh items returned directly. Expired items within stale window served stale + trigger async background revalidation. Items beyond stale window trigger synchronous fetch.
+Observed Implementation: Three-tier logic (fresh / stale-window / hard-miss) correctly implemented. `triggerRevalidate` uses `revalidating` map under mutex to prevent concurrent background revalidations per key. Background goroutine acquires 10-second timeout context, queries DB, updates cache. `revalCount` atomic counter tracks revalidations.
 Assessment: PASS
 Severity: LOW
-Notes: Single-revalidation-per-key guard is correct. The goroutine is not tracked via a WaitGroup — SWR service has no `Close()` method, so background goroutines may outlive the service in tests. In test scope this is acceptable (goroutines complete within test duration). Production would benefit from a `Close()` with context cancellation.
-
----
+Notes: The `revalidating` map cleanup (`delete`) happens in a `defer` in the goroutine, ensuring the key is unlocked even if the DB query fails. Correct.
 
 ## Finding 12
 
-Location: `internal/cache/repo.go:34-52` — `MockDB.Query`
-Claimed Behavior: Simulates DB latency, increments query count, returns value.
-Observed Implementation: Atomically increments `queryCount` before the delay — counts all calls including context-cancelled ones. Correct for measuring stampede (counts all concurrent initiating queries). `RLock` used for concurrent reads.
+Location: internal/cache/stampede.go:237-253 (SWR background goroutine)
+Claimed Behavior: Async revalidation updates cache on success; no-op on error.
+Observed Implementation: Errors from `db.Query` are silently ignored (no error channel, no log). For a lab/demo context this is acceptable; production would require monitoring.
 Assessment: PASS
 Severity: LOW
-Notes: Atomic counter is race-safe. Context cancellation handled during delay. Correct.
-
----
+Notes: Acceptable simplification for lab scope; documented in implementation notes.
 
 ## Finding 13
 
-Location: `internal/cache/stampede.go:93-97` — `XFetchService` struct with `rand *rand.Rand` and `mu sync.Mutex`
-Claimed Behavior: Thread-safe random number generation.
-Observed Implementation: `rand.Rand` (not the global source) is used with a dedicated `mu sync.Mutex`. `getRand()` acquires the mutex. The `randFunc` injection bypasses the mutex entirely.
+Location: internal/cache/repo.go:54-68 (`MockDB.Write`)
+Claimed Behavior: Write increments `writeCount`, respects context cancellation, simulates DB delay.
+Observed Implementation: `writeCount.Add(1)` called before delay. This means even cancelled writes increment the counter. In practice, tests do not cancel mid-write, so no test impact.
 Assessment: WARNING
 Severity: LOW
-Notes: `randFunc` injection has no mutex protection. Injected `randFunc` in tests is deterministic (returns constant), so no race in tests. Concurrent real usage with injected `randFunc` would race. Minor since this is test-only injection.
-
----
+Notes: If a context is cancelled mid-write before `db.data[key] = value`, the write count is incremented but the data is not actually written. This creates a minor discrepancy in write counter semantics. Does not affect any current test correctness.
 
 ## Finding 14
 
-Location: `internal/cache/store.go` — Design: no eviction background loop
-Claimed Behavior: Cache with TTL support.
-Observed Implementation: TTL is enforced lazily (on read only). Expired entries accumulate in the map until overwritten. No background sweeper.
+Location: engineering/01-design.md:46 (mentions `jitter.go`)
+Claimed Behavior: Architecture mentions `jitter.go` as a separate file.
+Observed Implementation: `TTLWithJitter` is implemented in `store.go`, not a separate `jitter.go`. No `jitter.go` file exists.
 Assessment: WARNING
 Severity: LOW
-Notes: Acceptable for lab scope — explicitly noted in implementation notes as in-memory demo. Not a correctness issue for demonstrated patterns.
+Notes: Design doc lists `jitter.go` as an architecture component that does not exist. Implementation consolidated TTL jitter into `store.go`. Minor doc inaccuracy; code is correct.
+
+## Finding 15
+
+Location: tests/cache_test.go (missing test coverage)
+Claimed Behavior: Implementation notes assert SWR timing-sensitive test. Write-Behind drop behavior exists but overflow test only checks cache value, not drop count.
+Observed Implementation: `TestWriteBehindService_QueueOverflow` verifies cache reflects latest update but does not assert how many writes were actually flushed to DB (i.e., overflow drop is not counted). `TestCachePatterns_FailurePaths` only covers Cache-Aside and Write-Through read errors; Write-Behind DB failure path is not tested.
+Assessment: WARNING
+Severity: MEDIUM
+Notes: Queue overflow drop behavior is tested partially (cache correct), but the drop side-effect is not quantified/asserted.
+
+## Finding 16
+
+Location: cmd/demo/main.go (Write-Through demo, line 59)
+Claimed Behavior: Demo shows `DB queries: 1` after Write-Through Update + GET (no extra query).
+Observed Implementation: Write-Through `Update` calls `db.Write` (increments `writeCount` not `queryCount`). Post-update GET hits cache directly. `db.QueryCount()` stays at 1 (from initial miss). Output is correct and not misleading.
+Assessment: PASS
+Severity: LOW
+Notes: Demo output correctly disambiguates query vs write counts.

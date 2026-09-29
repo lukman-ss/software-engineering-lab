@@ -1,53 +1,92 @@
-# Gaps
+# Gap Analysis
 
-## Gap 1 — MISSING_TEST (MEDIUM)
-Service Get/Update error & fallback paths covered in code but not tested:
-XFetch stale-fallback-on-recompute-error (stampede.go:159-164), SWR sync-fetch on
-beyond-stale-window error, SingleFlight flight-func error propagation, CacheAside/Update
-DB-write failure, WriteBehind lost async Write error.
-Why it matters: failure handling is otherwise unproven; a future refactor could silently
-invert the `if ok` fallback. Add tests with a failing/mock-err DB injected.
+Target Lab: labs/37-cache-invalidation-strategies
 
-## Gap 2 — MISSING_TEST (MEDIUM)
-XFetch `Get` end-to-end not unit-tested. Only `ShouldRecompute` pure fn tested. Early-refresh
-behavior is demo-only.
-Why it matters: the formula is proven but the Get() branch wiring (GetRaw → now.After →
-remaining → recompute-or-serve, plus stale fallback) is unverified by the test suite.
+## GAP-01: Write-Behind Flush Error Ignored Without Test or Metric
 
-## Gap 3 — MISSING_EDGE_CASE / weak assertion (MEDIUM)
-SWR test value-only, timing-coupled (30ms + 50ms Sleeps); does not assert RevalidateCount or
-the single-in-flight-per-key guard (stampede.go:228-231); does not assert stale value held
-during async refresh.
-Why it matters: test can pass while revalidation logic regresses; also flake-prone under load.
+Gap Type: UNHANDLED_ERROR
+Severity: MEDIUM
+Location: `internal/cache/patterns.go:125, 130`
+Description:
+In `WriteBehindService.flushWorker`, DB write errors are explicitly discarded with `_ = s.db.Write(...)`. If the backing store is unreachable or returns an error, the write is silently lost with no retry, error callback, dead-letter queue, or metric. While documented as a demonstration in implementation notes, no test exercises this failure path.
+Impact: Silent data loss on DB failure.
+Remediation: Document the error-handling limitation clearly in code comments or add an error callback/channel to `WriteBehindService` so failures can be observed and tested.
 
-## Gap 4 — MISSING_TEST (MEDIUM)
-Write-Behind overflow drop and Close() drain not asserted; only post-sleep write count checked.
-Why it matters: the silent-drop path (patterns.go:156-160 default branch) and graceful
-shutdown drain (128-131) are documented behavior — should have an overflow test + drain test.
+---
 
-## Gap 5 — RACE_CONDITION (latent) (MEDIUM)
-`XFetchService.SetRandFunc` (stampede.go:109-111) writes randFunc with no synchronization
-while `getRand` (113-120) reads it with no lock on the randFunc path. Safe only because tests
-set it before concurrent Gets; concurrent SetRandFunc would race.
-Why it matters: not exercised by `-race`, but real bug if ever used concurrently. Fix: protect
-randFunc read/write with s.mu, or document single-writer invariant.
+## GAP-02: Missing Test for SWR Hard-Miss Path
 
-## Gap 6 — MISSING_TEST (MEDIUM)
-No context-cancellation or timeout test. MockDB honours ctx.Done (repo.go:37-42, 56-61) but
-services only seen with context.Background(); cancellation never challenged.
-Why it matters: ctx-propagation path is unproven.
+Gap Type: MISSING_TEST
+Severity: LOW
+Location: `internal/cache/stampede.go:215-224`
+Description:
+`SWRService.Get` has three branches:
+1. Cache hit (fresh)
+2. Stale within stale window (serve stale + async revalidate)
+3. Hard miss / expired beyond stale window (synchronous fetch)
+Branch 3 is executed on the initial fetch (before key exists), but the condition where an existing key has aged *past* `ExpiresAt.Add(s.staleDelta)` is never explicitly tested.
+Impact: Edge case branch coverage incomplete for key expiration exceeding stale window.
+Remediation: Add a test case where `time.Sleep` exceeds `ttl + staleDelta` and verify synchronous query occurs and blocks.
 
-## Gap 7 — DOC_CODE_MISMATCH (LOW)
-engineering/01-design.md §Architecture lists `jitter.go: TTL jitter calculation`; no such file —
-jitter implemented in store.go. Stale doc reference only.
+---
 
-## Gap 8 — UNKNOWN_RESULT / timing risk (LOW)
-SWR and WriteBehind rely on real wall-clock Sleeps; documented as known limitation. No
-determinism risk found in observed runs, but flakiness acknowledged. Acceptable for lab;
-monitor under load.
+## GAP-03: Missing Test for XFetch DB Failure Stale Fallback
 
-## Summary of severity
-MEDIUM: 1,2,3,4,5,6
-LOW: 7,8
-CRITICAL/HIGH: (none) — no fabricated result, no broken core behavior, no race in exercised
-concurrency.
+Gap Type: MISSING_TEST
+Severity: LOW
+Location: `internal/cache/stampede.go:158-163`
+Description:
+`XFetchService.Get` contains defensive fallback logic:
+```go
+if err != nil {
+    if ok {
+        return item.Value, nil
+    }
+    return "", err
+}
+```
+If DB recompute fails during proactive early refresh, it returns the stale cached value rather than returning the error to the caller. This behavior is intentional and robust, but no test covers it.
+Impact: Unverified fallback behavior during database outage on proactive recompute.
+Remediation: Add a unit test injecting a failing DB query into `XFetchService` on a populated key and asserting that stale value is returned with `nil` error.
+
+---
+
+## GAP-04: Design Document Lists Non-Existent `jitter.go`
+
+Gap Type: DOC_CODE_MISMATCH
+Severity: LOW
+Location: `engineering/01-design.md:46`
+Description:
+The design document specifies:
+```text
+internal/cache:
+  ...
+  - jitter.go: TTL jitter calculation.
+```
+In reality, `TTLWithJitter` was placed in `internal/cache/store.go`. There is no `jitter.go` file. The README correctly omits `jitter.go`.
+Impact: Minor confusion for developers reading the design document.
+Remediation: Update `engineering/01-design.md` line 46 to reflect that jitter logic is in `store.go`.
+
+---
+
+## GAP-05: Missing Test for SWR Concurrent Revalidation Deduplication
+
+Gap Type: MISSING_TEST
+Severity: LOW
+Location: `internal/cache/stampede.go:226-234`
+Description:
+The SWR implementation includes a deduplication guard `revalidating map[string]bool` to ensure only one background revalidation goroutine runs per key. While the unit test checks that async revalidation happens, it does not issue concurrent reads during the stale window to verify that `revalCount` remains 1 and duplicate revalidations are suppressed.
+Impact: Deduplication logic correctness under concurrency is unverified by tests.
+Remediation: Add a concurrency test launching multiple goroutines during the stale window and asserting `revalCount` is 1.
+
+---
+
+## Summary
+
+| Gap ID | Gap Type | Severity | Description |
+|---|---|---|---|
+| GAP-01 | UNHANDLED_ERROR | MEDIUM | DB write errors in WriteBehind flush worker are discarded silently without test or metric |
+| GAP-02 | MISSING_TEST | LOW | SWR hard-miss path (past staleDelta) not explicitly tested |
+| GAP-03 | MISSING_TEST | LOW | XFetch fallback to stale value on DB error not tested |
+| GAP-04 | DOC_CODE_MISMATCH | LOW | `engineering/01-design.md` lists `jitter.go` which lives in `store.go` |
+| GAP-05 | MISSING_TEST | LOW | SWR in-flight revalidation deduplication not verified under concurrent reads |
