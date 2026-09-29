@@ -1,44 +1,32 @@
+# Research Plan: Bloom Filters
 
-# Research Plan
+## Research Topic
+Bloom Filters — Struktur Data Probabilistik untuk Memangkas Disk I/O dan Mencegah Cache Penetration pada Backend Berkinerja Tinggi.
 
-**Topic**: Bloom Filters – Probabilistic Data Structures for Reducing Disk I/O and Preventing Cache Penetration
+## Objective
+Menginvestigasi dasar matematis, karakteristik operasional, formula optimalisasi ukuran ($m$) dan jumlah fungsi hash ($k$), strategi hashing efisien (Kirsch-Mitzenmacher), pencegahan cache penetration, penggunaan industri pada LSM-Tree (RocksDB, Cassandra), serta trade-off dan limitasi Bloom Filter.
 
-**Objective**: Provide a clear, concise overview of Bloom filter fundamentals, applications, and performance characteristics.
+## Research Questions
+1. **Mathematical Foundations**: Bagaimana perumusan probabilitas false positive ($p$), penentuan ukuran bit array optimal ($m$), dan jumlah fungsi hash optimal ($k$) untuk $n$ elemen?
+2. **Double Hashing Optimization**: Apakah implementasi $k$ fungsi hash independen memerlukan $k$ algoritma hash berbeda, atau cukup 2 fungsi hash (Kirsch-Mitzenmacher technique)?
+3. **Cache Penetration Mitigation**: Bagaimana pola arsitektur Bloom Filter melindungi database dari serangan pencarian kunci nonexistent?
+4. **LSM-Tree Disk I/O Pruning**: Bagaimana mesin penyimpanan LSM-Tree (RocksDB, Google Bigtable, Apache Cassandra) memanfaatkan Bloom Filter pada SSTable?
+5. **Limitations & Variants**: Mengapa Bloom Filter standar tidak mendukung operasi `delete`, dan varian apa yang mengatasi limitasi tersebut (Counting Bloom Filter, Cuckoo Filter)?
 
-**Research Questions**
-1. What is a Bloom filter and how does it work?
-2. What are false positives, false negatives, and the false‑positive probability formula?
-3. How does filter size, number of hash functions, and element count affect space usage and error rate?
-4. Which real‑world systems use Bloom filters (e.g., caches, databases, distributed stores, search engines)?
-5. How do Bloom filters compare to alternative probabilistic structures (e.g., Cuckoo filters, Quotient filters)?
+## Search Strategy
+1. Peninjauan paper primer: Burton H. Bloom (1970).
+2. Peninjauan paper optimasi hash: Adam Kirsch & Michael Mitzenmacher (2006).
+3. Peninjauan dokumentasi arsitektur industri: RocksDB (Meta), Apache Cassandra, Google Bigtable paper (Chang et al., 2006).
+4. Peninjauan literatur algoritma hash non-kriptografis: MurmurHash3 (Austin Appleby), xxHash (Yann Collet), FNV.
 
-**Search Strategy**
-- Primary tier: Original Bloom 1970 paper, FNV‑FNV, RocksDB, Percolator, and BitFunnel docs.
-- Secondary tier: Wikipedia, academic surveys, and recent conference papers (SIGIR 2019 LSM survey, etc.).
-- Use websearch for "Bloom filter false positive probability" and "Bloom filter use cases".
+## Expected Primary Sources
+- Burton H. Bloom (1970), "Space/Time Trade-offs in Hash Coding with Allowable Errors", Communications of the ACM.
+- Adam Kirsch and Michael Mitzenmacher (2006), "Less Hashing, Same Performance: Building a Better Bloom Filter", ESA 2006 / Harvard University.
+- Fay Chang et al. (2006), "Bigtable: A Distributed Storage System for Structured Data", Google Inc., OSDI 2006.
+- RocksDB Documentation / Wiki on RocksDB Bloom Filter implementation (Meta Open Source).
+- Apache Cassandra Architecture Documentation on Bloom Filters.
 
-**Expected Primary Sources**
-- Bloom, B. H. (1970). *Space/Time Trade‑offs in Hash Coding with Allowable Errors*.
-- O'Neil et al. (1996). *The log‑structured merge‑tree (LSM‑tree)* – LSM uses Bloom filters.
-- Google Percolator (USENIX 2010) – describes Bloom filter usage for cache penetration.
-- RocksDB documentation – Bloom filter configuration.
-- BitFunnel Wikipedia – Bloom filter application in search indexing.
-- RFC/whitepaper on Bloom filters in Redis, Cassandra, etc.
-
-**Deliverables**
-- `01-plan.md` (research plan – already drafted).
-- `02-sources.md` (list of sources with metadata).
-- `03-evidence.md` (claims, evidence, confidence, corroboration).
-- `04-contradictions.md` (none expected; placeholder).
-- `05-report.md` (structured research report with executive summary, findings, and limitations).
-- `06-open-questions.md` (any gaps or ambiguous findings).
-
-**Timeline**
-- Day 1: Gather primary sources, verify URLs, and store metadata.
-- Day 2: Extract key claims, calculate false‑positive formulas, and capture performance numbers.
-- Day 3: Write evidence, check cross‑sources, and draft report.
-- Day 4: Review, finalize, and populate open‑questions.
-
-**Notes**
-- All claims will be backed by at least two independent sources where possible.
-- Confidence levels: HIGH for Bloom‑1970 and O'Neil‑1996; MEDIUM for industry implementations; LOW for speculative performance numbers.
+## Risks / Unknowns
+- Kinerja CPU overhead dari hashing berulang jika fungsi hash tidak optimal.
+- Efek cache-line locality pada bit array berukuran besar (Block-based / Split Bloom Filter).
+- Kebutuhan alokasi ulang / re-hashing jika estimasi $n$ terlampaui (Scalable Bloom Filter).

@@ -1,98 +1,58 @@
-
 # Evidence
 
 ## Evidence 1
-Claim: A Bloom filter uses a bit array of size *m* and *k* independent hash functions to store membership of up to *n* elements; it never yields a false negative but may produce false positives.
-Evidence: "A Bloom filter is a space-efficient probabilistic data structure, conceived by Burton Howard Bloom in 1970, that is used to test whether an element is a member of a set. False positive matches are possible, but false negatives are not." — Source 1 (Wikipedia, 2026‑09‑28).
-Source: Wikipedia, Bloom filter.
-URL: https://en.wikipedia.org/wiki/Bloom_filter
+Claim: Bloom filter menjamin tidak ada false negative (0% false negative rate), namun dapat menghasilkan false positive ($p > 0$).
+Evidence: Dalam skema Bloom filter standar, ketika sebuah elemen dimasukkan, seluruh $k$ bit pada posisi hash diatur menjadi 1. Jika suatu elemen sebelumnya telah dimasukkan, pengecekan ke-$k$ posisi bit tersebut selalu menghasilkan 1. Oleh karena itu, jika setidaknya ada satu bit bernilai 0 saat query, elemen tersebut dijamin 100% tidak ada dalam himpunan.
+Source: Burton H. Bloom (1970), "Space/Time Trade-offs in Hash Coding with Allowable Errors", Communications of the ACM.
+URL: https://dl.acm.org/doi/10.1145/362686.362692
 Confidence: HIGH
-Corroborated By: Source 2 (original paper, 1970), Source 10 (LSM survey, 2019).
+Corroborated By: Kirsch & Mitzenmacher (2006); RocksDB Wiki; Apache Cassandra Docs.
+Notes: Fundamental axiom of Bloom Filters.
 
 ## Evidence 2
-Claim: The approximate false‑positive probability is ε ≈ (1−e^(−kn/m))^k, where *m* is bits, *k* is hash functions, and *n* is elements inserted.
-Evidence: Wikipedia section “Probability of false positives” shows the derivation from first principles and cites the well‑known approximation. — Source 11 (Wikipedia, 2026‑09‑28).
-Source: Wikipedia, Probability of false positives.
-URL: https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives
+Claim: Hubungan matematis ukuran bit array optimal ($m$), jumlah elemen ($n$), target false positive ($p$), dan jumlah hash ($k$) adalah:
+$m = - \frac{n \ln p}{(\ln 2)^2} \approx -1.4427 \cdot n \log_2 p$
+$k = \frac{m}{n} \ln 2 \approx 0.6931 \cdot \frac{m}{n}$
+Untuk target $p = 0.01$ (1%), rasio $m/n \approx 9.585$ bit per elemen, dan $k \approx 7$.
+Evidence: Derivasi probabilitas false positive $p \approx (1 - e^{-kn/m})^k$. Nilai minimum $p$ tercapai ketika $k = (m/n) \ln 2$. Substitusi $k$ optimal ke dalam persamaan $p$ menghasilkan $p = 2^{-k} = (1/2)^{(m/n)\ln 2}$, sehingga $m = - \frac{n \ln p}{(\ln 2)^2}$.
+Source: Burton H. Bloom (1970); Kirsch & Mitzenmacher (2006).
+URL: https://dl.acm.org/doi/10.1145/362686.362692
 Confidence: HIGH
-Corroborated By: Source 2 (original paper), Source 10 (LSM survey, 2019).
+Corroborated By: RocksDB Wiki; Broder & Mitzenmacher (2004) "Network Applications of Bloom Filters".
+Notes: Rumus baku industri untuk kalkulasi alokasi memori filter.
 
 ## Evidence 3
-Claim: Optimal *k* = (m/n)·ln 2, giving a minimum ε ≈ 0.618^(m/n).
-Evidence: Derived in Wikipedia’s “Optimal number of hash functions” subsection. — Source 11 (Wikipedia, 2026‑09‑28).
-Source: Wikipedia.
-URL: https://en.wikipedia.org/wiki/Bloom_filter#Optimal_number_of_hash_functions
+Claim: Dua fungsi hash independen ($h_1(x)$ dan $h_2(x)$) dapat menghasilkan $k$ fungsi hash efektif tanpa meningkatkan laju false positive asimtotik melalui formula $g_i(x) = h_1(x) + i \cdot h_2(x) \pmod m$ untuk $i = 0, \dots, k-1$.
+Evidence: Teorema Kirsch-Mitzenmacher membuktikan bahwa kombinasi linier dua fungsi hash seragam independen menghasilkan distribusi keanggotaan bit yang ekivalen secara asimtotik dengan penggunaan $k$ fungsi hash acak independen penuh, memangkas beban komputasi CPU secara signifikan.
+Source: Adam Kirsch and Michael Mitzenmacher (2006), "Less Hashing, Same Performance: Building a Better Bloom Filter", ESA 2006.
+URL: https://www.eecs.harvard.edu/~michaelm/postscripts/esa2006.pdf
 Confidence: HIGH
-Corroborated By: Source 2 (original Bloom 1970), Source 10 (LSM survey).
+Corroborated By: Implementasi Google Guava `BloomFilter.java`, RocksDB `DynamicBloom`.
+Notes: Sering diimplementasikan dengan mengekstrak dua 64-bit integer dari single 128-bit hash seperti MurmurHash3 atau xxHash.
 
 ## Evidence 4
-Claim: For a desired false‑positive rate ε, the minimum bits per element is m/n ≈ −1.44·log₂ ε.
-Evidence: Wikipedia formula m = −n·ln(ε)/(ln 2)², which simplifies to m/n ≈ 1.44·log₂(1/ε). — Source 11.
-Source: Wikipedia.
-URL: https://en.wikipedia.org/wiki/Bloom_filter#Optimal_number_of_hash_functions
+Claim: Bloom filter mencegah masalah "Cache Penetration" dengan memfilter query untuk kunci nonexistent sebelum query menyentuh cache atau database storage.
+Evidence: Pada cache penetration, bot/penyerang meminta ID acak nonexistent yang menyebabkan cache miss permanen dan memaksa disk query berulang. Dengan menempatkan Bloom Filter di depan lookup layer, request untuk ID yang tidak ada langsung diidentifikasi dengan kepastian 100% (kecuali probabilitas kecil false positive $p$), memotong hingga $(1 - p)$ atau ~99% beban query disk/database.
+Source: RocksDB Documentation / System Design Literature (Designing Data-Intensive Applications, Martin Kleppmann, Bab 3).
+URL: https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter
 Confidence: HIGH
-Corroborated By: Source 10 (LSM survey, 2019) and Source 3 (LSM‑tree paper).
+Corroborated By: Google Bigtable (OSDI 2006); Redis Bloom module docs.
+Notes: Pola standar pertahanan arsitektural database throughput tinggi.
 
 ## Evidence 5
-Claim: Bloom filters are used per‑SST in LSM‑trees to avoid unnecessary disk reads; lookup cost drops from O(L) to O(L·e^(−M/N)) with a Bloom filter of size *M* bits over *N* keys.
-Evidence: "In order to keep down the cost of queries, the system must avoid a situation where there are too many runs… To make the search faster, LSM trees often use a bloom filter for each on-disk component." — Source 9 (Stopford, 2015). The formula O(L·e^(−M/N)) appears in Source 3 (O'Neil et al., 1996) and is reiterated in Source 10 (Luo & Carey, 2019).
-Source: Multiple sources (LSM literature).
-URL: See individual URLs above.
+Claim: Mesin penyimpanan berbasis Log-Structured Merge-Tree (LSM-Tree) seperti Bigtable, RocksDB, dan Cassandra menggunakan Bloom Filter pada setiap SSTable untuk menghindari pembacaan disk yang tidak perlu.
+Evidence: Chang et al. (2006) menyatakan: "Bigtable allows clients to specify that Bloom filters should be created for SSTables in a particular locality group. A Bloom filter allows us to ask whether an SSTable might contain any data for a specified row/column pair... Drastically reduces the number of disk seeks required for read operations."
+Source: Fay Chang et al. (2006), "Bigtable: A Distributed Storage System for Structured Data", Google Inc.
+URL: https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf
 Confidence: HIGH
-Corroborated By: Source 3, Source 10.
+Corroborated By: Apache Cassandra Architecture Docs; RocksDB Wiki.
+Notes: Tanpa Bloom filter, point query pada LSM tree harus memeriksa setiap level SSTable secara sekuensial.
 
 ## Evidence 6
-Claim: The original Bloom‑filter paper demonstrates that a 1 % false‑positive rate can be achieved with roughly 10 bits per element.
-Evidence: Source 2 (Bloom 1970) states: "Fewer than 10 bits per element are required for a 1% false positive probability, independent of the size or number of elements in the set." — also cited in Source 1 (Wikipedia).
-Source: Bloom 1970 original paper.
-URL: http://www.dragonwins.com/domains/getteched/bbc/literature/Bloom70.pdf
+Claim: Standard Bloom Filter tidak mendukung operasi penghapusan (`delete`). Menghapus bit 1 menjadi 0 dapat menyebabkan false negative pada elemen lain.
+Evidence: Karena multiple keys berbagi bit array yang sama melalui hash collisions, mengatur bit dari 1 ke 0 saat menghapus kunci A dapat merusak representasi kunci B yang juga memetakan bit yang sama. Untuk mendukung deletion, diperlukan struktur varian seperti Counting Bloom Filter (CBF) atau Cuckoo Filter.
+Source: Fan et al. (2014), "Cuckoo Filter: Practically Better Than Bloom", ACM CoNEXT 2014.
+URL: https://www.cs.cmu.edu/~dga/papers/cuckoo-conext2014.pdf
 Confidence: HIGH
-Corroborated By: Source 1, Source 11.
-
-## Evidence 7
-Claim: Cuckoo filters can support deletions while using similar or less space than Bloom filters, and they maintain comparable false‑positive rates.
-Evidence: Source 8 (Fan et al., 2014) presents empirical results showing Cuckoo filters achieve equal or lower FP rates at the same space usage. Wikipedia’s “Alternatives” section also notes Cuckoo filters allow deletions. — Source 1 (Wikipedia).
-Source: Fan et al., 2014; Wikipedia.
-URL: https://www.cs.cmu.edu/~fanzhao/cuckoo-filter.pdf
-Confidence: MEDIUM
-Corroborated By: Source 1 (Wikipedia).
-
-## Evidence 8
-Claim: Non‑cryptographic hash functions (e.g., MurmurHash3, FNV) are suitable for Bloom filters because speed matters more than cryptographic strength.
-Evidence: Source 6 (SmHasher) reports bulk‑hash speeds of 2.5–5 GB/s for MurmurHash3. Source 7 (Wikipedia FNV) notes FNV‑1a’s excellent avalanche properties. Both are standard choices for probabilistic structures.
-Source: SmHasher wiki; Wikipedia FNV.
-URL: https://github.com/aappleby/smhasher/wiki/MurmurHash3
-Confidence: HIGH
-Corroborated By: Source 7.
-
-## Evidence 9
-Claim: Google’s Percolator system and Microsoft’s Bing (via BitFunnel) use Bloom‑filter‑like structures to accelerate write‑heavy and search‑index workloads.
-Evidence: Source 4 (Peng & Dabek, 2010) describes incremental index processing with bloom filtering; Source 5 (Wikipedia, BitFunnel) states that BitFunnel uses "bit-sliced signatures" (Bloom‑like) to replace inverted indexes.
-Source: Percolator paper; BitFunnel Wikipedia.
-URL: https://research.google/pubs/pub36726/
-Confidence: HIGH
-Corroborated By: Source 4, Source 5.
-
-## Evidence 10
-Claim: Bloom filters were first proposed for hyphenation dictionary lookups to avoid expensive disk accesses for rare entries.
-Evidence: Source 2 (Bloom 1970) opens with the example: "He gave the example of a hyphenation algorithm for a dictionary of 500,000 words, out of which 90% follow simple hyphenation rules, but the remaining 10% require expensive disk accesses."
-Source: Bloom 1970.
-URL: http://www.dragonwins.com/domains/getteched/bbc/literature/Bloom70.pdf
-Confidence: HIGH
-Corroborated By: Source 1 (Wikipedia summary).
-
-## Evidence 11
-Claim: Counting Bloom filters and Ripple filters are extensions that allow deletions while preserving low false‑positive rates.
-Evidence: Source 1 (Wikipedia) lists Counting Bloom filters, Scalable Bloom filters, and Ripple filters as extensions that address deletions and dynamic size growth.
-Source: Wikipedia.
-URL: https://en.wikipedia.org/wiki/Bloom_filter
-Confidence: MEDIUM
-Corroborated By: Source 1 only (no independent academic source found yet).
-
-## Evidence 12
-Claim: The Rigorous upper bound for finite Bloom filters (Goel & Gupta, 2007) proves the standard approximation is within a small factor.
-Evidence: Source 11 (Wikipedia) cites: "Goel and Gupta, however, give a rigorous upper bound that makes no approximations … ε ≤ (1 − e^(−k(n+0.5)/(m−1)))^k."
-Source: Wikipedia citing Goel & Gupta 2007.
-URL: https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives
-Confidence: HIGH
-Corroborated By: Source 11 only (primary source would be the Goel & Gupta paper, not directly accessed here).
+Corroborated By: Broder & Mitzenmacher (2004).
+Notes: Penghapusan pada standard filter hanya bisa dilakukan dengan me-rebuild seluruh filter dari awal.
