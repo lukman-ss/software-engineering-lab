@@ -1,65 +1,62 @@
-# Contradictions Analysis Audit
+# Contradictions Analysis
 
-## Summary
-
-The research documents three potential tension points and concludes that no material contradictions exist. This audit confirms that the three points analyzed are genuine tensions in the field and that the Research Agent's reconciliations are logically sound.
-
-No new material contradictions were discovered during the audit.
+Target Lab: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/38-mutation-testing`
+Audit Date: 2026-09-29
 
 ---
 
-## Evaluation of Documented Tension Points
+## Contradiction Analysis Summary
 
-### Point 1: "Mutation testing requires a test to already exist" vs. "LLMs can generate tests from mutants"
-
-Statements:
-- Statement A: "Even though mutation testing cannot exist on its own (it requires a test to already exist)..." (Meta Engineering Blog)
-- Statement B: ACH uses unkilled mutants to generate new tests via LLMs (Meta Engineering Blog / arXiv abstract)
-
-Auditor Assessment: SOUND
-
-Analysis: The Research Agent correctly distinguishes between traditional mutation testing (which requires tests to evaluate) and mutation-guided test generation (which uses mutation gaps to prompt test creation). ACH still requires initial tests to establish an oracle. The reconciliation correctly explains this as workflow extension, not contradiction.
+No material contradictions were found across research files, nor between research files and README.md.
 
 ---
 
-### Point 2: Equivalent mutants as "mathematically undecidable" vs. tools claiming equivalence detection
+## Verification of Potential Tension Points
 
-Statements:
-- Statement A: "Determining whether a mutant is equivalent or not is known to be mathematically undecidable." (Meta Engineering Blog / academic literature)
-- Statement B: Meta ACH reports 0.95 precision / 0.96 recall for equivalent mutant detection with static preprocessing.
-
-Auditor Assessment: SOUND
-
-Analysis: Undecidability is a theoretical limit for arbitrary programs (Rice's Theorem / Halting Problem analog). Heuristic approximations (ML classifiers, static analysis) can achieve high empirical precision on typical human-written code without solving the general theoretical problem. The distinction between theoretical undecidability and practical heuristic efficacy is standard in computer science and is accurately represented.
-
----
-
-### Point 3: Computational cost concern vs. tool claims of speed
-
-Statements:
-- Statement A: "Mutation testing is a computationally expensive process and can take quite some time..." (PIT FAQ)
-- Statement B: Stryker claims "fast to run and easy to use."
-
-Auditor Assessment: SOUND
-
-Analysis: The speed difference reflects relative improvement over first-generation tools (1970s–1990s) that required full recompilation per mutant. Modern tools optimize execution via bytecode manipulation, incremental analysis, and test selection. However, running mutation testing on large codebases remains slow, which both tools acknowledge (e.g., PIT recommends targeting changed files only; Gremlins warns about runs taking hours). "Fast" is relative. The reconciliation is accurate.
+### Point 1: Research vs README Operator Scope
+Statement A: `README.md` lists 4 implemented mutation operators: (1) Relational operator replacement, (2) Boolean flip, (3) Arithmetic operator replacement, (4) Boundary value shift.
+Location: `README.md:48-53`
+Statement B: `research/05-report.md` notes 5 mutation types for practical implementation including statement deletion.
+Location: `research/05-report.md:45`
+Type: CODE_DOC_MISMATCH (minor pedagogical nuance)
+Impact: None. Research identifies the broad theoretical catalog (statement deletion is one of the classic operators), while the lab's specific Go implementation chooses a subset of 4 AST operators suited to its discount engine domain.
+Assessment: PASS. Not a contradiction; README scopes the actual Go implementation, while research covers the broader literature.
 
 ---
 
-## Audit of Undocumented Contradictions
+### Point 2: Undecidability vs Empirical Detection Rates
+Statement A: Semantic equivalence detection is mathematically undecidable in the general case.
+Location: `research/05-report.md` Finding 6; `research/04-contradictions.md` Point 2
+Statement B: Meta ACH reports 0.95 precision and 0.96 recall in equivalent mutant detection with preprocessing.
+Location: `research/05-report.md` Finding 7; `research/03-evidence.md` Evidence 12
+Type: INTERNAL / THEORETICAL_VS_EMPIRICAL
+Impact: None.
+Assessment: PASS. This tension is explicitly analyzed in `research/04-contradictions.md` Point 2. Undecidability is a general-case theoretical bound (Halting problem analogue), whereas empirical classification heuristics (LLM + static analysis) operate on specific code corpora without formal totality guarantees. Both coexist consistently.
 
-### Potential Contradiction 1: Fowler draft bliki citation vs. availability
+---
 
-Issue: Research cites Martin Fowler's bliki entry (`https://martinfowler.com/bliki/MutationTesting.html`) as corroborating evidence in multiple places, but the URL returns a 404 HTTP status during audit.
+### Point 3: Execution Models Across Tooling
+Statement A: Evaluation-focused mutation testing executes mutants against existing test suites.
+Location: `research/05-report.md` Finding 8; `research/03-evidence.md` Evidence 8
+Statement B: Generative systems like Meta ACH use unkilled mutants to prompt LLMs to synthesize new tests.
+Location: `research/05-report.md` Finding 7; `research/03-evidence.md` Evidence 12
+Type: INTERNAL (workflow taxonomy)
+Impact: None.
+Assessment: PASS. Resolved in research revision by scoping traditional tools as "evaluation-focused" and distinguishing generative paradigms.
 
-Assessment:
-- Type: SOURCE_AVAILABILITY_MISMATCH
-- Impact: Martin Fowler is a prominent figure whose citation lends authority. The URL is unreachable, and the research correctly noted the page carried a "This is a draft entry" notice. If the page was removed or never made permanently public, using it as an authoritative Tier 1 source is problematic.
-- Mitigating Factor: The core claims (mutation score definition, false confidence of code coverage, mutation operators) are independently supported by PIT, Stryker, and Wikipedia. The Fowler citation was used only as corroborating evidence, not as sole support.
-- Action: Documented in `02-source-audit.md` (FAIL) and `06-gaps.md` (WEAK_SOURCE). Research should either replace this source or explicitly note that the draft page was removed.
+---
+
+### Point 4: Martin Fowler Draft Entry Status
+Statement A: Martin Fowler bliki URL marked as `REMOVED (UNREACHABLE)` in `research/02-sources.md`.
+Location: `research/02-sources.md` Source 3
+Statement B: Martin Fowler draft entry referenced in `research/05-report.md` Finding 2 Sources field.
+Location: `research/05-report.md:31`
+Type: INTERNAL (residual citation)
+Impact: LOW. Finding 2 explicitly notes the URL was a pre-publication draft and that the claim is independently supported by Wikipedia and PIT. The revision documentation acknowledges this as non-blocking.
+Assessment: WARNING (minor residual string in report, fully harmless given multi-source support).
 
 ---
 
 ## Conclusion
 
-No internal contradictions between research documents. No source-to-source factual conflicts that invalidate findings. Tension points documented by the Research Agent were analyzed accurately and resolved with appropriate nuance.
+No material contradictions found. All investigated tension points are properly reconciled in the research text.
