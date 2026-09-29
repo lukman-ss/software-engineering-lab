@@ -1,0 +1,10 @@
+# Key Takeaways
+
+1. **CORS Bukan Firewall Backend**: CORS adalah mekanisme relaksasi Same-Origin Policy di browser untuk mengatur izin pembacaan respons (*read access*), bukan filter keamanan untuk mencegah penulisan atau eksekusi mutasi data (*write actions*) di server.
+2. **Simple Request Lolos Tanpa Preflight**: Request HTTP `POST` dengan `Content-Type: application/x-www-form-urlencoded` langsung dikirimkan oleh browser ke server tanpa memicu preflight `OPTIONS`, sehingga langsung dieksekusi oleh backend yang tidak terproteksi.
+3. **`Access-Control-Allow-Origin: *` Tidak Melindungi dari CSRF**: Pada serangan CSRF, penyerang hanya bertujuan memicu aksi di server. Browser yang memblokir pembacaan respons karena ketiadaan/ketidakcocokan header ACAO tidak membatalkan mutasi data yang telah selesai di database.
+4. **Wildcard Dilarang pada Credentialed Requests**: Menurut spesifikasi WHATWG Fetch, server dilarang merespons dengan `Access-Control-Allow-Origin: *` jika `Access-Control-Allow-Credentials: true` diaktifkan; origin harus direfleksikan secara spesifik dan eksplisit.
+5. **Signed Double-Submit Token Pattern Wajib**: Pola Naive Double-Submit Cookie rentan terhadap cookie injection/subdomain takeover; token Anti-CSRF harus ditandatangani secara kriptografis (HMAC-SHA256), terikat pada Session ID pengguna, memiliki TTL, dan divalidasi dengan perbandingan waktu konstan (*constant-time compare*).
+6. **Pertahanan Berlapis (Defense-in-Depth)**: Kombinasi atribut cookie `SameSite=Lax/Strict`, header Fetch Metadata (`Sec-Fetch-Site`), dan penegakan Custom Header API (`X-Requested-With`) memperkuat backend dari berbagai vektor serangan browser.
+7. **HTTP Method `GET` Wajib Idempotent**: Navigasi top-level `GET` tetap mengirimkan cookie pada kebijakan `SameSite=Lax`. Oleh karena itu, mutasi state dilarang keras dilakukan melalui method `GET`.
+8. **Anti-CSRF Tunduk pada XSS**: Segala mekanisme mitigasi CSRF (termasuk Anti-CSRF Token dan SameSite) dapat dilumpuhkan jika origin aplikasi memiliki celah Cross-Site Scripting (XSS).
