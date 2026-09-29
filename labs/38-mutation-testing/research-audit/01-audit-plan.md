@@ -1,46 +1,40 @@
-# Audit Plan
+# Research Audit Plan: Mutation Testing
 
 ## Target Lab
-`labs/38-mutation-testing`
-
-## Pipeline Mode
-RESEARCH ONLY (per PIPELINE OVERRIDE instructions: "Audit research only. Do not audit implementation/code in this stage. Do not modify research files. Write all audit output to: labs/38-mutation-testing/research-audit/").
+`labs/38-mutation-testing` (Research Audit Only)
 
 ## Files Reviewed
-1. `labs/38-mutation-testing/research/01-plan.md`
-2. `labs/38-mutation-testing/research/02-sources.md`
-3. `labs/38-mutation-testing/research/03-evidence.md`
-4. `labs/38-mutation-testing/research/04-contradictions.md`
-5. `labs/38-mutation-testing/research/05-report.md`
-6. `labs/38-mutation-testing/research/06-open-questions.md`
-7. `labs/38-mutation-testing/research-revision/01-revision-plan.md`
-8. `labs/38-mutation-testing/research-revision/02-changes-made.md`
-9. `labs/38-mutation-testing/research-revision/03-revision-result.md`
+- `labs/38-mutation-testing/research/01-plan.md`
+- `labs/38-mutation-testing/research/02-sources.md`
+- `labs/38-mutation-testing/research/03-evidence.md`
+- `labs/38-mutation-testing/research/04-contradictions.md`
+- `labs/38-mutation-testing/research/05-report.md`
+- `labs/38-mutation-testing/research/06-open-questions.md`
 
 ## Claims To Verify
-- Code coverage measures execution only, not fault detection capability.
-- Mutation Score formula: (Killed / Total) × 100%.
-- Core theoretical hypotheses: Competent Programmer Hypothesis and Coupling Effect.
-- Three conditions of the RIP model (Reach, Infect, Propagate) for mutant killing.
-- Equivalent mutants: definition, theoretical undecidability, and heuristic practical approaches.
-- Mutation operators taxonomy (statement, value, decision, operator replacement).
-- Meta ACH system findings: LLM equivalence detection metrics and empirical trial metrics.
-- Go mutation testing tooling status: `go-mutesting` and `gremlins` availability vs JVM/JS tool maturity.
-- Subsumed mutants definition and impact on metrics.
-- Industry standard thresholds: absence of universal threshold standard.
-
-## Code To Execute
-None. PIPELINE OVERRIDE: Audit research only. Implementation code not present or out of scope for research-stage audit.
+1. First proposed by Richard Lipton in 1971; published by DeMillo, Lipton, and Sayward in 1978.
+2. Two foundational hypotheses: Competent Programmer Hypothesis and Coupling Effect.
+3. Mutation Score definition and formula: $(Killed / Total) \times 100\%$.
+4. 100% code coverage does not guarantee fault detection capability; mutation testing detects weak assertions.
+5. Standard mutation operators across statement, value, and decision categories.
+6. Equivalent mutant problem is mathematically undecidable; represents major practical obstacle.
+7. RIP model (Reach, Infect, Propagate) criteria for mutant detection.
+8. Common tool execution pattern: inject mutations $\to$ run tests $\to$ classify killed vs survived.
+9. Meta ACH (September 2025) LLM-guided test generation and equivalence detection performance metrics.
+10. Tooling landscape: PIT (JVM), Stryker (JS/TS/C#/Scala), and Go tools (`go-mutesting`, `gremlins`).
+11. Subsumed mutants definition and impact on test coverage.
+12. Absence of an industry-standard universal mutation score threshold.
 
 ## Primary Risks
-- Inaccessible or dead URLs (e.g. Fowler bliki draft 404 or path shifting).
-- Foundational papers unread directly (DeMillo et al. 1978, Jia & Harman 2009 cited via secondary bibliography).
-- Single-vendor industrial findings (Meta ACH) presented as universal facts if not properly scoped.
-- Premature publication status for preprints (arXiv:2501.12862 submitted to FSE 2025).
+- Broken or dead URLs (e.g. 404 on unverified Martin Fowler bliki link).
+- Citation of unverified academic papers without direct inspection.
+- Attribution of recent industry statistics (Meta ACH) without checking preprint/primary data.
+- Overgeneralization of JVM/JS tool capabilities to Go ecosystem.
 
 ## Audit Strategy
-1. Live network verification of all referenced URLs.
-2. Fact vs interpretation claim classification across research files.
-3. Analysis of citations for secondary attribution disclosure.
-4. Evaluation of prior revisions against identified research gaps.
-5. Verdict determination based on evidence completeness.
+- Step 1: Inventory all claims, sources, and gaps in research files.
+- Step 2: Validate reachability, publisher identity, relevance, and fidelity of all 13 listed sources via live web fetches.
+- Step 3: Audit extraction of 14 key claims against verified sources.
+- Step 4: Audit contradiction analysis for thoroughness and logical coherence.
+- Step 5: Detail research gaps and evaluate whether existing caveats are sufficient.
+- Step 6: Produce final verdict according to independence rules and quality gates.
