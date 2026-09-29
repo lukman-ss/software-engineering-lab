@@ -1,222 +1,159 @@
 # Claim Audit
 
 ## Claim 1
-Claim: Mutation testing was first proposed by Richard Lipton in 1971 and published by DeMillo, Lipton, and Sayward in 1978.
 
-Location: research/03-evidence.md — Evidence 1; research/05-report.md — Executive Summary
+Claim: Code coverage metrics measure execution rather than assertion/fault detection capability.
 
-Evidence Provided: Wikipedia citation referencing DeMillo, Lipton, Sayward 1978. Martin Fowler bliki (draft) also mentions historical timeline.
+Location: `research/05-report.md` (Finding 1)
 
-Source: Wikipedia (secondary) attributing DeMillo et al. 1978; original paper NOT opened.
+Evidence Provided: Quoted statements from PIT homepage ("Traditional test coverage... measures only which code is executed... does not check that your tests are actually able to detect faults") and Stryker ("sandwich covered with paste" analogy).
+
+Source: Source 4 (PIT) and Source 6 (Stryker).
 
 Source Actually Supports Claim: YES
-Wikipedia article directly read confirms: "Mutation testing was originally proposed by Richard Lipton as a student in 1971, and first developed and published by DeMillo, Lipton and Sayward."
 
 Classification: FACT
 
 Severity: LOW
 
-Notes: Limitation explicitly disclosed. Bibliographic record confirmed via Wikipedia reading.
+Notes: Directly supported by official documentation of leading mutation testing tools.
 
 ---
 
 ## Claim 2
-Claim: Code coverage measures only what code is executed, not whether tests detect faults. Mutation testing exposes this discrepancy.
 
-Location: research/03-evidence.md — Evidence 4; research/05-report.md — Finding 1
+Claim: Mutation Score formula is (Killed Mutants / Total Mutants) × 100%.
 
-Evidence Provided: PIT homepage ("Traditional test coverage...measures only which code is executed by your tests. It does not check that your tests are actually able to detect faults in the executed code.") and Stryker sandwich analogy.
+Location: `research/05-report.md` (Finding 2)
 
-Source: PIT (https://pitest.org/), Stryker (https://stryker-mutator.io/docs/)
+Evidence Provided: Wikipedia definition and PIT documentation ("gauged from the percentage of mutations killed").
+
+Source: Source 2 (Wikipedia) and Source 5 (PIT FAQ).
 
 Source Actually Supports Claim: YES
-PIT homepage directly verified; quote confirmed.
 
 Classification: FACT
 
 Severity: LOW
 
-Notes: Strong evidence from authoritative primary sources. Both sources directly verified.
+Notes: Standard mathematical expression of mutation coverage percentage.
 
 ---
 
 ## Claim 3
-Claim: Mutation score formula is (Killed Mutants / Total Mutants) × 100%.
 
-Location: research/03-evidence.md — Evidence 3; research/05-report.md — Finding 2
+Claim: Mutation testing rests on the Competent Programmer Hypothesis and the Coupling Effect.
 
-Evidence Provided: Wikipedia: "The value of a test suite is measured by the percentage of mutants that it kills." PIT: "The quality of your tests can be gauged from the percentage of mutations killed."
+Location: `research/05-report.md` (Finding 4)
 
-Source: Wikipedia, PIT, Martin Fowler (draft)
+Evidence Provided: Wikipedia definitions citing DeMillo et al. (1978) and Offutt (1992).
+
+Source: Source 2 (Wikipedia).
 
 Source Actually Supports Claim: YES
-Wikipedia read directly confirms the formula. PIT homepage verified.
 
-Classification: FACT
+Classification: FACT / THEORY
 
 Severity: LOW
 
-Notes: Universal convention across all sources. Formula representation not explicitly spelled out as "(Killed/Total)×100%" in sources, but is a direct mathematical interpretation of "percentage of mutants killed." No issues.
+Notes: Universally acknowledged theoretical foundations of mutation testing.
 
 ---
 
 ## Claim 4
-Claim: Core theoretical foundations are the Competent Programmer Hypothesis and the Coupling Effect.
 
-Location: research/03-evidence.md — Evidence 2; research/05-report.md — Finding 4
+Claim: The RIP model specifies three conditions (Reach, Infect, Propagate) required for strong mutation testing to kill a mutant.
 
-Evidence Provided: Wikipedia directly states both hypotheses, citing DeMillo et al. 1978, Offutt 1992, and Acree et al. 1979.
+Location: `research/05-report.md` (Finding 5)
 
-Source: Wikipedia (secondary) referencing multiple primaries.
+Evidence Provided: Wikipedia summary citing Offutt & Untch (2000).
+
+Source: Source 2 (Wikipedia).
 
 Source Actually Supports Claim: YES
-Wikipedia article directly read confirms exact text about both hypotheses.
 
-Classification: FACT
+Classification: FACT / MODEL
 
 Severity: LOW
 
-Notes: Original academic papers not opened; Wikipedia text accessed and verified.
+Notes: Standard model for test excitation and assertion propagation.
 
 ---
 
 ## Claim 5
-Claim: The RIP model defines when a mutant is killed: Reach, Infect, Propagate.
 
-Location: research/03-evidence.md — Evidence 7; research/05-report.md — Finding 5
+Claim: Detecting equivalent mutants is mathematically undecidable.
 
-Evidence Provided: Wikipedia cites Offutt & Untch, 2000 (Mutation 2000 paper). Exact three conditions listed verbatim from Wikipedia article.
+Location: `research/05-report.md` (Finding 6)
 
-Source: Wikipedia referencing Offutt & Untch (2000)
+Evidence Provided: Wikipedia citations and Meta ACH paper statement ("Determining whether a mutant is equivalent or not is known to be mathematically undecidable").
+
+Source: Source 2 (Wikipedia) and Source 12 (arXiv:2501.12862).
 
 Source Actually Supports Claim: YES
-Wikipedia text directly verified; RIP model is spelled out word-for-word.
 
 Classification: FACT
 
 Severity: LOW
 
-Notes: PIT FAQ supports strong mutation via bytecode mutation. Foundational well-established model.
+Notes: Fundamental theoretical limit acknowledged across literature.
 
 ---
 
 ## Claim 6
-Claim: Equivalent mutants are mathematically undecidable to detect and are the primary obstacle to practical adoption.
 
-Location: research/03-evidence.md — Evidence 6; research/05-report.md — Finding 6
+Claim: Meta's ACH system uses LLMs to achieve 73% engineer acceptance, 36% privacy relevance, and 0.95/0.96 precision/recall for equivalent mutant detection with preprocessing.
 
-Evidence Provided: Wikipedia ("effort needed to check if mutants are equivalent or not can be very high, even for small programs"), Meta Engineering Blog ("Determining whether a mutant is equivalent or not is known to be mathematically undecidable").
+Location: `research/05-report.md` (Finding 7)
 
-Source: Wikipedia + Meta Engineering Blog
+Evidence Provided: Meta Engineering blog post (Sep 2025) and arXiv preprint abstract (Foster et al., Jan 2025).
+
+Source: Source 8 (Meta Blog) and Source 12 (arXiv:2501.12862).
 
 Source Actually Supports Claim: YES
-Wikipedia text verified directly. arXiv abstract confirms undecidability context in ACH description.
 
-Classification: FACT
+Classification: IMPLEMENTATION-SPECIFIC / EXPERIMENTAL
 
-Severity: LOW
+Severity: MEDIUM
 
-Notes: Undecidability is a standard theoretical result; the Wikipedia article and Meta blog both support this without contradiction.
+Notes: Trial statistics are accurate to the source, but restricted to Meta's specific Android Kotlin codebase and privacy test-a-thons. Appropriately contextualized in research revision.
 
 ---
 
 ## Claim 7
-Claim: Meta ACH achieved 73% engineer acceptance, 36% privacy-relevant tests, and LLM equivalence detector precision 0.95/recall 0.96 with preprocessing.
 
-Location: research/03-evidence.md — Evidence 12; research/05-report.md — Finding 7
+Claim: Go has community mutation testing tools (`go-mutesting`, `gremlins`), but tooling maturity trails JVM (PIT) and JS/TS (Stryker) ecosystems.
 
-Evidence Provided: Meta Engineering Blog (Mark Harman, September 2025). arXiv:2501.12862 abstract directly verified: 9,095 mutants, 571 tests, 10,795 Android Kotlin classes, 7 platforms, same statistics.
+Location: `research/05-report.md` (Finding 8)
 
-Source: Meta Engineering Blog + arXiv preprint abstract
+Evidence Provided: GitHub repositories for `go-mutesting` and `gremlins`, alongside PIT FAQ and Stryker supported language documentation.
 
-Source Actually Supports Claim: YES — arXiv abstract directly read and all statistics match verbatim.
+Source: Source 5 (PIT FAQ), Source 6 (Stryker), Source 10 (`go-mutesting`), Source 11 (`gremlins`).
 
-Classification: FACT — with implementation-specific scoping caveat
+Source Actually Supports Claim: YES
+
+Classification: FACT / EVALUATION
 
 Severity: LOW
 
-Notes:
-- The "73% acceptance" and "36% privacy-relevant" statistics are from a specific Android Kotlin privacy testing context at Meta, not a general benchmark for all LLM-assisted mutation testing.
-- Research files explicitly qualify this as implementation-specific and scope it correctly.
-- Confidence is appropriately rated MEDIUM in research/03-evidence.md Evidence 12.
+Notes: Accurately reflects current open-source tooling landscape for Go.
 
 ---
 
 ## Claim 8
-Claim: "Five barriers to industrial adoption" of mutation testing.
 
-Location: research/03-evidence.md — Evidence 9; research/05-report.md — Finding 7
+Claim: No universal industry-standard mutation score threshold exists (e.g., 80% vs 90%).
 
-Evidence Provided: Meta Engineering Blog (Mark Harman, September 2025). "Traditional mutation testing generates a very large number of mutants..."
+Location: `research/05-report.md` (Finding 11)
 
-Source: Meta Engineering Blog
+Evidence Provided: Review of PIT and Stryker documentation revealing no prescribed target threshold.
 
-Source Actually Supports Claim: PARTIAL
-
-Classification: INTERPRETATION
-
-Severity: MEDIUM
-
-Notes:
-- The "five barriers" (scalability, unrealistic mutants, equivalent mutants, computational cost, overstretching) is Meta/Harman's specific framing, not a universally established canonical list.
-- Research/05-report.md notes "The 'five barriers' framing is Harman/Meta's specific articulation, not a universal taxonomy." This is appropriate disclosure.
-- Research files classify confidence correctly as MEDIUM and scope it to one source.
-
----
-
-## Claim 9
-Claim: Subsumed mutants do not contribute to coverage metrics.
-
-Location: research/03-evidence.md — Evidence 14; research/05-report.md — Finding 10
-
-Evidence Provided: Wikipedia article, Mutation testing — subsumed mutants section.
-
-Source: Wikipedia
-
-Source Actually Supports Claim: YES
-Wikipedia text directly verified; exact definition matches the claim verbatim.
-
-Classification: FACT
-
-Severity: LOW
-
-Notes: Well-supported by direct Wikipedia source reading.
-
----
-
-## Claim 10
-Claim: Go has two community-driven mutation testing tools (go-mutesting and gremlins) but neither matches PIT or Stryker in maturity.
-
-Location: research/03-evidence.md — Evidence 13; research/05-report.md — Finding 8
-
-Evidence Provided: GitHub URLs for both tools; PIT FAQ confirming Java/Kotlin support; no Go in PIT/Stryker.
-
-Source: GitHub (go-mutesting, gremlins), PIT FAQ, Stryker docs
+Source: Source 5 (PIT FAQ) and Source 6 (Stryker docs).
 
 Source Actually Supports Claim: YES
 
-Classification: FACT
+Classification: FACT / OBSERVATION
 
 Severity: LOW
 
-Notes: Tools are real and accessible. The maturity comparison is a reasonable inference from ecosystem evidence, not a precisely measured claim.
-
----
-
-## Claim 11
-Claim: No industry-standard mutation score threshold exists.
-
-Location: research/05-report.md — Finding 11
-
-Evidence Provided: Absence of threshold in PIT FAQ and Stryker docs; stated as "no consensus found."
-
-Source: PIT FAQ, Stryker docs (absence of evidence)
-
-Source Actually Supports Claim: PARTIAL
-
-Classification: INTERPRETATION
-
-Severity: LOW
-
-Notes:
-- Correct methodology: absence of threshold in both primary tool sources is evidence of no consensus standard from those sources. However, "no universally accepted threshold exists" is a broader claim. Academic literature (e.g., Jia & Harman survey) was not opened. The claim is reasonable but technically based on limited source inspection. Appropriately hedged in research text: "Sources consulted did not establish a consensus standard."
+Notes: Honest identification of an unstandardized metric threshold in industry practice.

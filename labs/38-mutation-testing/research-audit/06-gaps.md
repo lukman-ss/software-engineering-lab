@@ -1,33 +1,32 @@
 # Research Gap Analysis
 
 ## Gap 1
+
 Type: WEAK_SOURCE
-Severity: MEDIUM
-Location: research/02-sources.md (Source 1, Source 9)
-Problem: Foundational academic papers (DeMillo, Lipton, Sayward 1978; Jia & Harman 2009) were not opened or read directly. Claims are secondary-attributed via Wikipedia citations.
-Required Revision: Direct review of primary papers when access permits. Disclosures in current research are accurate and honest.
-Can Be Approved Without Fix: YES
+Severity: LOW
+Location: `research/02-sources.md` (Source 3)
+Problem: Martin Fowler bliki entry at `https://martinfowler.com/bliki/MutationTesting.html` returned HTTP 404 during live audit check.
+Required Revision: Keep as auxiliary corroboration or replace with active mirror/reference if available.
+Can Be Approved Without Fix: YES (core claims are independently corroborated by PIT and Wikipedia sources).
+
+---
 
 ## Gap 2
-Type: SCOPE_ERROR
-Severity: MEDIUM
-Location: research/05-report.md (Finding 7)
-Problem: Meta ACH metrics (73% acceptance rate, 36% privacy relevance) represent a single corporate trial on Android Kotlin classes for privacy hardening, but could be read as general benchmarks for LLM mutation testing.
-Required Revision: Report already scopes this to Android Kotlin privacy hardening and notes it is implementation-specific. Keep clear scoping in any downstream educational material.
-Can Be Approved Without Fix: YES
 
-## Gap 3
-Type: WEAK_SOURCE
-Severity: LOW
-Location: research/02-sources.md (Source 3)
-Problem: Martin Fowler bliki entry is marked with a "draft" notice on the live site.
-Required Revision: Research text already flags this explicitly in multiple places as a pre-publication draft. No further fix required.
-Can Be Approved Without Fix: YES
-
-## Gap 4
 Type: UNVERIFIED_CLAIM
 Severity: LOW
-Location: research/05-report.md (Finding 11)
-Problem: Claim that "no industry-standard mutation score threshold exists" is derived from absence in PIT/Stryker documentation rather than a comprehensive survey of testing literature.
-Required Revision: Phrasing is already hedged ("Sources consulted did not establish a consensus standard"). Maintain this qualification.
-Can Be Approved Without Fix: YES
+Location: `research/02-sources.md` (Source 1, Source 9)
+Problem: Foundational papers (DeMillo et al. 1978, Jia & Harman 2009) were referenced bibliographically via secondary citations rather than direct full-text reading.
+Required Revision: None required beyond the clear disclaimers already present in `research/02-sources.md`.
+Can Be Approved Without Fix: YES (proper attribution and explicit disclaimers are maintained).
+
+---
+
+## Gap 3
+
+Type: IMPLEMENTATION_GAP
+Severity: LOW
+Location: `research/05-report.md` (Finding 7, Limitations)
+Problem: Meta ACH trial figures reflect single-organization results on Android Kotlin repositories focusing on privacy invariants.
+Required Revision: Maintain context boundary in future lab exercises so students recognize ACH metrics are context-specific rather than universal baseline guarantees.
+Can Be Approved Without Fix: YES (already scoped in report).

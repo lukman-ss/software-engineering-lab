@@ -1,36 +1,24 @@
 # Contradictions Analysis
 
 ## Summary
-No material contradictions were identified across research documents, primary sources, or secondary documentation.
+No material contradictions found across the reviewed research documents or between primary source assertions.
 
-## Potential Tension Points Examined
+## Evaluated Potential Contradictions
 
-### Contradiction 1: Undecidability vs Practical Equivalence Detection
-Statement A: Determining whether a mutant is equivalent is mathematically undecidable (Wikipedia, Harman 2025).
-Location: research/05-report.md Finding 6; research/04-contradictions.md Point 2
-Statement B: ACH achieves 0.95 precision and 0.96 recall in equivalent mutant detection with preprocessing (arXiv:2501.12862).
-Location: research/05-report.md Finding 7; research/03-evidence.md Evidence 12
-Type: INTERNAL / SOURCE_CONFLICT
-Impact: LOW
-Assessment: Not a contradiction. Statement A addresses general theoretical undecidability for arbitrary programs. Statement B describes empirical heuristic classification on specific codebases. The distinction is accurately analyzed in research/04-contradictions.md.
+### 1. Undecidability vs Empirical Detection of Equivalent Mutants
+- Statement A: Determining equivalent mutants is mathematically undecidable in general.
+- Statement B: Meta ACH reports 0.95 precision and 0.96 recall for equivalent mutant detection.
+- Analysis: Statement A addresses the halting problem-equivalent theoretical limit for arbitrary programs. Statement B describes empirical heuristic classification on specific human-written program constructs using static analysis preprocessing and LLM classification.
+- Assessment: NO CONTRADICTION. Theory vs heuristic empirical approximation.
 
-### Contradiction 2: Mutation Testing Preconditions
-Statement A: Mutation testing cannot exist on its own; it requires existing tests to evaluate (Meta Engineering Blog).
-Location: research/03-evidence.md Evidence 9; research/04-contradictions.md Point 1
-Statement B: ACH generates new tests from unkilled mutants (arXiv:2501.12862).
-Location: research/05-report.md Finding 7
-Type: INTERNAL / SOURCE_CONFLICT
-Impact: LOW
-Assessment: Not a contradiction. ACH uses unkilled mutants as targets for LLM test generation, but relies on the overall test framework and mutant execution as an oracle. The research clearly articulates the workflow extension.
+### 2. Mutation Testing Pre-requisite vs Test Generation
+- Statement A: Mutation testing requires existing tests to evaluate.
+- Statement B: Mutation-guided LLM frameworks (ACH) generate new tests from mutants.
+- Analysis: Statement A describes traditional mutation testing as an evaluative metric. Statement B uses mutant survival signals to guide test creation agents, expanding test suites.
+- Assessment: NO CONTRADICTION. Evaluative baseline vs generative extension.
 
-### Contradiction 3: Computational Cost Perception
-Statement A: Mutation testing is computationally expensive and slow for large systems (PIT FAQ).
-Location: research/03-evidence.md Evidence 9
-Statement B: PIT is fast and runs in minutes (PIT Homepage).
-Location: research/02-sources.md Source 4
-Type: SOURCE_CONFLICT
-Impact: LOW
-Assessment: Relative speedup compared to 1980s-era full re-compilation systems vs absolute wall-clock overhead on modern large enterprise repositories. Fully explained in research/04-contradictions.md Point 3.
-
-## Conclusion
-No material contradictions found. All tension points are appropriately analyzed and reconciled.
+### 3. Execution Speed Claims
+- Statement A: PIT FAQ notes mutation testing is computationally expensive and can take time.
+- Statement B: Stryker claims fast execution and usability.
+- Analysis: PIT highlights worst-case full-suite runtime constraints, while Stryker highlights relative speed gains over historical whole-program compilation engines. Both recommend incremental analysis of changed lines/files in CI.
+- Assessment: NO CONTRADICTION. Context-dependent performance scope.
