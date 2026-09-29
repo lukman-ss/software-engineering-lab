@@ -2,53 +2,68 @@
 
 ## Revision 1
 
-Audit Issue:
-LOW — Dead link in Source Citations (Outdated Source)
+Audit Issue: MEDIUM — The 3-way transaction taxonomy (compensable, pivot, retryable) rests on a single source (Microsoft Azure Architecture Center).
 
-Location:
-`labs/29-saga-pattern/research/02-sources.md` (Source 5)
-`labs/29-saga-pattern/research/runs/2026-09-28-saga-pattern/02-sources.md` (Source 5)
-
-Problem:
-`https://learn.microsoft.com/en-us/dotnet/architecture/cloud-native/saga-pattern` returns HTTP 404.
-
-Required Revision:
-Replace with active .NET Saga documentation or remove Source 5 since Sources 1 and 2 already fully support all core claims.
+Files Changed:
+- research/05-report.md (Finding 4 — added source qualification sentence)
+- research/03-evidence.md (Evidence 7 — noted single-source limitation in Source field and Notes)
 
 Action:
-- Removed Source 5 from `02-sources.md` (main and run copy) because Sources 1 (Azure Architecture Center) and 2 (microservices.io) provide authoritative, comprehensive coverage of the Saga pattern, including all core claims verified in the claim audit.
+- Added explicit note that this taxonomy is documented in detail only in Microsoft's Architecture Center, and that Richardson's public page references countermeasures without explicitly enumerating the 3-type step taxonomy.
+- Maintained MEDIUM confidence for this claim; clarified source scope in evidence.
 
 Verification:
-- Source 5 URL checked and confirmed 404 Not Found
-- Sources 1-4 remain verified and reachable per source audit
-- Core claims in claim audit (03-claim-audit.md) remain supported by Sources 1-4
+- Claim remains supported (Microsoft source verified reachable and authoritative); now explicitly attributed rather than presented as universal literature consensus.
 
-Status:
-RESOLVED
+Status: RESOLVED
 
 ## Revision 2
 
-Audit Issue:
-MEDIUM — Recovery Mechanism for Failed Compensations (Missing Case)
+Audit Issue: MEDIUM — The specific 6-item list of isolation countermeasures rests on Microsoft Azure Architecture Center without external cross-enumeration.
 
-Location:
-`labs/29-saga-pattern/research/03-evidence.md` (Evidence 9), `06-open-questions.md` (Unanswered Question 4)
-`labs/29-saga-pattern/research/runs/2026-09-28-saga-pattern/03-evidence.md` (Evidence 9), `06-open-questions.md` (Unanswered Question 4)
-
-Problem:
-The research notes that compensating transactions can fail, but does not provide architectural patterns for handling permanently failed compensations (e.g., dead-letter queue processing, human-in-the-loop manual reconciliation consoles, out-of-band balance adjustments).
-
-Required Revision:
-Detail operational remediation workflows when compensating actions fail in production.
+Files Changed:
+- research/05-report.md (Finding 8 — expanded evidence and confidence notes)
+- research/03-evidence.md (Evidence 11, Evidence 12 — added source-limitation notes)
+- research/04-contradictions.md (Contradiction 2 — added clarification sentence)
 
 Action:
-- Added new Evidence 9a in `03-evidence.md` (main and run copy) documenting operational remediation patterns: dead-letter queues, alerting/monitoring, manual reconciliation via admin consoles, out-of-band adjustments, citing Microsoft Azure Architecture Center statements about compensating transaction limitations and need for monitoring/tracking.
-- Updated `06-open-questions.md` Question 4 (main and run copy) to expand coverage from LOW to EXPANDED, adding concrete operational patterns: DLQ for failed compensations, alert escalation to on-call teams, manual reconciliation via admin console, out-of-band data adjustments, referencing Azure documentation.
+- Explicitly labeled the 6-countermeasure enumeration as "Microsoft's formalization" rather than a universal standard.
+- Noted that Microservices.io confirms the concept of countermeasures without providing an independent enumeration.
+- Maintained HIGH confidence for anomaly existence; MEDIUM confidence for the specific 6-item list.
 
 Verification:
-- Evidence 9a quotes verified against actual Microsoft Azure Saga pattern page
-- Cited passages are verbatim from the source: "Limitations of compensating transactions: Compensating transactions might not always succeed, which can leave the system in an inconsistent state." and "Need for monitoring and tracking sagas: Monitoring and tracking the workflow of a saga are essential tasks to maintain operational oversight."
-- Open question coverage updated to reflect added detail
+- Claim correctly scoped to source; no overgeneralization introduced.
 
-Status:
-RESOLVED
+Status: RESOLVED
+
+## Revision 3
+
+Audit Issue: LOW — No automated protocol exists for failure of compensating transactions after retries; operational intervention is required.
+
+Files Changed:
+- research/05-report.md (Finding 9 — added note that no standard recovery protocol exists; production systems must add retry + backoff, DLQ, and manual intervention)
+
+Action:
+- Clarified that absence of a universal compensation-of-compensation protocol is an inherent pattern limitation, not a documentation gap.
+- Listed expected operational patterns (retry with backoff, dead-letter queue, operator alerts) without inventing specific "best practice" numbers.
+
+Verification:
+- Claim aligns with Microsoft, AWS, and Temporal sources cited in Evidence 14; no new unsupported claims added.
+
+Status: RESOLVED
+
+## Revision 4
+
+Audit Issue: LOW — Garcia-Molina & Salem (1987) text was verified via citation chain / ACM references rather than direct OCR/text parsing of the scanned PDF.
+
+Files Changed:
+- No changes made to research files; this limitation was already correctly documented in research/05-report.md (Limitations section) and research/06-open-questions.md (Unanswered Question 3).
+
+Action:
+- Verified that existing documentation accurately reflects the verification method (citation chain via ACM DOI, Cornell mirror link, Temporal footnote).
+- No claim requires modification since the historical origin statement remains well-supported by multiple secondary sources and ACM indexing.
+
+Verification:
+- Existing documentation consistent with audit finding; no action needed.
+
+Status: NO CHANGE NEEDED — Already documented

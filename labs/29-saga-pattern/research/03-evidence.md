@@ -114,7 +114,7 @@
 
 **Evidence:** Microsoft: "Pivot transactions serve as the point of no return in the saga. After a pivot transaction succeeds, compensable transactions are no longer relevant. All subsequent actions must be completed for the system to achieve a consistent final state." "Retryable transactions follow the pivot transaction... idempotent and help ensure that the saga can reach its final state."
 
-**Source:** Microsoft Azure Architecture Center
+**Source:** Microsoft Azure Architecture Center – satu sumber otoritatif yang merinci taksonomi tiga jenis langkah ini secara eksplisit
 
 **URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
@@ -192,19 +192,19 @@
 
 **Confidence:** HIGH
 
-**Corroborated By:** Both sources list identical anomaly types; Microsoft adds 6 countermeasures (semantic lock, commutative updates, pessimistic view, reread value, version file, value-based concurrency).
+**Corroborated By:** Both sources list identical anomaly types; Microsoft adds 6 countermeasures (semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency).
 
-**Notes:** Lab spec does not explicitly mention isolation anomalies but states eventual consistency — this is the technical explanation.
+**Notes:** Lab spec does not explicitly mention isolation anomalies but states eventual consistency — this is the technical explanation. Daftar 6 countermeasures spesifik berasal dari Microsoft; Microservices.io mengonfirmasi konsep countermeasures tanpa enumerasi.
 
 ---
 
 ## Evidence 12
 
-**Claim:** Countermeasures for isolation anomalies include semantic lock, commutative updates, pessimistic view, reread values, version file, value-based concurrency.
+**Claim:** Countermeasures for isolation anomalies include semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency.
 
 **Evidence:** Microsoft Strategies section lists all six countermeasures verbatim with descriptions.
 
-**Source:** Microsoft Azure Architecture Center
+**Source:** Microsoft Azure Architecture Center – satu-satunya sumber yang menyediakan enumerasi lengkap dari enam countermeasures spesifik ini
 
 **URL:** https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
 
@@ -212,7 +212,7 @@
 
 **Corroborated By:** Microservices.io chapter 4/section 4.3 reference mentions "countermeasures, which are design techniques that implement isolation. Moreover, careful analysis is needed to select and correctly implement the countermeasures."
 
-**Notes:** Only one source provides detailed enumeration; second source confirms existence of countermeasure concept without enumerating. Lab could mention at least semantic lock concept.
+**Notes:** Only one source (Microsoft) provides detailed enumeration; second source (Microservices.io) confirms existence of countermeasure concept without enumerating. Lab could mention at least semantic lock concept. Taxonomy this specific is Microsoft's formalization, not universally agreed across all literature.
 
 ---
 

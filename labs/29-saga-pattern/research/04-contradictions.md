@@ -27,7 +27,7 @@ Enumerates 6 specific countermeasures: semantic lock, commutative updates, pessi
 References "countermeasures, which are design techniques that implement isolation" and points to Chapter 4 of *Microservices Patterns* (Manning) without enumerating them in the public page.
 
 **ASSESSMENT:**
-Not a disagreement — Microsoft's list appears to be derived from Richardson's book. Public Microservices.io page does not independently verify the six-item taxonomy. Confidence for the specific six-item list is MEDIUM (one detailed source).
+Not a disagreement — Microsoft's list appears to be derived from Richardson's book. Public Microservices.io page does not independently verify the six-item taxonomy. Confidence for the specific six-item list is MEDIUM (one detailed source). This enumeration reflects Microsoft's formalization, not a universal standard across all literature.
 
 ---
 

@@ -64,7 +64,7 @@ Richardson: "Lack of automatic rollback — a developer must design compensating
 ### Finding 4: Pivot dan Retryable Transactions (Extended Concept)
 
 **Claim:**
-Microsoft membagi langkah saga menjadi compensable (bisa di-undo), pivot (point of no return), dan retryable (harus selesai, idempotent, setelah pivot).
+Microsoft membagi langkah saga menjadi compensable (bisa di-undo), pivot (point of no return), dan retryable (harus selesai, idempotent, setelah pivot). Taksonomi tiga jenis ini didokumentasikan secara rinci di Microsoft Azure Architecture Center. Richardson dalam *Microservices Patterns* (Chapter 4) merujuk countermeasures tanpa menyebut taksonomi eksplisit di halaman publik.
 
 **Evidence:**
 Hanya Microsoft Architecture Center yang merinci taksonomi tiga jenis ini secara publik. Richardson merujuk "countermeasures" di buku tanpa enumerasi di halaman publik.
@@ -129,16 +129,16 @@ Richardson Idempotent Consumer: INSERT gagal jika PK duplikat → rollback, igno
 ### Finding 8: Anomali Data karena Tidak Ada Isolation
 
 **Claim:**
-Tanpa isolation lintas service, saga concurrent bisa menghasilkan lost updates, dirty reads, fuzzy/nonrepeatable reads. Countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, value-based concurrency.
+Tanpa isolation lintas service, saga concurrent bisa menghasilkan lost updates, dirty reads, fuzzy/nonrepeatable reads. Countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency.
 
 **Evidence:**
-Microsoft enumerasi 3 anomali + 6 countermeasures. Richardson: "saga developer must typically use countermeasures... careful analysis is needed."
+Microsoft enumerasi 3 anomali + 6 countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency. Daftar 6 item spesifik ini berasal dari dokumentasi Microsoft. Richardson: "saga developer must typically use countermeasures... careful analysis is needed" — halaman publik Microservices.io mengonfirmasi keberadaan konsep countermeasures tanpa meng-enumerasi daftar lengkapnya.
 
 **Sources:**
 - Microsoft Azure Architecture Center
 - Microservices.io Pattern: Saga (chapter 4/section 4.3 reference)
 
-**Confidence:** HIGH untuk adanya anomali; MEDIUM untuk daftar 6 countermeasures spesifik (satu sumber rinci)
+**Confidence:** HIGH untuk adanya anomali dan konsep countermeasures; MEDIUM untuk enumerasi 6 countermeasures spesifik (satu sumber otoritatif: Microsoft Azure Architecture Center)
 
 ---
 
@@ -148,7 +148,7 @@ Microsoft enumerasi 3 anomali + 6 countermeasures. Richardson: "saga developer m
 Compensating transaction tidak dijamin sukses. Sistem bisa inkonsisten. Monitoring, retry, dan intervensi operator diperlukan.
 
 **Evidence:**
-Microsoft: "Compensating transactions might not always succeed, which can leave the system in an inconsistent state." AWS: "The saga pattern is difficult to debug and its complexity increases with the number of microservices." Temporal sample: log error pada compensation failure, lanjutkan sisa kompensasi.
+Microsoft: "Compensating transactions might not always succeed, which can leave the system in an inconsistent state." AWS: "The saga pattern is difficult to debug and its complexity increases with the number of microservices." Temporal sample: log error pada compensation failure, lanjutkan sisa kompensasi. Tidak ada protokol recovery standar untuk kompensasi yang gagal; operasi produksi harus menambahkan retry dengan backoff, dead-letter queue, dan logging untuk intervensi manual.
 
 **Sources:**
 - Microsoft Azure Architecture Center

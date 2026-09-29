@@ -8,33 +8,31 @@ Previous Audit Status: APPROVED_WITH_WARNINGS
 
 Critical: 0
 High: 0
-Medium: 1 (Gap 3: Recovery Mechanism for Failed Compensations)
-Low: 1 (Gap 1: Dead Link in Source Citations)
+Medium: 2 (Gap 1: pivot/retryable taxonomy — single source; Gap 2: 6 isolation countermeasures — single source)
+Low: 2 (Gap 3: compensation-of-compensation protocol — no standard; Gap 4: Garcia-Molina PDF text extraction — citation chain)
 
 ## Resolution
 
-Resolved: 2
+Resolved: 2 (Gaps 1 & 2 — source qualification added)
+No Change Needed: 2 (Gap 3 — documented as inherent limitation; Gap 4 — already correctly documented in Limitations)
 Partially Resolved: 0
 Unresolved: 0
 
 ## Validation
 
-Source Integrity:
-PASS — All 4 remaining sources (Azure Architecture Center, Microservices.io, Microservices Patterns book, Garcia-Molina & Salem paper) are verified reachable and authoritative
+Source Integrity: PASS — Microsoft Azure Architecture Center and all cited sources confirmed reachable; source limitations clarified where applicable.
 
-Claim Support:
-PASS — All 10 claims from claim audit remain fully supported by Sources 1-4; Evidence 9a adds support for operational remediation patterns
+Claim Support: PASS — All claims remain supported by cited sources; pivot/retryable and countermeasures claims now explicitly scoped to Microsoft as the detailed source.
 
-Internal Consistency:
-PASS — No contradictions introduced; new evidence aligns with existing evidence on compensating transaction limitations
+Internal Consistency: PASS — No contradictions introduced; added qualifications align with existing Evidence 7, 12, and 14.
 
-Documentation Accuracy:
-PASS — Open questions updated to reflect expanded coverage; dead link removed
+Documentation Accuracy: PASS — report, evidence, and contradictions files updated to reflect accurate source scope.
 
 ## Remaining Risks
 
-- Gap 2 (Lack of Quantitative Benchmarks vs 2PC) remains as documented in open-questions.md with NOT VERIFIED status — appropriately tracked, not a research defect
-- Implementation recipes for operational remediation (retry-with-backoff, idempotency keys for compensation, compensating-of-compensations) are correctly deferred to code/implementation stage
+- The pivot/retryable/ retryable transaction taxonomy remains MEDIUM confidence (single authoritative public source). Additional corroboration from Richardson's paywalled book or another primary work would raise confidence to HIGH.
+- The 6 isolation countermeasures list remains MEDIUM confidence (Microsoft-only enumeration).
+- Compensation-of-compensation recovery remains an acknowledged limitation of the pattern with no standard protocol.
 
 ## Ready For Re-Audit
 
