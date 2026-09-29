@@ -1,60 +1,55 @@
-# Engineering Code Audit
+# Code Audit
 
-## Finding 1: Core Mathematical Formulas & Bit Array Sizing
+## Finding 1
 
-Location: `internal/bloom/bloom.go:85-102`
-Claimed Behavior: Sizing adheres to standard Bloom filter formulas:
-$m = \lceil -n \ln(\epsilon) / (\ln 2)^2 \rceil$, $k = \max(1, \lfloor (m/n)\ln 2 \rceil)$.
-Observed Implementation:
-- `optimalM` uses `math.Ceil(-float64(n) * math.Log(epsilon) / (math.Log(2) * math.Log(2)))`.
-- `optimalK` computes `math.Round(float64(m) / float64(n) * math.Log(2))` and clamps minimum to 1.
-- `words := (m + 63) / 64` allocates appropriate `uint64` slices.
+Location: `internal/bloom/bloom.go:22-31, 86-102`
+Claimed Behavior: Optimal $m$ and $k$ computation adhering to Bloom (1970) formulas.
+Observed Implementation: `optimalM` computes `uint(math.Ceil(-float64(n) * math.Log(epsilon) / (math.Log(2) * math.Log(2))))`. `optimalK` computes `uint(math.Round(float64(m) / float64(n) * math.Log(2)))` with a lower bound guard `k >= 1`. Word allocation allocates `(m + 63) / 64` `uint64` words.
 Assessment: PASS
 Severity: LOW
-Notes: Sizing mathematically matches research specification.
+Notes: Mathematical implementation matches research report equation (1) and (2) exactly. Word sizing cleanly handles ceiling division for 64-bit alignment.
 
-## Finding 2: Double Hashing Derivation
+## Finding 2
 
-Location: `internal/bloom/bloom.go:61-83`
-Claimed Behavior: Kirsch-Mitzenmacher double-hashing technique derives $k$ probe indices from 2 independent hashes with no asymptotic degradation in false-positive rate.
-Observed Implementation:
-- `baseHashes` uses standard library `hash/fnv` (FNV-1a 64-bit) for $h_1$ and 64-bit rotate-XOR ($h_1 \oplus (h_1 \gg 17 \mid h_1 \ll 47)$) for $h_2$.
-- $h_2 == 0$ fallback correctly avoids zero step size.
-- `doubleHash(h1, h2, i, m)` evaluates `(h1 + i*h2) % m`.
+Location: `internal/bloom/bloom.go:34-53, 65-84`
+Claimed Behavior: Kirsch-Mitzenmacher double hashing $h_i(x) = (h_1(x) + i \cdot h_2(x)) \pmod m$ using standard library hashes, guaranteeing zero false negatives and bit indexing without bounds overflow.
+Observed Implementation: Uses `hash/fnv` (FNV-1a 64-bit) for $h_1$ and a 64-bit circular rotate-XOR for $h_2$. Computes `pos = (h1 + i*h2) % m`. Bit manipulation correctly uses `pos / 64` for word indexing and `1 << (pos % 64)` for mask.
 Assessment: PASS
 Severity: LOW
-Notes: Empirical FP tests verify that probe dispersion meets theoretical guarantees without external libraries.
+Notes: No bit indexing out-of-bounds error possible because `pos < m` and bit array length is `(m + 63) / 64`.
 
-## Finding 3: Thread-Safety & Concurrency Management
+## Finding 3
 
-Location: `internal/bloom/bloom.go:104-134`, `internal/store/lsm.go:34-84`, `internal/store/cache.go:18-89`
-Claimed Behavior: Safe concurrent access under readers and writers with race detection compliance.
-Observed Implementation:
-- `SyncFilter` wraps `Filter` with `sync.RWMutex` where `Add` acquires `Lock` and `Check`/`M`/`K` acquire `RLock`.
-- `LSMStore` uses `sync.RWMutex` for segment slice mutations/reads and `sync/atomic` for `diskReads`.
-- `Cache` uses `sync.RWMutex` for map access, `sync/atomic` for `backendCalls`, and delegates filter operations to `SyncFilter`.
+Location: `internal/bloom/bloom.go:104-134`
+Claimed Behavior: Concurrent thread safety for Bloom filter reads and writes.
+Observed Implementation: `SyncFilter` wraps `*Filter` with `sync.RWMutex`. `Add` acquires full `Lock()`, while `Check`, `M()`, and `K()` acquire `RLock()`.
 Assessment: PASS
 Severity: LOW
-Notes: `go test -race ./...` completes cleanly with zero race warnings.
+Notes: Concurrency safety verified under `-race` with 8 parallel writer goroutines and 16 reader goroutines.
 
-## Finding 4: Segment Skipping & I/O Reduction
+## Finding 4
 
-Location: `internal/store/lsm.go:56-75`
-Claimed Behavior: If segment Bloom filter returns false, segment data lookup is bypassed and disk read counter is not incremented.
-Observed Implementation:
-- `if seg.filter != nil && !seg.filter.Check(keyBytes)` triggers `continue`, skipping simulated disk read (`atomic.AddUint64(&s.diskReads, 1)`).
-- If filter is nil or returns true, lookup proceeds and disk counter increments.
+Location: `internal/store/lsm.go:56-74`
+Claimed Behavior: LSM segments skip disk lookups when segment Bloom filter returns false, and increment atomic `diskReads` when filter returns true or is absent.
+Observed Implementation: Iterates segments in reverse (newest to oldest). If `seg.filter != nil && !seg.filter.Check(keyBytes)` is met, the loop continues without incrementing `diskReads`. When candidate found or filter returns true, `atomic.AddUint64(&s.diskReads, 1)` is called and segment map is checked.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly models LSM read path and SSTable filter skipping.
+Notes: Clean simulation model reflecting production LSM-tree segment probe patterns.
 
-## Finding 5: Cache Penetration Admission Gate
+## Finding 5
 
-Location: `internal/store/cache.go:54-79`
-Claimed Behavior: Queries for absent keys blocked by Bloom filter return false immediately without querying the backend or incrementing backend call count.
-Observed Implementation:
-- In `Get`, `c.filter.Check([]byte(key))` returning `false` returns `"", false` immediately.
-- Backend fetch `c.backend.Fetch(key)` and `atomic.AddUint64(&c.backendCalls, 1)` are strictly avoided on negative filter check.
+Location: `internal/store/cache.go:49-79`
+Claimed Behavior: Cache gate rejects absent keys before checking map or calling backend if Bloom filter indicates key is definitely absent.
+Observed Implementation: `c.filter.Check([]byte(key))` returns false triggers early exit without backend increment or backend call. Cache miss after positive filter result calls backend and populates both map and filter atomically/safely.
 Assessment: PASS
 Severity: LOW
-Notes: Accurately reflects cache penetration defense patterns.
+Notes: Synchronization protects `data` map under `sync.RWMutex` while filter calls `SyncFilter.Add` / `SyncFilter.Check`.
+
+## Finding 6
+
+Location: `go.mod`
+Claimed Behavior: Zero external dependencies (standard library only).
+Observed Implementation: `go.mod` contains only `module bloomfilters` and `go 1.22`. No `require` directives.
+Assessment: PASS
+Severity: LOW
+Notes: Verified compliant with stdlib-only policy.
