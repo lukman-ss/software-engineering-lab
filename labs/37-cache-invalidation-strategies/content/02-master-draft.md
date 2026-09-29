@@ -1,4 +1,4 @@
-# Cache Invalidation Strategies — Draft Teknis
+# Cache Invalidation Strategies
 
 ## Problem
 
@@ -26,7 +26,7 @@ Pikirkan cache sebagai "memori kerja" di depan database:
 
 ## Core Concept: Three Write Policies
 
-### Cache-Aside (Lazy Loading)
+### Cache-Aside (Lazy Loading on Miss)
 
 Pola paling umum untuk read-heavy workload:
 
@@ -88,13 +88,13 @@ Recompute dijadwalkan sebelum TTL resmi ketika `now + offset ≥ expiry`, ekuiva
 
 Efeknya: request dengan traffic tinggi (yang mengukur `Δ` besar) cenderung early refresh lebih awal; request jarang justru sering melewati kondisi dan pakai cache stale sampai TTL resmi. Ini menggeser puncak rebuild dari satu titik expiry ke distribusi exponential sepanjang TTL, menghilangkan sinkronisasi.
 
-**Peringatan tanda minus:** formula pedagogis lab awal (`Δ · β · ln(U) > TTL_remaining`) selalu FALSE untuk U ∈ (0,1) karena `ln(U)` negatif, sehingga LHS negatif sementara RHS positif. Implementasi lab telah dikoreksi oleh research revision menjadi `-Δ · β · ln(U) > TTL_remaining` — sesuai temuan research audit C1.
+**Peringatan tanda minus kritis:** formula pedagogis lab awal (`Δ · β · ln(U) > TTL_remaining`) selalu FALSE untuk U ∈ (0,1) karena `ln(U)` negatif, sehingga LHS negatif sementara RHS positif. Implementasi lab telah dikoreksi oleh research revision menjadi `-Δ · β · ln(U) > TTL_remaining` — sesuai temuan research audit C1.
 
 Optimality claim paper diterima dengan kepercayaan bibliografis (DOI metadata OK); bukti matematis dan benchmark empiris paper primer belum diverifikasi karena PDF tidak dapat diparsenoleh tool fetch (render binary stream).
 
 ### Mitigasi 3: Stale-While-Revalidate (SWR)
 
-Didefinisikan dalam RFC 5861 (Informational, 2010) sebagai Cache-Control extension: cache dapat melayani response setelah stale sampai `delta` detik, sambil melakukan revalidasi async (non-blocking) ke origin.
+Didefinisikan dalam RFC 5861 (Independent Submission, 2010) sebagai Cache-Control extension: cache dapat melayani response setelah stale sampai `delta` detik, sambil melakukan revalidasi async (non-blocking) ke origin.
 
 Implementasi aplikasi-level (`SWRService`):
 - Raw item dikembalikan baik yang sudah expired (selama masih dalam `staleDelta`).
@@ -267,7 +267,7 @@ Demo output (`go run ./cmd/demo`):
 - [ ] Terapkan SWR jika toleransi staleness ada.
 - [ ] Uji stampede mitigation dengan benchmark konkurensi sebelum deploy.
 - [ ] Instrumentasi counter (queries, writes, revalidations) untuk observability.
-- [ ] Dokumentasikan bounded drop / overflow behavior write-behind.
+- [ ] Dokumentasikan bounded drop / overflow behavior write-behind; ponytail: expose overflow metric for production.
 
 ## Key Takeaways
 

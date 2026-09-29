@@ -11,11 +11,12 @@ cmd/demo/main.go
         │
         ▼
 internal/cache/
- ├── store.go       MemoryCache + TTLWithJitter
- ├── repo.go        MockDB (query/write counters)
- ├── patterns.go    CacheAsideService, WriteThroughService, WriteBehindService
- └── stampede.go    NaiveStampedeService, SingleFlightService,
+  ├── store.go       MemoryCache + TTLWithJitter
+  ├── repo.go        MockDB (query/write counters)
+  ├── patterns.go    CacheAsideService, WriteThroughService, WriteBehindService
+  ├── stampede.go    NaiveStampedeService, SingleFlightService,
                      XFetchService, SWRService, ShouldRecompute
+  └── (code)         All diagrams derived from implementation files only.
         │
         ▼
 tests/cache_test.go
@@ -88,7 +89,7 @@ GET(key) — cache miss
   ├── XFetchService
   │     ├─ GetRaw(key)
   │     ├─ compute remaining
-  │     └─ ShouldRecompute(delta, beta, remaining, u)
+  │     └─ ShouldRecompute(-delta*beta*ln(u), remaining)
   │           ├─ true  ─► MockDB.Query(key) + MemoryCache.Set
   │           └─ false ─► return stale item immediately
   │

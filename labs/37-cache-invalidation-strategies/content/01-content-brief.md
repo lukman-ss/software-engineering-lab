@@ -2,7 +2,7 @@
 
 **Topic:** Cache Invalidation Strategies — patterns untuk menulis-cache dan mitigasi cache stampede (thundering herd) di backend.
 
-**Target Reader:** Software engineer yang membangun atau memelihara backend Go dengan cache in-process (termasuk Redis sebagai target akhir); pembaca harus sudah paham dasar HTTP caching dan concurrency Go.
+**Target Reader:** Software engineer yang membangun atau memelihara backend Go dengan cache in-process (termasuk Redis sebagai target akhir); pembaca harus sudah paham dasar concurrency Go.
 
 **Problem:** Saat item cache populer kadaluarsa serempak, banyak goroutine/klien secara bersamaan melakukan recompute dari database — menyebabkan database kewalahan (congestion collapse), latency melonjak, dan hit rate turun mendekati nol. Pola tulis (write-through vs write-behind vs cache-aside) juga memilih antara freshnes read-after-write dan throughput tulis.
 

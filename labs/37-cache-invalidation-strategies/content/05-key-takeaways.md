@@ -16,6 +16,6 @@
 
 8. **Jitter deskronisasi TTL cross-key, bukan single-key stampede.** Menambahkan `[0, maxJitter)` pada base TTL mencegah banyak key expire serentak (mis. setelah deploy), tetapi tidak mengurangi jumlah concurrent miss pada satu hot key yang expired.
 
-9. **Laboratorium ini pedagogis, bukan benchmark produksi.** In-memory cache dan `MockDB` digunakan agar lab dapat dijalankan standalone tanpa Redis/PostgreSQL. Beban 20 goroutines dan `queryDelay=20ms` adalah parameter sintetik; angka 10.000 RPS yang disebut dalam konteks pedagogis bukan ukuran lapangan.
+9. **Laboratorium ini pedagogis, bukan benchmark produksi.** In-memory cache dan `MockDB` digunakan agar lab dapat dijalankan standalone tanpa Redis/PostgreSQL. Beban 20 goroutines dan `queryDelay=20ms` adalah parameter sintetik; angka 10.000 RPS dalam konteks pedagogis bukan ukuran lapangan. ponytail: replace MockDB with Redis client for production; instrument Prometheus metrics.
 
 10. **Observability wajib sebelum production.** Counter `queryCount` / `writeCount` / `revalCount` pada demo harus digantikan metrics sesungguhnya (Prometheus histogram/counter) untuk memantau pattern hit/miss, revalidation rate, dan queue depth write-behind.

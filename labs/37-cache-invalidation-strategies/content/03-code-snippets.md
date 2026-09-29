@@ -58,7 +58,7 @@ func (s *WriteThroughService) Update(ctx context.Context, key, val string) error
 }
 ```
 
-Explanation: Write both DB and cache in sequence. The `delta` measured is DB write duration and is recorded in `ReadDelta` field (minor semantic mismatch noted in audit Finding 4). Reader immediately hits cache on next access.
+Explanation: Write both DB and cache in sequence. The `delta` measured is DB write duration and is recorded in `ReadDelta` field (minor semantic mismatch noted in audit Finding 4). Reader immediately hits cache on next access. ponytail: semantic field naming inconsistent; `FetchOrWriteDelta` would be clearer.
 
 ---
 
@@ -81,7 +81,7 @@ func (s *WriteBehindService) Update(key, val string) {
 }
 ```
 
-Explanation: Cache updated immediately; write enqueued to buffered channel. On full queue, the write is silently dropped — an implementation limitation, not a production recommendation (ponytail comment in source). Background `flushWorker` drains queue and calls `db.Write` in loop.
+Explanation: Cache updated immediately; write enqueued to buffered channel. On full queue, the write is silently dropped — an implementation limitation, not a production recommendation. ponytail: expose overflow counter or return error for observability. Background `flushWorker` drains queue and calls `db.Write` in loop.
 
 ---
 
@@ -123,7 +123,7 @@ func (s *SingleFlightService) Get(ctx context.Context, key string) (string, erro
 }
 ```
 
-Explanation: First miss enters `flight.Do`. The closure performs a double-check cache hit before querying DB. All concurrent callers with the same key block on `Do` and receive the same result when the first completes. Verified by test: 20 goroutines → 1 DB query.
+Explanation: First miss enters `flight.Do`. The closure performs a double-check cache hit before querying DB. All concurrent callers with the same key block on `Do` and receive the same result when the first completes. `Do` returns `(value, err, shared bool)`; `shared=true` indicates caller received cached result. Verified by test: 20 goroutines → 1 DB query.
 
 ---
 
@@ -209,4 +209,4 @@ func TTLWithJitter(base time.Duration, maxJitter time.Duration) time.Duration {
 }
 ```
 
-Explanation: Returns `base + rand[0, maxJitter)`. Useful when many keys share the same TTL origin (deploy, cron). Does not prevent stampede on a single hot key — only desynchronizes across keys.
+Explanation: Returns `base + rand[0, maxJitter)`. Useful when many keys share the same TTL origin (deploy, cron). Does not prevent stampede on a single hot key — only desynchronizes across keys. ponytail: use crypto/rand if jitter is security-sensitive.
