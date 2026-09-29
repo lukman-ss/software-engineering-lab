@@ -76,6 +76,7 @@ Client memverifikasi ID Token menggunakan kunci signing yang sama dengan AS. Lan
 5. Cek `exp` (masih berlaku).
 6. Cek `iat` (tidak melebihi sekarang + 5 menit).
 7. Cocokkan `nonce` dengan yang dikirim pada request awal.
+*Catatan: Implementasi ini menggunakan 7 langkah validasi dengan HMAC-SHA256 symmetric signing untuk tujuan pendidikan; lengkap OIDC Core 3.1.3.7 meliputi ekstra checks seperti alg pinning, JWKS-based signature verification, at_hash/c_hash, dan decryption untuk JWE.*
 
 ### 5. Protected Resource Access
 
@@ -338,7 +339,7 @@ Active session revoked due to family revocation! Error: refresh token reuse dete
 - [ ] Refresh token di-rotate setiap penggunaan.
 - [ ] Replay detection memicu family revocation.
 - [ ] Tidak ada implicit flow atau resource owner password flow.
-- [ ] State parameter divalidasi (untuk anti-CSRF).
+- [ ] State parameter divalidasi (untuk anti-CSRF) — *catatan: demo ini tidak memvalidasi state server-side (arsitektur lab Demo)*.
 - [ ] Token storage menghindari localStorage untuk bearer tokens.
 - [ ] Concurrency aman (mutex, race detector passed).
 
