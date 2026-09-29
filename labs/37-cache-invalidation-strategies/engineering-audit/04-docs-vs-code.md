@@ -1,30 +1,47 @@
-# Documentation vs Code Consistency Audit
+# Docs vs Code Audit
 
-## Matrix of Comparison
+## Comparison Matrix
 
-| Item | README / Engineering Notes Claim | Code / Execution Result | Status |
-|------|-----------------------------------|-------------------------|--------|
-| Directory Structure | `cmd/demo/main.go`, `internal/cache/store.go`, `repo.go`, `patterns.go`, `stampede.go`, `tests/cache_test.go` | Matches actual directory layout exactly. | MATCH |
-| Test Command | `go test -v ./...` and `go test -race ./...` | Both run and pass cleanly. | MATCH |
-| Demo Command | `go run ./cmd/demo` | Runs and produces exact expected outputs. | MATCH |
-| Cache-Aside Claim | Checks cache, loads DB on miss, invalidates on update | Implemented in `CacheAsideService.Get` & `Update`. Tested in `TestCachePatterns`. | MATCH |
-| Write-Through Claim | Updates DB and cache synchronously; subsequent reads hit cache | Implemented in `WriteThroughService.Update`. Tested in `TestCachePatterns`. | MATCH |
-| Write-Behind Claim | Immediate cache update, async flush queue with worker | Implemented in `WriteBehindService`. Tested in `TestCachePatterns`. | MATCH |
-| SingleFlight Claim | Coalesces concurrent cache miss requests down to 1 query | Implemented in `SingleFlightService` using `golang.org/x/sync/singleflight`. Tested in `TestStampedeMitigation`. | MATCH |
-| XFetch Claim | Early refresh using `-Δ · β · ln(U) > TTL_remaining` | Implemented in `ShouldRecompute` and `XFetchService`. Tested in `TestXFetchLogic`. | MATCH |
-| SWR Claim | Immediate stale return + background revalidation | Implemented in `SWRService`. Tested in `TestStaleWhileRevalidate`. | MATCH |
-| TTL Jitter Claim | Adds randomized offset `[0, maxJitter)` to base TTL | Implemented in `TTLWithJitter`. Tested in `TestJitter`. | MATCH |
+| Component / Claim | Documented Claim (README & Engineering Notes) | Actual Implementation in Code | Mismatch Detected |
+|---|---|---|---|
+| Module Path | `github.com/lukman/labs/37-cache-invalidation-strategies` | `go.mod`: `github.com/lukman/labs/37-cache-invalidation-strategies` | None |
+| Cache-Aside | Reads DB on miss, populates cache; invalidates on update | `internal/cache/patterns.go:12-48` | None |
+| Write-Through | Updates DB and cache synchronously | `internal/cache/patterns.go:50-90` | None |
+| Write-Behind | Updates cache immediately; flushes to DB asynchronously | `internal/cache/patterns.go:92-166` | None |
+| SingleFlight | Coalesces concurrent cache misses to 1 DB query | `internal/cache/stampede.go:45-85` | None |
+| XFetch Formula | `-Δ · β · ln(U) > TTL_remaining` | `internal/cache/stampede.go:122-136` | None |
+| Stale-While-Revalidate | Serves stale data immediately; triggers async revalidation | `internal/cache/stampede.go:173-254` | None |
+| TTL Jitter | Adds random offset `[0, maxJitter)` to base TTL | `internal/cache/store.go:79-85` | None |
+| Demo Output | 7 sections matching claimed behaviors | `cmd/demo/main.go` | None |
 
-## Detailed Observations
+---
 
-1. **NO DOC_CODE_MISMATCH**: All function names, method signatures, package paths, and structural layouts described in `README.md` and `engineering/01-design.md` match the code.
-2. **NO TEST_CLAIM_MISMATCH**: Every capability claimed in the feature list in `README.md` is covered by an automated unit test in `tests/cache_test.go`.
-3. **NO RESEARCH_IMPLEMENTATION_MISMATCH**: 
-   - Research document (`research/05-report.md`) called out the critical sign bug in XFetch implementations (`-Δ` vs `+Δ`). Code in `internal/cache/stampede.go:134` correctly uses `-deltaSec * beta * math.Log(u)` and `tests/cache_test.go:180-183` explicitly tests for the erroneous sign inversion.
-   - Singleflight implementation properly handles duplicate suppression.
-   - SWR deduplication prevents revalidation storming.
-4. **NO FAKE DEMO / FAKE BENCHMARK**: Output printed by `go run ./cmd/demo` is generated dynamically at runtime using live struct calls to `MemoryCache`, `MockDB`, and service types. Atomic counters measure actual DB queries and writes executed during the demo run.
+## Detailed Checks
 
-## Conclusion
+### 1. README vs Code
+- **Structure**: All directory tree entries in `README.md` (lines 8-24) exist at exact locations.
+- **Commands**: `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` all run cleanly without errors.
+- **Features List**: All 7 features described in `README.md` (lines 44-50) are implemented and exercised in tests.
 
-The documentation, design notes, code implementation, test suite, and execution outputs are completely consistent.
+### 2. Engineering Notes vs Code
+- In-memory store decision accurately reflects lack of Redis requirement.
+- Singleflight in-process limitation accurately recorded.
+- Write-behind drop behavior matches `select { default: }` in `patterns.go:158`.
+- XFetch formula guard `u <= 0 || u >= 1` in `stampede.go:126` matches engineering note 28.
+
+### 3. Research Claims vs Code
+- Finding 1 (Cache-Aside read/write lifecycle): Implemented in `patterns.go`.
+- Finding 2 (Write-Through synchronous write): Implemented in `patterns.go`.
+- Finding 3 (Write-Behind async flush durability risk): Implemented in `patterns.go`.
+- Finding 4 (Stampede naive N vs singleflight 1): Implemented in `stampede.go`.
+- Finding 5 (XFetch formula with negative sign): Correct formula `-deltaSec * beta * math.Log(u)` in `stampede.go`.
+- Finding 6 (XFetch beta parameter default 1.0): Used in `cmd/demo/main.go` and `tests/cache_test.go`.
+- Finding 7 (SWR stale return + async revalidation): Implemented in `stampede.go`.
+- Finding 8 (TTL Jitter anti-synchronization): Implemented in `store.go`.
+
+---
+
+## Discrepancies / Overclaims
+
+No documentation mismatches or overclaims detected.
+The code strictly delivers the scope promised by the documentation and research reports.
