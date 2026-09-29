@@ -1,61 +1,77 @@
-# 04 — Contradictions / Tensions Audit
+# 04 — Contradictions
 
-Target Lab: labs/37-cache-invalidation-strategies
+## Contradiction 1
 
-## Contradiction 1: XFetch Formula Sign in Lab Prompt vs Mathematical Reality
+Statement A: Lab prompt formula `Δ·β·ln(rand()) > TTL_remaining`
 
-Statement A (Lab Prompt):
-`Δ · β · ln(rand()) > TTL_remaining`
+Location: `research/04-contradictions.md: C1`, `research/05-report.md: Finding 6`
 
-Statement B (Mathematical Reality / Wikipedia PVLDB 2015):
-`-Δ · β · ln(rand()) > TTL_remaining` (or `(time() - delta * beta * log(rand(0,1))) ≥ expiry`)
+Statement B: Wikipedia-transcribed XFetch formulation: `(time() - delta*beta*log(rand(0,1))) ≥ expiry`, which rearranges to `-Δ·β·ln(rand()) > TTL_remaining`
 
-Location: `04-contradictions.md` C1; `05-report.md` Finding 6 Warning.
-Type: INTERNAL / SPECIFICATION_ERROR
-Impact: Critical if uncaught (formula would never trigger early refresh for `rand() ∈ (0,1)`).
-Assessment: RESOLVED. The research report contains an explicit, prominent WARNING block explaining why the unnegated formula is mathematically broken and directing the engineering phase to use the negated formula `-Δ·β·ln(rand()) > TTL_remaining`.
+Location: `research/03-evidence.md: Evidence 10`
+
+Type: INTERNAL
+
+Impact: HIGH — as written in the lab prompt, the formula is always false for rand∈(0,1), producing a dead branch that never triggers early refresh. Educational lab would teach incorrect algorithm.
+
+Assessment: RESOLVED — research-revision added prominent WARNING block with correct formula.
 
 ---
 
-## Contradiction 2: RFC 5861 "Standard" vs "Informational" Status
+## Contradiction 2
 
-Statement A:
-Informal engineering references often refer to RFC 5861 as an "IETF standard".
+Statement A: RFC 5861 header: "not endorsed by the IETF and has no formal standing in the IETF standards process" (Informational / Independent Submission).
 
-Statement B:
-RFC 5861 header states: "Published on the Independent Submission stream. This RFC is not endorsed by the IETF and has no formal standing in the IETF standards process."
+Location: `research/04-contradictions.md: C3`
 
-Location: `04-contradictions.md` C3; `05-report.md` Finding 7.
+Statement B: Common informal usage treating RFC 5861 as an "Internet Standard."
+
+Location: community materials / casual usage
+
 Type: SOURCE_CONFLICT
-Impact: Minor nuance regarding formal standardization.
-Assessment: RESOLVED. Report and evidence correctly designate RFC 5861 as an Informational RFC / Independent Submission.
+
+Impact: LOW — research correctly identifies the RFC's actual informational status.
+
+Assessment: RESOLVED — research explicitly states "Informational RFC" consistently.
 
 ---
 
-## Contradiction 3: Write-Through "Same Write Operation" vs Distributed Realities
+## Contradiction 3
 
-Statement A (Vendor Docs):
-Write-through updates data store and cache "in the same write operation".
+Statement A: Wikipedia Cache stampede: locking "requires an extra write for the locking mechanism, doubling the number of writes."
 
-Statement B (Distributed Systems Fact):
-Database and cache (e.g. Postgres and Redis) are independent systems without 2PC/distributed transaction support in standard web stacks.
+Location: `research/04-contradictions.md: C4`
 
-Location: `04-contradictions.md` C6; `05-report.md` Finding 2.
-Type: INTERNAL / SCOPE_CLARIFICATION
-Impact: Engineers could falsely assume transactional atomicity across DB + Redis.
-Assessment: RESOLVED. Research explicitly documents that "same write operation" means application-level sequential writing with best-effort cache set and TTL safety net.
+Statement B: Go `singleflight` uses in-process mutex, no external lock write needed.
+
+Location: `research/04-contradictions.md: C4`
+
+Type: SCOPE CLARIFICATION (not a true contradiction)
+
+Impact: MEDIUM — confusion risk if reader conflates in-process with distributed mechanisms.
+
+Assessment: RESOLVED — research explicitly differentiates scope (in-process singleflight vs. Redis SET NX PX distributed lock).
 
 ---
 
-## Contradiction 4: Request-Triggered vs Background Cron SWR
+## Contradiction 4
 
-Statement A (RFC 5861 §5):
-Revalidation should be predicated upon an incoming request to prevent amplification attacks.
+Statement A: RFC 5861 §3.1: revalidation triggered by an incoming request; §5 warns against validation without request trigger to avoid amplification.
 
-Statement B (Loose SWR Descriptions):
-SWR described as an independent periodic background worker refreshing expired keys.
+Location: `research/04-contradictions.md: C5`
 
-Location: `04-contradictions.md` C5; `05-report.md` Finding 7.
-Type: ARCHITECTURAL_DESIGN_TENSION
-Impact: Request fan-out vs worker complexity.
-Assessment: RESOLVED. Research clarifies that request-triggered revalidation is the canonical RFC 5861 model, while independent background refresh represents the external recomputation pattern.
+Statement B: Lab spec describes "asynchronous background job" for SWR revalidation.
+
+Location: `research/04-contradictions.md: C5`, `05-report.md: Finding 7`
+
+Type: CODE_DOC_MISMATCH (research-level)
+
+Impact: MEDIUM — amplification risk if misimplemented as unconditional background cron.
+
+Assessment: RESOLVED — research notes tension and recommends request-correlated implementation aligned with RFC §5.
+
+---
+
+## No other material contradictions
+
+All other areas — cache-aside ordering, singleflight semantics, XFetch formulation, TTL trade-offs, jitter purpose, stale-if-error — are internally consistent across sources.
