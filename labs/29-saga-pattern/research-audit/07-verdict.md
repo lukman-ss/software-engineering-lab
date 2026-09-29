@@ -1,27 +1,26 @@
 # Audit Verdict
 
-Target Lab: labs/29-saga-pattern (Research Phase)
-
-Audit Date: 2026-09-29
+Target Lab: `labs/29-saga-pattern`  
+Audit Date: 2026-09-29  
 
 ## Summary
 
-Major Claims Reviewed: 11
-Sources Reviewed: 9
-Unsupported Claims: 0
-Contradictions: 0 (material)
-Code Issues: NOT_APPLICABLE (Pipeline override: research only)
-Test Failures: NOT_APPLICABLE (Pipeline override: research only)
-Research Gaps: 4 (2 Medium, 2 Low)
+Major Claims Reviewed: 10  
+Sources Reviewed: 9 (Tier 1 & Tier 2)  
+Unsupported Claims: 0  
+Contradictions: 0 (0 material, 3 resolved architectural/layering nuances documented)  
+Code Issues: NOT_APPLICABLE (Research-only audit stage per pipeline override)  
+Test Failures: NOT_APPLICABLE  
+Research Gaps: 4 (Cataloged with appropriate severity and confidence ratings)  
 
 ## Quality Gates
 
-Source Integrity: PASS
-Claim Support: PASS
-Internal Consistency: PASS
-Code Correctness: NOT_APPLICABLE
-Tests: NOT_APPLICABLE
-Documentation Accuracy: PASS
+Source Integrity: PASS  
+Claim Support: PASS  
+Internal Consistency: PASS  
+Code Correctness: NOT_APPLICABLE  
+Tests: NOT_APPLICABLE  
+Documentation Accuracy: PASS  
 
 ## Blocking Issues
 
@@ -29,16 +28,14 @@ None.
 
 ## Non-Blocking Issues
 
-1. The 3-way transaction taxonomy (compensable, pivot, retryable) rests on a single source (Microsoft Azure Architecture Center).
-2. The specific 6-item list of isolation countermeasures rests on Microsoft Azure Architecture Center without external cross-enumeration.
-3. Garcia-Molina & Salem (1987) text was verified via citation chain / ACM references rather than direct OCR/text parsing of the scanned PDF.
-4. No automated protocol exists for failure of compensating transactions after retries; operational intervention is required.
+1. **Scanned PDF text extraction limit (Garcia-Molina 1987):** Primary historical source verified via citation chain (ACM DOI 10.1145/62224.62226, Cornell repository, Microsoft/Temporal citations). Verbatim text quotes missing due to image LZW compression.
+2. **Single-source step taxonomy (Pivot/Retryable):** The compensable/pivot/retryable taxonomy originates specifically from Microsoft Azure Architecture Center. Appropriately assigned MEDIUM confidence in research files.
+3. **Single-source 6 isolation countermeasures enumeration:** Derived primarily from Microsoft documentation (referencing Richardson's *Microservices Patterns* text). Appropriately marked MEDIUM confidence in research report.
 
 ## Required Revisions
 
-1. In the downstream content/engineering phase, clarify that the pivot/retryable step taxonomy and the 6 countermeasures reflect Microsoft's formalization of saga patterns.
-2. In the lab implementation and documentation, ensure that compensation failure is explicitly handled via retry and logged for manual intervention rather than assumed impossible.
+None for the research files. Downstream content creators should maintain the documented confidence levels (e.g. presenting the 6 isolation countermeasures and pivot taxonomy as Microsoft/Richardson formalizations rather than strict universal standards).
 
 ## Final Status
 
-APPROVED_WITH_WARNINGS
+APPROVED

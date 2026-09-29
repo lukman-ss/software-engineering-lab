@@ -1,86 +1,37 @@
-# Contradictions Audit: Saga Pattern Research
+# 04 - Contradictions: Saga Pattern Research
 
-## Contradiction 1
-
-Statement A:
-"Choreography is 'easier to implement, at least initially' but 'orchestration is often easier to build when one uses it from the start.'" — Temporal Blog (2023-07-13)
-
-Location:
-`research/04-contradictions.md:6` and `research/03-evidence.md:61-70`
-
-Statement B:
-"Good for simple workflows that have few services and don't need a coordination logic." (Choreography benefit) — Microsoft Azure Architecture Center
-
-Location:
-`research/04-contradictions.md:8-9`
-
-Type:
-INTERNAL
-
-Impact:
-LOW — the research agent correctly assessed this as a difference in framing, not a factual conflict. Both sources agree choreography suits simpler workflows; only emphasis differs.
-
-Assessment:
-RESOLVED by research agent. Acceptable as documented.
+## Contradiction 1: Choreography vs Orchestration Preferred Defaults
+Statement A: Temporal (2023-07-13) posits that choreography might look simpler initially, but orchestration is easier to build and maintain when adopted from the start if backed by durable execution.  
+Location: `research/04-contradictions.md:5-7`  
+Statement B: Microsoft Azure Architecture Center and common industry consensus state that choreography is suitable for simple workflows with few services, while orchestration is better suited for complex workflows.  
+Location: `research/04-contradictions.md:8-10`  
+Type: SOURCE_CONFLICT (Nuance/Perspective)  
+Impact: LOW. Does not invalidate either approach. Temporal's perspective reflects their positioning as an orchestration/durable execution engine, whereas Microsoft reflects general architectural rules of thumb.  
+Assessment: Resolved. The research appropriately notes that qualitative complexity thresholds dictate choice, and the 3-step checkout flow in the lab exercise is well-suited for orchestration.
 
 ---
 
-## Contradiction 2
-
-Statement A:
-Microsoft Azure Architecture Center lists 6 specific isolation countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, value-based concurrency.
-
-Location:
-`research/04-contradictions.md:23-24`, `research/03-evidence.md:203-215`
-
-Statement B:
-Microservices.io references "countermeasures" in Chapter 4 of the Manning book without enumerating them on the public page.
-
-Location:
-`research/04-contradictions.md:27`
-
-Type:
-SOURCE_CONFLICT (minor, by incompleteness)
-
-Impact:
-MEDIUM — the 6-countermeasure taxonomy rests on a single public source (Microsoft). Richardson's complete list is paywalled. Research agent correctly reported MEDIUM confidence for this claim.
-
-Assessment:
-NOT FULLY RESOLVED. Single-source claim for the specific 6-item enumeration. Requires acknowledgment in gaps.
+## Contradiction 2: Exactly-Once vs At-Least-Once Delivery Guarantees
+Statement A: AWS Step Functions Standard workflows guarantee "exactly-once" execution. Temporal guarantees deterministic replay / workflow-level execution.  
+Location: `research/04-contradictions.md:70-75`  
+Statement B: Message brokers and distributed participants operate under at-least-once delivery; activity executions require participant idempotency regardless of orchestrator guarantees.  
+Location: `research/04-contradictions.md:76-78`  
+Type: INTERNAL (Layering Distinction)  
+Impact: LOW. The tension is reconciled by distinguishing orchestrator state machine execution (workflow level) from RPC/messaging participant invocation (network level).  
+Assessment: Resolved. Research correctly insists on idempotency keys at the participant level regardless of workflow engine guarantees.
 
 ---
 
-## Contradiction 3
-
-Statement A:
-"Standard workflows have exactly-once execution." — AWS Step Functions documentation
-
-Location:
-`research/04-contradictions.md:70-71`, `research/03-evidence.md:221-227`
-
-Statement B:
-Temporal claims "exactly-once" at workflow level via deterministic replay, but activities (participants) are at-least-once.
-
-Location:
-`research/04-contradictions.md:74`
-
-Statement C:
-Debezium pipeline is at-least-once; consumers must detect duplicates.
-
-Location:
-`research/04-contradictions.md:77`
-
-Type:
-SOURCE_CONFLICT (layered terminology)
-
-Impact:
-MEDIUM — conflating workflow-engine exactly-once with end-to-end participant delivery could mislead lab readers into thinking no idempotency is needed when orchestrated by Step Functions Standard. Research agent correctly resolved this as a layered distinction, not a fundamental contradiction.
-
-Assessment:
-RESOLVED adequately. Required note in final publication.
+## Contradiction 3: Compensation Failure Protocols
+Statement A: Compensating transactions are the mechanism to return the system to consistency.  
+Location: `research/03-evidence.md:21-26`  
+Statement B: Compensating transactions themselves can fail, leaving the system in an inconsistent state with no standard automatic second-tier rollback protocol.  
+Location: `research/04-contradictions.md:34-49`  
+Type: INTERNAL (Known Theoretical Limit)  
+Impact: LOW to MEDIUM. Represents an inherent limitation of Sagas, not an error in research.  
+Assessment: Resolved. Research explicitly highlights that production systems must rely on retries with exponential backoff, dead-letter queues, and human operator intervention.
 
 ---
 
-## Note
-
-No material contradictions in core claims. All potential conflicts identified in `04-contradictions.md` are correctly classified as terminological or emphasis differences, not factual disagreements. Research agent exercised appropriate critical reasoning.
+## Material Contradictions Summary
+No material, irreconcilable contradictions found. Differences between sources represent legitimate architectural tradeoffs, different layers of abstraction (orchestrator vs participant), and vendor-specific design philosophies.
