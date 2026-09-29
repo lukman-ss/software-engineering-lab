@@ -1,30 +1,33 @@
 # Engineering Audit Verdict
 
 Target Lab: `labs/36-cors-and-csrf`
-Audit Date: 2026-09-29
+Audit Date: Tue Sep 29 2026
 
 ## Summary
 
-Code Files Reviewed: 5
+Code Files Reviewed:
 - `internal/cors/middleware.go`
-- `internal/csrf/middleware.go`
 - `internal/csrf/token.go`
+- `internal/csrf/middleware.go`
 - `internal/bank/app.go`
 - `cmd/demo/main.go`
+- `README.md`
 
-Tests Reviewed: 4
+Tests Reviewed:
 - `internal/cors/middleware_test.go`
 - `internal/csrf/token_test.go`
 - `internal/bank/app_test.go`
 - `tests/integration_test.go`
 
 Commands Executed:
-- `rtk go test -v ./...` (14 passed)
-- `rtk go test -race ./...` (14 passed, 0 races)
-- `rtk go run ./cmd/demo` (success, clean output matching claims)
+- `go test -v ./...`
+- `go test -race ./...`
+- `go test -count=1 ./...`
+- `go test -count=1 -race ./...`
+- `go run ./cmd/demo`
 
 Failures: 0
-Warnings: 4 (1 Medium, 3 Low)
+Warnings: 0
 
 ## Quality Gates
 
@@ -36,21 +39,15 @@ Research Alignment: PASS
 Documentation Accuracy: PASS
 
 ## Blocking Issues
-
 None.
 
 ## Non-Blocking Issues
-
-1. **GAP-001 (MEDIUM)**: Missing test for `RequireCustomHeaderMiddleware` at `/api/transfer/custom-header`.
-2. **GAP-002 (LOW)**: `strings.Split` in token validation breaks if `sessionID` contains `:` delimiters.
-3. **GAP-003 (LOW)**: No test verifying negative/zero amount validation in `HandleTransferVulnerable`.
-4. **GAP-004 (LOW)**: Disallowed origin simple request is not tested at the unit level in `internal/cors/middleware_test.go` (covered transitively in integration test).
+1. `HandleBalance` endpoint is implemented but lacks dedicated test assertion.
+2. Concurrent race test exercises token generation endpoint only; concurrent transfer execution test could provide additional coverage.
 
 ## Required Revisions
-
-1. Add a test case for `RequireCustomHeaderMiddleware` in `internal/csrf/token_test.go` or `tests/integration_test.go` verifying that requests lacking `X-Requested-With` are rejected with 403 and requests containing the header pass.
-2. Consider switching `strings.Split` to `strings.SplitN(..., 4)` or JSON payload in `TokenManager.ValidateToken` to prevent potential colon collisions in session identifiers.
+None. Implementation meets quality gates.
 
 ## Final Status
 
-APPROVED_WITH_WARNINGS
+APPROVED

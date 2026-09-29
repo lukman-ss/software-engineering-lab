@@ -1,46 +1,46 @@
-# Code Audit
+# Engineering Code Audit
 
 ## Finding 1
 
 Location: `internal/cors/middleware.go:44-92`
-Claimed Behavior: Middleware handles CORS preflight and actual requests, enforcing origin safelists and credential rules without blocking standard cross-origin simple requests from executing server-side logic when origin is disallowed.
-Observed Implementation: When origin is not allowed, preflight OPTIONS requests return 403, while non-preflight requests proceed to `next.ServeHTTP(w, r)` without setting CORS headers. This faithfully demonstrates how browsers receive the response but execute the server-side action.
+Claimed Behavior: CORS middleware should process requests without aborting non-preflight requests when Origin is disallowed, matching browser behavior where simple requests reach the server.
+Observed Implementation: For non-preflight requests with disallowed Origin, `next.ServeHTTP(w, r)` is executed without setting CORS response headers. Preflight `OPTIONS` requests from disallowed origins return `403 Forbidden`.
 Assessment: PASS
 Severity: LOW
-Notes: Complies with W3C/Fetch CORS specifications.
+Notes: Correctly demonstrates that CORS header absence does not block backend execution of simple POST requests.
 
 ## Finding 2
 
-Location: `internal/cors/middleware.go:62-66`
-Claimed Behavior: When credentials are enabled (`AllowCredentials: true`), wildcard `*` origin is forbidden and the requesting origin is explicitly reflected.
-Observed Implementation: Direct check `if m.config.AllowCredentials` reflects `r.Header.Get("Origin")` and sets `Access-Control-Allow-Credentials: true`.
+Location: `internal/cors/middleware.go:62-72`
+Claimed Behavior: When `AllowCredentials: true`, wildcard `*` is illegal and origin must be explicitly reflected.
+Observed Implementation: When `m.config.AllowCredentials` is true, `Access-Control-Allow-Origin` is explicitly set to `origin`. When false and wildcard origin configured, it sets `*`.
 Assessment: PASS
 Severity: LOW
-Notes: Adheres to security specifications forbidding wildcard credentials.
+Notes: Strict compliance with W3C / Fetch Standard CORS credential rules.
 
 ## Finding 3
 
 Location: `internal/csrf/token.go:44-109`
-Claimed Behavior: CSRF tokens are HMAC-SHA256 signed, session-bound, include a timestamp and cryptographic nonce, and are verified using constant-time comparison.
-Observed Implementation: `GenerateToken` generates 16 random bytes via `crypto/rand`, constructs `sessionID:ts:nonce`, signs it with HMAC-SHA256, and `ValidateToken` verifies the session match, timestamp TTL, and uses `subtle.ConstantTimeCompare`.
+Claimed Behavior: Secure, session-bound HMAC-SHA256 signed CSRF token generation and constant-time validation.
+Observed Implementation: Tokens encode `sessionID:timestamp:nonce:hmac`. Validation decodes base64, verifies exact session ID, checks timestamp against TTL, and uses `subtle.ConstantTimeCompare` for HMAC comparison.
 Assessment: PASS
 Severity: LOW
-Notes: Implements defense-in-depth token security without memory leaks or timing attack vulnerabilities.
+Notes: Uses constant-time comparison to prevent timing attacks. Nonce ensures token freshness.
 
 ## Finding 4
 
-Location: `internal/csrf/middleware.go:24-86`
-Claimed Behavior: Provides CSRF middleware checking headers/form bodies on unsafe methods, Fetch-Metadata validation on `Sec-Fetch-Site`, and custom header enforcement.
-Observed Implementation: Safe methods (GET, HEAD, OPTIONS, TRACE) bypass token checks; state-changing requests validate token against session cookie. `FetchMetadataMiddleware` and `RequireCustomHeaderMiddleware` provide secondary defensive layers.
+Location: `internal/bank/app.go:122-145`
+Claimed Behavior: Thread-safe in-memory state updates during fund transfer operations.
+Observed Implementation: Uses `b.mu.Lock()` and `defer b.mu.Unlock()` around sender and recipient balance mutations. Reads return deep copies of `Account` struct under `RLock()`.
 Assessment: PASS
 Severity: LOW
-Notes: Standard defense-in-depth anti-CSRF patterns accurately coded.
+Notes: Clean thread-safety primitives without data race potential.
 
 ## Finding 5
 
-Location: `internal/bank/app.go:20-152`
-Claimed Behavior: Thread-safe banking operations with session authentication and balance transfers.
-Observed Implementation: Protected by `sync.RWMutex`, defensive copies of `Account` returned in `GetAccount`, atomic locking around account sender/recipient balance updates.
+Location: `internal/csrf/middleware.go:56-70`
+Claimed Behavior: Fetch Metadata middleware inspects `Sec-Fetch-Site` and rejects cross-site state-changing requests.
+Observed Implementation: If `Sec-Fetch-Site` is `cross-site`, non-safe methods (POST/PUT/DELETE/etc.) return `403 Forbidden`. Safe methods (GET/HEAD/OPTIONS) are allowed through.
 Assessment: PASS
 Severity: LOW
-Notes: Concurrency safety verified under `-race`.
+Notes: Accurately reflects W3C Fetch Metadata specification guidelines for browser-initiated requests.

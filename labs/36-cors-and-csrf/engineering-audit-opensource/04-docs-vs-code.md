@@ -1,55 +1,29 @@
 # Docs vs Code Audit
 
-## 1. README vs Implementation
+## Comparisons
 
-### Claim 1: Architecture Structure
-- **README**: Mentions `internal/cors`, `internal/csrf`, `internal/bank`, `cmd/demo`, and `tests`.
-- **Code**: All five modules exist and correspond directly to the claimed packages and files.
-- **Assessment**: PASS
+### 1. Architecture Alignment
+- `README.md` claims:
+  - `internal/cors`: Spec-compliant CORS middleware (`OPTIONS` preflight, allowed origins, method/header safelists, credential checks).
+  - `internal/csrf`: Anti-CSRF mechanisms including HMAC-SHA256 signed session-bound tokens, Fetch Metadata (`Sec-Fetch-Site`), and API custom header middleware.
+  - `internal/bank`: Bank application service simulating cookie-authenticated balance inquiries, vulnerable transfer endpoints, and protected transfer endpoints.
+  - `cmd/demo`: Runnable CLI program showcasing attacks against vulnerable vs. protected configurations.
+  - `tests`: Integration test suite verifying cross-origin requests, preflight, race safety, and attack mitigation.
+- Code observation: All packages exist, contain the described modules, and implement the features as listed.
 
-### Claim 2: CORS Middleware Spec Compliance
-- **README**: Claims `OPTIONS` preflight, allowed origins, method/header safelists, and credential checks.
-- **Code**: `internal/cors/middleware.go` implements all of these behaviors including disallowing wildcard `*` with credentials.
-- **Assessment**: PASS
+### 2. Execution Claims
+- `README.md` claims:
+  - `go test -v ./...` runs tests. (PASS: verified)
+  - `go test -race ./...` runs tests with race detector. (PASS: verified)
+  - `go run ./cmd/demo` executes runnable demonstration. (PASS: verified)
 
-### Claim 3: Anti-CSRF Defense Mechanisms
-- **README**: Mentions HMAC-SHA256 signed session-bound tokens, Fetch Metadata (`Sec-Fetch-Site`), and API custom header middleware.
-- **Code**: All three mechanisms are fully implemented in `internal/csrf/`.
-- **Assessment**: PASS
+### 3. Demo Output Veracity
+- Demo output produced from `go run ./cmd/demo`:
+  - Step 1: Initial state ($1000 victim, $50 attacker).
+  - Step 2: Cross-origin attack on vulnerable endpoint succeeds with balance deduction ($600 victim, $450 attacker) despite missing CORS header.
+  - Step 3: Cross-origin attack on protected endpoint returns 403, balances unchanged.
+  - Step 4: Legitimate flow with signed CSRF token succeeds ($500 victim, $550 attacker).
+- Code verification: Output matches execution trace line-by-line; no mocked print statements masquerading as live handlers.
 
-### Claim 4: Test Commands
-- **README**: Lists `go test -v ./...` and `go test -race ./...`.
-- **Execution**: Both commands run and pass without errors.
-- **Assessment**: PASS
-
-### Claim 5: Demo Command
-- **README**: Lists `go run ./cmd/demo`.
-- **Execution**: Runs cleanly and completes with exit code 0.
-- **Assessment**: PASS
-
----
-
-## 2. Research Claims vs Implementation
-
-### Research Claim 1: CORS Does Not Prevent CSRF
-- **Research**: Concludes CORS is an origin-based access control policy enforced by browsers to protect responses, NOT a server-side firewall preventing request processing.
-- **Code**: Proved in `tests/integration_test.go:54` and in demo step 2. Request from `https://evil.com` executes state mutation on the server regardless of CORS configuration.
-- **Assessment**: PASS
-
-### Research Claim 2: Signed Session-Bound CSRF Token Defeats Simple Requests
-- **Research**: Advocates for session-bound cryptographically signed CSRF tokens (HMAC-SHA256).
-- **Code**: `internal/csrf/token.go` implements `TokenManager` which signs `sessionID:ts:nonce` with HMAC-SHA256 and validates with `subtle.ConstantTimeCompare`.
-- **Assessment**: PASS
-
-### Research Claim 3: Modern Defense-in-Depth (Sec-Fetch-Site & Custom Headers)
-- **Research**: Recommends `Sec-Fetch-Site` inspection and custom headers for API endpoints.
-- **Code**: `FetchMetadataMiddleware` and `RequireCustomHeaderMiddleware` implement these exact strategies.
-- **Assessment**: PASS
-
----
-
-## Identified Discrepancies
-
-- No `DOC_CODE_MISMATCH` detected.
-- No `TEST_CLAIM_MISMATCH` detected.
-- No `RESEARCH_IMPLEMENTATION_MISMATCH` detected.
+### 4. Mismatches
+- None detected. Implementation matches documentation cleanly.

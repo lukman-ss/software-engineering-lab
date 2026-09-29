@@ -1,42 +1,42 @@
 # Engineering Audit Plan
 
-Target Lab: labs/36-cors-and-csrf
+Target Lab: `labs/36-cors-and-csrf`
 Implementation Files:
-- internal/cors/middleware.go
-- internal/csrf/token.go
-- internal/csrf/middleware.go
-- internal/bank/app.go
-- cmd/demo/main.go
+- `internal/cors/middleware.go`
+- `internal/csrf/middleware.go`
+- `internal/csrf/token.go`
+- `internal/bank/app.go`
 
 Tests:
-- internal/cors/middleware_test.go
-- internal/csrf/token_test.go
-- internal/bank/app_test.go
-- tests/integration_test.go
+- `internal/cors/middleware_test.go`
+- `internal/csrf/token_test.go`
+- `internal/bank/app_test.go`
+- `tests/integration_test.go`
 
 Executable/Demo:
-- cmd/demo/main.go
+- `cmd/demo/main.go`
 
 Approved Research Inputs:
-- research/05-report.md
-- research-audit/07-verdict.md
-- engineering/01-design.md
-- engineering/02-implementation-notes.md
+- `research/05-report.md`
+- `research-audit/07-verdict.md`
 
 Main Claims To Verify:
-1. CORS does NOT protect against CSRF attacks; unauthorized cross-origin simple POST requests still execute on the server unless protected by anti-CSRF measures.
-2. CORS middleware strictly follows the W3C/Fetch standard (preflight handling, origin reflection when credentials are true, no wildcard with credentials).
-3. Anti-CSRF Token Manager uses HMAC-SHA256 session binding, constant-time comparison, and expiry checking.
-4. Fetch-Metadata (`Sec-Fetch-Site`) middleware blocks cross-site state-changing requests while allowing same-origin and safe methods.
-5. Custom header requirement blocks standard HTML form CSRF requests.
-6. Concurrency safety: Bank state mutations, account reads, and token operations are thread-safe under `-race`.
+1. CORS rejection of origin does not prevent backend execution of state-mutating simple requests (`POST` form).
+2. `Access-Control-Allow-Origin: *` cannot be combined with `Access-Control-Allow-Credentials: true` (Fetch spec compliance).
+3. Preflight `OPTIONS` behaves correctly for allowed vs disallowed origins.
+4. Anti-CSRF signed tokens (HMAC-SHA256, session-bound, timestamped, nonce) prevent forged submissions while allowing legitimate requests.
+5. Cross-session token reuse is blocked.
+6. Modern defenses (`Sec-Fetch-Site: cross-site` rejection and custom header checks) protect against unauthorized cross-site requests.
+7. Concurrency safety: Token generation and in-memory account access are race-free.
+8. Demo and integration tests produce real, verifiable output matching documentation.
 
 Commands To Run:
-- `go test -count=1 ./...`
-- `go test -count=1 -race ./...`
+- `go test -v ./...`
+- `go test -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Thread-safety / race conditions during concurrent account balance transfers or reads.
-- Discrepancies between demo execution output and documented examples.
-- Overclaiming of CORS security guarantees.
+- Race conditions in bank account updates or token validation.
+- Incomplete error propagation or missing validation branches in token parser.
+- Mismatch between README documentation and executable behavior.
+- Insecure HMAC verification (timing attacks).
