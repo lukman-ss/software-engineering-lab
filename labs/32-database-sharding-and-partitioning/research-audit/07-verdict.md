@@ -1,51 +1,48 @@
 # Audit Verdict
 
 Target Lab: `labs/32-database-sharding-and-partitioning`
-
-Audit Date: September 28, 2026
+Audit Date: 2026-09-29
 
 ## Summary
 
-Major Claims Reviewed: 8
+Major Claims Reviewed: 10
 Sources Reviewed: 9
 Unsupported Claims: 0
 Contradictions: 0
-Code Issues: 0 (Code audit not applicable per override)
-Test Failures: 0 (Code audit not applicable per override)
-Research Gaps: 3 (All LOW severity, non-blocking)
+Code Issues: N/A (PIPELINE OVERRIDE — research only)
+Test Failures: N/A (PIPELINE OVERRIDE — research only)
+Research Gaps: 3 (all LOW severity)
 
 ## Quality Gates
 
 Source Integrity:
-PASS
+PASS — All 9 sources are Tier 1 primary documents (official vendor documentation, IETF standard, peer-reviewed academic paper). URL metadata is consistent with stated publishers and publication context. ACM paper paywall limitation is properly disclosed.
 
 Claim Support:
-PASS
+PASS — All 10 major claims are supported by cited primary sources that directly back the stated assertions. Nuances (cross-shard isolation gaps, scatter-gather exceptions, mathematical equivalence of $1/n$ vs $n/m$) are correctly identified and explained.
 
 Internal Consistency:
-PASS
+PASS — No material contradictions found between research files, source material, or between sources. Identified "nuances" (JOIN capabilities, rebalancing triggers, consistent hashing formula variants) are accurately resolved by the research.
 
 Code Correctness:
-NOT_APPLICABLE
+NOT_APPLICABLE — Implementation code audit deferred per PIPELINE OVERRIDE.
 
 Tests:
-NOT_APPLICABLE
+NOT_APPLICABLE — Test execution deferred per PIPELINE OVERRIDE.
 
 Documentation Accuracy:
-PASS
+NOT_APPLICABLE — Code-doc mismatch audit deferred per PIPELINE OVERRIDE.
 
 ## Blocking Issues
-
 None.
 
 ## Non-Blocking Issues
-
-1. **Virtual Node Tuning Heuristics**: Quantitative rules of thumb for virtual node density (e.g. 100-300 vnodes per physical node) could be further elaborated in the implementation design phase.
-2. **Threshold Metrics for Sharding**: Transition metrics from logical partitioning to physical sharding depend heavily on engine and hardware constraints; appropriate caveat is noted in open questions.
+1. Karger et al. 1997 full text not directly verified (paywall); mathematical properties correctly restated via Wikipedia secondary source with proper disclosure.
+2. No empirical/quantitative benchmarks for latency thresholds or workload cutover points. Research acknowledges this in limitations.
+3. Modern NewSQL alternatives (CockroachDB, Spanner) excluded from scope; correctly documented as a research limitation.
 
 ## Required Revisions
-
-None prior to lab implementation design.
+None required for research publication readiness.
 
 ## Final Status
 

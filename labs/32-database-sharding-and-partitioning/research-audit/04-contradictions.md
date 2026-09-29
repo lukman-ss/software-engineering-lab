@@ -1,26 +1,24 @@
 # Contradiction Audit
 
-## Material Contradictions Analysis
-
-Across the reviewed research artifacts (`research/01-plan.md`, `research/02-sources.md`, `research/03-evidence.md`, `research/04-contradictions.md`, `research/05-report.md`, `research/06-open-questions.md`):
+## Evaluation of Research Internal Consistency & Source Alignment
 
 No material contradictions found.
 
-## Nuance and Scope Comparisons
+### Evaluation of Candidate Nuances
 
-### 1. Cross-Shard JOIN Execution
-- **Statement A**: Traditional single-instance relational JOIN operations are not natively executable across distinct physical shards without distributed coordinator query planning or application-level scatter-gather merge (`research/04-contradictions.md`, `research/05-report.md`).
-- **Statement B**: Distributed database middleware (e.g., Vitess Gen4 planner) and distributed SQL engines (e.g., CockroachDB) support distributed joins by orchestrating multi-shard execution trees with Two-Phase Commit protocols.
-- **Type**: SOURCE_CONFLICT / ARCHITECTURAL VARIATION
-- **Impact**: LOW. Both perspectives are valid in their respective architectural paradigms (middleware vs distributed SQL engine). The research explicitly distinguishes between naive application sharding and distributed query engines.
-- **Assessment**: PASS
+1. **Cross-shard JOIN Capability vs Claim of "No Native JOIN"**
+   - Statement A: High-level architectural descriptions frequently state "sharding breaks relational JOINs."
+   - Statement B: Vitess Gen4 planner and MongoDB 4.2+ support distributed JOINs / distributed multi-document transactions.
+   - Audit Result: Not a contradiction. The research explicitly resolves this: while distributed query engines *can* execute scatter-gather JOINs, they incur substantial network and latency penalties and lack full ACID isolation across shards. Co-location remains the recommended design pattern.
 
-### 2. Auto-increment vs Distributed Sequences
-- **Statement A**: Relational databases rely on local sequence generators / `AUTO_INCREMENT`, which collide across independent database instances.
-- **Statement B**: Vitess Sequences and Snowflake/UUIDv7 provide distributed uniqueness without central locks per row.
-- **Type**: INTERNAL
-- **Impact**: NONE. The distinction is consistent throughout all documents.
-- **Assessment**: PASS
+2. **Automatic vs Operator-Triggered Resharding**
+   - Statement A: MongoDB uses a background balancer for continuous chunk migration.
+   - Statement B: Vitess uses operator-triggered workflows (`vtctldclient Reshard`) with brief read-only cutover.
+   - Audit Result: Implementation variance, not a contradiction. Both adhere to the underlying distributed systems necessity of minimal downtime rebalancing.
 
-### Conclusion
-The research exhibits strong internal consistency across definitions, evidence, and report findings.
+3. **Consistent Hashing Formula: $1/n$ vs $n/m$**
+   - Statement A: Karger et al. 1997 demonstrates adding the $n$-th server redistributes on average $1/n$ of the keys.
+   - Statement B: Wikipedia states resizing remaps $n/m$ keys (where $n$ is keys and $m$ is slots).
+   - Audit Result: Mathematically identical under standard notation ($K/N$ items per node where $K$ is total keys and $N$ is total nodes). When adding 1 node to $N$ existing nodes, the fraction of relocated keys is $1/(N+1) \approx 1/N$.
+
+All evaluated sources and internal research documents maintain high consistency.

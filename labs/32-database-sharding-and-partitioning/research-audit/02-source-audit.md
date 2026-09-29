@@ -18,7 +18,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- Minor: PostgreSQL version in URL uses `current` alias rather than hardcoded `18`. PostgreSQL declarative table partitioning concepts apply from PostgreSQL 10 through current versions.
+- URL uses `/docs/current/` which resolves dynamically to the current active release. In late 2026, PG 18 is current.
 
 Assessment:
 PASS
@@ -43,7 +43,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative reference for multi-instance physical sharding architecture, mongos routing, chunk allocation, and balancer mechanics.
+- None. Standard official documentation for MongoDB multi-instance sharding.
 
 Assessment:
 PASS
@@ -68,7 +68,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Comprehensive documentation regarding shard key cardinality, frequency, monotonicity write-hotspots, and query isolation.
+- None. Direct primary source for cardinality, frequency, and monotonicity tradeoffs.
 
 Assessment:
 PASS
@@ -93,7 +93,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Direct reference for MySQL horizontal sharding, keyspace IDs, key ranges, and resharding workflows.
+- Specific release version (24.0) pinned. Valid primary documentation for MySQL horizontal sharding.
 
 Assessment:
 PASS
@@ -118,7 +118,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Authoritative architectural guide for Primary Vindexes, Secondary Lookup Vindexes, functional vs lookup mapping, and scatter-gather avoidance.
+- None. Primary source for primary vs secondary lookup vindexes.
 
 Assessment:
 PASS
@@ -143,7 +143,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Documents 2PC (Two-Phase Commit) implementation in Vitess, atomicity guarantees, and cross-shard transaction tradeoffs.
+- None. Covers TwoPC latency and isolation trade-offs.
 
 Assessment:
 PASS
@@ -168,7 +168,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Explains centralized sequence tables with block allocation to replace distributed auto_increment limitations.
+- None. Documents centralized table-backed sequence allocation for sharded MySQL.
 
 Assessment:
 PASS
@@ -193,7 +193,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Standards-track RFC defining UUIDv7 timestamp-ordered specifications and B-tree index locality benefits over random UUIDv4.
+- None. Official IETF standard for UUIDv7 time-ordered identifiers.
 
 Assessment:
 PASS
@@ -218,7 +218,7 @@ Supports Claimed Topic:
 YES
 
 Problems:
-- None. Foundational paper establishing $O(K/N)$ key remapping bound for consistent hashing vs modulo hashing.
+- Full text behind paywall/landing page; paper restatement was cross-checked via secondary reference (Wikipedia Consistent Hashing), which is explicitly recorded in research metadata.
 
 Assessment:
 PASS

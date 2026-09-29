@@ -1,9 +1,9 @@
 # Code Audit
 
 ## Status
-NOT APPLICABLE (Pipeline Override: Audit research only).
+NOT APPLICABLE / SKIPPED
 
-## Verification Notes
-- The current pipeline stage is limited strictly to technical research verification (`research/` artifacts).
-- Implementation and demonstration code have not been created yet or evaluated in this stage.
-- No code was executed or modified.
+## Explanation
+Pursuant to the explicit PIPELINE OVERRIDE instructions for this audit:
+- Audit research only (`labs/32-database-sharding-and-partitioning/research/`).
+- Implementation, source code, and tests were not audited in this research-only stage.

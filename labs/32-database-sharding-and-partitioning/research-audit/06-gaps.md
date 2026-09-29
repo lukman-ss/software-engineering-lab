@@ -1,29 +1,25 @@
 # Research Gap Analysis
 
 ## Gap 1
-Type: MISSING_CASE
-Severity: LOW
-Location: `research/05-report.md` (Finding 3), `research/06-open-questions.md`
-Problem: While consistent hashing ring properties are thoroughly explained, virtual node count tuning strategies (e.g., standard ratio of 100-300 vnodes per physical node to control variance) are mentioned only qualitatively.
-Required Revision: Detail specific virtual node configuration heuristics for balancing distribution variance against memory overhead.
-Can Be Approved Without Fix: YES
-
----
-
-## Gap 2
 Type: WEAK_SOURCE
 Severity: LOW
-Location: `research/06-open-questions.md`
-Problem: The transition threshold from vertical partitioning to distributed sharding is noted as lacking cross-vendor benchmark standards, which is accurately flagged in open questions.
-Required Revision: Document empirical sizing boundaries commonly used in practice (e.g., table size exceeding RAM / buffer pool working set, write IOPS saturation).
+Location: `research/02-sources.md:Source 9`, `research/03-evidence.md:Evidence 5`
+Problem: The foundational paper for consistent hashing (Karger et al. 1997) is gated behind ACM paywall; research relied on the abstract/landing page corroborated by Wikipedia's mathematical restatement.
+Required Revision: None required for architectural validity, as the mathematical properties ($1/n$ remap, virtual nodes) are standard and correctly stated.
 Can Be Approved Without Fix: YES
 
----
+## Gap 2
+Type: MISSING_CASE
+Severity: LOW
+Location: `research/06-open-questions.md:Unanswered Questions`
+Problem: Quantitative threshold for transitioning from single-instance table partitioning to multi-instance physical sharding is not strictly quantified with universal benchmarks across engines.
+Required Revision: None. This is inherently workload, hardware, and schema dependent; the research correctly flags this in open questions.
+Can Be Approved Without Fix: YES
 
 ## Gap 3
 Type: SCOPE_ERROR
 Severity: LOW
-Location: `research/05-report.md` (Finding 4)
-Problem: Cross-shard distributed transaction isolation degradation (e.g., read phenomena during 2PC phase transitions) is noted conceptually via Vitess TwoPC but not detailed across distributed concurrency control protocols (e.g., Percolator, Spanner TrueTime, MVCC).
-Required Revision: Acknowledge distributed isolation levels in the subsequent lab design.
+Location: `research/05-report.md:Limitations`
+Problem: Modern distributed NewSQL systems (CockroachDB, Google Cloud Spanner, YugabyteDB) that manage range-based sharding and consensus under the hood are excluded from deep comparative analysis.
+Required Revision: None. The research topic is explicitly scoped to application/proxy-level sharding and partitioning fundamentals (PostgreSQL, MongoDB, Vitess).
 Can Be Approved Without Fix: YES
