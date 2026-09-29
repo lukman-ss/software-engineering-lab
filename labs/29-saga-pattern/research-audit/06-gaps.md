@@ -1,155 +1,87 @@
 # Research Gap Analysis: Saga Pattern Research
 
-Target Lab: `labs/29-saga-pattern`
-Date: 2026-09-29
-
----
-
 ## Gap 1
 
-Type: WEAK_SOURCE
+Type:
+WEAK_SOURCE
 
-Severity: MEDIUM
+Severity:
+MEDIUM
 
 Location:
-`research/05-report.md` → Finding 4; `research/03-evidence.md` → Evidence 7
+`research/05-report.md:74-75`, `research/03-evidence.md:121-126`, `research/06-open-questions.md:19`
 
 Problem:
-The 3-tier transaction taxonomy (Compensable, Pivot, Retryable) is sourced exclusively from Microsoft Azure Architecture Center. Microservices.io (Richardson) does not enumerate this taxonomy on its public page. Richardson's book (*Microservices Patterns* Chapter 4, Manning, paywalled) contains the authoritative description but was not directly opened as a source. The Garcia-Molina 1987 paper does not introduce this language (these are modern framing terms).
+The classification of saga steps into "compensable, pivot, and retryable transactions" relies on a single public source (Microsoft Azure Architecture Center). It is not cross-verified with other Tier 1 primary literature or books (Richardson Chapter 4 is paywalled/unaccessed).
 
 Required Revision:
-Either (a) acknowledge single-source limitation with stronger wording, or (b) obtain a cross-reference from a second non-Microsoft authoritative source (e.g., Richardson book page or Temporal documentation). The research does correctly self-report MEDIUM confidence.
+Acknowledge that this 3-type step taxonomy originates primarily from Microsoft's framework specification, though logically consistent with general saga theory.
 
-Can Be Approved Without Fix: YES
-The limitation is transparently acknowledged in both `03-evidence.md` (Evidence 7) and `06-open-questions.md`.
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 2
 
-Type: WEAK_SOURCE
+Type:
+WEAK_SOURCE
 
-Severity: MEDIUM
+Severity:
+MEDIUM
 
 Location:
-`research/05-report.md` → Finding 8; `research/03-evidence.md` → Evidence 12
+`research/05-report.md:131-142`, `research/03-evidence.md:203-215`
 
 Problem:
-The enumeration of 6 isolation countermeasures (semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency) is sourced exclusively from Microsoft Azure Architecture Center. Microservices.io refers readers to *Microservices Patterns* Chapter 4/Section 4.3 (paywalled). The 6-item list as presented represents Microsoft's formulation, which may reflect Richardson's broader taxonomy but is not independently cross-verified from a second readable source.
+The list of 6 isolation countermeasures (semantic lock, commutative updates, pessimistic view, reread values, version files, value-based concurrency) relies on Microsoft Azure Architecture Center alone for full enumeration.
 
 Required Revision:
-Label the countermeasure list as "Microsoft's taxonomy per Azure Architecture Center" rather than a universally agreed-upon canonical list. As presented, readers may interpret the list as a definitive industry standard.
+State in final content that while isolation countermeasures are standard, this specific 6-item taxonomy is from Microsoft's documentation.
 
-Can Be Approved Without Fix: YES
-Research reports MEDIUM confidence on this item. The underlying existence of countermeasures is corroborated by Richardson's public page.
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 3
 
-Type: UNVERIFIED_CLAIM
+Type:
+MISSING_CASE
 
-Severity: LOW
+Severity:
+LOW
 
 Location:
-`research/03-evidence.md` → Evidence 1; `research/06-open-questions.md` → Open Question 3
+`research/06-open-questions.md:5`
 
 Problem:
-The verbatim definition from Garcia-Molina & Salem (1987) — commonly cited as "A saga is a long-lived transaction that can be written as a sequence of transactions that can be interleaved with other transactions" — was not extracted directly from the PDF due to LZW/scanned-image encoding. Verification relies on citation chains.
+No standardized protocol is identified for recovery when a compensating transaction itself fails after all retries are exhausted. Sources universally recommend manual intervention, DLQ, or operational alerts, but no automated protocol exists.
 
 Required Revision:
-None strictly required. The research transparently documents this limitation in `06-open-questions.md` and acknowledges that verbatim extraction was not performed.
+Explicitly document in engineering/content phase that compensation failure requires fallback to dead-letter queues and human intervention.
 
-Can Be Approved Without Fix: YES
-Attribution is academically well-established. DOI 10.1145/62224.62226 verified.
+Can Be Approved Without Fix:
+YES
 
 ---
 
 ## Gap 4
 
-Type: MISSING_CASE
+Type:
+UNVERIFIED_CLAIM
 
-Severity: LOW
-
-Location:
-`research/05-report.md` → Conclusion; `research/06-open-questions.md` → Open Question 1
-
-Problem:
-No standard compensating-for-compensation recovery protocol is defined or cited. When a compensating transaction itself fails (e.g., Refund Payment fails during saga rollback), all sources agree recovery depends on retries, dead-letter queues, and human-in-the-loop. No canonical specification covers this scenario.
-
-Required Revision:
-This limitation is correctly noted in `06-open-questions.md`. Explicit acknowledgment in the lab README or conclusion section that compensation failure recovery is non-standardized would strengthen the research.
-
-Can Be Approved Without Fix: YES
-
----
-
-## Gap 5
-
-Type: MISSING_SOURCE
-
-Severity: LOW
+Severity:
+LOW
 
 Location:
-`research/01-plan.md` → Risk / Unknowns; `research/06-open-questions.md` → Open Question 5
+`research/06-open-questions.md:9-10`
 
 Problem:
-Camunda, Axon, Seata (TCC pattern), and Spring State Machine were not opened as primary sources. The research plan acknowledged this scope limitation.
+The verbatim original quotation of Garcia-Molina & Salem (1987) was not extracted directly from the scanned PDF image due to LZW compression issues; historical claim is verified via citation chain (ACM DOI, Cornell link, Temporal footnote).
 
 Required Revision:
-If the lab will cover TCC vs Saga or tooling beyond AWS Step Functions / Temporal, primary sources for those tools should be added.
+None needed for core technical validity. Historical claim is sufficiently backed by ACM library indexing and secondary references.
 
-Can Be Approved Without Fix: YES
-The lab focus is patterns and concepts, not an exhaustive tooling survey.
-
----
-
-## Gap 6
-
-Type: MISSING_CASE
-
-Severity: LOW
-
-Location:
-`research/05-report.md` → Limitations
-
-Problem:
-No quantitative benchmark comparing 2PC latency vs Saga latency was found or cited. The claim "2PC too slow or not feasible" rests on qualitative engineering consensus across authoritative sources (Richardson, Microsoft, AWS). This is appropriate for a conceptual education lab but should not be presented as quantitatively benchmarked.
-
-Required Revision:
-None strictly required. Research correctly reports this in `05-report.md` Limitations: "Tidak ada benchmark kuantitatif latency/throughput saga vs 2PC yang diverifikasi."
-
-Can Be Approved Without Fix: YES
-
----
-
-## Gap 7
-
-Type: IMPLEMENTATION_GAP (Research-level)
-
-Severity: LOW
-
-Location:
-`research/05-report.md` → Conclusion
-
-Problem:
-The Microservices.io Idempotent Consumer URL (`/patterns/data/idempotent-consumer.html`) is listed as a source in `02-sources.md` (Source 8) and cited in `03-evidence.md` (Evidence 10) but was not directly opened and fetched as a primary inspection step in this audit session. The core idempotency claim is corroborated by Debezium and Microsoft, but the specific `PROCESSED_MESSAGES` table + `(subscriberId, messageID)` PK mechanism attributed to that URL cannot be independently page-confirmed from the current audit.
-
-Required Revision:
-Low priority. Mechanism is consistent with the architectural pattern described in the Debezium blog and Microsoft docs.
-
-Can Be Approved Without Fix: YES
-
----
-
-## Summary
-
-| Gap | Type | Severity | Blocks Approval |
-|-----|------|----------|-----------------|
-| 1 — Pivot/Retryable single source | WEAK_SOURCE | MEDIUM | NO |
-| 2 — 6 countermeasures single source | WEAK_SOURCE | MEDIUM | NO |
-| 3 — 1987 PDF verbatim unextracted | UNVERIFIED_CLAIM | LOW | NO |
-| 4 — Compensation failure recovery undefined | MISSING_CASE | LOW | NO |
-| 5 — TCC/Camunda/Axon not sourced | MISSING_SOURCE | LOW | NO |
-| 6 — No quantitative 2PC benchmark | MISSING_CASE | LOW | NO |
-| 7 — Idempotent Consumer URL not directly inspected | IMPLEMENTATION_GAP | LOW | NO |
+Can Be Approved Without Fix:
+YES

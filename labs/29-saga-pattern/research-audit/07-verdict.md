@@ -1,41 +1,27 @@
 # Audit Verdict
 
-Target Lab: `labs/29-saga-pattern`
-Audit Scope: Research deliverables (`research/`) per Pipeline Override
+Target Lab: labs/29-saga-pattern (Research Phase)
+
 Audit Date: 2026-09-29
 
 ## Summary
 
-Major Claims Reviewed: 12
-Sources Reviewed: 9 (Tier 1 & Tier 2)
+Major Claims Reviewed: 11
+Sources Reviewed: 9
 Unsupported Claims: 0
-Contradictions: 5 identified, 5 analyzed and resolved (0 unresolved material contradictions)
-Code Issues: NOT_APPLICABLE (Pipeline override: research audit only)
-Test Failures: NOT_APPLICABLE (Pipeline override: research audit only)
-Research Gaps: 7 identified (0 blocking)
+Contradictions: 0 (material)
+Code Issues: NOT_APPLICABLE (Pipeline override: research only)
+Test Failures: NOT_APPLICABLE (Pipeline override: research only)
+Research Gaps: 4 (2 Medium, 2 Low)
 
 ## Quality Gates
 
 Source Integrity: PASS
-- All 9 sources exist, are reachable, correctly identified, and accurately tiered.
-- PDF extraction limitation for 1987 paper transparently acknowledged.
-
 Claim Support: PASS
-- 10 of 12 claims supported by multiple Tier 1/2 primary sources.
-- 2 claims (Compensable/Pivot/Retryable taxonomy; 6 isolation countermeasures) supported by single primary source (Microsoft Azure Architecture Center) and correctly flagged as MEDIUM confidence in research deliverables.
-- Zero fabricated claims detected.
-
 Internal Consistency: PASS
-- Disagreements between sources (Choreography default vs Orchestration default; Exactly-once workflow vs At-least-once participant; Dual-write historical scope) accurately identified, analyzed, and reconciled.
-
 Code Correctness: NOT_APPLICABLE
-- Pipeline override: implementation audit skipped in this research stage.
-
 Tests: NOT_APPLICABLE
-- Pipeline override: test execution skipped in this research stage.
-
 Documentation Accuracy: PASS
-- Research findings cleanly map to research plan objectives and lab problem statement.
 
 ## Blocking Issues
 
@@ -43,15 +29,15 @@ None.
 
 ## Non-Blocking Issues
 
-1. **Single-Source Taxonomy (Pivot/Retryable):** The compensable/pivot/retryable taxonomy is sourced solely from Microsoft Azure Architecture Center. Explicitly label this as Microsoft's model in final lab materials.
-2. **Single-Source Isolation Countermeasures:** The 6-item countermeasure list (semantic lock, commutative updates, pessimistic view, reread values, version files, risk-based concurrency) is detailed only on Microsoft's Azure Architecture Center page. Clarify that this is Microsoft's specific formulation.
-3. **1987 PDF Verbatim Quote:** Historical attribution of Garcia-Molina & Salem (1987) is verified via DOI (10.1145/62224.62226) and citation chains, but direct verbatim string parsing from the scanned PDF was not performed.
-4. **Compensation Failure Recovery:** No canonical specification exists for "compensation of a failed compensation transaction." Acknowledge in lab documentation that failure at this stage relies on retries, dead-lettering, and operator intervention.
+1. The 3-way transaction taxonomy (compensable, pivot, retryable) rests on a single source (Microsoft Azure Architecture Center).
+2. The specific 6-item list of isolation countermeasures rests on Microsoft Azure Architecture Center without external cross-enumeration.
+3. Garcia-Molina & Salem (1987) text was verified via citation chain / ACM references rather than direct OCR/text parsing of the scanned PDF.
+4. No automated protocol exists for failure of compensating transactions after retries; operational intervention is required.
 
 ## Required Revisions
 
-1. In future lab documentation, explicitly note that the 3-tier transaction taxonomy (compensable/pivot/retryable) and 6 isolation countermeasures represent Microsoft's Azure Architecture taxonomy.
-2. Explicitly specify that participant services in a saga MUST be idempotent regardless of orchestrator "exactly-once" claims (due to network retries).
+1. In the downstream content/engineering phase, clarify that the pivot/retryable step taxonomy and the 6 countermeasures reflect Microsoft's formalization of saga patterns.
+2. In the lab implementation and documentation, ensure that compensation failure is explicitly handled via retry and logged for manual intervention rather than assumed impossible.
 
 ## Final Status
 

@@ -1,89 +1,86 @@
-# Contradiction Audit: Saga Pattern Research
+# Contradictions Audit: Saga Pattern Research
 
-Target Lab: `labs/29-saga-pattern`
-Date: 2026-09-29
-
----
-
-## Contradiction 1: Choreography vs Orchestration Complexity Threshold
+## Contradiction 1
 
 Statement A:
-Temporal (2023-07-13) states: "Orchestration is often easier to build when one uses it from the start." Choreography appears simple initially, but becomes hard quickly.
+"Choreography is 'easier to implement, at least initially' but 'orchestration is often easier to build when one uses it from the start.'" — Temporal Blog (2023-07-13)
 
 Location:
-`research/04-contradictions.md` → Contradiction 1; `research/02-sources.md` (Source 6)
+`research/04-contradictions.md:6` and `research/03-evidence.md:61-70`
 
 Statement B:
-Microsoft Azure Architecture Center & lab specification frame Choreography as "Good for simple workflows that have few services and don't need a coordination logic."
+"Good for simple workflows that have few services and don't need a coordination logic." (Choreography benefit) — Microsoft Azure Architecture Center
 
 Location:
-`research/04-contradictions.md` → Contradiction 1; `research/02-sources.md` (Source 2)
+`research/04-contradictions.md:8-9`
 
 Type:
-SOURCE_CONFLICT
+INTERNAL
 
-Impact: LOW
-Both sources agree that Choreography degrades as complexity grows. The disagreement is about whether orchestration should be the default from day one (Temporal's perspective, influenced by their product which is a durable execution engine) or whether choreography is acceptable for 2-3 service linear workflows (Microsoft/standard industry view).
+Impact:
+LOW — the research agent correctly assessed this as a difference in framing, not a factual conflict. Both sources agree choreography suits simpler workflows; only emphasis differs.
 
 Assessment:
-The research correctly identifies this as a perspective difference rather than a factual error, noting that "No quantitative threshold (e.g. number of services or branching factor) exists; community consensus is qualitative." This is an accurate assessment.
+RESOLVED by research agent. Acceptable as documented.
 
 ---
 
-## Contradiction 2: "Exactly-Once" Semantics vs Mandatory Participant Idempotency
+## Contradiction 2
 
 Statement A:
-AWS Step Functions Standard Workflows claim "exactly-once workflow execution."
+Microsoft Azure Architecture Center lists 6 specific isolation countermeasures: semantic lock, commutative updates, pessimistic view, reread values, version files, value-based concurrency.
 
 Location:
-`research/04-contradictions.md` → Contradiction 5; `research/02-sources.md` (Source 9)
+`research/04-contradictions.md:23-24`, `research/03-evidence.md:203-215`
 
 Statement B:
-Debezium outbox pattern and Temporal documentation explicitly state that participant services receive "at-least-once" message delivery and MUST be idempotent.
+Microservices.io references "countermeasures" in Chapter 4 of the Manning book without enumerating them on the public page.
 
 Location:
-`research/04-contradictions.md` → Contradiction 5; `research/02-sources.md` (Sources 5, 7)
+`research/04-contradictions.md:27`
 
 Type:
-INTERNAL / SOURCE_CONFLICT
+SOURCE_CONFLICT (minor, by incompleteness)
 
-Impact: MEDIUM
-If a developer relies on "exactly-once workflow execution" without implementing idempotency at the participant level, duplicate payments or inventory reservations can occur under network retry conditions.
+Impact:
+MEDIUM — the 6-countermeasure taxonomy rests on a single public source (Microsoft). Richardson's complete list is paywalled. Research agent correctly reported MEDIUM confidence for this claim.
 
 Assessment:
-The research correctly resolves this layered distinction: the orchestrator workflow state machine guarantees single execution of the workflow *definition*, but individual network calls/Lambda invocations to participant services can still experience retries, making participant idempotency non-negotiable. The research's analysis is technically accurate.
+NOT FULLY RESOLVED. Single-source claim for the specific 6-item enumeration. Requires acknowledgment in gaps.
 
 ---
 
-## Contradiction 3: Dual-Write Problem Attribution to Garcia-Molina (1987)
+## Contradiction 3
 
 Statement A:
-The research plan (`01-plan.md` Objective 5) lists the Dual-Write Problem as a core saga research topic alongside the 1987 paper.
+"Standard workflows have exactly-once execution." — AWS Step Functions documentation
 
 Location:
-`research/01-plan.md` → Objective 5
+`research/04-contradictions.md:70-71`, `research/03-evidence.md:221-227`
 
 Statement B:
-Garcia-Molina & Salem (1987) addressed long-lived transactions within a *single* database system. The Dual-Write Problem (updating a DB + sending a Kafka event without distributed transactions) is a modern event-driven microservices concern.
+Temporal claims "exactly-once" at workflow level via deterministic replay, but activities (participants) are at-least-once.
 
 Location:
-`research/04-contradictions.md` → Contradiction 4
+`research/04-contradictions.md:74`
+
+Statement C:
+Debezium pipeline is at-least-once; consumers must detect duplicates.
+
+Location:
+`research/04-contradictions.md:77`
 
 Type:
-HISTORICAL_CONTEXT_DISTINCTION
+SOURCE_CONFLICT (layered terminology)
 
-Impact: LOW
-Dual-write is a modern prerequisite for implementing reliable saga messaging, not a feature of the 1987 paper.
+Impact:
+MEDIUM — conflating workflow-engine exactly-once with end-to-end participant delivery could mislead lab readers into thinking no idempotency is needed when orchestrated by Step Functions Standard. Research agent correctly resolved this as a layered distinction, not a fundamental contradiction.
 
 Assessment:
-The research explicitly clarifies this in `04-contradictions.md` (Contradiction 4): "Dual-write is a modern problem that sagas inherited when adapted to event-driven microservices... Terminology difference, not factual contradiction." This demonstrates clear historical discernment.
+RESOLVED adequately. Required note in final publication.
 
 ---
 
-## Summary
+## Note
 
-- Total Contradictions Identified by Research: 5
-- Total Contradictions Verified by Audit: 5
-- Material Contradictions Unhandled by Research: 0
-- Silent Fixes or Concealed Contradictions: None found.
-- Assessment: Internal consistency is PASS with HIGH technical accuracy.
+No material contradictions in core claims. All potential conflicts identified in `04-contradictions.md` are correctly classified as terminological or emphasis differences, not factual disagreements. Research agent exercised appropriate critical reasoning.
