@@ -18,19 +18,21 @@ Approved Research Inputs:
 - research-revision/03-revision-result.md
 
 Main Claims To Verify:
-1. Cache-Aside, Write-Through, and Write-Behind write/invalidation/flush strategies operate as designed.
-2. SingleFlight coalesces N concurrent cache miss queries into exactly 1 database query.
-3. XFetch implements probabilistic early expiration using formula `-Δ · β · ln(U) > TTL_remaining`.
-4. Stale-While-Revalidate (SWR) serves stale cached values immediately while asynchronously revalidating in the background.
-5. TTL Jitter adds random positive offsets `[0, maxJitter)` to base TTLs.
-6. Code compiles, tests pass, race detector passes, demo executes cleanly, and README matches implementation.
+1. Cache-Aside pattern: cache miss queries DB and populates cache; update invalidates cache.
+2. Write-Through pattern: update synchronously writes DB and updates cache.
+3. Write-Behind pattern: update writes cache immediately and queues background DB write; queue overflow drops writes when channel buffer is exceeded.
+4. SingleFlight stampede mitigation: coalesces concurrent requests on cache miss to 1 DB query using `golang.org/x/sync/singleflight`.
+5. XFetch probabilistic early expiration: triggers proactive recomputation using `-Δ · β · ln(U) > TTL_remaining`.
+6. Stale-While-Revalidate (SWR): serves stale data immediately within stale window while asynchronously triggering deduplicated background revalidation.
+7. TTL Jitter: adds randomized offset `[0, maxJitter)` to base TTL to prevent synchronized key expiration.
 
 Commands To Run:
-- `go test -v ./...`
+- `go test ./...`
 - `go test -race ./...`
 - `go run ./cmd/demo`
 
 Primary Risks:
-- Race conditions during concurrent cache reads/writes, singleflight coalescing, or background SWR / Write-Behind goroutines.
-- Unhandled errors during DB read/write failures.
-- Discrepancy between README claims and underlying code logic.
+- Data race conditions in concurrent cache or background goroutines.
+- Incorrect mathematical formulation in probabilistic calculations (e.g. XFetch formula sign errors).
+- Flaky tests dependent on real wall-clock sleeps (`time.Sleep`).
+- Incomplete error propagation or missing failure path handling.

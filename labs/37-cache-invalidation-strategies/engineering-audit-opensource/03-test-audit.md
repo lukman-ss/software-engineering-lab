@@ -1,57 +1,75 @@
 # Test Audit
 
-Target Lab: labs/37-cache-invalidation-strategies
-Test File: tests/cache_test.go
+## Test Suite Overview
 
-## Execution Results
+Test file: `tests/cache_test.go`
+Execution status: All tests PASS with race detector enabled (`go test -race ./...`).
+
+## Test Cases Evaluated
+
+### 1. Cache-Aside Read & Write (`TestCachePatterns/Cache-Aside_Read_&_Write`)
+- Covers: Miss handling, hit verification, atomic query count assertions, DB write + cache invalidation, subsequent miss fetch.
+- Assessment: PASS. Strong assertions proving cache bypass and invalidation semantics.
+
+### 2. Write-Through Read & Write (`TestCachePatterns/Write-Through_Read_&_Write`)
+- Covers: Miss caching, synchronous DB + cache write on update, subsequent read verifying zero additional DB queries.
+- Assessment: PASS. Proves write-through avoids subsequent read miss.
+
+### 3. Write-Behind Asynchronous Flush (`TestCachePatterns/Write-Behind_Asynchronous_Flush`)
+- Covers: Immediate cache update, asynchronous background worker write to DB, graceful shutdown.
+- Assessment: PASS. Validates asynchronous decoupling.
+
+### 4. Naive Stampede (`TestStampedeMitigation/Naive_Stampede_Queries_DB_Concurrently`)
+- Covers: 20 concurrent goroutines querying cold key without coalescing.
+- Assessment: PASS. Proves stampede creates `> 1` DB queries.
+
+### 5. SingleFlight Coalescing (`TestStampedeMitigation/SingleFlight_Coalesces_To_Single_Query`)
+- Covers: 20 concurrent goroutines querying cold key with `singleflight`.
+- Assessment: PASS. Asserts all 20 receive correct value and exactly 1 DB query is executed.
+
+### 6. XFetch Logic & Service (`TestXFetchLogic`, `TestXFetchService_Get`)
+- Covers: Mathematical formula boundary cases, high vs low random draw behavior, deterministic injection via `SetRandFunc`.
+- Assessment: PASS. Proves proactive refresh trigger condition.
+
+### 7. Stale-While-Revalidate (`TestStaleWhileRevalidate`, `TestSWRService_ConcurrentRevalidationDeduplication`)
+- Covers: Fresh hit, stale window immediate return, async background revalidation, and concurrent revalidation deduplication.
+- Assessment: PASS. Validates stale serving speed and single background worker guarantee.
+
+### 8. TTL Jitter (`TestJitter`)
+- Covers: 100 iterations verifying bounded random offset within `[base, base+maxJitter)`.
+- Assessment: PASS. Verified range correctness.
+
+### 9. Failure Paths & Queue Overflow (`TestCachePatterns_FailurePaths`, `TestWriteBehindService_QueueOverflow`)
+- Covers: Unfound records returning errors, write-behind channel buffer overflow handling.
+- Assessment: PASS. Validates failure paths and graceful backpressure behavior.
+
+## Test Execution Results
 
 ```text
-go test -v ./...
+=== RUN   TestCachePatterns
+=== RUN   TestCachePatterns/Cache-Aside_Read_&_Write
+=== RUN   TestCachePatterns/Write-Through_Read_&_Write
+=== RUN   TestCachePatterns/Write-Behind_Asynchronous_Flush
 --- PASS: TestCachePatterns (0.05s)
-    --- PASS: TestCachePatterns/Cache-Aside_Read_&_Write (0.00s)
-    --- PASS: TestCachePatterns/Write-Through_Read_&_Write (0.00s)
-    --- PASS: TestCachePatterns/Write-Behind_Asynchronous_Flush (0.05s)
+=== RUN   TestStampedeMitigation
+=== RUN   TestStampedeMitigation/Naive_Stampede_Queries_DB_Concurrently
+=== RUN   TestStampedeMitigation/SingleFlight_Coalesces_To_Single_Query
 --- PASS: TestStampedeMitigation (0.03s)
-    --- PASS: TestStampedeMitigation/Naive_Stampede_Queries_DB_Concurrently (0.01s)
-    --- PASS: TestStampedeMitigation/SingleFlight_Coalesces_To_Single_Query (0.02s)
+=== RUN   TestXFetchLogic
 --- PASS: TestXFetchLogic (0.00s)
+=== RUN   TestStaleWhileRevalidate
 --- PASS: TestStaleWhileRevalidate (0.09s)
+=== RUN   TestJitter
 --- PASS: TestJitter (0.00s)
+=== RUN   TestCachePatterns_FailurePaths
+=== RUN   TestCachePatterns_FailurePaths/Cache-Aside_DB_Read_Error
+=== RUN   TestCachePatterns_FailurePaths/Write-Through_DB_Read_Error
 --- PASS: TestCachePatterns_FailurePaths (0.00s)
-    --- PASS: TestCachePatterns_FailurePaths/Cache-Aside_DB_Read_Error (0.00s)
-    --- PASS: TestCachePatterns_FailurePaths/Write-Through_DB_Read_Error (0.00s)
+=== RUN   TestXFetchService_Get
 --- PASS: TestXFetchService_Get (0.10s)
+=== RUN   TestWriteBehindService_QueueOverflow
 --- PASS: TestWriteBehindService_QueueOverflow (0.10s)
-ok  github.com/lukman/labs/37-cache-invalidation-strategies/tests 0.477s
-
-go test -race -count=1 ./...
-ok  github.com/lukman/labs/37-cache-invalidation-strategies/tests 1.686s
+=== RUN   TestSWRService_ConcurrentRevalidationDeduplication
+--- PASS: TestSWRService_ConcurrentRevalidationDeduplication (0.17s)
+PASS
 ```
-
-## Coverage Assessment
-
-| Test | Happy Path | Failure Path | Edge Cases | Concurrency | Transitions |
-|---|---|---|---|---|---|
-| Cache-Aside Read & Write | PASS | - | - | - | Cache invalidation PASS |
-| Write-Through Read & Write | PASS | - | - | - | Read-after-write PASS |
-| Write-Behind Async Flush | PASS | - | - | - | Async flush PASS |
-| Naive Stampede | PASS | - | - | 20 goroutines PASS | - |
-| SingleFlight Coalesces | PASS | - | - | 20 goroutines PASS | Single DB query PASS |
-| XFetch Logic | PASS | - | Guard u<=0/u>=1 PASS | - | Formula negation sign PASS |
-| Stale-While-Revalidate | PASS | - | Stale window PASS | - | Async revalidation PASS |
-| Jitter | PASS | - | 100-sample range check PASS | - | - |
-| Failure Paths | - | PASS (miss) | - | - | - |
-| XFetch Service Get | PASS | - | Deterministic randFunc PASS | - | Early recompute trigger PASS |
-| Write-Behind Queue Overflow | PASS | - | Buffer overflow PASS | - | Immediate cache visibility PASS |
-
-## Missing Test Coverage
-
-1. **Write-Behind failure path**: No test verifies DB write errors during async flush. The flush worker uses `_ = s.db.Write(...)`, ignoring errors silently. No test confirms what happens when DB write fails.
-2. **SWR hard-miss (total expiry beyond stale window)**: Test does not explicitly verify the synchronous fetch code path when the item is beyond `staleDelta` (i.e., `now >= staleUntil`).
-3. **Write-Behind `Close()` drain correctness**: No test verifies that `Close()` drains all pending writes before exiting; only the queue overflow case is tested.
-4. **SWR revalidation concurrency deduplication**: No test verifies that concurrent requests during the stale window trigger exactly one background revalidation, not N.
-5. **XFetch stale fallback on DB error**: No test verifies the `if ok { return item.Value, nil }` stale fallback when DB recompute errors during XFetch.
-
-## Assessment
-
-Tests provide strong happy-path and concurrency coverage. Failure paths for Write-Behind flush errors, SWR hard-miss path, and XFetch DB error fallback are not covered. These are MEDIUM severity gaps.

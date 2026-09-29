@@ -1,70 +1,82 @@
 # Code Audit
 
-Target Lab: labs/37-cache-invalidation-strategies
+## Finding 1
 
-## Finding 1: In-Memory Cache Thread Safety and TTL Handling
-
-Location: `internal/cache/store.go:20-76`
-Claimed Behavior: Thread-safe cache operations supporting TTL checks, raw extraction for SWR/XFetch, and key deletions.
-Observed Implementation: `MemoryCache` protects `items` map using `sync.RWMutex`. `Get` uses `RLock`, correctly checks `time.Now().After(item.ExpiresAt)`. `GetRaw` uses `RLock` to retrieve unexpired or expired item metadata without filtering by TTL. `Set` and `Delete` use write `Lock`.
+Location: internal/cache/store.go:20-76
+Claimed Behavior: Thread-safe in-memory cache supporting TTL, raw inspection, and delta compute time tracking.
+Observed Implementation: `MemoryCache` encapsulates `map[string]Item` protected by `sync.RWMutex`. `Get` checks expiration against `time.Now()`. `GetRaw` returns item unconditionally for inspection. `Set` and `Delete` acquire write lock.
 Assessment: PASS
 Severity: LOW
-Notes: Clean thread-safety design using standard library primitives.
+Notes: Clean implementation matching all requirements.
 
-## Finding 2: TTL Jitter Range and Uniform Randomness
+## Finding 2
 
-Location: `internal/cache/store.go:78-86`
-Claimed Behavior: Prevents synchronized key expiration by adding a non-negative random jitter up to `maxJitter`.
-Observed Implementation: `TTLWithJitter` checks `if maxJitter <= 0` and returns `base`. For positive jitter, computes `rand.Int63n(int64(maxJitter))` and returns `base + jitter`.
+Location: internal/cache/repo.go:13-81
+Claimed Behavior: Thread-safe mock database supporting query/write latency simulation, context cancellation, and atomic operation counters.
+Observed Implementation: `MockDB` uses `sync.RWMutex` for data map, `atomic.Int64` for `queryCount`/`writeCount`, and checks `ctx.Done()` during delay sleeps.
 Assessment: PASS
 Severity: LOW
-Notes: Correctly guarded against non-positive jitter values. Annotated with `ponytail:` comment noting stdlib `math/rand` selection.
+Notes: Correct synchronization and context propagation.
 
-## Finding 3: Cache Invalidation Patterns (Aside, Write-Through, Write-Behind)
+## Finding 3
 
-Location: `internal/cache/patterns.go:10-166`
-Claimed Behavior:
-- Cache-Aside: Reads check cache -> fallback to DB -> populate cache. Updates write DB -> delete key from cache.
-- Write-Through: Updates write DB -> synchronously update cache.
-- Write-Behind: Updates write cache -> enqueue to background buffer -> flush to DB asynchronously. Graceful shutdown drains queue.
-Observed Implementation:
-- `CacheAsideService.Get` and `Update` match pattern precisely; errors in DB write halt before cache deletion.
-- `WriteThroughService.Update` writes to DB first; returns error immediately if DB write fails, preserving DB integrity before cache update.
-- `WriteBehindService` initializes a buffered channel worker with `sync.WaitGroup` and `quit` channel. Graceful `Close()` signals quit and drains queued writes. Buffer overflow drops write via non-blocking select, appropriately documented.
+Location: internal/cache/patterns.go:10-48
+Claimed Behavior: Cache-Aside reads from cache, loads DB on miss and populates cache; updates write DB first then invalidate cache.
+Observed Implementation: Implemented in `CacheAsideService.Get` and `Update`. Errors from DB query/write are properly propagated.
 Assessment: PASS
 Severity: LOW
-Notes: Behavior conforms to classic write lifecycle models.
+Notes: Matches canonical Cache-Aside pattern.
 
-## Finding 4: SingleFlight Stampede Coalescing
+## Finding 4
 
-Location: `internal/cache/stampede.go:43-85`
-Claimed Behavior: Coalesces concurrent read misses on a hot key to a single DB query using `golang.org/x/sync/singleflight`.
-Observed Implementation: `SingleFlightService.Get` first checks `cache.Get(key)`. On miss, delegates to `s.flight.Do(key, func() ...)` with double-check inside closure. Query results are populated back into cache and returned to all waiting callers.
+Location: internal/cache/patterns.go:50-89
+Claimed Behavior: Write-Through reads like Cache-Aside, updates DB and cache synchronously on write.
+Observed Implementation: Implemented in `WriteThroughService.Get` and `Update`. DB write failure terminates early before cache mutation.
 Assessment: PASS
 Severity: LOW
-Notes: Double-check locking inside the flight execution prevents redundant fetches if cache was populated between caller check and execution.
+Notes: Synchronous consistency maintained.
 
-## Finding 5: XFetch Probabilistic Early Expiration
+## Finding 5
 
-Location: `internal/cache/stampede.go:86-170`
-Claimed Behavior: Evaluates `-Δ · β · ln(U) > TTL_remaining` where `U ~ Uniform(0,1)`.
-Observed Implementation:
-- `ShouldRecompute` explicitly guards `u <= 0 || u >= 1`.
-- Correctly computes `expiryCompute := -deltaSec * beta * math.Log(u)`.
-- If recompute succeeds, updates cache with fresh value and new duration.
-- On query error during proactive recompute, gracefully returns existing stale value if available (`if ok { return item.Value, nil }`).
+Location: internal/cache/patterns.go:91-166
+Claimed Behavior: Write-Behind updates cache immediately and flushes to DB via background worker queue; drains on graceful `Close()`.
+Observed Implementation: `WriteBehindService` spawns `flushWorker` goroutine on initialization, handles non-blocking enqueue via `select`/`default`, and drains channel on `Close()` with `sync.WaitGroup`.
 Assessment: PASS
 Severity: LOW
-Notes: Fully aligns with research correction removing false positive formula negation bugs.
+Notes: Graceful shutdown and worker lifecycle properly managed.
 
-## Finding 6: Stale-While-Revalidate (SWR) Concurrency and In-Flight Deduplication
+## Finding 6
 
-Location: `internal/cache/stampede.go:171-254`
-Claimed Behavior: Serves stale cached values immediately while asynchronously revalidating in the background, without launching unbounded duplicate revalidation goroutines for the same key.
-Observed Implementation:
-- `SWRService.Get` checks `item.ExpiresAt`. If stale but within `staleUntil = item.ExpiresAt.Add(s.staleDelta)`, returns `item.Value` immediately and calls `triggerRevalidate(key)`.
-- `triggerRevalidate` guards execution using `revalidating map[string]bool` under mutex lock. Duplicate triggers return immediately.
-- Background goroutine executes with `context.WithTimeout(context.Background(), 10*time.Second)` and cleans up the key in `revalidating` upon exit.
+Location: internal/cache/stampede.go:44-84
+Claimed Behavior: SingleFlight coalesces concurrent cache misses into a single DB query.
+Observed Implementation: Uses `golang.org/x/sync/singleflight.Group.Do()`. Re-checks cache inside flight execution to prevent duplicate DB calls if a concurrent execution populated it.
 Assessment: PASS
 Severity: LOW
-Notes: Effective deduplication prevents background goroutine leaks during repeated reads of stale keys.
+Notes: Safe and robust concurrency handling.
+
+## Finding 7
+
+Location: internal/cache/stampede.go:88-169
+Claimed Behavior: XFetch implements Vattani et al. optimal early expiration algorithm `-Δ * β * ln(U) > TTL_remaining`.
+Observed Implementation: `ShouldRecompute` evaluates `-deltaSec * beta * math.Log(u) > ttlRemainingSec` with bounds checks on `u ∈ (0, 1)`. `XFetchService` supports custom random generator function for deterministic testing. If recomputation fails, cached fallback is returned.
+Assessment: PASS
+Severity: LOW
+Notes: Mathematically correct formula and fallback logic.
+
+## Finding 8
+
+Location: internal/cache/stampede.go:173-254
+Claimed Behavior: Stale-While-Revalidate serves stale cache immediately within stale window while asynchronously revalidating DB with deduplication.
+Observed Implementation: `SWRService.Get` checks fresh vs stale windows. `triggerRevalidate` guards duplicate background workers with `s.revalidating[key]` map under mutex protection.
+Assessment: PASS
+Severity: LOW
+Notes: Deduplicated background revalidation prevents thundering herd during stale period.
+
+## Finding 9
+
+Location: internal/cache/store.go:79-86
+Claimed Behavior: TTL Jitter adds randomized offset `[0, maxJitter)` to base TTL.
+Observed Implementation: `TTLWithJitter` adds `rand.Int63n(int64(maxJitter))` to `base`. Bounds check handles `maxJitter <= 0`.
+Assessment: PASS
+Severity: LOW
+Notes: Correct jitter distribution.
