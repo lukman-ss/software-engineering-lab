@@ -9,13 +9,13 @@ Severity:
 LOW
 
 Location:
-`research/06-open-questions.md` (Section: Weak Evidence 1), `research/05-report.md` (Finding 4)
+`research/06-open-questions.md: Weak Evidence #1`
 
 Problem:
-Empirical bug detection data in the research is primarily derived from Python (Hypothesis), JavaScript (fast-check), and Haskell (QuickCheck). For Go specifically, while `testing/quick` and `gopter` are well documented structurally, there is relatively little published empirical data quantifying real-world bug-detection rates across Go open-source repositories.
+Most empirical case studies and CVE reports are drawn from JavaScript/TypeScript (`fast-check`) and Python (`Hypothesis`). Direct empirical benchmarks for Go (`gopter` / `testing/quick`) are sparse in public research.
 
 Required Revision:
-None required for research approval; the research explicitly acknowledges this limitation in `06-open-questions.md`.
+None blocking. The research report already explicitly acknowledged this limitation under Section "Limitations" and `06-open-questions.md`.
 
 Can Be Approved Without Fix:
 YES
@@ -31,13 +31,13 @@ Severity:
 LOW
 
 Location:
-`research/05-report.md` (Finding 5) & `research/06-open-questions.md` (Weak Evidence 2)
+`research/06-open-questions.md: Claims Needing Deeper Research #1`
 
 Problem:
-The claim that biased generators ("designed for bugs") are measurably more effective than uniform random generators is based on maintainer assertions from fast-check and Hypothesis rather than peer-reviewed statistical benchmarks comparing both strategies under controlled conditions.
+The claim that Hypothesis's byte-stream shrinking outperforms type-based shrinking across all domains rests on creator technical blog posts rather than formal peer-reviewed comparative benchmarks.
 
 Required Revision:
-None required; properly caveated in `06-open-questions.md`.
+None blocking. Properly qualified in research notes as architectural rationale from the creator.
 
 Can Be Approved Without Fix:
 YES
@@ -53,13 +53,13 @@ Severity:
 LOW
 
 Location:
-`research/05-report.md` (Finding 7)
+`research/06-open-questions.md: Unanswered Questions #1`
 
 Problem:
-Stateful/model-based testing is covered primarily through Hypothesis's `RuleBasedStateMachine`. Practical ergonomics and patterns for stateful testing in Go using `gopter` or `testing/quick` could be elaborated further in future implementation phases.
+Lack of quantitative studies measuring test authoring time vs bug discovery efficiency (cost-benefit metric).
 
 Required Revision:
-Implementation stage will provide concrete Go stateful or invariant examples.
+None blocking. Recorded as an open research question.
 
 Can Be Approved Without Fix:
 YES
