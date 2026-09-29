@@ -1,62 +1,29 @@
 # Test Audit
 
-## Coverage Analysis
+## Test Suite Overview
 
-### Currency (`internal/currency/currency_test.go`)
-- `TestExampleBasedNaiveCurrency`: Happy path unit test demonstrating false confidence with hand-picked cases.
-- `TestPropertyNaiveCurrencyFails`: Uses `testing/quick.Check` with custom `Generate` to prove float precision failure.
-- `TestPropertyRobustAmountRoundtrip`: 1,000 iterations over wide range of positive, zero, and negative integer cent values verifying `ParseRobust(amount.Format()) == amount`.
-- Coverage: Happy path, negative values, large integer bounds, failure proof.
+| Package | Test Name | Invariant / Target | Type | Result |
+|---|---|---|---|---|
+| `internal/currency` | `TestExampleBasedNaiveCurrency` | Happy-path float parsing | Example-based | PASS |
+| `internal/currency` | `TestPropertyNaiveCurrencyFails` | Sub-cent float roundtrip failure | Property-based | PASS |
+| `internal/currency` | `TestPropertyRobustAmountRoundtrip` | Roundtrip Invariant (`Parse(Format(x)) == x`) across 1,000 runs | Property-based | PASS |
+| `internal/interval` | `TestExampleBasedIntervalMerge` | Hand-picked sorted interval merge | Example-based | PASS |
+| `internal/interval` | `TestPropertyNaiveMergeFails` | Oracle failure on unsorted inputs | Property-based | PASS |
+| `internal/interval` | `TestPropertyRobustMergeIdempotence` | Idempotence Invariant (`f(f(x)) == f(x)`) across 1,000 runs | Property-based | PASS |
+| `internal/interval` | `TestPropertyRobustMergeNonOverlapping` | Non-overlapping output invariant across 1,000 runs | Property-based | PASS |
+| `internal/shrinker` | `TestFindAndShrink` | Array size reduction to minimal counterexample `[-1]` | Invariant & Shrinking | PASS |
 
-### Interval (`internal/interval/interval_test.go`)
-- `TestExampleBasedIntervalMerge`: Example-based test showing false confidence on pre-sorted arrays.
-- `TestPropertyNaiveMergeFails`: Oracle invariant proving `NaiveMerge` differs from `RobustMerge` on arbitrary random intervals.
-- `TestPropertyRobustMergeIdempotence`: 1,000 iterations proving `Merge(Merge(x)) == Merge(x)`.
-- `TestPropertyRobustMergeNonOverlapping`: 1,000 iterations proving consecutive output intervals never overlap.
-- Coverage: Happy path, unsorted inputs, boundary conditions, invariant properties.
+## Coverage and Test Strength Assessment
 
-### Shrinker (`internal/shrinker/shrinker_test.go`)
-- `TestFindAndShrink`: Verifies searching for counterexamples and shrinking array of negative values to a minimal 1-element slice containing a negative number.
-- Coverage: Deterministic shrinking, size reduction verification, minimal element validation.
-
-## Execution Results
-
-```text
-go test -v -count=1 ./...
-=== RUN   TestExampleBasedNaiveCurrency
---- PASS: TestExampleBasedNaiveCurrency (0.00s)
-=== RUN   TestPropertyNaiveCurrencyFails
---- PASS: TestPropertyNaiveCurrencyFails (0.00s)
-=== RUN   TestPropertyRobustAmountRoundtrip
---- PASS: TestPropertyRobustAmountRoundtrip (0.00s)
-PASS
-ok  	labs/40-property-based-testing/internal/currency	0.316s
-=== RUN   TestExampleBasedIntervalMerge
---- PASS: TestExampleBasedIntervalMerge (0.00s)
-=== RUN   TestPropertyNaiveMergeFails
---- PASS: TestPropertyNaiveMergeFails (0.00s)
-=== RUN   TestPropertyRobustMergeIdempotence
---- PASS: TestPropertyRobustMergeIdempotence (0.00s)
-=== RUN   TestPropertyRobustMergeNonOverlapping
---- PASS: TestPropertyRobustMergeNonOverlapping (0.00s)
-PASS
-ok  	labs/40-property-based-testing/internal/interval	0.104s
-=== RUN   TestFindAndShrink
---- PASS: TestFindAndShrink (0.00s)
-PASS
-ok  	labs/40-property-based-testing/internal/shrinker	0.315s
-```
-
-Race detector:
-```text
-go test -race -count=1 ./...
-PASS in all packages without data races.
-```
-
-Demo execution:
-```text
-go run ./cmd/demo
-Executes DEMO 1, DEMO 2, DEMO 3, and SUMMARY cleanly and predictably.
-```
-
-Assessment: PASS. Test suite thoroughly exercises both failing and robust implementations.
+1. **Happy Path vs Negative Paths**:
+   - Both packages deliberately implement example-based tests showing passes on naive flawed implementations.
+   - Property tests explicitly verify negative cases where naive implementations fail oracle properties.
+2. **Invariant Verification**:
+   - `Roundtrip`: Tested on negative, zero, and extreme integer values up to multi-billion amounts.
+   - `Idempotence`: Tested across 1,000 generated slices with negative coordinates and varying interval lengths.
+   - `Oracle Check`: Compares naive against robust implementation, confirming discrepancy on arbitrary inputs.
+   - `Non-overlapping`: Directly checks structural invariants of resulting slices.
+3. **Execution Results**:
+   - `go test -v ./...`: All 8 test functions pass cleanly.
+   - `go test -race ./...`: Zero data races detected.
+   - `go run ./cmd/demo`: Demo output matches execution results reported in `engineering/03-execution-result.md`.

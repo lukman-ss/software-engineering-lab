@@ -1,31 +1,16 @@
-# Docs vs Code Audit
+# Documentation vs Code Audit
 
-## README Claims vs Code
+## Comparison Matrix
 
-### Claim 1: Roundtrip Invariant — Float fails, integer cents passes 1,000 roundtrips
-- Code: `TestPropertyNaiveCurrencyFails` confirms float failure; `TestPropertyRobustAmountRoundtrip` runs 1,000 iterations.
-- Demo: Shows "Property FAIL: 1000/1000 inputs failed roundtrip" for float and "All 1000 iterations PASS" for robust.
-- Status: MATCH
+| Claim / Section | Documented Claim | Implemented Code | Status |
+|---|---|---|---|
+| Zero Third-Party Dependencies | Uses pure Go stdlib (`testing/quick`, `math/rand`, `reflect`) | `go.mod` specifies only `module labs/40-property-based-testing` and `go 1.22.0` with no external dependencies | MATCH |
+| Canonical Invariant 1: Roundtrip | `internal/currency`: Float64 fails roundtrip, RobustAmount passes 1,000 roundtrips | `internal/currency/currency_test.go`: `TestPropertyRobustAmountRoundtrip` runs 1,000 iterations via `quick.Config{MaxCount: 1000}` | MATCH |
+| Canonical Invariant 2: Idempotence | `internal/interval`: `f(f(x)) == f(x)` on interval merge | `internal/interval/interval_test.go`: `TestPropertyRobustMergeIdempotence` checks `Merge(Merge(x)) == Merge(x)` on 1,000 runs | MATCH |
+| Canonical Invariant 3: Oracle Check | `internal/interval`: `NaiveMerge` fails oracle comparison against `RobustMerge` on unsorted input | `internal/interval/interval_test.go`: `TestPropertyNaiveMergeFails` asserts discrepancy | MATCH |
+| Canonical Invariant 4: Shrinking | `internal/shrinker`: Reduces complex 10+ element failing arrays to minimal reproducer `[-1]` | `internal/shrinker/shrinker.go` and `shrinker_test.go`: Tests verify reduction to slice of len 1 with negative element | MATCH |
+| Demo Output | Reported demo traces in `engineering/03-execution-result.md` match executable stdout | `go run ./cmd/demo` output is identical to recorded execution logs | MATCH |
+| CLI Commands in README | `go test -v ./...`, `go test -race ./...`, `go run ./cmd/demo` | All 3 commands execute without error | MATCH |
 
-### Claim 2: Idempotence Invariant — `Merge(Merge(x)) == Merge(x)`
-- Code: `TestPropertyRobustMergeIdempotence` runs 1,000 iterations.
-- Demo: "All 1000 iterations PASS"
-- Status: MATCH
-
-### Claim 3: Oracle Invariant — NaiveMerge fails vs RobustMerge
-- Code: `TestPropertyNaiveMergeFails` uses `quick.Check` to confirm NaiveMerge diverges.
-- Demo: "NaiveMerge vs RobustMerge oracle discrepancies: 85/100"
-- Status: MATCH
-
-### Claim 4: Shrinking reduces array to minimal `[-1]`
-- Code: `TestFindAndShrink` asserts `len(res.Minimal) == 1` and `res.Minimal[0] < 0`.
-- Demo: "Minimal counterexample (1 elements): [-1]"
-- Status: MATCH
-
-### README Directory Layout
-- Lists `engineering/`, `go.mod`, `README.md`, all packages and demo.
-- Actual directory matches.
-- Status: MATCH
-
-## No Discrepancies Found
-No `DOC_CODE_MISMATCH`, `TEST_CLAIM_MISMATCH`, or `RESEARCH_IMPLEMENTATION_MISMATCH` detected.
+## Discrepancies Found
+- None. Documentation, design specifications, execution results, and codebase are completely synchronized.
