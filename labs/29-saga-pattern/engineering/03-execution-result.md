@@ -20,15 +20,21 @@ Result:
 --- PASS: TestOrchestrator_Concurrency (0.00s)
 === RUN   TestChoreography_Flow
 --- PASS: TestChoreography_Flow (0.00s)
+=== RUN   TestChoreography_FailureCompensates
+--- PASS: TestChoreography_FailureCompensates (0.00s)
+=== RUN   TestOrchestrator_CompensationErrorPropagated
+--- PASS: TestOrchestrator_CompensationErrorPropagated (0.00s)
+=== RUN   TestOrchestrator_ContextCancellation
+--- PASS: TestOrchestrator_ContextCancellation (0.00s)
 PASS
-ok  	labs/29-saga-pattern/tests	0.481s
+ok  	labs/29-saga-pattern/tests	0.002s
 ```
 
 ## Race Detector
 Command: `go test -race ./...`
 Result:
 ```text
-ok  	labs/29-saga-pattern/tests	1.339s
+ok  	labs/29-saga-pattern/tests	1.362s
 ```
 
 ## Demo
