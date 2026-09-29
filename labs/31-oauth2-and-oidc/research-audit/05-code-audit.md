@@ -1,21 +1,18 @@
-# Code Audit: OAuth 2.0 & OIDC Research
+# Code Audit — OAuth 2.0 & OIDC Research Audit
 
 Target Lab: `labs/31-oauth2-and-oidc`
-Audit Scope: Code Execution & Validation
 
----
+## PIPELINE OVERRIDE NOTICE
+Per execution instructions:
+- Audit research only (`research/` directory).
+- Implementation and code auditing are NOT performed in this stage.
+- No code test commands were executed during this audit.
 
-## Status: NOT APPLICABLE (RESEARCH PHASE)
+## Summary
+Code auditing is NOT APPLICABLE to this research-only audit pass.
 
-Per pipeline instructions:
-- Audit research only.
-- Do not audit implementation/code in this stage.
-- No source code or tests exist in `labs/31-oauth2-and-oidc` at this phase of the pipeline.
-
----
-
-## Execution Record
-- Target files: `research/*.md`
-- Code compilation: N/A
-- Tests execution: N/A
-- Demo execution: N/A
+| Field | Value |
+|-------|-------|
+| Code Verification Status | NOT APPLICABLE |
+| Test Execution Status | NOT APPLICABLE |
+| Documentation vs Code Verification | NOT APPLICABLE |
