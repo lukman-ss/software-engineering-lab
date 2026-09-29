@@ -1,11 +1,15 @@
-# Code Audit: Bloom Filters Research
+# 05 - Code Audit: Bloom Filters Research
 
-**PIPELINE OVERRIDE ACTIVE**
+## Scope Override
+Audit ini difokuskan khusus pada fase riset (`research/`). Audit implementasi kode/source code tidak dieksekusi pada tahapan ini sesuai dengan pipeline override instruksi.
 
-This audit is scoped to research-only.
-
-Per the pipeline override directive, code audit is not applicable at this stage.
-
-No implementation files, runnable code, or tests exist in `labs/39-bloom-filters` at this stage of the pipeline.
-
-No code audit was performed.
+## Evaluation of Pseudocode & Formulas in Research Report
+1. **Index Calculation Formula**:
+   $$g_i(x) = (h_1(x) + i \cdot h_2(x)) \pmod m$$
+   Formulasi ini tepat dan sesuai dengan konvensi Kirsch-Mitzenmacher.
+2. **Optimal Hash Count Formula**:
+   $$k = \frac{m}{n} \ln 2$$
+   Formulasi tepat dan konsisten dengan turunan kalkulus $\frac{d}{dk} (1 - e^{-kn/m})^k = 0$.
+3. **Optimal Bit Size Formula**:
+   $$m = - \frac{n \ln p}{(\ln 2)^2}$$
+   Formulasi tepat dan menghasilkan nilai teoretis minimum untuk bit array.

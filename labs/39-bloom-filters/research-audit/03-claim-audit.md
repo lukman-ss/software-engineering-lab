@@ -1,81 +1,74 @@
-# Claim Audit: Bloom Filters Research
+# 03 - Claim Audit: Bloom Filters Research
 
-## Claim 1
-Claim: A Bloom filter uses a bit array of size $m$ and $k$ independent hash functions; false negatives are impossible, but false positives may occur.
-Location: `research/03-evidence.md:5-10`, `research/05-report.md:20-25`
-Evidence Provided: Bloom 1970, Wikipedia Bloom filter section.
-Source: Source 1, Source 2, Source 10.
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Fundamental invariant of standard Bloom filters.
+## Claim 1: Zero False Negative Guarantee
+- **Claim**: Bloom filter menjamin tidak ada false negative (0% false negative rate), namun dapat menghasilkan false positive ($p > 0$).
+- **Location**: `03-evidence.md` (Evidence 1); `05-report.md` (Finding 1).
+- **Evidence Provided**: Setting bit 1 saat insert menjamin pengecekan $k$ hash posisi selalu mengembalikan 1 jika elemen ada.
+- **Source**: Burton H. Bloom (1970).
+- **Source Actually Supports Claim**: YES.
+- **Classification**: FACT.
+- **Severity**: LOW.
+- **Notes**: Asas fundamental struktur data Bloom Filter.
 
-## Claim 2
-Claim: The approximate false-positive probability is $\varepsilon \approx (1 - e^{-kn/m})^k$.
-Location: `research/03-evidence.md:12-18`, `research/05-report.md:26-30`
-Evidence Provided: Standard mathematical derivation assuming independent bit setting probabilities.
-Source: Source 2, Source 10, Source 11.
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Verified against analytical derivations and asymptotic approximations.
+---
 
-## Claim 3
-Claim: Optimal number of hash functions is $k = (m/n) \ln 2$, giving minimum false positive probability $(1/2)^k \approx (0.6185)^{m/n}$.
-Location: `research/03-evidence.md:20-26`, `research/05-report.md:13`
-Evidence Provided: Calculus derivative of $(1 - e^{-kn/m})^k$ with respect to $k$.
-Source: Source 2, Source 10, Source 11.
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Exact minimum $(1/2)^{(m/n)\ln 2} = 2^{-(m/n)\ln 2} = e^{-(m/n)(\ln 2)^2} \approx 0.6185^{m/n}$.
+## Claim 2: Mathematical Formulae for Optimal Bit Size and Hash Count
+- **Claim**:
+  $$m = - \frac{n \ln p}{(\ln 2)^2} \approx -1.4427 \cdot n \log_2 p$$
+  $$k = \frac{m}{n} \ln 2 \approx 0.6931 \cdot \frac{m}{n}$$
+  Untuk $p = 0.01$ (1%), rasio $m/n \approx 9.585$ bit/elemen dan $k \approx 7$.
+- **Location**: `03-evidence.md` (Evidence 2); `05-report.md` (Finding 1).
+- **Evidence Provided**: Derivasi probabilitas false positive $p \approx (1 - e^{-kn/m})^k$ dengan minimasi terhadap $k$.
+- **Source**: Burton H. Bloom (1970); Kirsch & Mitzenmacher (2006).
+- **Source Actually Supports Claim**: YES.
+- **Classification**: FACT.
+- **Severity**: LOW.
+- **Notes**: Kalkulasi matematis diverifikasi akurat. $-1 / (\ln 2)^2 \approx -1 / (0.693147^2) \approx 2.08136 \cdot \ln(1/p) \approx 1.4427 \cdot \log_2(1/p)$. Untuk $p=0.01$, $- \ln(0.01) / (\ln 2)^2 \approx 4.60517 / 0.480453 \approx 9.585$ bits/elemen. $k = 9.585 \times \ln 2 \approx 6.64 \approx 7$.
 
-## Claim 4
-Claim: For a target false positive rate $\varepsilon$, the required bit ratio is $m/n \approx -1.44 \log_2 \varepsilon$ (or $\sim 9.6$ bits/element for $1\%$ FP rate).
-Location: `research/03-evidence.md:28-34`, `research/05-report.md:32-36`
-Evidence Provided: Bloom 1970 calculation: $m/n = -\ln(\varepsilon)/(\ln 2)^2 \approx 1.4427 \log_2(1/\varepsilon)$.
-Source: Source 2, Source 11.
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: For $\varepsilon = 0.01$, $m/n = 1.442695 \times \log_2(100) \approx 9.585$ bits/element with $k = \lceil 9.585 \ln 2 \rceil = 7$.
+---
 
-## Claim 5
-Claim: LSM-tree storage engines use per-SST Bloom filters to reduce point-lookup disk read costs from $O(L)$ to $O(L \cdot e^{-M/N})$.
-Location: `research/03-evidence.md:36-42`, `research/05-report.md:38-43`
-Evidence Provided: O'Neil et al. (1996) LSM-tree paper, Luo & Carey (2019) survey.
-Source: Source 3, Source 9, Source 10.
-Source Actually Supports Claim: YES
-Classification: FACT / IMPLEMENTATION-SPECIFIC
-Severity: LOW
-Notes: Universal across modern LSM engines (RocksDB, Cassandra, LevelDB).
+## Claim 3: Kirsch-Mitzenmacher Double Hashing Optimization
+- **Claim**: Kombinasi linear dua fungsi hash independen $g_i(x) = h_1(x) + i \cdot h_2(x) \pmod m$ cukup untuk mensimulasikan $k$ fungsi hash independen tanpa degradasi false positive rate asimtotik.
+- **Location**: `03-evidence.md` (Evidence 3); `05-report.md` (Finding 2).
+- **Evidence Provided**: Teorema Kirsch-Mitzenmacher (ESA 2006) membuktikan kesetaraan distribusi keanggotaan bit asimtotik.
+- **Source**: Kirsch & Mitzenmacher (2006).
+- **Source Actually Supports Claim**: YES.
+- **Classification**: FACT.
+- **Severity**: LOW.
+- **Notes**: Standar de facto industri (Google Guava, RocksDB, Redis).
 
-## Claim 6
-Claim: Google Percolator and Microsoft Bing (BitFunnel) utilize Bloom-filter principles to eliminate redundant reads or accelerate search queries.
-Location: `research/03-evidence.md:68-74`, `research/05-report.md:44-54`
-Evidence Provided: Peng & Dabek (2010), Goodwin et al. (2017).
-Source: Source 4, Source 5.
-Source Actually Supports Claim: YES
-Classification: FACT / EXAMPLE
-Severity: LOW
-Notes: Properly contextualized in research notes.
+---
 
-## Claim 7
-Claim: Fast non-cryptographic hash functions (MurmurHash3, FNV-1a) provide superior throughput over cryptographic hashes while maintaining low collision correlation for Bloom filters.
-Location: `research/03-evidence.md:60-66`, `research/05-report.md:56-60`
-Evidence Provided: SmHasher benchmarks (2.5–5 GB/s throughput) and FNV specification.
-Source: Source 6, Source 7, Source 12.
-Source Actually Supports Claim: YES
-Classification: FACT / INTERPRETATION
-Severity: LOW
-Notes: Industry consensus standard for in-memory Bloom filter implementations.
+## Claim 4: Cache Penetration Mitigation
+- **Claim**: Bloom filter mencegah masalah "Cache Penetration" dengan memfilter query untuk kunci nonexistent sebelum query menyentuh cache atau disk database, memotong hingga ~99% beban disk/database untuk nonexistent keys pada $p=0.01$.
+- **Location**: `03-evidence.md` (Evidence 4); `05-report.md` (Finding 3).
+- **Evidence Provided**: Kunci nonexistent yang tidak ada dalam filter dieliminasi 100% saat bit 0 ditemukan, hanya meloloskan fraksi $p$ false positive.
+- **Source**: Martin Kleppmann (DDIA); RocksDB Wiki.
+- **Source Actually Supports Claim**: YES.
+- **Classification**: INTERPRETATION.
+- **Severity**: LOW.
+- **Notes**: Valid pattern in distributed backend architectures.
 
-## Claim 8
-Claim: Standard Bloom filters do not support deletion; Counting Bloom filters and Cuckoo filters enable deletions with distinct trade-offs.
-Location: `research/03-evidence.md:52-58, 84-90`, `research/05-report.md:62-67`
-Evidence Provided: Fan et al. (CoNEXT 2014) Cuckoo filter analysis.
-Source: Source 1, Source 8.
-Source Actually Supports Claim: YES
-Classification: FACT
-Severity: LOW
-Notes: Accurately contrasts structural limitations of classic Bloom bit-arrays against fingerprint/bucket structures.
+---
+
+## Claim 5: LSM-Tree Disk I/O Pruning per SSTable
+- **Claim**: Mesin basis data berbasis Log-Structured Merge-Tree (LSM-Tree) seperti Bigtable, RocksDB, dan Cassandra menggunakan Bloom Filter pada setiap SSTable untuk menghindari pembacaan disk yang tidak perlu.
+- **Location**: `03-evidence.md` (Evidence 5); `05-report.md` (Finding 4).
+- **Evidence Provided**: Bigtable paper (Chang et al., OSDI 2006, p. 7): "A Bloom filter allows us to ask whether an SSTable might contain any data for a specified row/column pair... Drastically reduces the number of disk seeks required for read operations."
+- **Source**: Fay Chang et al. (2006).
+- **Source Actually Supports Claim**: YES.
+- **Classification**: FACT.
+- **Severity**: LOW.
+- **Notes**: Kutipan diverifikasi langsung pada dokumen orisinal Bigtable.
+
+---
+
+## Claim 6: Standard Bloom Filter Inability to Support Deletion
+- **Claim**: Standard Bloom Filter tidak mendukung operasi penghapusan (`delete`). Menghapus bit 1 menjadi 0 dapat menyebabkan false negative pada elemen lain akibat hash collisions.
+- **Location**: `03-evidence.md` (Evidence 6); `05-report.md` (Limitations & Disagreement).
+- **Evidence Provided**: Cuckoo Filter paper (Fan et al., ACM CoNEXT 2014) Table 1 & Section 1.
+- **Source**: Fan et al. (2014).
+- **Source Actually Supports Claim**: YES.
+- **Classification**: FACT.
+- **Severity**: LOW.
+- **Notes**: Properti intrinsik bit array terbagi.

@@ -1,22 +1,26 @@
-# Contradiction Audit: Bloom Filters Research
+# 04 - Contradictions Audit: Bloom Filters Research
 
-No material contradictions found across the reviewed research files and cited literature.
+## Summary
+Tidak ditemukan kontradiksi material internal maupun eksternal yang merusak keabsahan riset Bloom Filters.
 
-## Consistency Checks
+---
 
-### 1. Research Plan vs. Evidence vs. Final Report
-- **Item**: Mathematical formulas and asymptotic bounds.
-- **Plan**: Target standard FP formula and space/hash optimizations.
-- **Evidence**: Derives $\varepsilon \approx (1 - e^{-kn/m})^k$, $k = (m/n)\ln 2$, and $m/n \approx -1.44 \log_2 \varepsilon$.
-- **Report**: Reflects identical values and constants without discrepancies.
-- **Assessment**: CONSISTENT.
+## Analysis of Investigated Trade-offs
 
-### 2. Space Trade-offs: Bloom vs. Information Theoretic Lower Bound
-- **Statement A**: Bloom filters achieve 1% false positive rate at $\sim 9.6$ bits per element ($1.44 \log_2(1/\varepsilon)$).
-- **Statement B**: Theoretical lower bound for any approximate membership query structure is $\log_2(1/\varepsilon) \approx 6.64$ bits.
-- **Assessment**: CONSISTENT. Bloom filters incur the known $\approx 44\%$ information-theoretic overhead ($1/\ln 2 \approx 1.4427$).
+### 1. Hash Independence Assumption vs Double Hashing Approximation
+- **Statement A**: Teori orisinal Burton H. Bloom (1970) mengasumsikan $k$ fungsi hash acak independen dan berdistribusi seragam.
+- **Statement B**: Praktik rekayasa (Kirsch & Mitzenmacher 2006) menggunakan dua fungsi hash $h_1(x) + i \cdot h_2(x) \pmod m$ untuk menghemat CPU.
+- **Type**: SOURCE_REFINEMENT (Bukan kontradiksi fatal, melainkan optimasi terbukti).
+- **Assessment**: Teorema Kirsch-Mitzenmacher secara formal membuktikan bahwa laju error asimtotik konvergen ke bound yang sama dengan $k$ hash independen.
 
-### 3. Percolator Architectural Clarification
-- **Statement A**: Initial plan listed Percolator under "cache penetration".
-- **Statement B**: Evidence and source notes refined Percolator's Bloom filter usage to the underlying Bigtable SSTable layer.
-- **Assessment**: CONSISTENT. Research appropriately scoped the mechanism to avoid overgeneralization.
+### 2. Cache-Line Misses vs Bit Uniformity (Standard vs Blocked Filter)
+- **Statement A**: Standard Bloom filter menyebarkan $k$ bit secara acak di seluruh array $m$, memicu hingga $k$ cache miss per lookup.
+- **Statement B**: Block-based Bloom Filter (RocksDB) melokalisasi $k$ bit dalam 1 cache line 64-byte untuk lookup berkecepatan tinggi, dengan konsekuensi variasi load factor lokal sedikit menaikkan false positive rate.
+- **Type**: ARCHITECTURAL_TRADEOFF.
+- **Assessment**: Riset mendokumentasikan trade-off ini secara transparan di `04-contradictions.md` dan `06-open-questions.md`.
+
+### 3. Static Sizing vs Dynamic Resizing
+- **Statement A**: Rumus Bloom filter mensyaratkan estimasi $n$ elemen di awal.
+- **Statement B**: Jika $n$ terlampaui tanpa batas, false positive rate mendekati 100%.
+- **Type**: LIMITATION_CONSISTENCY.
+- **Assessment**: Riset secara eksplisit mencantumkan keterbatasan kapasitas statis pada bagian limitasi di `05-report.md:59` dan menyarankan Scalable Bloom Filter (SBF) pada `06-open-questions.md:9`.
