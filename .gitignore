@@ -88,3 +88,4 @@ scripts/orchestrator/
 patch.js
 scripts/run-until-writer.sh
 content-output/
+output/
