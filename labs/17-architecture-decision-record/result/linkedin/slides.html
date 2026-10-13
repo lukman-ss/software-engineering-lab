@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: 16in 9in;
+    margin: 0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: #0b1b2d;
+    color: #f4f1e8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .slide {
+    width: 16in;
+    height: 9in;
+    page-break-after: always;
+    position: relative;
+    padding: 0.65in 0.85in;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    background: #0d2137;
+    border-bottom: 8px solid #087f76;
+  }
+  .slide-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #087f76;
+    padding-bottom: 0.15in;
+  }
+  .lab-tag {
+    font-size: 20pt;
+    font-weight: 800;
+    color: #d97706;
+    letter-spacing: 2px;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  .slide-num {
+    font-size: 18pt;
+    font-weight: bold;
+    color: #7ba29e;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  .slide-body {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.3in 0;
+    gap: 0.25in;
+  }
+  .slide-title {
+    font-size: 38pt;
+    font-weight: 900;
+    color: #f4f1e8;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+  }
+  .slide-subtitle {
+    font-size: 22pt;
+    color: #a4c2bb;
+    line-height: 1.35;
+  }
+  .slide-text {
+    font-size: 20pt;
+    line-height: 1.45;
+    color: #d8e9df;
+  }
+  .slide-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #1a3c5a;
+    padding-top: 0.15in;
+    font-size: 15pt;
+    color: #7ba29e;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  .author-name {
+    color: #d97706;
+    font-weight: bold;
+  }
+
+  /* Components */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4in;
+    align-items: start;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.3in;
+    align-items: start;
+  }
+  .card {
+    background: #081626;
+    border: 2px solid #087f76;
+    border-radius: 8px;
+    padding: 0.3in;
+  }
+  .card-warn {
+    background: #181216;
+    border: 2px solid #ef4444;
+    border-radius: 8px;
+    padding: 0.3in;
+  }
+  .card-amber {
+    background: #181712;
+    border: 2px solid #d97706;
+    border-radius: 8px;
+    padding: 0.3in;
+  }
+  .card h3 {
+    font-size: 22pt;
+    color: #d97706;
+    margin-bottom: 0.15in;
+  }
+  .card p, .card li {
+    font-size: 17pt;
+    line-height: 1.4;
+    color: #cad7cf;
+  }
+  pre {
+    background: #050e18;
+    border: 1px solid #087f76;
+    border-radius: 6px;
+    padding: 0.25in;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 15pt;
+    line-height: 1.4;
+    color: #d8e9df;
+    overflow: hidden;
+  }
+  .kw { color: #f59e0b; font-weight: bold; }
+  .fn { color: #38bdf8; }
+  .str { color: #34d399; }
+  .cmt { color: #64748b; }
+  .stat { color: #fb7185; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 16pt;
+    background: #081626;
+  }
+  th, td {
+    border: 1px solid #087f76;
+    padding: 0.16in 0.2in;
+    text-align: left;
+  }
+  th {
+    background: #087f76;
+    color: #071321;
+    font-weight: 900;
+  }
+  tr:nth-child(even) { background: #0c1e33; }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 14pt;
+    font-weight: bold;
+    font-family: monospace;
+  }
+  .badge-acc { background: #059669; color: #fff; }
+  .badge-sup { background: #d97706; color: #fff; }
+  .badge-rej { background: #dc2626; color: #fff; }
+
+  /* Cover slide specific */
+  .cover-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2in;
+  }
+  .cover-title {
+    font-size: 48pt;
+    font-weight: 900;
+    line-height: 1.1;
+    color: #f4f1e8;
+  }
+  .cover-sub {
+    font-size: 24pt;
+    color: #a4c2bb;
+    line-height: 1.35;
+  }
+  .tag-row {
+    display: flex;
+    gap: 0.2in;
+  }
+  .tag-item {
+    background: #081626;
+    border: 1px solid #d97706;
+    color: #d97706;
+    padding: 6px 16px;
+    font-size: 16pt;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+  <!-- SLIDE 1: Cover -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">SOFTWARE ENGINEERING LAB // 17</span>
+      <span class="slide-num">01 / 24</span>
+    </div>
+    <div class="slide-body cover-box">
+      <div style="font-size: 20pt; color: #087f76; font-family: monospace; font-weight: bold;">AUTOMATED ARCHITECTURE VALIDATION</div>
+      <div class="cover-title">Architecture Decision Record (ADR)</div>
+      <div class="cover-sub">Validasi Integritas Silsilah Keputusan Arsitektur di Git: Parser Markdown, Penomoran Monotonik, dan Tautan Timbal-Balik Supersedes.</div>
+      <div class="tag-row">
+        <span class="tag-item">#Golang</span>
+        <span class="tag-item">#SystemArchitecture</span>
+        <span class="tag-item">#CodeQuality</span>
+        <span class="tag-item">#GitOps</span>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Author: <span class="author-name">Lukman / lukman-ss</span></span>
+      <span>github.com/lukman-ss/software-engineering-lab</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: Failure Scenario -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">PROBLEM DEFINITION</span>
+      <span class="slide-num">02 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Konteks Historis Hilang, Debat Berulang Muncul</div>
+      <div class="grid-2">
+        <div class="card-warn">
+          <h3 style="color: #ef4444;">1. Pembalikan Keputusan Sembarangan</h3>
+          <p>Anggota baru bergabung atau struktur berganti, lalu membalikkan arsitektur masa lalu tanpa memahami kendala dan kompromi awal yang memicunya.</p>
+        </div>
+        <div class="card-warn">
+          <h3 style="color: #ef4444;">2. Kepatuhan Buta Pola Usang</h3>
+          <p>Tim mempertahankan desain awal secara dogmatis meskipun skala beban, ukuran organisasi, dan batas throughput sudah melampaui kapasitasnya.</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top: 0.1in;">
+        <p style="font-size: 18pt; color: #f4f1e8;">Dokumentasi arsitektur di wiki eksternal cepat usang (<em>documentation drift</em>) karena terpisah dari pull request dan siklus rilis kode.</p>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Lab 17: Architecture Decision Record</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: 5W+1H Part 1 -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CONTEXT 5W+1H</span>
+      <span class="slide-num">03 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Dimensi Masalah: What, Why, Who</div>
+      <div class="grid-3">
+        <div class="card">
+          <h3>WHAT</h3>
+          <p>Invarian struktural ADR: dokumen Markdown bernomor urut kontigu dengan metadata status resmi dan silsilah penggantian yang valid.</p>
+        </div>
+        <div class="card">
+          <h3>WHY</h3>
+          <p>Mencegah keputusan amnesia, inkonsistensi panduan teknis, dan perdebatan siklis tanpa data objektif baru.</p>
+        </div>
+        <div class="card">
+          <h3>WHO</h3>
+          <p>Software architects, tech leads, dan pengembang yang meninjau pull request serta merancang batas domain sistem.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Lab 17: Architecture Decision Record</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: 5W+1H Part 2 -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CONTEXT 5W+1H</span>
+      <span class="slide-num">04 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Dimensi Eksekusi: When, Where, How</div>
+      <div class="grid-3">
+        <div class="card">
+          <h3>WHEN</h3>
+          <p>Dijalankan saat build lokal, Git pre-commit, atau pipeline CI sebelum PR disatukan ke cabang utama.</p>
+        </div>
+        <div class="card">
+          <h3>WHERE</h3>
+          <p>Di-commit dalam direktori repositori yang sama dengan kode sumber (ko-lokasi di Git).</p>
+        </div>
+        <div class="card">
+          <h3>HOW</h3>
+          <p>Parser mengekstrak metadata via regex, linter memverifikasi penomoran monotonik dan relasi timbal-balik secara konkuren.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Lab 17: Architecture Decision Record</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Core Mental Model -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CORE MENTAL MODEL</span>
+      <span class="slide-num">05 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Decisions as Versioned Invariants</div>
+      <div class="card-amber" style="padding: 0.4in;">
+        <p style="font-size: 26pt; color: #f59e0b; font-family: 'Courier New', monospace; font-weight: bold; margin-bottom: 0.2in;">
+          "Architecture decisions must form an immutable, verifiable directed acyclic graph."
+        </p>
+        <p style="font-size: 20pt; color: #f4f1e8; line-height: 1.45;">
+          Keputusan yang telah diterima (<em>Accepted</em>) tidak boleh disunting retroaktif. Perubahan arsitektur dituangkan ke dalam rekaman baru yang secara eksplisit menggantikan catatan lama melalui silsilah timbal-balik yang dapat diverifikasi oleh mesin.
+        </p>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Mental Model: Immutable Decision Lineage</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Architecturally Significant Requirements -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">SCOPE BOUNDARY</span>
+      <span class="slide-num">06 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Kriteria Keputusan yang Bernilai Arsitektur</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 28%;">Kategori ASR</th>
+            <th style="width: 42%;">Cakupan Evaluasi</th>
+            <th style="width: 30%;">Contoh Keputusan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Struktur</strong></td>
+            <td>Pemisahan subsistem, batasan domain komponen</td>
+            <td>Monolith Modular vs Microservice</td>
+          </tr>
+          <tr>
+            <td><strong>Non-Fungsional (NFR)</strong></td>
+            <td>Throughput, toleransi kesalahan, isolasi lonjakan beban</td>
+            <td>Message queue asinkron untuk notifikasi</td>
+          </tr>
+          <tr>
+            <td><strong>Dependensi</strong></td>
+            <td>Pilihan database, framework inti, broker pesan</td>
+            <td>Relational SQL vs Document Store</td>
+          </tr>
+          <tr>
+            <td><strong>Antarmuka & Konstruksi</strong></td>
+            <td>Protokol komunikasi, aturan transaksi terdistribusi</td>
+            <td>Audit table vs Event Sourcing</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="slide-footer">
+      <span>Nygard (2011) & Zimmermann (2020)</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Lifecycle State Machine -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">LIFECYCLE STATE MACHINE</span>
+      <span class="slide-num">07 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Status Transisi Siklus Hidup ADR</div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Status Utama</h3>
+          <p><span class="badge" style="background:#2563eb; color:#fff;">Proposed</span> Usulan aktif dalam tahap review tim.</p>
+          <p style="margin-top:0.1in;"><span class="badge badge-acc">Accepted</span> Keputusan disetujui dan aktif mengikat.</p>
+          <p style="margin-top:0.1in;"><span class="badge badge-sup">Superseded</span> Digantikan oleh keputusan baru.</p>
+        </div>
+        <div class="card">
+          <h3>Status Terminasi</h3>
+          <p><span class="badge" style="background:#4b5563; color:#fff;">Deprecated</span> Ditinggalkan tanpa ada pengganti.</p>
+          <p style="margin-top:0.1in;"><span class="badge badge-rej">Rejected</span> Usulan ditolak secara formal.</p>
+          <p style="font-size: 15pt; color: #a4c2bb; margin-top: 0.15in;">Mencatat usulan yang ditolak mencegah perdebatan yang sama berulang di masa depan.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>internal/adr/models.go: Status Enum</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Architecture Flow -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">ARCHITECTURE PIPELINE</span>
+      <span class="slide-num">08 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Alur Validasi Struktural ADR</div>
+      <pre>
+[ Markdown ADR Raw Documents ]
+              │
+              ▼
+    [ adr.Parse(content) ] ── (Regex: ID, Title, Status, Lineage, Sections)
+              │
+              ▼
+   []*adr.Record (In-Memory Graph)
+              │
+              ▼
+    [ adr.Linter.Validate() ]
+              ├── 1. Monotonic ID Sequence Check (1..N)
+              ├── 2. Cycle Detection in Supersession Chains (DFS 3-Color)
+              └── 3. Concurrent Bidirectional Verification (Goroutines)
+              │
+              ▼
+[ Slice of Integrity Errors (nil jika lulus) ]
+      </pre>
+    </div>
+    <div class="slide-footer">
+      <span>Engine: internal/adr/linter.go</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Code - Models -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CODE IMPLEMENTATION</span>
+      <span class="slide-num">09 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Model Data & Invarian Record</div>
+      <pre>
+<span class="cmt">// internal/adr/models.go:3-29</span>
+<span class="kw">type</span> <span class="stat">Status</span> <span class="kw">string</span>
+
+<span class="kw">const</span> (
+    <span class="stat">StatusProposed</span>   Status = <span class="str">"Proposed"</span>
+    <span class="stat">StatusAccepted</span>   Status = <span class="str">"Accepted"</span>
+    <span class="stat">StatusSuperseded</span> Status = <span class="str">"Superseded"</span>
+    <span class="stat">StatusDeprecated</span> Status = <span class="str">"Deprecated"</span>
+    <span class="stat">StatusRejected</span>   Status = <span class="str">"Rejected"</span>
+)
+
+<span class="kw">type</span> <span class="fn">Record</span> <span class="kw">struct</span> {
+    ID           <span class="kw">int</span>
+    Title        <span class="kw">string</span>
+    Status       <span class="stat">Status</span>
+    SupersededBy <span class="kw">int</span> <span class="cmt">// 0 jika tidak digantikan</span>
+    Supersedes   <span class="kw">int</span> <span class="cmt">// 0 jika tidak menggantikan</span>
+    Content      <span class="kw">string</span>
+}
+      </pre>
+    </div>
+    <div class="slide-footer">
+      <span>Zero-dependency Go Standard Library</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Code - Parser Regular Expressions -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CODE IMPLEMENTATION</span>
+      <span class="slide-num">10 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Ekstraksi Pola Ekspresi Reguler</div>
+      <pre>
+<span class="cmt">// internal/adr/parser.go:12-18</span>
+<span class="kw">var</span> (
+    titleRegex        = regexp.<span class="fn">MustCompile</span>(<span class="str">`^#\s+(\d+)\.\s+(.+)$`</span>)
+    statusRegex       = regexp.<span class="fn">MustCompile</span>(<span class="str">`(?i)^Status:\s*([A-Za-z]+)(?:\s+by\s+(\d+))?`</span>)
+    supersedesRegex   = regexp.<span class="fn">MustCompile</span>(<span class="str">`(?i)^Supersedes:\s*(\d+)`</span>)
+    contextRegex      = regexp.<span class="fn">MustCompile</span>(<span class="str">`(?i)^##\s+Context`</span>)
+    decisionRegex     = regexp.<span class="fn">MustCompile</span>(<span class="str">`(?i)^##\s+Decision`</span>)
+    consequencesRegex = regexp.<span class="fn">MustCompile</span>(<span class="str">`(?i)^##\s+Consequences`</span>)
+)
+      </pre>
+      <div class="slide-text" style="font-size: 17pt;">
+        Pola menangkap ID dan judul di level heading H1, mengekstrak relasi silsilah, dan memvalidasi keberadaan section wajib.
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Deterministic Parsing via Regexp</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Code - Mandatory Section Checks -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CODE IMPLEMENTATION</span>
+      <span class="slide-num">11 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Validasi Bagian Wajib Non-Kosong</div>
+      <pre>
+<span class="cmt">// internal/adr/parser.go:118-128</span>
+<span class="kw">if</span> !foundContext || !contextHasContent {
+    <span class="kw">return</span> <span class="kw">nil</span>, fmt.<span class="fn">Errorf</span>(<span class="str">"context section missing or empty"</span>)
+}
+
+<span class="kw">if</span> !foundDecision || !decisionHasContent {
+    <span class="kw">return</span> <span class="kw">nil</span>, fmt.<span class="fn">Errorf</span>(<span class="str">"decision section missing or empty"</span>)
+}
+
+<span class="kw">if</span> !foundConsequences || !consequencesHasContent {
+    <span class="kw">return</span> <span class="kw">nil</span>, fmt.<span class="fn">Errorf</span>(<span class="str">"consequences section missing or empty"</span>)
+}
+      </pre>
+      <div class="slide-text" style="font-size: 17pt;">
+        ADR tanpa konteks atau tanpa konsekuensi ditolak parser agar dokumen tidak menjadi sekadar dekrit sepihak tanpa argumentasi.
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>tests/parser_test.go: TestParse_Invalid</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 12: Code - Monotonic Linter -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CODE IMPLEMENTATION</span>
+      <span class="slide-num">12 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Pemeriksaan Penomoran Monotonik 1..N</div>
+      <pre>
+<span class="cmt">// internal/adr/linter.go:27-39</span>
+ids := <span class="fn">make</span>([]<span class="kw">int</span>, 0, <span class="fn">len</span>(records))
+<span class="kw">for</span> id := <span class="kw">range</span> recordMap {
+    ids = <span class="fn">append</span>(ids, id)
+}
+sort.<span class="fn">Ints</span>(ids)
+
+<span class="kw">for</span> i := 0; i &lt; <span class="fn">len</span>(ids); i++ {
+    <span class="kw">if</span> ids[i] != i+1 {
+        errs = <span class="fn">append</span>(errs, fmt.<span class="fn">Errorf</span>(
+            <span class="str">"non-monotonic numbering, expected %d but got %d"</span>, i+1, ids[i]))
+        <span class="kw">break</span>
+    }
+}
+      </pre>
+    </div>
+    <div class="slide-footer">
+      <span>Contiguous Integer Verification</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 13: Code - Bidirectional Link Linter -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CODE IMPLEMENTATION</span>
+      <span class="slide-num">13 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Verifikasi Silsilah Timbal-Balik</div>
+      <pre>
+<span class="cmt">// internal/adr/linter.go:72-85</span>
+<span class="kw">if</span> rec.Status == <span class="stat">StatusSuperseded</span> {
+    <span class="kw">if</span> rec.SupersededBy == 0 {
+        localErrs = <span class="fn">append</span>(localErrs, fmt.<span class="fn">Errorf</span>(<span class="str">"ADR %d is superseded but missing reference"</span>, rec.ID))
+    } <span class="kw">else</span> {
+        replacement, exists := recordMap[rec.SupersededBy]
+        <span class="kw">if</span> !exists {
+            localErrs = <span class="fn">append</span>(localErrs, fmt.<span class="fn">Errorf</span>(<span class="str">"ADR %d superseded by non-existent ADR %d"</span>, rec.ID, rec.SupersededBy))
+        } <span class="kw">else if</span> replacement.Supersedes != rec.ID {
+            localErrs = <span class="fn">append</span>(localErrs, fmt.<span class="fn">Errorf</span>(<span class="str">"ADR %d superseded by %d, but %d does not declare it"</span>, rec.ID, rec.SupersededBy, rec.SupersededBy))
+        }
+    }
+}
+      </pre>
+    </div>
+    <div class="slide-footer">
+      <span>Parallel Node Execution via Goroutines</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 14: Failure Scenario - Dangling & One-Sided -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">FAILURE BEHAVIOR</span>
+      <span class="slide-num">14 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Edge Case 1: Tautan Putus & Sepihak</div>
+      <div class="grid-2">
+        <div class="card-warn">
+          <h3 style="color:#ef4444;">Dangling Reference</h3>
+          <p>ADR 1 mencatat <code>Status: Superseded by 99</code>.</p>
+          <p style="margin-top:0.1in; color:#f87171;">Hasil Linter: <strong>FAIL</strong></p>
+          <p style="font-size:15pt; margin-top:0.1in;">"ADR 1 superseded by non-existent ADR 99"</p>
+        </div>
+        <div class="card-warn">
+          <h3 style="color:#ef4444;">One-Sided Link</h3>
+          <p>ADR 1 mencatat <code>Superseded by 2</code>, tetapi ADR 2 lupa menuliskan <code>Supersedes: 1</code>.</p>
+          <p style="margin-top:0.1in; color:#f87171;">Hasil Linter: <strong>FAIL</strong></p>
+          <p style="font-size:15pt; margin-top:0.1in;">"ADR 2 does not declare it supersedes ADR 1"</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>tests/linter_test.go: TestLinter_BrokenReferences</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 15: Failure Scenario - Self Supersession & Cycles -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">FAILURE BEHAVIOR</span>
+      <span class="slide-num">15 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Edge Case 2: Self-Supersession & Siklus</div>
+      <div class="grid-2">
+        <div class="card-warn">
+          <h3 style="color:#ef4444;">Self-Supersession</h3>
+          <p>ADR 1 mencatat <code>Superseded by 1</code> atau <code>Supersedes: 1</code>.</p>
+          <p style="margin-top:0.1in; color:#f87171;">Hasil Linter: <strong>FAIL</strong></p>
+          <p style="font-size:15pt; margin-top:0.1in;">"ADR 1 cannot supersede itself"</p>
+        </div>
+        <div class="card-warn">
+          <h3 style="color:#ef4444;">Cyclical Supersession</h3>
+          <p>ADR 1 digantikan oleh 2, ADR 2 digantikan oleh 3, ADR 3 digantikan oleh 1 (loop).</p>
+          <p style="margin-top:0.1in; color:#f87171;">Hasil Linter: <strong>FAIL</strong></p>
+          <p style="font-size:15pt; margin-top:0.1in;">"cyclical supersession detected involving ADR 1"</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Cycle Detection via DFS Graph Traversal</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 16: Failure Scenario - Gaps & Duplicate IDs -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">FAILURE BEHAVIOR</span>
+      <span class="slide-num">16 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Edge Case 3: Penomoran Loncat & ID Ganda</div>
+      <div class="grid-2">
+        <div class="card-warn">
+          <h3 style="color:#ef4444;">Non-Monotonic IDs</h3>
+          <p>Terdapat ADR 1 dan ADR 3, tetapi ADR 2 hilang.</p>
+          <p style="margin-top:0.1in; color:#f87171;">Hasil Linter: <strong>FAIL</strong></p>
+          <p style="font-size:15pt; margin-top:0.1in;">"non-monotonic numbering, expected 2 but got 3"</p>
+        </div>
+        <div class="card-warn">
+          <h3 style="color:#ef4444;">Duplicate ADR ID</h3>
+          <p>Dua dokumen berbeda sama-sama menggunakan ID 1 akibat merge branch paralel.</p>
+          <p style="margin-top:0.1in; color:#f87171;">Hasil Linter: <strong>FAIL</strong></p>
+          <p style="font-size:15pt; margin-top:0.1in;">"duplicate ADR ID: 1"</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Invariants Enforced Prior to Branch Merge</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 17: Case Study Overview -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">CASE STUDY</span>
+      <span class="slide-num">17 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Evolusi Arsitektur SaaS ERP (cmd/demo)</div>
+      <div class="grid-3">
+        <div class="card">
+          <h3>ADR 0001</h3>
+          <p><span class="badge badge-sup">Superseded</span></p>
+          <p style="font-weight:bold; margin-top:0.1in;">Modular Monolith</p>
+          <p style="font-size:15pt; margin-top:0.05in;">Tim 5 insinyur, deadline 3 bulan. Menjaga ACID lokal & deploy tunggal.</p>
+        </div>
+        <div class="card">
+          <h3>ADR 0002</h3>
+          <p><span class="badge badge-acc">Accepted</span></p>
+          <p style="font-weight:bold; margin-top:0.1in;">Notification Microservice</p>
+          <p style="font-size:15pt; margin-top:0.05in;">Tim 25 insinyur, burst traffic. Ekstraksi modul via message queue.</p>
+        </div>
+        <div class="card">
+          <h3>ADR 0003</h3>
+          <p><span class="badge badge-rej">Rejected</span></p>
+          <p style="font-weight:bold; margin-top:0.1in;">Reject Event Sourcing</p>
+          <p style="font-size:15pt; margin-top:0.05in;">Usulan ditolak; tabel audit relasional mencukupi kebutuhan hukum.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>cmd/demo/main.go</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 18: Demo Execution Output -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">EXECUTION VERIFICATION</span>
+      <span class="slide-num">18 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Hasil Eksekusi Demo Aktual</div>
+      <pre>
+=== Architecture Decision Record (ADR) Lab ===
+Successfully parsed 3 ADRs:
+  - [0001] Use Modular Monolith for Core SaaS ERP        | Status: Superseded -> Superseded by ADR 2
+  - [0002] Extract Notification Service to Microservice  | Status: Accepted   -> Supersedes ADR 1
+  - [0003] Reject Event Sourcing for Order Management    | Status: Rejected  
+
+Running ADR Integrity Linter...
+Integrity check passed! Decision lineage and lifecycle invariants are intact.
+      </pre>
+      <div class="slide-text" style="font-size: 17pt;">
+        Demo memverifikasi bahwa parser regex mengekstrak silsilah secara presisi dan linter menyatakan status integritas 100% valid.
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>go run ./cmd/demo</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 19: Test Suite Assertions -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">TEST SUITE PROOF</span>
+      <span class="slide-num">19 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Apa yang Benar-Benar Dibuktikan Pengujian</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Test Function</th>
+            <th>Target Pengujian</th>
+            <th>Hasil Verifikasi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>TestParse_Valid</code></td>
+            <td>Struktur Markdown lengkap</td>
+            <td>Ekstraksi ID, Title, Status Accepted akurat</td>
+          </tr>
+          <tr>
+            <td><code>TestParse_Superseded</code></td>
+            <td>Klausa Status: Superseded by N</td>
+            <td>Field SupersededBy terisi integer N</td>
+          </tr>
+          <tr>
+            <td><code>TestParse_Invalid</code></td>
+            <td>Format cacat / bagian kosong</td>
+            <td>Error spesifik pada judul/status/section kosong</td>
+          </tr>
+          <tr>
+            <td><code>TestLinter_BrokenReferences</code></td>
+            <td>6 skenario anomali graf</td>
+            <td>Mendeteksi tautan putus, sepihak, loncat, siklus</td>
+          </tr>
+          <tr>
+            <td><code>TestLinter_ConcurrencyStress</code></td>
+            <td>100 record berpasangan</td>
+            <td>Zero error & zero race condition (<code>-race</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="slide-footer">
+      <span>PASS: 23 test assertions across internal packages</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 20: Implementation Boundaries -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">LIMITATIONS</span>
+      <span class="slide-num">20 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Batas Pembuktian Implementasi</div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Parser Regex Ketat</h3>
+          <p>Parser mengasumsikan heading persis <code># 1. Judul</code> dan section H2. Format Markdown bebas atau sintaks non-standar belum didukung.</p>
+        </div>
+        <div class="card">
+          <h3>Model Data In-Memory</h3>
+          <p>Implementasi memvalidasi string Markdown di memori. Belum terhubung otomatis ke traversal disk rekursif atau hook Git.</p>
+        </div>
+      </div>
+      <div class="card-amber" style="margin-top: 0.1in;">
+        <p style="font-size: 17pt; color: #f4f1e8;">Linter menjamin integritas struktural silsilah, tetapi tidak dapat menilai apakah argumen bisnis di dalam ADR tersebut secara teknis tepat.</p>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Explicit Engineering Boundaries</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 21: Trade-offs Table -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">TRADE-OFF ANALYSIS</span>
+      <span class="slide-num">21 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Kompromi ADR Otomatis vs Dokumentasi Tradisional</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Pendekatan</th>
+            <th>Keuntungan Nyata</th>
+            <th>Beban / Kelemahan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Wiki Eksternal (Confluence)</strong></td>
+            <td>Mudah dibaca stakeholders non-teknis, GUI kaya</td>
+            <td>Cepat mengalami drift, terputus dari riwayat branch Git</td>
+          </tr>
+          <tr>
+            <td><strong>ADR Markdown Manual</strong></td>
+            <td>Tersimpan bersama kode, review via Pull Request</td>
+            <td>Rentan penomoran loncat dan tautan silsilah putus</td>
+          </tr>
+          <tr>
+            <td><strong>ADR + Linter Otomatis</strong></td>
+            <td>Integritas graf terjamin, ID monotonik, fail-fast di CI</td>
+            <td>Format penulisan kaku, butuh disiplin memelihara record</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="slide-footer">
+      <span>Architectural Governance Comparison</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 22: Production Checklist -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">PRODUCTION CHECKLIST</span>
+      <span class="slide-num">22 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Checklist Penggabungan ADR ke Branch Utama</div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Struktur & Penomoran</h3>
+          <p>&#9633; Nomor urut kontigu tanpa jeda (1, 2, 3...)</p>
+          <p>&#9633; Format Markdown memenuhi aturan regex linter</p>
+          <p>&#9633; Bagian Context, Decision, Consequences terisi padat</p>
+          <p>&#9633; Pemicu tinjauan ulang (Review Triggers) tercatat</p>
+        </div>
+        <div class="card">
+          <h3>Silsilah & Status</h3>
+          <p>&#9633; Status resmi: Proposed, Accepted, Superseded, Rejected</p>
+          <p>&#9633; Tautan timbal-balik SupersededBy dan Supersedes sinkron</p>
+          <p>&#9633; Keputusan lama tidak disunting retroaktif</p>
+          <p>&#9633; Pipeline CI menjalankan linter dengan hasil 0 error</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Pre-merge Pull Request Verification</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 23: Key Engineering Lessons -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">ENGINEERING LESSONS</span>
+      <span class="slide-num">23 / 24</span>
+    </div>
+    <div class="slide-body">
+      <div class="slide-title">Pelajaran Kunci dari Lab 17</div>
+      <div class="grid-3">
+        <div class="card">
+          <h3>1. Ko-lokasi di Git</h3>
+          <p>Dokumentasi yang berada di luar repositori kode adalah dokumentasi yang ditakdirkan usang.</p>
+        </div>
+        <div class="card">
+          <h3>2. Rekam Penolakan</h3>
+          <p>Status Rejected mengabadikan argumentasi mengapa opsi menarik ditolak, mencegah perdebatan berulang.</p>
+        </div>
+        <div class="card">
+          <h3>3. Invarian Tervalidasi</h3>
+          <p>Perlakukan silsilah dokumentasi arsitektur sama ketatnya dengan skema basis data dan kontrak API.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Engineering Governance Principles</span>
+      <span>Lukman / lukman-ss</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 24: Summary & Repository Link -->
+  <div class="slide">
+    <div class="slide-header">
+      <span class="lab-tag">SUMMARY & REPOSITORY</span>
+      <span class="slide-num">24 / 24</span>
+    </div>
+    <div class="slide-body cover-box">
+      <div class="slide-title">Pelajari Implementasi Lengkap Lab 17</div>
+      <div class="card" style="padding: 0.35in;">
+        <p style="font-size: 22pt; color: #f4f1e8; line-height: 1.4; margin-bottom: 0.2in;">
+          Seluruh kode implementasi, parser regex, linter konkuren, demo executable, serta 23 unit test assertions tersedia di repositori publik:
+        </p>
+        <p style="font-size: 20pt; color: #38bdf8; font-family: monospace; word-break: break-all;">
+          github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record
+        </p>
+        <p style="font-size: 16pt; color: #7ba29e; font-family: monospace; margin-top: 0.15in;">
+          Commit: 4636359a4376246c0af2abdea360ac0b014c7bc4
+        </p>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>Software Engineering Lab · Lukman / lukman-ss</span>
+      <span>24 / 24</span>
+    </div>
+  </div>
+
+</body>
+</html>

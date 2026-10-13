@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1920px;
+    height: 1080px;
+    background-color: #0b1b2d;
+    color: #f4f1e8;
+    font-family: 'Courier New', Courier, monospace;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Scanline effect */
+  body::before {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+    background-size: 100% 4px;
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  /* CRT subtle glow vignette */
+  body::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: radial-gradient(circle at center, transparent 65%, rgba(5, 12, 20, 0.7) 100%);
+    z-index: 21;
+    pointer-events: none;
+  }
+
+  /* Outer retro bezel container */
+  .monitor-bezel {
+    position: absolute;
+    top: 30px;
+    left: 40px;
+    right: 40px;
+    bottom: 30px;
+    border: 4px solid #087f76;
+    box-shadow: inset 0 0 20px rgba(8, 127, 118, 0.5), 0 0 25px rgba(8, 127, 118, 0.4);
+    border-radius: 12px;
+    padding: 35px 45px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #0d2137;
+  }
+
+  /* Terminal Top Bar */
+  .terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #087f76;
+    padding-bottom: 15px;
+  }
+
+  .terminal-tag {
+    font-size: 26px;
+    font-weight: bold;
+    color: #d97706;
+    letter-spacing: 2px;
+  }
+
+  .terminal-status {
+    font-size: 22px;
+    color: #087f76;
+    letter-spacing: 1px;
+  }
+
+  /* Main Display Grid */
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 40px;
+    align-items: center;
+    margin: 20px 0;
+  }
+
+  .title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .lab-badge {
+    display: inline-block;
+    align-self: flex-start;
+    background: #087f76;
+    color: #f4f1e8;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 6px 18px;
+    border-radius: 4px;
+    letter-spacing: 2px;
+  }
+
+  .main-title {
+    font-size: 58px;
+    line-height: 1.15;
+    font-weight: 900;
+    color: #f4f1e8;
+    text-shadow: 2px 2px 0px #087f76;
+    letter-spacing: -1px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+
+  .subtitle {
+    font-size: 27px;
+    color: #a4c2bb;
+    line-height: 1.4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+
+  .spec-tags {
+    display: flex;
+    gap: 15px;
+    margin-top: 10px;
+  }
+
+  .spec-tag {
+    font-size: 18px;
+    background: #091829;
+    border: 1px solid #d97706;
+    color: #d97706;
+    padding: 5px 12px;
+    border-radius: 4px;
+  }
+
+  /* Retro CRT Terminal Box */
+  .retro-terminal {
+    background: #071321;
+    border: 2px solid #087f76;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+
+  .term-header {
+    background: #087f76;
+    color: #071321;
+    padding: 8px 16px;
+    font-size: 18px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .term-dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .term-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #071321;
+  }
+
+  .term-code {
+    padding: 20px;
+    font-size: 17px;
+    line-height: 1.55;
+    color: #d8e9df;
+  }
+
+  .term-code .kw { color: #f59e0b; font-weight: bold; }
+  .term-code .fn { color: #38bdf8; }
+  .term-code .str { color: #34d399; }
+  .term-code .cmt { color: #64748b; }
+  .term-code .stat { color: #fb7185; }
+  .term-code .link { color: #a78bfa; font-weight: bold; }
+
+  /* Bottom Bar */
+  .terminal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 2px solid #087f76;
+    padding-top: 15px;
+  }
+
+  .author-tag {
+    font-size: 24px;
+    font-weight: bold;
+    color: #f4f1e8;
+    letter-spacing: 1px;
+  }
+
+  .author-tag span {
+    color: #d97706;
+  }
+
+  .repo-tag {
+    font-size: 20px;
+    color: #7ba29e;
+  }
+</style>
+</head>
+<body>
+  <div class="monitor-bezel">
+    <div class="terminal-header">
+      <div class="terminal-tag">SYS://SOFTWARE_ENGINEERING_LAB</div>
+      <div class="terminal-status">[ INVARIANTS: VERIFIED // TEST: 23 PASS ]</div>
+    </div>
+
+    <div class="content-grid">
+      <div class="title-group">
+        <div class="lab-badge">LAB 17</div>
+        <div class="main-title">Architecture Decision Record (ADR)</div>
+        <div class="subtitle">Enforcing architectural lineage in Git: Markdown regex parsing, monotonic numbering, bidirectional supersedes validation, and rejected state tracking.</div>
+        <div class="spec-tags">
+          <div class="spec-tag">#Monotonic-IDs</div>
+          <div class="spec-tag">#Reciprocal-Supersedes</div>
+          <div class="spec-tag">#Cycle-Detection</div>
+          <div class="spec-tag">#Go-Stdlib</div>
+        </div>
+      </div>
+
+      <div class="retro-terminal">
+        <div class="term-header">
+          <span>adr_linter.go (reciprocal check)</span>
+          <div class="term-dots">
+            <div class="term-dot"></div>
+            <div class="term-dot"></div>
+            <div class="term-dot"></div>
+          </div>
+        </div>
+        <div class="term-code">
+<span class="cmt">// Validate decision lineage integrity</span>
+<span class="kw">if</span> rec.Status == <span class="stat">StatusSuperseded</span> {
+    repl, ok := recordMap[rec.SupersededBy]
+    <span class="kw">if</span> !ok {
+        <span class="fn">appendErr</span>(<span class="str">"dangling target ADR"</span>)
+    } <span class="kw">else if</span> repl.Supersedes != rec.ID {
+        <span class="fn">appendErr</span>(<span class="str">"broken reciprocal link"</span>)
+    }
+}
+
+<span class="cmt">// Enforce 1..N contiguous sequence</span>
+<span class="kw">for</span> i, id := <span class="kw">range</span> sortedIDs {
+    <span class="kw">if</span> id != i+1 {
+        <span class="fn">appendErr</span>(<span class="str">"non-monotonic numbering"</span>)
+    }
+}
+<span class="link">&gt;&gt; PASS: 0 data races detected</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="terminal-footer">
+      <div class="author-tag">AUTHOR: <span>lukman-ss</span> / Lukman</div>
+      <div class="repo-tag">github.com/lukman-ss/software-engineering-lab</div>
+    </div>
+  </div>
+</body>
+</html>
