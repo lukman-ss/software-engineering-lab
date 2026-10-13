@@ -329,6 +329,25 @@ func (m *MockGateway) Charge(money di.Money) error {
     <li><strong>Interface Segregation:</strong> Deklarasikan interface sekecil mungkin sesuai kebutuhan pemanggil. Interface <code>PaymentGateway</code> hanya menuntut satu method <code>Charge(m Money) error</code>, menjaga kemudahan penulisan test double.</li>
   </ul>
 
+  <h2>Analisis Kegagalan dan Pola Pemulihan</h2>
+
+  <p>Dalam sistem terdistribusi, interaksi antar komponen selalu menghadapi dua kategori anomali: data input tidak valid dan ketidaktersediaan layanan pihak ketiga. Implementasi pada lab ini mendemonstrasikan bagaimana isolasi tanggung jawab menyederhanakan penanganan kegagalan.</p>
+
+  <p>Pada skenario pertama, validasi input dilakukan di gerbang terdepan (pre-check). Ketika pemanggil mengirimkan nilai transaksi tidak sah (misalnya amount bernilai nol atau negatif), <code>Processor</code> langsung mengembalikan error tanpa menghubungi <code>PaymentGateway</code>. Ini menghemat alokasi memori, mencegah beban jaringan percuma, dan menghindarkan downstream gateway dari kegagalan validasi eksternal. Pengujian unit membuktikan bahwa pointer mock gateway sama sekali tidak mencatat aktivitas pemanggilan pada skenario ini.</p>
+
+  <p>Pada skenario kedua, ketika gateway eksternal mengalami kegagalan transmisi atau timeout, error dikembalikan secara transparan ke pemanggil. Struktur domain tidak berusaha menelan error atau memodifikasi status secara sembrono. Dalam skenario produksi riil, jika implementasi <code>RealGateway</code> mengalami gangguan permanen atau degradasi performa, penggantian implementasi ke penyedia cadangan (fallback provider) dapat dilakukan murni pada lapisan <em>Composition Root</em> (di <code>main.go</code>) tanpa merombak satu baris pun logika bisnis pada <code>Processor</code>.</p>
+
+  <h2>Pelajaran Inti Software Engineering</h2>
+
+  <p>Eksperimen dalam lab ini menegaskan sejumlah prinsip fundamental dalam rekayasa perangkat lunak:</p>
+
+  <ol>
+    <li><strong>Eksternalisasi Pembuatan Objek:</strong> Biarkan assembler luar menyusun graf dependensi. Modul bisnis menerima dependensi yang sudah siap pakai dan berfokus penuh mengeksekusi aturan domain.</li>
+    <li><strong>Utamakan Constructor Injection:</strong> Constructor injection menjamin status objek valid sejak awal instansiasi, menjaga kekekalan referensi dependensi, dan menolak pembuatan objek setengah jadi.</li>
+    <li><strong>Hindari Service Locator di Domain Logic:</strong> Service locator menyamarkan dependensi nyata di balik antarmuka generik, mengaburkan analisis statis kode, dan memperumit pembuatan skenario pengujian unit.</li>
+    <li><strong>Batasi DI Hanya untuk Objek Berperilaku Eksternal:</strong> Struktur data murni, representasi nilai (value objects), dan DTO harus diinstansiasi secara langsung tanpa melibatkan container injeksi.</li>
+  </ol>
+
   <h2>Informasi Repositori</h2>
 
   <p>Seluruh implementasi, berkas demo, dan pengujian dapat ditinjau langsung pada repositori open-source:</p>
