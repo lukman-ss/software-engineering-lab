@@ -1,187 +1,15 @@
-<!doctype html>
-<html lang="id">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis</title>
-  <meta name="description" content="Pelajari dependency injection di Go: konstruktor eksplisit vs service locator anti-pattern, mock testing tanpa network, dan isolasi value object murni.">
-  <meta property="og:title" content="Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis">
-  <meta property="og:description" content="Kontras Constructor Injection dan Service Locator di Go: validasi input, mocking tanpa jaringan, dan batas container.">
-  <style>
-    body {
-      margin: 0;
-      background: #f4f1e8;
-      color: #11283a;
-      font: 19px/1.75 Georgia, serif;
-    }
-    article {
-      max-width: 850px;
-      margin: 48px auto;
-      padding: 0 28px 70px;
-    }
-    h1, h2, h3, .subtitle {
-      font-family: Arial, sans-serif;
-      line-height: 1.25;
-      color: #0b1b2d;
-    }
-    h1 {
-      font-size: 42px;
-      margin-bottom: 8px;
-    }
-    h2 {
-      margin-top: 48px;
-      font-size: 28px;
-      border-bottom: 2px solid #cad7cf;
-      padding-bottom: 8px;
-    }
-    h3 {
-      font-size: 22px;
-      margin-top: 32px;
-    }
-    .subtitle {
-      font-size: 21px;
-      color: #52606b;
-      margin-top: 0;
-      margin-bottom: 24px;
-    }
-    .author-line {
-      font-family: Arial, sans-serif;
-      font-size: 15px;
-      color: #087f76;
-      font-weight: bold;
-      margin-bottom: 32px;
-    }
-    img {
-      width: 100%;
-      height: auto;
-      border-radius: 8px;
-      margin-bottom: 36px;
-      border: 1px solid #cad7cf;
-    }
-    pre {
-      background: #0b1b2d;
-      color: #d8e9df;
-      padding: 20px;
-      overflow-x: auto;
-      font: 14px/1.65 monospace;
-      border-radius: 8px;
-      margin: 24px 0;
-    }
-    code {
-      font-family: monospace;
-      background: #e2ddd0;
-      color: #0b1b2d;
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 15px;
-    }
-    pre code {
-      background: transparent;
-      color: inherit;
-      padding: 0;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font: 16px/1.5 Arial, sans-serif;
-      margin: 28px 0;
-    }
-    td, th {
-      padding: 12px 14px;
-      border: 1px solid #cad7cf;
-      text-align: left;
-    }
-    th {
-      background: #0b1b2d;
-      color: #f4f1e8;
-    }
-    tr:nth-child(even) {
-      background: #eae5d7;
-    }
-    blockquote {
-      border-left: 4px solid #087f76;
-      margin: 28px 0;
-      padding: 8px 20px;
-      color: #2c444e;
-      font-style: italic;
-      background: #eae5d8;
-      border-radius: 0 8px 8px 0;
-    }
-    a {
-      color: #087f76;
-      text-decoration: underline;
-    }
-    ul, ol {
-      padding-left: 24px;
-    }
-    li {
-      margin-bottom: 8px;
-    }
-  </style>
-</head>
-<body>
-<article>
-  <h1>Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis</h1>
-  <p class="subtitle">Kontras Constructor Injection dan Service Locator di Go: validasi input, mocking tanpa jaringan, dan batas container.</p>
-  <p class="author-line">Lukman / lukman-ss · Software Engineering Lab 16</p>
-
-  <img src="lab-16-dependency-injection-cover-id.png" alt="Ilustrasi komputer CRT retro pixel art menampilkan kode dependency injection di Go, Constructor Injection vs Service Locator, dan identitas lukman-ss.">
-
-  <p>Ketika sebuah modul bisnis menginisialisasi dependensinya secara langsung di dalam method, detail infrastruktur mengunci logika domain. Mengganti implementasi payment gateway, mengalihkan vendor notifikasi, atau mengisolasi unit test tanpa koneksi internet menjadi tugas yang rumit. Setiap modifikasi infrastruktur memaksa perubahan pada kode bisnis, dan unit test berubah menjadi integration test yang lambat.</p>
-
-  <blockquote>Separation of configuration from use: biarkan pihak luar merakit dependensi, sementara domain hanya fokus mengeksekusi kontrak.</blockquote>
-
-  <p>Software Engineering Lab 16 membuktikan prinsip ini dalam Go standar tanpa framework eksternal. Melalui implementasi payment processor, lab ini mengontraskan <strong>Constructor Injection</strong> dengan <strong>Service Locator anti-pattern</strong>, menunjukkan pengujian terisolasi memakai test double mock, serta menguraikan batas perlakuan terhadap value object murni.</p>
-
-  <h2>Kontrak Interface dan Value Object</h2>
-
-  <p>Fondasi abstraksi terletak pada file <code>internal/di/gateway.go</code>. Sebuah interface mendefinisikan batas kemampuan yang dibutuhkan oleh domain bisnis, terlepas dari siapa penyedianya:</p>
-
-  <pre><code>// internal/di/gateway.go:11-14
-type PaymentGateway interface {
-    Charge(m Money) error
-}</code></pre>
-
-  <p>Pada file yang sama, <code>Money</code> didefinisikan sebagai struktur data representasional:</p>
-
-  <pre><code>// internal/di/gateway.go:6-9
-type Money struct {
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis di Go</title><meta name="description" content="Pelajari dependency injection di Go: pemisahan konfigurasi dari penggunaan, kontras constructor injection vs service locator, isolasi unit test zero-network, dan batas perlakuan value object murni."><meta property="og:title" content="Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis di Go"><meta property="og:description" content="Analisis teknis implementasi Constructor Injection vs Service Locator anti-pattern di Go standar tanpa framework eksternal."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px;border-bottom:2px solid #cad7cf;padding-bottom:8px}h3{font-size:22px;margin-top:28px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px;margin-bottom:32px;border:1px solid #cad7cf}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px;margin:24px 0}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif;margin:28px 0}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}blockquote{border-left:4px solid #087f76;margin:24px 0;padding:10px 20px;background:#eae5d8;color:#2c444e;font-style:italic;border-radius:0 8px 8px 0}a{color:#087f76}</style></head><body><article><h1>Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis di Go</h1><p class="subtitle">Kontras Constructor Injection dan Service Locator di Go: validasi input, mocking tanpa jaringan, dan batas container.</p><p>Lukman / lukman-ss · Software Engineering Lab 16</p><img src="lab-16-dependency-injection-cover-id.png" alt="Cover retro CRT terminal menampilkan kode Go Dependency Injection, Constructor Injection vs Service Locator, dan lukman-ss."><h2>Separation of Configuration from Use</h2><p>Ketika sebuah fungsi bisnis menginisialisasi dependensi teknis secara langsung—misalnya <code>Processor</code> memanggil <code>new RealGateway()</code> di dalam method-nya—logika domain terkunci pada vendor infrastruktur spesifik. Perubahan protokol jaringan, kredensial API, atau implementasi mock untuk pengujian memaksa modifikasi di dalam inti logika bisnis. Martin Fowler menegaskan bahwa prinsip <em>Separation of Configuration from Use</em> jauh lebih fundamental daripada perdebatan sintaksis antara Dependency Injection dan Service Locator. Objek bisnis tidak boleh mencari atau merakit dependensinya sendiri; perakitan didelegasikan ke assembler luar.</p><h2>Value object Money tidak menyentuh I/O</h2><p>Struktur data murni seperti uang atau koordinat tidak memiliki siklus hidup independen, tidak memegang koneksi socket, dan tidak menyentuh I/O eksternal. Pada file <code>internal/di/gateway.go</code>, <code>Money</code> didefinisikan sebagai struct sederhana dengan dua field integer dan string. Lab ini secara tegas memisahkan perlakuan terhadap value object: <code>Money</code> diinstansiasi langsung pada baris pemanggilan logika bisnis, bukan didaftarkan ke dalam container DI atau diinjeksi via interface. Menyuntikkan struct data tanpa perilaku infrastruktur ke dalam container hanya menghasilkan abstraksi berlebihan (<em>over-engineering</em>) tanpa manfaat pengujian.</p><pre><code>type Money struct {
     Amount   int
     Currency string
-}</code></pre>
-
-  <p>Struktur data murni seperti <code>Money</code> tidak menyentuh database, jaringan, atau sistem operasi. Objek semacam ini adalah value object yang diinstansiasi langsung pada baris pemanggilan, bukan disuntikkan lewat dependency injection. Memasukkan struct data ke dalam container DI hanya menambah kompleksitas tanpa nilai arsitektural.</p>
-
-  <h2>Constructor Injection vs Service Locator</h2>
-
-  <p>Lab mengimplementasikan dua pendekatan pemrosesan transaksi yang kontras:</p>
-
-  <h3>1. Pendekatan Bersih: Constructor Injection</h3>
-
-  <p>Struktur <code>Processor</code> di <code>internal/di/processor.go</code> menerima kontrak secara eksplisit melalui fungsi konstruktor:</p>
-
-  <pre><code>// internal/di/processor.go:6-13
-type Processor struct {
+}</code></pre><h2>Interface PaymentGateway didefinisikan di sisi konsumen</h2><p>Bahasa Go menganut konvensi idiomatik di mana konsumen abstraksi menentukan interface yang dibutuhkannya, bukan provider yang menyediakannya. <code>PaymentGateway</code> hanya mendeklarasikan satu method <code>Charge(m Money) error</code>. Interface minimalis ini melindungi <code>Processor</code> dari detail teknis implementasi konkret seperti pooling HTTP client, marshalling JSON, atau konfigurasi TLS. Jika di kemudian hari sistem berpindah dari RealGateway ke vendor perbankan lain, kontrak bisnis tetap utuh tanpa modifikasi struktural.</p><pre><code>type PaymentGateway interface {
+    Charge(m Money) error
+}</code></pre><h2>Constructor injection menjamin kelengkapan inisialisasi</h2><p>Pola <strong>Constructor Injection</strong> diimplementasikan pada <code>internal/di/processor.go</code> melalui fungsi <code>NewProcessor(g PaymentGateway) *Processor</code>. Dengan menerima kontrak interface secara eksplisit saat pembentukan objek, struct <code>Processor</code> tidak pernah berada dalam status separuh jadi (<em>half-baked</em>). Semua dependensi wajib harus disediakan sebelum objek dapat memproses transaksi bisnis. Tidak ada setter mutable yang dapat dimodifikasi secara sengaja atau tidak sengaja setelah fase perakitan selesai.</p><pre><code>type Processor struct {
     gateway PaymentGateway
 }
 
 func NewProcessor(g PaymentGateway) *Processor {
-    return &Processor{gateway: g}
-}</code></pre>
-
-  <p>Pola ini memberikan jaminan konkret:</p>
-  <ul>
-    <li>Dependensi tampak jelas pada signature fungsi <code>NewProcessor</code>.</li>
-    <li>Objek tidak dapat dibuat dalam status setengah jadi tanpa gateway.</li>
-    <li><code>Processor</code> tidak mengetahui keberadaan framework DI, reflection, atau container registrasi.</li>
-  </ul>
-
-  <h3>2. Anti-Pattern: Service Locator</h3>
-
-  <p>Struktur <code>BadProcessor</code> di <code>internal/di/locator.go</code> menerima container generik alih-alih kontrak yang dibutuhkan:</p>
-
-  <pre><code>// internal/di/locator.go:6-17
-type Container interface {
+    return &amp;Processor{gateway: g}
+}</code></pre><h2>Compiler Go menggagalkan dependensi yang tertinggal</h2><p>Keunggulan utama Constructor Injection dibandingkan pendekatan dinamis adalah validasi pada waktu kompilasi (<em>compile-time safety</em>). Jika pengembang menambahkan dependensi baru ke dalam <code>NewProcessor</code>—misalnya interface <code>AuditLogger</code>—compiler Go akan langsung menolak seluruh kode pemanggilan yang belum menyediakan parameter tersebut. Kesalahan konfigurasi terdeteksi sebelum binary selesai dibangun, mengeliminasi risiko crash saat aplikasi menerima request pertama di lingkungan produksi.</p><h2>Jebakan nil pointer pada constructor tanpa guard</h2><p>Meskipun signature fungsi mewajibkan parameter bertipe interface <code>PaymentGateway</code>, runtime Go tetap mengizinkan pemanggilan <code>NewProcessor(nil)</code>. Jika constructor tidak memiliki defensive guard <code>if g == nil</code>, objek <code>Processor</code> akan berhasil dibuat namun akan memicu <code>panic: runtime error: invalid memory address or nil pointer dereference</code> saat method <code>p.gateway.Charge(m)</code> dieksekusi. Lab ini mencatat bahwa pada aplikasi produksi berstandar tinggi, constructor injection wajib memvalidasi non-nil parameter atau mengembalikan tuple <code>(*Processor, error)</code>.</p><h2>Service Locator menyembunyikan dependency graph</h2><p>Sebagai kontras terhadap pendekatan bersih, lab mengimplementasikan <strong>Service Locator anti-pattern</strong> pada <code>internal/di/locator.go</code>. Struct <code>BadProcessor</code> tidak menerima <code>PaymentGateway</code> secara langsung, melainkan menerima <code>Container</code> generik:</p><pre><code>type Container interface {
     GetPaymentGateway() PaymentGateway
 }
 
@@ -190,62 +18,25 @@ type BadProcessor struct {
 }
 
 func NewBadProcessor(c Container) *BadProcessor {
-    return &BadProcessor{container: c}
-}</code></pre>
-
-  <p>Pada saat pemanggilan method <code>ProcessPayment</code>, dependensi ditarik dari container secara dinamis:</p>
-
-  <pre><code>// internal/di/locator.go:19-25
-func (p *BadProcessor) ProcessPayment(amount int) error {
-    if amount &lt;= 0 {
-        return errors.New("invalid amount")
-    }
-    m := Money{Amount: amount, Currency: "USD"}
-    return p.container.GetPaymentGateway().Charge(m)
-}</code></pre>
-
-  <p>Pendekatan Service Locator ini menghadirkan tiga kelemahan utama:</p>
-  <ol>
-    <li>Dependensi tersembunyi di dalam implementasi method; inspeksi constructor tidak memberitahukan service apa saja yang sebenarnya dipakai.</li>
-    <li>Kelas bisnis terikat erat pada API <code>Container</code>.</li>
-    <li>Pengujian unit mewajibkan pembuatan mock container buatan, bukan sekadar menyediakan mock service.</li>
-  </ol>
-
-  <h2>Alur Eksekusi di Composition Root</h2>
-
-  <p>Titik perakitan dependensi (Composition Root) ditempatkan secara terpusat pada file <code>cmd/demo/main.go</code>. Kode domain tidak mengurus instansiasi struct konkret:</p>
-
-  <pre><code>// cmd/demo/main.go:16-35
-func main() {
+    return &amp;BadProcessor{container: c}
+}</code></pre><p>Pola ini menyembunyikan dependency graph sistem. Membaca konstruktor <code>NewBadProcessor</code> tidak memberikan petunjuk apa pun mengenai layanan eksternal apa yang sebenarnya dibutuhkan oleh prosesor untuk memproses pembayaran.</p><h2>Query runtime menggantikan validasi compile-time</h2><p>Pada saat pemanggilan <code>ProcessPayment</code>, <code>BadProcessor</code> melakukan query runtime ke container: <code>p.container.GetPaymentGateway().Charge(m)</code>. Jika implementasi container lupa mendaftarkan gateway atau mengembalikan nil, compiler tidak memberikan peringatan apa pun. Kesalahan arsitektur baru meledak saat kode jalur tersebut benar-benar dilewati oleh alur eksekusi pengguna. Keterikatan terhadap API container juga mempersulit portabilitas modul ke sistem lain.</p><h2>Komparasi arsitektural: DI eksplisit vs Service Locator</h2><p>Perbedaan mendasar antara kedua pendekatan terletak pada arah kendali, transparansi dependensi, dan beban persiapan pengujian unit:</p><table><tr><th>Dimensi Arsitektur</th><th>Constructor Injection (Processor)</th><th>Service Locator (BadProcessor)</th></tr><tr><td>Visibilitas dependensi</td><td>Eksplisit di parameter constructor</td><td>Tersembunyi di dalam method body</td></tr><tr><td>Keamanan tipe</td><td>Compile-time safety oleh compiler Go</td><td>Tergantung lookup runtime container</td></tr><tr><td>Keterikatan framework</td><td>Nol (hanya bergantung pada interface bisnis)</td><td>Tinggi (terikat pada kontrak Container)</td></tr><tr><td>Setup test double</td><td>Mock di-pass langsung sebagai argumen</td><td>Wajib membungkus mock ke MockContainer</td></tr><tr><td>Status objek</td><td>Immutable dan terjamin lengkap</td><td>Rentan nil dereference jika container kosong</td></tr></table><h2>Composition Root terpusat di cmd/demo/main.go</h2><p>Titik di mana fase konfigurasi dieksekusi dan graf objek dirakit disebut <strong>Composition Root</strong>. Pada <code>cmd/demo/main.go</code>, fungsi <code>main</code> bertindak sebagai assembler aplikasi. Di sinilah satu-satunya lokasi kode di mana implementasi konkret <code>&amp;di.RealGateway{}</code> diinstansiasi dan disambungkan ke <code>di.NewProcessor(realGateway)</code>. Lapisan logika bisnis di dalam <code>internal/di/</code> sama sekali tidak mengimpor atau mengetahui keberadaan struct konkret ini.</p><pre><code>func main() {
     realGateway := &amp;di.RealGateway{}
 
-    // Jalur Constructor Injection
+    // Jalur Constructor Injection (Eksplisit)
     processor := di.NewProcessor(realGateway)
-    fmt.Println("--- Running Constructor Injection ---")
     _ = processor.ProcessPayment(100)
 
     // Jalur Service Locator (Anti-Pattern)
     container := &amp;SimpleContainer{gateway: realGateway}
     badProcessor := di.NewBadProcessor(container)
-    fmt.Println("--- Running Service Locator ---")
     _ = badProcessor.ProcessPayment(200)
-}</code></pre>
-
-  <p>Hasil eksekusi program demo membuktikan kedua jalur mampu menjalankan transaksi:</p>
-
-  <pre><code>--- Running Constructor Injection ---
-RealGateway charging 100 USD
---- Running Service Locator ---
-RealGateway charging 200 USD</code></pre>
-
-  <p>Keduanya menghasilkan output yang setara, namun jalur konstruktor mengekspos seluruh kebutuhan objek pada fase kompilasi tanpa resolusi runtime tambahan.</p>
-
-  <h2>Bukti Pengujian: 6 Assertion Tanpa Jaringan</h2>
-
-  <p>Pengujian pada <code>tests/processor_test.go</code> memverifikasi kebenaran logika bisnis menggunakan test double <code>MockGateway</code>:</p>
-
-  <pre><code>// tests/processor_test.go:10-21
-type MockGateway struct {
+}</code></pre><h2>Isolasi pengetahuan tipe konkret di entrypoint</h2><p>Dengan mengisolasi instansiasi tipe konkret pada entrypoint aplikasi, restrukturisasi infrastruktur menjadi sangat terlokalisasi. Jika <code>RealGateway</code> diganti dengan gateway yang mendukung HTTP retry, rate limiting, atau circuit breaker, perubahan hanya dilakukan pada satu baris di <code>main.go</code>. Seluruh kode domain pemrosesan pembayaran tetap steril tanpa ada perubahan satu baris pun pada file <code>processor.go</code>.</p><h2>Validasi input sebelum menguras sumber daya gateway</h2><p>Kedua implementasi prosesor menerapkan guard clause sebelum memanggil gateway: <code>if amount &lt;= 0 { return errors.New("invalid amount") }</code>. Logika ini memverifikasi bahwa aturan domain divalidasi lebih awal di lapisan memori lokal. Transaksi invalid tidak pernah membuang koneksi jaringan, kuota API pihak ketiga, atau latensi I/O. Desain DI memastikan bahwa kepatuhan guard clause ini dapat diuji secara mandiri tanpa menyentuh gateway riil.</p><pre><code>func (p *Processor) ProcessPayment(amount int) error {
+    if amount &lt;= 0 {
+        return errors.New("invalid amount")
+    }
+    m := Money{Amount: amount, Currency: "USD"}
+    return p.gateway.Charge(m)
+}</code></pre><h2>Error propagation transparan tanpa masking</h2><p>Ketika pemanggilan <code>p.gateway.Charge(m)</code> menghasilkan error, <code>Processor</code> mempropagasikan error tersebut langsung ke pemanggil tanpa menelan (<em>swallowing</em>) atau mengaburkan informasi kegagalan. Keterbukaan propagasi error ini krusial untuk observabilitas: layer atas (HTTP handler atau message subscriber) berhak menentukan apakah transaksi harus diulang (retry), dikirim ke Dead Letter Queue (DLQ), atau dikembalikan sebagai respons 502/503.</p><h2>Test double MockGateway tanpa jaringan</h2><p>Pengujian unit pada <code>tests/processor_test.go</code> mendefinisikan struct <code>MockGateway</code> yang mencatat argumen pemanggilan dan menyediakan flag pengontrol kegagalan:</p><pre><code>type MockGateway struct {
     ChargedMoney di.Money
     ShouldFail   bool
 }
@@ -256,107 +47,20 @@ func (m *MockGateway) Charge(money di.Money) error {
     }
     m.ChargedMoney = money
     return nil
-}</code></pre>
-
-  <p>Pengujian memverifikasi 3 skenario untuk masing-masing processor (total 6 kasus):</p>
-
-  <ol>
-    <li><strong>Skenario Sukses:</strong> Transaksi valid (amount 50 dan 75) berhasil dieksekusi, status error bernilai <code>nil</code>, dan nilai amount serta currency tercatat presisi di dalam <code>ChargedMoney</code>.</li>
-    <li><strong>Propagasi Error Gateway:</strong> Ketika <code>ShouldFail</code> aktif, pesan error <code>gateway unavailable</code> diteruskan ke pemanggil tanpa diabaikan.</li>
-    <li><strong>Validasi Input Sebagai Pelindung:</strong> Ketika input bernilai negatif (amount -10 atau -5), sistem mengembalikan error <code>invalid amount</code>. Assertion <code>mock.ChargedMoney.Amount == 0</code> memastikan bahwa panggilan ke gateway infrastruktur tidak pernah dilakukan.</li>
-  </ol>
-
-  <p>Seluruh pengujian unit berjalan selesai dalam hitungan milidetik secara terisolasi tanpa memerlukan dependensi eksternal, konfigurasi database, atau kredensial API.</p>
-
-  <h2>Matriks Pembuktian dan Batas Sistem</h2>
-
-  <p>Tabel berikut memetakan batas pengujian yang dilakukan oleh implementasi lab:</p>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Aspek Arsitektur</th>
-        <th>Terbukti di Lab</th>
-        <th>Batas dan Catatan Implementasi</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Pemisahan Konstruksi</td>
-        <td>Ya</td>
-        <td>Perakitan dilakukan manual di <code>cmd/demo/main.go</code>.</td>
-      </tr>
-      <tr>
-        <td>Isolasi Unit Testing</td>
-        <td>Ya</td>
-        <td>6 test assertions lulus tanpa dependensi jaringan.</td>
-      </tr>
-      <tr>
-        <td>Validasi Pre-check</td>
-        <td>Ya</td>
-        <td>Nilai &lt;= 0 menolak eksekusi sebelum memanggil gateway.</td>
-      </tr>
-      <tr>
-        <td>Thread Safety</td>
-        <td>Ya</td>
-        <td><code>go test -race ./...</code> lulus tanpa race warning.</td>
-      </tr>
-      <tr>
-        <td>DI Framework Otomatis</td>
-        <td>Tidak</td>
-        <td>Lab tidak menggunakan code generation atau reflection container.</td>
-      </tr>
-      <tr>
-        <td>Lifecycle Management</td>
-        <td>Tidak</td>
-        <td>Singleton, Scoped, dan Transient lifecycle tidak disimulasikan.</td>
-      </tr>
-      <tr>
-        <td>Benchmark Performa</td>
-        <td>Tidak</td>
-        <td>Lab tidak mengukur alokasi memori atau latency injection.</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h2>Pertimbangan Praktis Arsitektur</h2>
-
-  <p>Penerapan Dependency Injection menuntut disiplin desain:</p>
-
-  <ul>
-    <li><strong>Manual Wiring vs Framework DI:</strong> Pada codebase Go berukuran kecil hingga menengah, perakitan manual di fungsi <code>main</code> memberikan visibilitas tinggi dan keamanan tipe saat kompilasi. Penggunaan reflection container menambah beban penelusuran alur eksekusi saat debugging.</li>
-    <li><strong>Sinyal Constructor Bloat:</strong> Konstruktor dengan lebih dari 4 hingga 6 parameter merupakan indikasi pelanggaran Single Responsibility Principle. Solusinya adalah memecah tanggung jawab kelas, bukan membungkus seluruh parameter ke dalam satu service locator.</li>
-    <li><strong>Interface Segregation:</strong> Deklarasikan interface sekecil mungkin sesuai kebutuhan pemanggil. Interface <code>PaymentGateway</code> hanya menuntut satu method <code>Charge(m Money) error</code>, menjaga kemudahan penulisan test double.</li>
-  </ul>
-
-  <h2>Analisis Kegagalan dan Pola Pemulihan</h2>
-
-  <p>Dalam sistem terdistribusi, interaksi antar komponen selalu menghadapi dua kategori anomali: data input tidak valid dan ketidaktersediaan layanan pihak ketiga. Implementasi pada lab ini mendemonstrasikan bagaimana isolasi tanggung jawab menyederhanakan penanganan kegagalan.</p>
-
-  <p>Pada skenario pertama, validasi input dilakukan di gerbang terdepan (pre-check). Ketika pemanggil mengirimkan nilai transaksi tidak sah (misalnya amount bernilai nol atau negatif), <code>Processor</code> langsung mengembalikan error tanpa menghubungi <code>PaymentGateway</code>. Ini menghemat alokasi memori, mencegah beban jaringan percuma, dan menghindarkan downstream gateway dari kegagalan validasi eksternal. Pengujian unit membuktikan bahwa pointer mock gateway sama sekali tidak mencatat aktivitas pemanggilan pada skenario ini.</p>
-
-  <p>Pada skenario kedua, ketika gateway eksternal mengalami kegagalan transmisi atau timeout, error dikembalikan secara transparan ke pemanggil. Struktur domain tidak berusaha menelan error atau memodifikasi status secara sembrono. Dalam skenario produksi riil, jika implementasi <code>RealGateway</code> mengalami gangguan permanen atau degradasi performa, penggantian implementasi ke penyedia cadangan (fallback provider) dapat dilakukan murni pada lapisan <em>Composition Root</em> (di <code>main.go</code>) tanpa merombak satu baris pun logika bisnis pada <code>Processor</code>.</p>
-
-  <h2>Pelajaran Inti Software Engineering</h2>
-
-  <p>Eksperimen dalam lab ini menegaskan sejumlah prinsip fundamental dalam rekayasa perangkat lunak:</p>
-
-  <ol>
-    <li><strong>Eksternalisasi Pembuatan Objek:</strong> Biarkan assembler luar menyusun graf dependensi. Modul bisnis menerima dependensi yang sudah siap pakai dan berfokus penuh mengeksekusi aturan domain.</li>
-    <li><strong>Utamakan Constructor Injection:</strong> Constructor injection menjamin status objek valid sejak awal instansiasi, menjaga kekekalan referensi dependensi, dan menolak pembuatan objek setengah jadi.</li>
-    <li><strong>Hindari Service Locator di Domain Logic:</strong> Service locator menyamarkan dependensi nyata di balik antarmuka generik, mengaburkan analisis statis kode, dan memperumit pembuatan skenario pengujian unit.</li>
-    <li><strong>Batasi DI Hanya untuk Objek Berperilaku Eksternal:</strong> Struktur data murni, representasi nilai (value objects), dan DTO harus diinstansiasi secara langsung tanpa melibatkan container injeksi.</li>
-  </ol>
-
-  <h2>Informasi Repositori</h2>
-
-  <p>Seluruh implementasi, berkas demo, dan pengujian dapat ditinjau langsung pada repositori open-source:</p>
-  <ul>
-    <li>Repositori: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection">Software Engineering Lab 16 - Dependency Injection</a></li>
-    <li>File Sumber: <code>internal/di/gateway.go</code>, <code>internal/di/processor.go</code>, <code>internal/di/locator.go</code>, <code>tests/processor_test.go</code>, <code>cmd/demo/main.go</code></li>
-    <li>Commit SHA: <code>8afe2a824667528d16d6d9b2ac434a18a6ac2db1</code></li>
-    <li>Lingkungan Eksekusi: Go 1.22</li>
-  </ul>
-</article>
-</body>
-</html>
+}</code></pre><p>Test double ini memungkinkan test suite berjalan instan dalam hitungan mikrodetik tanpa port jaringan, tanpa container Docker, dan tanpa ketergantungan pada server sandbox pihak ketiga.</p><h2>Enam assertion memeriksa kedua jalur eksekusi</h2><p>Suite pengujian memverifikasi enam skenario konkret yang mencakup skenario sukses, kegagalan infrastruktur, dan penolakan input pada kedua prosesor:</p><table><tr><th>Kasus Uji</th><th>Komponen Target</th><th>Kondisi Input</th><th>Perilaku Gateway</th><th>Hasil Ekspektasi</th></tr><tr><td>TestProcessor_Success</td><td>Processor</td><td>amount = 50</td><td>ShouldFail = false</td><td>Error nil, ChargedMoney = 50 USD</td></tr><tr><td>TestProcessor_GatewayError</td><td>Processor</td><td>amount = 50</td><td>ShouldFail = true</td><td>Error != nil ("gateway unavailable")</td></tr><tr><td>TestProcessor_InvalidAmount</td><td>Processor</td><td>amount = -10</td><td>ShouldFail = false</td><td>Error != nil, ChargedMoney = 0 USD</td></tr><tr><td>TestBadProcessor_Success</td><td>BadProcessor</td><td>amount = 75</td><td>ShouldFail = false</td><td>Error nil, ChargedMoney = 75 USD</td></tr><tr><td>TestBadProcessor_GatewayError</td><td>BadProcessor</td><td>amount = 75</td><td>ShouldFail = true</td><td>Error != nil ("gateway unavailable")</td></tr><tr><td>TestBadProcessor_InvalidAmount</td><td>BadProcessor</td><td>amount = -5</td><td>ShouldFail = false</td><td>Error != nil, ChargedMoney = 0 USD</td></tr></table><h2>Assertion negatif: amount tidak valid dan error gateway</h2><p>Pengujian negatif memverifikasi bahwa invariant sistem tetap terjaga dalam kondisi ekstrem. Pada <code>TestProcessor_InvalidAmount</code>, assertion <code>mock.ChargedMoney.Amount != 0</code> memastikan bahwa ketika input negatif dimasukkan, pemanggilan method <code>Charge</code> sama sekali tidak terjadi. Pengujian ini membuktikan bahwa validasi domain mengeksekusi *short-circuit* sebelum I/O gateway tersentuh.</p><h2>Verifikasi konkurensi: nol race condition</h2><p>Menjalankan test suite dengan race detector aktif membuktikan bahwa implementasi bersih dari dependensi mutable terbagi (<em>shared mutable state</em>):</p><pre><code>go test -v -race ./...
+=== RUN   TestProcessor_Success
+--- PASS: TestProcessor_Success (0.00s)
+=== RUN   TestProcessor_GatewayError
+--- PASS: TestProcessor_GatewayError (0.00s)
+=== RUN   TestProcessor_InvalidAmount
+--- PASS: TestProcessor_InvalidAmount (0.00s)
+=== RUN   TestBadProcessor_Success
+--- PASS: TestBadProcessor_Success (0.00s)
+=== RUN   TestBadProcessor_GatewayError
+--- PASS: TestBadProcessor_GatewayError (0.00s)
+=== RUN   TestBadProcessor_InvalidAmount
+--- PASS: TestBadProcessor_InvalidAmount (0.00s)
+PASS
+ok      lab16/tests     1.442s</code></pre><p>Karena <code>Processor</code> dan <code>MockGateway</code> tidak menggunakan variabel global dan mengoper objek per-instansiasi, eksekusi konkuren bersifat race-clean secara deterministik.</p><h2>Kapan struct membutuhkan injeksi interface</h2><p>Tidak semua komponen perangkat lunak memerlukan injeksi dependensi. Tim rekayasa perangkat lunak harus membedakan objek berdasarkan kebutuhan batas I/O dan substitusi pengujian:</p><table><tr><th>Kategori Objek</th><th>Karakteristik Utama</th><th>Perlakuan DI</th><th>Contoh Konkret</th></tr><tr><td>Service / Port</td><td>Memegang koneksi I/O, stateful, integrasi sistem</td><td>Wajib Constructor Injection</td><td>PaymentGateway, UserRepository, CacheClient</td></tr><tr><td>Value Object</td><td>Data murni, immutable, tanpa dependensi eksternal</td><td>Instansiasi langsung (Bypass DI)</td><td>Money, OrderID, GeoPoint, EmailAddress</td></tr><tr><td>Entity Domain</td><td>Aturan bisnis inti, identitas unik, mutasi status</td><td>Dioper sebagai argumen method</td><td>Order, Invoice, SubscriptionAccount</td></tr><tr><td>Pure Functions</td><td>Kalkulasi deterministik tanpa side-effect</td><td>Panggil langsung via package</td><td>math.Max, hash.Compute, time.Duration</td></tr></table><h2>Bahaya interface pollution dan package cycle di Go</h2><p>Dua jebakan paling umum dalam arsitektur Go adalah <em>interface pollution</em> dan <em>cyclic dependency</em>. Interface pollution terjadi ketika pengembang menciptakan interface untuk setiap struct tunggal tanpa kebutuhan substitusi nyata, membuat navigasi kode via IDE menjadi berbelit-belit. Selain itu, jika Paket A membutuhkan Paket B dan Paket B membutuhkan Paket A untuk menyelesaikan dependency injection, compiler Go secara tegas menolak kompilasi package cycle. Solusinya adalah memindahkan interface ke sisi konsumen (<em>consumer package</em>) atau mendefinisikan interface pada lapisan domain inti.</p><h2>Manual wiring vs DI framework otomatis</h2><p>Lab 16 sengaja menggunakan manual wiring tanpa dependensi framework pihak ketiga. Pemilihan antara manual wiring dan automated container bergantung pada kompleksitas graf objek aplikasi:</p><table><tr><th>Pendekatan</th><th>Mekanisme Kerja</th><th>Kelebihan</th><th>Batasan / Trade-off</th></tr><tr><td>Manual Wiring (Lab 16)</td><td>Inisialisasi eksplisit di main.go</td><td>Nol magic, navigasi IDE instan, waktu kompilasi nol overhead</td><td>Boilerplate bertambah seiring bertambahnya ratusan service</td></tr><tr><td>Code Generation (Google Wire)</td><td>Kompilasi menganalisis graph dan menghasilkan kode Go native</td><td>Type-safe saat kompilasi, tanpa runtime reflection</td><td>Memerlukan build step tambahan (go generate)</td></tr><tr><td>Runtime Reflection (Uber Dig / Fx)</td><td>Container mendaftarkan dan menyelesaikan tipe saat runtime</td><td>Sangat fleksibel untuk aplikasi monolit berskala raksasa</td><td>Error graph tersembunyi hingga runtime aplikasi menyala</td></tr></table><h2>Batas eksplorasi lab dan verifikasi mandiri</h2><p>Kejujuran teknis mewajibkan penegasan batasan: Lab 16 membuktikan manual constructor wiring di Go standar dan isolasi test double mock. Lab ini tidak mendemonstrasikan framework DI berbasis reflection, code generation, atau manajemen lifecycle container rumit (seperti singleton, scoped per-request, atau transient). Seluruh verifikasi dapat direproduksi secara mandiri di repositori:</p><pre><code>cd labs/16-dependency-injection
+go test -v -race ./...
+go run ./cmd/demo</code></pre><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection">Software Engineering Lab 16 — Dependency Injection</a>, internal/di, tests/processor_test.go, cmd/demo/main.go, README.md, dan go.mod. Snapshot commit 8afe2a824667528d16d6d9b2ac434a18a6ac2db1.</p></article></body></html>

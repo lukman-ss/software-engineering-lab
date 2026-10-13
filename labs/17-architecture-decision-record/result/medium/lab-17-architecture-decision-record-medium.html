@@ -1,398 +1,78 @@
-<!doctype html>
-<html lang="id">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git</title>
-  <meta name="description" content="Pelajari Architecture Decision Record (ADR) di Go: parser Markdown, linter penomoran monotonik, validasi timbal-balik supersedes, dan pencatatan rejected.">
-  <meta property="og:title" content="Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git">
-  <meta property="og:description" content="Menjaga konteks teknis di repositori: parsing Markdown, penomoran monotonik, validasi timbal-balik supersedes, dan siklus rejected.">
-  <style>
-    body {
-      margin: 0;
-      background: #f4f1e8;
-      color: #11283a;
-      font: 19px/1.75 Georgia, serif;
-    }
-    article {
-      max-width: 850px;
-      margin: 48px auto;
-      padding: 0 28px 70px;
-      box-sizing: border-box;
-    }
-    h1, h2, h3, .subtitle {
-      font-family: Arial, sans-serif;
-      line-height: 1.25;
-      color: #0b1b2d;
-    }
-    h1 {
-      font-size: 40px;
-      margin-bottom: 8px;
-    }
-    h2 {
-      margin-top: 48px;
-      font-size: 27px;
-      border-bottom: 2px solid #cad7cf;
-      padding-bottom: 8px;
-    }
-    h3 {
-      font-size: 21px;
-      margin-top: 32px;
-    }
-    .subtitle {
-      font-size: 21px;
-      color: #52606b;
-      margin-top: 0;
-      margin-bottom: 24px;
-    }
-    .author-line {
-      font-family: Arial, sans-serif;
-      font-size: 15px;
-      color: #087f76;
-      font-weight: bold;
-      margin-bottom: 32px;
-    }
-    img {
-      width: 100%;
-      height: auto;
-      border-radius: 8px;
-      margin-bottom: 36px;
-      border: 1px solid #cad7cf;
-    }
-    pre {
-      background: #0b1b2d;
-      color: #d8e9df;
-      padding: 20px;
-      overflow-x: auto;
-      font: 14px/1.65 monospace;
-      border-radius: 8px;
-      margin: 24px 0;
-    }
-    code {
-      font-family: monospace;
-      background: #e2ddd0;
-      color: #0b1b2d;
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 15px;
-    }
-    pre code {
-      background: transparent;
-      color: inherit;
-      padding: 0;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font: 16px/1.5 Arial, sans-serif;
-      margin: 28px 0;
-    }
-    td, th {
-      padding: 12px 14px;
-      border: 1px solid #cad7cf;
-      text-align: left;
-    }
-    th {
-      background: #0b1b2d;
-      color: #f4f1e8;
-    }
-    tr:nth-child(even) {
-      background: #eae5d7;
-    }
-    blockquote {
-      margin: 28px 0;
-      padding: 16px 20px;
-      background: #e7e2d4;
-      border-left: 5px solid #087f76;
-      font-style: italic;
-      color: #203345;
-    }
-    ul, ol {
-      padding-left: 28px;
-      margin: 20px 0;
-    }
-    li {
-      margin-bottom: 10px;
-    }
-    .callout {
-      background: #e5ede8;
-      border-left: 4px solid #087f76;
-      padding: 16px 20px;
-      margin: 24px 0;
-      font-size: 17px;
-    }
-  </style>
-</head>
-<body>
-  <article>
-    <h1>Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git</h1>
-    <p class="subtitle">Menjaga konteks teknis di repositori: parsing Markdown, penomoran monotonik, validasi timbal-balik supersedes, dan siklus rejected.</p>
-    <div class="author-line">Lukman / lukman-ss · Software Engineering Lab 17</div>
-
-    <img src="lab-17-architecture-decision-record-cover-id.png" alt="Cover Architecture Decision Record Lab 17">
-
-    <p>Ketika basis kode bertumbuh dan insinyur berganti, pertanyaan historis muncul ke permukaan: mengapa modul notifikasi dipisahkan menjadi microservice? Mengapa event sourcing ditolak untuk manajemen pesanan? Ketika dokumen desain tersimpan terpisah pada wiki eksternal, dokumentasi tersebut cepat usang dan terputus dari commit aktual.</p>
-
-    <p>Hilangnya konteks keputusan memicu dua jebakan tim rekayasa:</p>
-    <ol>
-      <li>Membatalkan pola masa lalu secara terburu-buru tanpa memahami batasan awal yang memicunya.</li>
-      <li>Mempertahankan arsitektur lama secara kaku meski skala beban dan ukuran tim sudah jauh melampaui kapasitas desain awal.</li>
-    </ol>
-
-    <blockquote>Architecture decisions must form an immutable, verifiable directed acyclic graph. Once accepted, records are never edited retroactively; they are superseded through explicit bidirectional lineage.</blockquote>
-
-    <p>Lab 17 mendemonstrasikan implementasi validator dan linter struktural di Go untuk Architecture Decision Records (ADR). ADR disimpan bersama kode sumber dalam format Markdown, bernomor urut monotonik, dan memiliki silsilah penggantian timbal-balik yang diperiksa otomatis pada pipeline pengujian.</p>
-
-    <h2>Batasan Keputusan yang Signifikan Secara Arsitektur</h2>
-
-    <p>ADR tidak dirancang untuk mencatat setiap refaktorisasi metode atau perbaikan bug lokal. Sesuai prinsip Michael Nygard (2011) dan Olaf Zimmermann (2020), ADR dicadangkan khusus untuk keputusan bernilai arsitektural (Architecturally Significant Requirements):</p>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Kategori</th>
-          <th>Cakupan Keputusan</th>
-          <th>Contoh Nyata</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Struktur</td>
-          <td>Pemisahan subsistem dan batasan modularitas</td>
-          <td>Modular Monolith vs Microservices</td>
-        </tr>
-        <tr>
-          <td>Non-Fungsional (NFR)</td>
-          <td>Skalabilitas, toleransi kesalahan, dan latensi</td>
-          <td>Isolasi antrean asinkron untuk lonjakan trafik</td>
-        </tr>
-        <tr>
-          <td>Dependensi</td>
-          <td>Pemilihan basis data dan pustaka inti</td>
-          <td>Relational DB vs Document DB</td>
-        </tr>
-        <tr>
-          <td>Antarmuka</td>
-          <td>Kontrak komunikasi antarlayanan</td>
-          <td>Protokol REST vs gRPC vs Message Broker</td>
-        </tr>
-        <tr>
-          <td>Konstruksi</td>
-          <td>Standar integritas dan transaksi</td>
-          <td>Tabel audit relasional vs Event Sourcing</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h2>Siklus Hidup Status ADR</h2>
-
-    <p>Keputusan arsitektur dimodelkan melalui status diskret pada berkas <code>internal/adr/models.go</code>:</p>
-
-    <pre><code>type Status string
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git</title><meta name="description" content="Pelajari Architecture Decision Record (ADR) di Go: parser Markdown, linter penomoran monotonik, validasi timbal-balik supersedes, dan integritas graf keputusan berbasis Git."><meta property="og:title" content="Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git"><meta property="og:description" content="Menjaga konteks teknis di repositori: parsing Markdown, penomoran monotonik, validasi timbal-balik supersedes, dan pencatatan rejected."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px;border-bottom:2px solid #cad7cf;padding-bottom:8px}h3{font-size:22px;margin-top:28px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px;margin-bottom:32px;border:1px solid #cad7cf}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px;margin:24px 0}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif;margin:28px 0}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}blockquote{border-left:4px solid #087f76;margin:24px 0;padding:10px 20px;background:#eae5d8;color:#2c444e;font-style:italic;border-radius:0 8px 8px 0}a{color:#087f76}</style></head><body><article><h1>Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git</h1><p class="subtitle">Menjaga konteks teknis di repositori: parsing Markdown, penomoran monotonik, validasi timbal-balik supersedes, dan siklus rejected.</p><p>Lukman / lukman-ss · Software Engineering Lab 17</p><img src="lab-17-architecture-decision-record-cover-id.png" alt="Cover retro CRT terminal menampilkan status lifecycle Architecture Decision Record di Go dan lukman-ss."><h2>Keputusan arsitektur sebagai kode dan dokumen Git</h2><p>Ketika basis kode bertumbuh dan insinyur berganti, pertanyaan historis muncul ke permukaan: mengapa subsistem ini memakai modular monolith? Mengapa relational database dipilih daripada document store? Ketika dokumentasi arsitektur disimpan terpisah pada wiki internal, dokumen tersebut cepat mengalami <em>documentation drift</em>—ketinggalan zaman dan terputus dari commit aktual. Michael Nygard (2011) memperkenalkan Architecture Decision Record (ADR) untuk menyimpan rekaman keputusan langsung di dalam direktori Git bersama kode aplikasi, ditinjau melalui pull request, dan diperlakukan sebagai artefak perangkat lunak yang dapat diverifikasi secara terprogram.</p><h2>Anatomi lima seksi wajib: Title, Status, Context, Decision, Consequences</h2><p>Sebuah berkas ADR yang sehat mengikuti struktur terstandarisasi (format MADR). Berkas diawali dengan nomor urut dan judul singkat, diikuti status siklus hidup terkini. Bagian <strong>Context</strong> menguraikan gaya dorong (<em>forces</em>), batasan bisnis, dan kendala teknis saat keputusan diambil. Bagian <strong>Decision</strong> menegaskan perubahan desain yang disepakati dengan kalimat aktif. Terakhir, <strong>Consequences</strong> mendokumentasikan dampak positif, trade-off negatif, dan risiko netral yang harus ditanggung tim. Ketiadaan salah satu dari seksi ini menandakan catatan yang tidak lengkap.</p><h2>Model data Record dan konstanta Status diskret</h2><p>Pada <code>internal/adr/models.go</code>, status ADR didefinisikan sebagai tipe custom berbasis string dengan lima nilai diskret yang diizinkan. Struct <code>Record</code> merepresentasikan dokumen ADR di dalam memori setelah melalui proses parsing:</p><pre><code>type Status string
 
 const (
-	StatusProposed   Status = "Proposed"
-	StatusAccepted   Status = "Accepted"
-	StatusSuperseded Status = "Superseded"
-	StatusDeprecated Status = "Deprecated"
-	StatusRejected   Status = "Rejected"
+    StatusProposed   Status = "Proposed"
+    StatusAccepted   Status = "Accepted"
+    StatusSuperseded Status = "Superseded"
+    StatusDeprecated Status = "Deprecated"
+    StatusRejected   Status = "Rejected"
 )
 
 type Record struct {
-	ID           int
-	Title        string
-	Status       Status
-	SupersededBy int // 0 jika tidak digantikan
-	Supersedes   int // 0 jika tidak menggantikan
-	Content      string
-}</code></pre>
-
-    <p>Setiap status memiliki peran semantik eksplisit:</p>
-    <ul>
-      <li><strong>Proposed:</strong> Usulan arsitektur yang sedang ditinjau tim sebelum disetujui.</li>
-      <li><strong>Accepted:</strong> Keputusan resmi yang aktif mengikat desain sistem saat ini.</li>
-      <li><strong>Superseded:</strong> Keputusan yang tidak lagi aktif karena digantikan oleh ADR baru.</li>
-      <li><strong>Deprecated:</strong> Keputusan yang ditinggalkan tanpa ada pengganti langsung.</li>
-      <li><strong>Rejected:</strong> Usulan yang ditolak secara formal. Mencatat usulan yang ditolak mencegah perdebatan teknis berulang di kemudian hari tanpa adanya bukti atau data beban baru.</li>
-    </ul>
-
-    <h2>Skenario Kerusakan Dokumen Markdown Manual</h2>
-
-    <p>Memelihara berkas ADR tanpa linter otomatis menimbulkan risiko inkonsistensi data:</p>
-    <ul>
-      <li><strong>Tautan Penggantian Patah:</strong> Berkas lama mencatat <code>Status: Superseded by 99</code>, tetapi ADR 99 tidak ada di repositori.</li>
-      <li><strong>Tautan Sepihak:</strong> ADR baru mencantumkan <code>Supersedes: 1</code>, namun ADR 1 masih berstatus <code>Accepted</code> tanpa referensi <code>Superseded by 2</code>.</li>
-      <li><strong>Penomoran Loncat:</strong> Penomoran melompat dari ADR 1 langsung ke ADR 3, menimbulkan ketidakpastian apakah berkas ADR 2 terhapus atau tertinggal dalam konflik merge Git.</li>
-      <li><strong>Self-Supersession dan Siklus:</strong> ADR menyatakan menggantikan dirinya sendiri (ID 1 menggantikan ID 1) atau terjadi siklus tak berujung (1 &rarr; 2 &rarr; 3 &rarr; 1).</li>
-      <li><strong>Bagian Wajib Kosong:</strong> Pengembang menghapus heading Context, Decision, atau Consequences sehingga ADR kehilangan alasan rasionalnya.</li>
-    </ul>
-
-    <h2>Mekanisme Parsing Teks ke Struktur Invarian</h2>
-
-    <p>Modul <code>internal/adr/parser.go</code> memindai berkas Markdown baris demi baris menggunakan ekspresi reguler terarah:</p>
-
-    <pre><code>var (
-	titleRegex        = regexp.MustCompile(`^#\s+(\d+)\.\s+(.+)$`)
-	statusRegex       = regexp.MustCompile(`(?i)^Status:\s*([A-Za-z]+)(?:\s+by\s+(\d+))?`)
-	supersedesRegex   = regexp.MustCompile(`(?i)^Supersedes:\s*(\d+)`)
-	contextRegex      = regexp.MustCompile(`(?i)^##\s+Context`)
-	decisionRegex     = regexp.MustCompile(`(?i)^##\s+Decision`)
-	consequencesRegex = regexp.MustCompile(`(?i)^##\s+Consequences`)
-)</code></pre>
-
-    <p>Fungsi <code>Parse</code> memeriksa keberadaan teks non-kosong di dalam setiap bagian wajib:</p>
-
-    <pre><code>if !foundContext || !contextHasContent {
-	return nil, fmt.Errorf("context section missing or empty")
+    ID           int
+    Title        string
+    Status       Status
+    SupersededBy int // 0 jika tidak ada
+    Supersedes   int // 0 jika tidak ada
+    Content      string
+}</code></pre><h2>State machine lima status: Proposed, Accepted, Rejected, Superseded, Deprecated</h2><p>Status ADR tidak boleh diisi dengan teks bebas sembarangan (seperti "Draft" atau "In Progress"). Setiap status merepresentasikan kondisi formal dalam siklus hidup arsitektur:</p><table><tr><th>Status</th><th>Makna Semantik</th><th>Aturan Mutasi</th><th>Metadata Wajib</th></tr><tr><td>Proposed</td><td>Usulan dalam tahap peninjauan tim</td><td>Bisa berubah ke Accepted atau Rejected</td><td>Nir-referensi</td></tr><tr><td>Accepted</td><td>Keputusan aktif yang mengikat desain sistem</td><td>Bisa berubah ke Superseded atau Deprecated</td><td>Nir-referensi</td></tr><tr><td>Rejected</td><td>Usulan ditolak setelah evaluasi formal</td><td>Immutable (tidak boleh berubah lagi)</td><td>Alasan penolakan di Context</td></tr><tr><td>Superseded</td><td>Keputusan lama yang digantikan oleh ADR baru</td><td>Immutable</td><td>Wajib referensi Superseded by &lt;ID&gt;</td></tr><tr><td>Deprecated</td><td>Keputusan ditinggalkan tanpa pengganti</td><td>Immutable</td><td>Penjelasan di Consequences</td></tr></table><h2>Kriteria keputusan bernilai arsitektural (Architecturally Significant)</h2><p>ADR tidak dibuat untuk mencatat setiap refaktorisasi rutin atau perubahan nama variabel. Berdasarkan taksonomi Zimmermann (2020), ADR hanya dicadangkan untuk keputusan yang berdampak luas:</p><table><tr><th>Dimensi Arsitektur</th><th>Cakupan Keputusan</th><th>Contoh Konkret</th></tr><tr><td>Struktur Subsistem</td><td>Pemisahan domain dan batas modularitas</td><td>Modular Monolith vs Microservices</td></tr><tr><td>Persyaratan Non-Fungsional</td><td>Skalabilitas, ketersediaan, toleransi beban</td><td>Pemasangan circuit breaker pada external gateway</td></tr><tr><td>Ketergantungan Inti</td><td>Pemilihan framework, database, atau runtime</td><td>PostgreSQL vs DynamoDB untuk persistence</td></tr><tr><td>Antarmuka Sistem</td><td>Kontrak protokol komunikasi antarlayanan</td><td>Adopsi gRPC Protobuf vs REST JSON</td></tr><tr><td>Konstruksi &amp; Standar</td><td>Penanganan transaksi dan integritas data</td><td>Pola Two-Phase Commit vs Saga Orchestration</td></tr></table><h2>Parser membaca teks Markdown baris demi baris</h2><p>Implementasi pada <code>internal/adr/parser.go</code> menggunakan <code>bufio.Scanner</code> untuk memindai dokumen Markdown secara linier baris demi baris. Pendekatan scanning baris per baris hemat memori dan deterministik, memungkinkan parser mengekstraksi metadata kunci di header tanpa perlu mem-parsing keseluruhan Abstract Syntax Tree (AST) dokumen yang berat.</p><pre><code>scanner := bufio.NewScanner(strings.NewReader(content))
+for scanner.Scan() {
+    line := strings.TrimSpace(scanner.Text())
+    // Regex parsing per baris
+}</code></pre><h2>Regex ekstraksi metadata judul dan nomor ID</h2><p>Header utama dokumen diekstraksi menggunakan ekspresi reguler <code>^#\s+(\d+)\.\s+(.+)$</code>. Pola ini memastikan bahwa setiap dokumen ADR memiliki judul tingkat satu (H1) yang diawali oleh nomor bulat positif dan titik, diikuti oleh nama keputusan arsitektural. Jika judul tidak cocok dengan pola tersebut, parser mengembalikan error spesifik bahwa format judul tidak valid.</p><pre><code>var titleRegex = regexp.MustCompile(`^#\s+(\d+)\.\s+(.+)$`)
+matches := titleRegex.FindStringSubmatch(line)
+if matches != nil {
+    id, _ := strconv.Atoi(matches[1])
+    record.ID = id
+    record.Title = matches[2]
+}</code></pre><h2>Parsing silsilah: Superseded by dan Supersedes</h2><p>Ketika sebuah keputusan mengalami evolusi, parser mengekstraksi hubungan silsilah penggantian melalui regex status. Jika sebuah baris status menyatakan <code>Status: Superseded by 2</code>, parser menetapkan <code>record.Status = StatusSuperseded</code> dan <code>record.SupersededBy = 2</code>. Begitu pula jika terdapat baris <code>Supersedes: 1</code>, parser menetapkan <code>record.Supersedes = 1</code>.</p><pre><code>var supersededRegex = regexp.MustCompile(
+    `(?i)superseded\s+by\s+(\d+)`)
+var supersedesRegex = regexp.MustCompile(
+    `(?i)supersedes[:\s]+(\d+)`)</code></pre><h2>Model linier versus directed acyclic graph (DAG)</h2><p>Kumpulan ADR dalam satu repositori tidak sekadar daftar linier berurutan, melainkan membentuk <em>Directed Acyclic Graph</em> (DAG). Sebuah keputusan di masa lalu dapat digantikan oleh keputusan baru, yang di kemudian hari dapat digantikan lagi oleh keputusan ketiga (ADR 1 → ADR 5 → ADR 12). Pohon silsilah ini memungkinkan insinyur baru menelusuri rantai evolusi arsitektur dari keputusan fondasi hingga kondisi operasional saat ini.</p><h2>Empat skenario kerusakan dokumen Markdown manual</h2><p>Tanpa validasi otomatis, repositori ADR rentan terhadap empat anomali struktural yang merusak integritas dokumentasi:</p><table><tr><th>Jenis Anomali</th><th>Deskripsi Kesalahan</th><th>Dampak Arsitektural</th></tr><tr><td>Dangling Reference</td><td>ADR menyatakan "Superseded by 99", tetapi ADR 99 tidak ada</td><td>Silsilah putus, pembaca tidak menemukan penerus</td></tr><tr><td>One-Sided Supersession</td><td>ADR 2 mengklaim "Supersedes 1", tetapi ADR 1 masih berstatus Accepted</td><td>Ambiguitas keputusan mana yang aktif berlaku</td></tr><tr><td>Non-Monotonic Sequence</td><td>Penomoran melompat (misal: 1, 2, 4 tanpa ADR 3)</td><td>Ketidakpastian apakah ada keputusan yang hilang</td></tr><tr><td>Invalid Lifecycle Status</td><td>Status diisi nilai informal ("Draft", "Under Review")</td><td>Status mesin tidak dapat diproses pipeline otomatis</td></tr></table><h2>Linter memvalidasi urutan penomoran monotonik</h2><p>Pada <code>internal/adr/linter.go</code>, fungsi <code>Linter.Lint(records []*Record)</code> memeriksa keutuhan urutan penomoran ID. Linter mengurutkan seluruh ID yang terdaftar dan memverifikasi bahwa urutan dimulai tepat dari 1 dan bertambah satu demi satu tanpa celah (<code>1, 2, 3, ... N</code>). Jika terdapat ID duplikat atau nomor yang hilang, linter mengembalikan error penomoran non-monotonik.</p><pre><code>sort.Slice(records, func(i, j int) bool {
+    return records[i].ID &lt; records[j].ID
+})
+for i, r := range records {
+    expectedID := i + 1
+    if r.ID != expectedID {
+        errs = append(errs, fmt.Errorf(
+            "non-monotonic ID: expected %d, got %d",
+            expectedID, r.ID))
+    }
+}</code></pre><h2>Validasi timbal-balik (Bidirectional Lineage Check)</h2><p>Integritas silsilah diperiksa melalui validasi dua arah (<em>bidirectional reciprocal check</em>). Jika Record A berstatus <code>SupersededBy: B</code>, linter mencari Record B di dalam repositori dan menegaskan bahwa Record B benar-benar mendeklarasikan <code>Supersedes: A</code>. Sebaliknya, jika Record B mengklaim <code>Supersedes: A</code>, linter memverifikasi bahwa Record A berstatus <code>Superseded</code> dan menunjuk balik ke Record B. Jika salah satu sisi hilang, linter melaporkan inkonsistensi silsilah.</p><h2>Goroutine konkuren memvalidasi graf referensi</h2><p>Untuk mendemonstrasikan efisiensi konkurensi di Go, linter membagi pemeriksaan simpul graf ADR ke dalam goroutine terpisah menggunakan <code>sync.WaitGroup</code>. Setiap goroutine memvalidasi satu dokumen ADR terhadap peta memori (<code>recordsMap</code>) secara paralel, menghasilkan waktu validasi mendekati instan bahkan pada repositori dengan ratusan berkas ADR.</p><pre><code>var wg sync.WaitGroup
+for _, r := range records {
+    wg.Add(1)
+    go func(rec *Record) {
+        defer wg.Done()
+        // Validasi reciprocal timbal-balik
+    }(r)
 }
-if !foundDecision || !decisionHasContent {
-	return nil, fmt.Errorf("decision section missing or empty")
-}
-if !foundConsequences || !consequencesHasContent {
-	return nil, fmt.Errorf("consequences section missing or empty")
-}</code></pre>
+wg.Wait()</code></pre><h2>Mutex mengunci agregasi slice error validasi</h2><p>Karena banyak goroutine dapat menemukan pelanggaran aturan secara bersamaan, penulisan ke slice <code>errs</code> dilindungi oleh <code>sync.Mutex</code>. Setiap kali goroutine menemukan tautan patah atau ketidaksesuaian status, ia mengunci mutex sebelum menambahkan error ke koleksi bersama. Mekanisme ini memastikan validasi konkurensi bebas dari data race saat diuji dengan flag <code>-race</code>.</p><pre><code>var mu sync.Mutex
+// Di dalam goroutine validasi:
+if invalid {
+    mu.Lock()
+    errs = append(errs, err)
+    mu.Unlock()
+}</code></pre><h2>Enam assertion memeriksa ketangguhan Parser</h2><p>Pengujian pada <code>tests/parser_test.go</code> memverifikasi enam skenario parsing yang mencakup dokumen valid, status superseded, ekstraksi konten, dan penolakan format judul yang rusak:</p><table><tr><th>Test Case</th><th>Input File / String</th><th>Kondisi Pengujian</th><th>Ekspektasi Output</th></tr><tr><td>TestParser_ValidProposed</td><td>0001-use-modular-monolith.md</td><td>Judul valid, Status Proposed</td><td>ID=1, Status=StatusProposed, Error=nil</td></tr><tr><td>TestParser_ValidAccepted</td><td>0002-relational-database.md</td><td>Judul valid, Status Accepted</td><td>ID=2, Status=StatusAccepted, Error=nil</td></tr><tr><td>TestParser_SupersededWithReference</td><td>Status: Superseded by 2</td><td>Deklarasi penggantian nomor 2</td><td>Status=StatusSuperseded, SupersededBy=2</td></tr><tr><td>TestParser_SupersedesDeclaration</td><td>Supersedes: 1</td><td>Deklarasi menggantikan nomor 1</td><td>Supersedes=1, Error=nil</td></tr><tr><td>TestParser_InvalidTitleFormat</td><td># No Number Title</td><td>Judul tanpa nomor bulat dan titik</td><td>Error != nil ("invalid title format")</td></tr><tr><td>TestParser_UnknownStatus</td><td>Status: Pending Approval</td><td>Status informal di luar 5 status baku</td><td>Error != nil ("unknown status")</td></tr></table><h2>Delapan assertion memeriksa aturan validasi Linter</h2><p>Pengujian pada <code>tests/linter_test.go</code> memverifikasi delapan skenario kualitas repositori dokumen:</p><table><tr><th>Test Case</th><th>Skenario Pelanggaran</th><th>Kondisi Graf Keputusan</th><th>Hasil Linter</th></tr><tr><td>TestLinter_ValidMonotonicAndLineage</td><td>Dokumen 1..3 valid</td><td>ADR 1 digantikan ADR 3 timbal-balik sempurna</td><td>errs == nil (PASS)</td></tr><tr><td>TestLinter_MissingIDInSequence</td><td>ID: 1, 3 (ID 2 hilang)</td><td>Celah penomoran dalam urutan</td><td>Error: "non-monotonic ID"</td></tr><tr><td>TestLinter_DuplicateID</td><td>ID: 1, 2, 2</td><td>Dua dokumen berebut nomor yang sama</td><td>Error: "duplicate ID"</td></tr><tr><td>TestLinter_DanglingSupersededBy</td><td>ADR 1 Superseded by 99</td><td>ADR 99 tidak ada di repositori</td><td>Error: "target ADR 99 not found"</td></tr><tr><td>TestLinter_OneSidedSupersedes</td><td>ADR 2 Supersedes 1</td><td>ADR 1 masih berstatus Accepted</td><td>Error: "ADR 1 not marked Superseded"</td></tr><tr><td>TestLinter_SupersededWithoutTarget</td><td>Status: Superseded</td><td>Tidak mencantumkan nomor ADR pengganti</td><td>Error: "missing superseded target"</td></tr><tr><td>TestLinter_RejectedStatusAllowed</td><td>ADR 4 Status: Rejected</td><td>Pencatatan penolakan formal</td><td>errs == nil (Valid)</td></tr><tr><td>TestLinter_ConcurrentRaceClean</td><td>100 record acak diuji paralel</td><td>Dijalankan dengan race detector aktif</td><td>PASS (Zero data race)</td></tr></table><h2>Pemisahan parser murni dari rule-checking linter</h2><p>Lab memisahkan secara tegas tanggung jawab pemindaian teks (<code>Parser</code>) dari penegakan aturan arsitektur (<code>Linter</code>). Parser murni memetakan Markdown menjadi struct data tanpa menghakimi validitas hubungan antardokumen. Linter menerima slice <code>[]*Record</code> dan menerapkan aturan bisnis agregat. Pemisahan ini mencerminkan prinsip <em>Single Responsibility</em> dan mempermudah pengujian modular.</p><h2>Pencatatan status Rejected mencegah debat berulang</h2><p>Salah satu nilai terbesar ADR adalah mencatat opsi yang <strong>ditolak</strong> (<em>Rejected</em>). Dalam banyak organisasi, ide teknis yang sama (seperti "mari migrasi ke NoSQL") diusulkan berulang kali setiap beberapa bulan oleh anggota tim yang berbeda. Dengan adanya ADR berstatus Rejected yang mendokumentasikan alasan kegagalan evaluasi, tim dapat menghemat ratusan jam diskusi dan langsung merujuk pada bukti yang telah diuji.</p><h2>Invarian Git: ADR bersifat append-only dan immutable</h2><p>Aturan dasar pengelolaan ADR adalah <em>immutability</em>. Sekali sebuah ADR disetujui (Accepted), isinya tidak boleh diedit secara retroaktif untuk mengubah substansi keputusan. Jika arah arsitektur berubah karena kebutuhan skala baru, tim wajib membuat ADR baru yang menggantikannya. ADR lama tetap ada di repositori dengan status <code>Superseded</code>, menjaga integritas riwayat evolusi sistem sebagaimana log transaksi akuntansi.</p><h2>CLI demo mendemonstrasikan validasi direktori riil</h2><p>File <code>cmd/demo/main.go</code> mengintegrasikan parser dan linter untuk memeriksa direktori Markdown secara nyata:</p><pre><code>func main() {
+    files, _ := filepath.Glob("docs/adr/*.md")
+    var records []*adr.Record
+    for _, f := range files {
+        content, _ := os.ReadFile(f)
+        rec, err := adr.Parse(string(content))
+        if err != nil {
+            log.Fatalf("Parse error %s: %v", f, err)
+        }
+        records = append(records, rec)
+    }
 
-    <h2>Validasi Monotonik dan Silsilah Timbal-Balik</h2>
-
-    <p>Modul <code>internal/adr/linter.go</code> menjalankan tiga lapis pemeriksaan integritas:</p>
-
-    <h3>1. Pemeriksaan Urutan Monotonik</h3>
-    <p>Seluruh identitas ID dikumpulkan ke dalam slice dan diurutkan. Algoritma memastikan penomoran dimulai dari 1 hingga N tanpa jeda:</p>
-
-    <pre><code>sort.Ints(ids)
-for i := 0; i < len(ids); i++ {
-	if ids[i] != i+1 {
-		errs = append(errs, fmt.Errorf("non-monotonic numbering, expected %d but got %d", i+1, ids[i]))
-		break
-	}
-}</code></pre>
-
-    <h3>2. Deteksi Siklus Supersession</h3>
-    <p>Linter menggunakan penelusuran graf (Depth-First Search) tiga warna (unvisited, visiting, visited) untuk mendeteksi siklus berarah pada rantai <code>SupersededBy</code>:</p>
-
-    <pre><code>state := make(map[int]int)
-var detectCycle func(id int)
-detectCycle = func(id int) {
-	state[id] = 1
-	rec, exists := recordMap[id]
-	if exists && rec.SupersededBy != 0 && rec.SupersededBy != rec.ID {
-		nextID := rec.SupersededBy
-		if state[nextID] == 1 {
-			errs = append(errs, fmt.Errorf("cyclical supersession detected involving ADR %d", nextID))
-		} else if state[nextID] == 0 {
-			detectCycle(nextID)
-		}
-	}
-	state[id] = 2
-}</code></pre>
-
-    <h3>3. Validasi Timbal-Balik Konkuren</h3>
-    <p>Setiap node divalidasi secara paralel melalui goroutine dengan sinkronisasi <code>sync.Mutex</code>:</p>
-
-    <pre><code>if rec.Status == StatusSuperseded {
-	if rec.SupersededBy == rec.ID {
-		localErrs = append(localErrs, fmt.Errorf("ADR %d cannot supersede itself", rec.ID))
-	} else if rec.SupersededBy == 0 {
-		localErrs = append(localErrs, fmt.Errorf("ADR %d is superseded but missing superseded_by reference", rec.ID))
-	} else {
-		replacement, exists := recordMap[rec.SupersededBy]
-		if !exists {
-			localErrs = append(localErrs, fmt.Errorf("ADR %d superseded by non-existent ADR %d", rec.ID, rec.SupersededBy))
-		} else if replacement.Supersedes != rec.ID {
-			localErrs = append(localErrs, fmt.Errorf("ADR %d superseded by ADR %d, but ADR %d does not declare it supersedes ADR %d", rec.ID, rec.SupersededBy, rec.SupersededBy, rec.ID))
-		}
-	}
-}</code></pre>
-
-    <h2>Studi Kasus: Evolusi Arsitektur SaaS ERP</h2>
-
-    <p>Program percontohan <code>cmd/demo/main.go</code> memodelkan evolusi arsitektur SaaS ERP melalui tiga ADR konkret:</p>
-
-    <ol>
-      <li><strong>ADR 0001 (Modular Monolith):</strong> Dipilih saat tim berjumlah 5 insinyur dengan tenggat 3 bulan. Memprioritaskan iterasi cepat, satu basis data bersama, dan integritas transaksi ACID lokal. Menyertakan pemicu peninjauan ketika tim melampaui 20 insinyur.</li>
-      <li><strong>ADR 0002 (Ekstraksi Microservice Notifikasi):</strong> Diterbitkan ketika tim mencapai 25 insinyur dan mesin notifikasi mengalami lonjakan beban tinggi yang mengganggu inti ERP. ADR 0001 ditandai <code>Superseded by 2</code>, sementara ADR 0002 mencantumkan <code>Supersedes: 1</code>. Modul notifikasi dipisahkan menjadi layanan independen berbasis antrean pesan asinkron.</li>
-      <li><strong>ADR 0003 (Penolakan Event Sourcing):</strong> Usulan merombak modul pesanan menjadi event sourcing ditolak (<code>Status: Rejected</code>). Tabel catatan audit relasional dinilai mencukupi kebutuhan kepatuhan hukum tanpa menanggung kerumitan migrasi skema event dan konsistensi eventual.</li>
-    </ol>
-
-    <p>Eksekusi demo memvalidasi ketiga dokumen tersebut dan memastikan seluruh rantai silsilah terikat sempurna tanpa pelanggaran aturan linter:</p>
-
-    <pre><code>=== Architecture Decision Record (ADR) Lab ===
-Successfully parsed 3 ADRs:
-  - [0001] Use Modular Monolith for Core SaaS ERP        | Status: Superseded -> Superseded by ADR 2
-  - [0002] Extract Notification Service to Microservice  | Status: Accepted   -> Supersedes ADR 1
-  - [0003] Reject Event Sourcing for Order Management    | Status: Rejected  
-
-Running ADR Integrity Linter...
-Integrity check passed! Decision lineage and lifecycle invariants are intact.</code></pre>
-
-    <h2>Hasil Verifikasi Uji Otomatis</h2>
-
-    <p>Uji otomatis pada <code>tests/parser_test.go</code> dan <code>tests/linter_test.go</code> membuktikan invarian sistem secara ketat:</p>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Fungsi Uji</th>
-          <th>Skenario yang Diperiksa</th>
-          <th>Assertion yang Terbukti</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>TestParse_Valid</code></td>
-          <td>Format Markdown lengkap</td>
-          <td>Mengekstrak ID 1 dan Status Accepted dengan tepat</td>
-        </tr>
-        <tr>
-          <td><code>TestParse_Superseded</code></td>
-          <td>Status <code>Superseded by 2</code></td>
-          <td>Mengekstrak field <code>SupersededBy</code> bernilai 2</td>
-        </tr>
-        <tr>
-          <td><code>TestParse_Supersedes</code></td>
-          <td>Deklarasi <code>Supersedes: 1</code></td>
-          <td>Mengekstrak field <code>Supersedes</code> bernilai 1</td>
-        </tr>
-        <tr>
-          <td><code>TestParse_Invalid</code></td>
-          <td>Header salah atau bagian kosong</td>
-          <td>Menolak Markdown tanpa judul, tanpa status, dan bagian Context/Decision/Consequences kosong</td>
-        </tr>
-        <tr>
-          <td><code>TestLinter_ValidSequence</code></td>
-          <td>Rantai silsilah valid 3 ADR</td>
-          <td>Menghasilkan 0 error</td>
-        </tr>
-        <tr>
-          <td><code>TestLinter_BrokenReferences</code></td>
-          <td>Kerusakan referensial</td>
-          <td>Mendeteksi tautan ke ID 99 fiktif, tautan sepihak, penomoran non-monotonik (1 lalu 3), self-supersession, duplikasi ID, dan siklus 1-2-3-1</td>
-        </tr>
-        <tr>
-          <td><code>TestLinter_ConcurrencyStress</code></td>
-          <td>100 record berpasangan</td>
-          <td>Lolos eksekusi paralel tanpa race condition (<code>-race</code>)</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="callout">
-      Seluruh 23 test case lulus pada eksekusi <code>go test -race ./...</code> dengan nol data race.
-    </div>
-
-    <h2>Batas Implementasi dan Pertimbangan Produksi</h2>
-
-    <p>Untuk adopsi di lingkungan produksi, pahami batas lingkup lab ini:</p>
-    <ul>
-      <li><strong>Parser Berbasis Pola Regex:</strong> Parser bergantung pada format heading Markdown spesifik (<code># 1. Judul</code> dan <code>## Context</code>). Belum menggunakan parser AST Markdown umum.</li>
-      <li><strong>Pemrosesan In-Memory:</strong> Demo dan suite pengujian memvalidasi string memori; pembacaan rekursif dari direktori disk lokal atau commit Git belum diimplementasikan di layer CLI.</li>
-      <li><strong>Integrasi CI dan Pre-commit:</strong> Linter dirancang dipanggil pada pipeline pengujian lokal atau CI; instalasi hook otomatis pada <code>.git/hooks</code> belum disertakan.</li>
-      <li><strong>Validasi Semantik:</strong> Linter memastikan struktur, ID, dan tautan silsilah valid. Penilaian apakah keputusan arsitektural tersebut benar tetap menjadi tanggung jawab manusia melalui peninjauan rekan kerja (peer review).</li>
-    </ul>
-
-    <p>Implementasi lengkap, contoh dokumen ADR, dan suite pengujian tersedia pada repositori GitHub:</p>
-    <p><a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record">github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record</a></p>
-    <p>Commit hash: <code>4636359a4376246c0af2abdea360ac0b014c7bc4</code></p>
-  </article>
-</body>
-</html>
+    linter := adr.NewLinter()
+    if errs := linter.Lint(records); len(errs) &gt; 0 {
+        for _, err := range errs {
+            fmt.Printf("[LINT ERROR] %v\n", err)
+        }
+        os.Exit(1)
+    }
+    fmt.Println("[ADR LINTER PASS] All 3 ADRs valid and lineage verified.")
+}</code></pre><h2>Batas eksplorasi lab: linter lokal tanpa webhook CI/CD</h2><p>Kejujuran teknis: Lab 17 membuktikan algoritma parsing Markdown, model state machine status, dan validasi timbal-balik graf silsilah di Go standar. Lab ini tidak mengimplementasikan webhook GitHub Actions otomatis, parser format AsciiDoc, atau visualizer grafik SVG interaktif. Seluruh pengujian berjalan pada unit test in-memory lokal.</p><h2>Jalankan ulang dan verifikasi unit test ADR</h2><p>Modul menggunakan Go standar 1.22 tanpa dependensi pihak ketiga. Verifikasi integritas parser, linter, dan race condition dapat dijalankan langsung di terminal:</p><pre><code>cd labs/17-architecture-decision-record
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo</code></pre><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record">Software Engineering Lab 17 — Architecture Decision Record</a>, internal/adr, tests/parser_test.go, tests/linter_test.go, cmd/demo/main.go, README.md, dan go.mod. Snapshot commit eb612371e53183397649b7091a33d4068f70a7cb.</p></article></body></html>
