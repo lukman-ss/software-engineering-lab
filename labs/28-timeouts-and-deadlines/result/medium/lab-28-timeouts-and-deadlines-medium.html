@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timeouts dan Deadlines: Mencegah Dependensi Lambat Melumpuhkan Sistem</title>
+<style>
+  body {
+    font-family: Georgia, serif;
+    background-color: #f4f1e8;
+    color: #11283a;
+    line-height: 1.7;
+    margin: 0;
+    padding: 24px;
+  }
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    padding: 40px 48px;
+    border: 1px solid #d5cfc1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  h1, h2, h3, h4 {
+    font-family: Arial, sans-serif;
+    color: #0b1b2d;
+    line-height: 1.3;
+    margin-top: 1.8em;
+    margin-bottom: 0.6em;
+  }
+  h1 {
+    font-size: 2.1rem;
+    margin-top: 0.4em;
+    border-bottom: 2px solid #0b1b2d;
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 1.45rem;
+    border-bottom: 1px solid #d5cfc1;
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 1.15rem;
+  }
+  p, li {
+    font-size: 1.02rem;
+  }
+  img.cover-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px 0 32px 0;
+    border: 1px solid #d5cfc1;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 0.95rem;
+  }
+  table, th, td {
+    border: 1px solid #0b1b2d;
+  }
+  th {
+    background-color: #0b1b2d;
+    color: #d8e9df;
+    padding: 10px 12px;
+    text-align: left;
+    font-family: Arial, sans-serif;
+  }
+  td {
+    padding: 10px 12px;
+    background-color: #faf9f6;
+    color: #11283a;
+  }
+  tr:nth-child(even) td {
+    background-color: #f0ede4;
+  }
+  pre {
+    background-color: #0b1b2d;
+    color: #d8e9df;
+    padding: 16px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  }
+  p code, li code {
+    background-color: #e6e2d6;
+    color: #0b1b2d;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  pre code {
+    background-color: transparent;
+    color: #d8e9df;
+    padding: 0;
+  }
+  blockquote {
+    margin: 20px 0;
+    padding: 12px 20px;
+    background-color: #ece8dc;
+    border-left: 4px solid #0b1b2d;
+    font-style: italic;
+  }
+  a {
+    color: #0b1b2d;
+    text-decoration: underline;
+  }
+  ul, ol {
+    padding-left: 28px;
+  }
+  .callout {
+    background-color: #e7eff0;
+    border: 1px solid #8baab1;
+    border-left: 4px solid #11283a;
+    padding: 14px 18px;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<img src="lab-28-timeouts-and-deadlines-cover-id.png" alt="Lab 28 Timeouts & Deadlines Cover" class="cover-img">
+
+<h1>Timeouts dan Deadlines: Mencegah Dependensi Lambat Melumpuhkan Sistem</h1>
+
+<h2>1. Pendahuluan / Latar Belakang</h2>
+
+<p>Dalam rekayasa sistem terdistribusi, kegagalan cepat (fast failure) adalah sahabat terbaik arsitek perangkat lunak. Ketika sebuah layanan downstream langsung mengembalikan HTTP 500 dalam 2 milidetik atau koneksi TCP langsung ditolak (connection refused) dalam 1 milidetik, thread pemanggil, alokasi memori, file descriptor, dan slot koneksi pool segera dibebaskan kembali ke runtime. Konsumsi memori tetap stabil, event loop tetap responsif, dan throughput sistem secara agregat tetap terjaga.</p>
+
+<p>Sebaliknya, dependensi yang merespons dengan sangat lambat (slow dependency) adalah penyebab paling mematikan bagi sistem produksi. Layanan hilir yang biasanya merespons dalam 50 milidetik tiba-tiba melambat menjadi 30 detik karena deadlock database, degradasi performa I/O penyimpanan awan, atau GC pause berkepanjangan. Permintaan yang masuk ke API gateway terus tertahan menunggu respons. Setiap permintaan yang menggantung menahan sumber daya komputasi internal secara terus-menerus: alokasi stack goroutine, koneksi socket klien, soket database hilir, dan buffer antrean thread pool. Beban komputasi CPU mungkin terlihat sangat rendah atau nyaris menganggur, namun sistem tiba-tiba mengalami kehabisan memori (OOM kill), exhausted thread pool, atau kehabisan file descriptor (socket exhaustion). Ini adalah bentuk murni dari keruntuhan sistemik berantai (cascading failure).</p>
+
+<p>Hubungan matematis yang mendasari fenomena ini dimodelkan secara elegan oleh Hukum Little (Little's Law) dalam teori antrean:</p>
+
+<pre><code>L = λ * W</code></pre>
+
+<p>Di mana:</p>
+<ul>
+  <li><code>L</code> adalah jumlah rata-rata permintaan konkruen yang sedang aktif di dalam sistem (in-flight concurrency / queue depth).</li>
+  <li><code>λ</code> (lambda) adalah tingkat kedatangan permintaan rata-rata (arrival rate dalam satuan request per detik).</li>
+  <li><code>W</code> adalah rata-rata waktu yang dihabiskan permintaan di dalam sistem (residence time / rata-rata latensi respons).</li>
+</ul>
+
+<p>Misalkan sebuah layanan gateway menerima kedatangan trafik konstan <code>λ = 500 RPS</code> (requests per second). Dalam kondisi operasional normal dengan latensi hilir <code>W = 40 milidetik (0.04 detik)</code>, jumlah permintaan in-flight rata-rata di dalam sistem adalah:</p>
+
+<pre><code>L = 500 * 0.04 = 20 permintaan aktif secara bersamaan</code></pre>
+
+<p>Sistem dapat dengan mudah menangani 20 goroutine atau koneksi konkuren tanpa tekanan memori yang berarti. Namun, bayangkan layanan payment gateway pihak ketiga mengalami insiden jaringan dan latensinya melonjak menjadi <code>W = 30 detik</code> sementara pengguna terus mengirimkan transaksi pada laju <code>λ = 500 RPS</code> yang sama. Tanpa mekanisme timeout yang agresif, jumlah permintaan in-flight di gateway seketika meledak:</p>
+
+<pre><code>L = 500 * 30 = 15,000 permintaan aktif tertahan secara bersamaan</code></pre>
+
+<p>Lonjakan sebesar 750 kali lipat ini menghabisi cadangan soket TCP dan memori gateway dalam hitungan detik. Goroutine yang menumpuk mencapai puluhan ribu, waktu siklus garbage collector melonjak drastis, dan seluruh layanan gateway runtuh. Penurunan performa pada satu dependensi isolasi berhasil melumpuhkan seluruh platform multi-layanan. Oleh karena itu, timeouts, deadlines, circuit breaker, exponential backoff dengan jitter, dan idempotency keys bukan sekadar fitur defensif tambahan, melainkan pondasi mutlak untuk mempertahankan kelangsungan hidup arsitektur mikroservis modern.</p>
+
+<h2>2. Masalah yang Diselesaikan</h2>
+
+<p>Untuk memahami mengapa mekanisme mitigasi ini harus bekerja secara harmonis, kita menelaah skenario kegagalan nyata yang kerap melanda infrastruktur berskala besar.</p>
+
+<h3>2.1 Skenario Nyata: Degradasi Latensi Ekstrem dan Starvation Lintas Endpoint</h3>
+<p>Sebuah API Gateway monolitik atau ingress router menangani puluhan endpoint publik. Salah satu endpoint, misalnya <code>POST /checkout/process-order</code>, bergantung pada dependensi eksternal layanan verifikasi fraud dan payment gateway bank. Pada kondisi normal, dependensi ini merespons dalam 300ms. Suatu hari, sistem bank mengalami degradasi latensi parah menjadi 60 detik tanpa memutus koneksi socket.</p>
+
+<p>Dampak langsungnya: worker pool atau pool goroutine pada API Gateway seluruhnya teralokasi untuk menahan permintaan <code>/checkout/process-order</code> yang sedang menunggu respons dari bank. Akibatnya, endpoint lain yang sepenuhnya independen—seperti <code>GET /healthz</code> untuk Kubernetes liveness probe, <code>GET /catalog/products</code> untuk katalog barang, dan <code>GET /user/profile</code>—mengalami fenomena kelaparan sumber daya (resource starvation). Kubernetes menganggap container gateway tidak sehat karena gagal merespons liveness probe dalam 5 detik, lalu secara agresif me-restart container. Siklus restart massal ini memicu rolling outage total pada seluruh sistem bisnis, meskipun katalog produk dan database profil pengguna dalam kondisi prima.</p>
+
+<h3>2.2 Masalah Thundering Herd dan Badai Retry (Retry Storm)</h3>
+<p>Ketika panggilan RPC atau HTTP gagal atau mengalami timeout, naluri pertama pengembang adalah menambahkan logika percobaan ulang (retry). Namun, retry tanpa perhitungan ilmiah justru mempercepat kematian sistem hilir.</p>
+
+<p>Pertimbangkan layanan downstream yang kelebihan beban (overload) sehingga gagal merespons 100 klien pada detik yang sama. Jika ke-100 klien tersebut dikonfigurasi dengan fixed backoff (misalnya mencoba ulang tepat 2 detik kemudian), maka tepat pada detik ke-2 seluruh 100 klien secara bersamaan membanjiri layanan yang sedang sekarat tersebut dengan gelombang permintaan baru. Ini adalah fenomena thundering herd. Jika klien menerapkan exponential backoff murni tanpa jitter (misalnya 100ms, 200ms, 400ms, 800ms), klien yang masuk pada waktu bersamaan tetap akan mencoba ulang secara tersinkronisasi sempurna pada interval eksponensial yang identik. Layanan downstream tidak pernah mendapatkan jeda bernapas untuk pulih, memicu fenomena yang dikenal sebagai Retry Storm.</p>
+
+<h3>2.3 Masalah Ambiguitas Timeout dan Eksekusi Ganda (Double Charge)</h3>
+<p>Dalam komunikasi jaringan terdistribusi, timeout adalah status indeterminat, bukan konfirmasi kegagalan. Ketika klien menetapkan timeout 5 detik untuk panggilan <code>POST /charges</code> ke layanan perbankan, dan timer 5 detik habis tanpa ada byte balasan yang diterima, ada tiga kemungkinan realitas di lapangan:</p>
+<ol>
+  <li>Paket permintaan klien tidak pernah mencapai server bank (misal putus di router perantara). Operasi belum berjalan sama sekali.</li>
+  <li>Permintaan tiba di bank dan sedang diproses secara lambat, namun belum selesai saat timeout klien tercapai. Operasi sedang berlangsung.</li>
+  <li>Permintaan berhasil diproses di bank, rekening berhasil didebit, namun paket balasan HTTP 200 OK hilang saat perjalanan pulang akibat koneksi drop. Operasi telah sukses penuh.</li>
+</ol>
+<p>Jika klien langsung melakukan retry tanpa mekanisme deduplikasi, bank akan memproses pemotongan dana untuk kedua kalinya. Ini menghasilkan bug fatal penagihan ganda (double-charge). Tanpa Idempotency Key, retry otomatis pada timeout adalah tindakan berisiko tinggi yang dapat merusak integritas data finansial.</p>
+
+<h2>3. Arsitektur / Desain Solusi</h2>
+
+<p>Untuk menyelesaikan spektrum masalah di atas secara tuntas, Lab 28 membangun arsitektur pertahanan 4 pilar yang saling melengkapi di dalam Go runtime:</p>
+
+<pre><code>+-----------------------------------------------------------------------------------+
+|                              Inbound User Request                                 |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v
+       +-------------------------------------------------------------------+
+       | Pilar 1: Context Deadline & Budget Propagation                    |
+       | File: internal/deadline/deadline.go                               |
+       | Mengikat total alokasi waktu eksekusi. Warisan hierarki context.   |
+       +-------------------------------------------------------------------+
+                                         |
+                                         v
+       +-------------------------------------------------------------------+
+       | Pilar 4: Idempotency Key Store                                    |
+       | File: internal/idempotency/idempotency.go                         |
+       | Periksa key: Jika hasil tersimpan valid -> Kembalikan dari cache  |
+       | Jika miss -> Lanjutkan eksekusi dan simpan hasil                  |
+       +-------------------------------------------------------------------+
+                                         |
+                                         v
+       +-------------------------------------------------------------------+
+       | Pilar 2: Retrier with Exponential Backoff & Full Jitter           |
+       | File: internal/retry/retry.go                                     |
+       | Loop percobaan ulang teratur. Math: rand(0, min(max, base*2^att))  |
+       +-------------------------------------------------------------------+
+                                         |
+                                         v
+       +-------------------------------------------------------------------+
+       | Pilar 3: Circuit Breaker State Machine                            |
+       | File: internal/circuit/circuit.go                                 |
+       | Guard: CLOSED -> OPEN -> HALF_OPEN. Fast-abort saat dependensi    |
+       | terbukti rusak, cegah pemborosan resource retry loop.             |
+       +-------------------------------------------------------------------+
+                                         |
+                                         v
+                        [ Outbound Remote Dependency Call ]
+</code></pre>
+
+<p>Keempat komponen tersebut memiliki pembagian tanggung jawab yang ketat dan saling menopang:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Pilar Komponen</th>
+      <th>Package / Lokasi File</th>
+      <th>Peran Utama dalam Sistem</th>
+      <th>Mekanisme Proteksi Khusus</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Context Deadline</strong></td>
+      <td><code>internal/deadline</code></td>
+      <td>Membatasi masa hidup eksekusi (wall-clock budget) dari hulu ke hilir.</td>
+      <td>Buffered channel (cap=1) untuk eliminasi total kebocoran goroutine (goroutine leak) saat timeout terpilih.</td>
+    </tr>
+    <tr>
+      <td><strong>Retrier Full Jitter</strong></td>
+      <td><code>internal/retry</code></td>
+      <td>Menangani kegagalan transien jaringan dengan interval adaptif.</td>
+      <td>Formula AWS Full Jitter: distribusi seragam [0, temp] untuk memecah gelombang thundering herd dan retry storm.</td>
+    </tr>
+    <tr>
+      <td><strong>Circuit Breaker</strong></td>
+      <td><code>internal/circuit</code></td>
+      <td>Memutus aliran trafik secara instan ketika kegagalan berturut-turut melebihi ambang batas.</td>
+      <td>State machine thread-safe (CLOSED, OPEN, HALF_OPEN) menggunakan sync.RWMutex dan cooldown probe tanpa background worker.</td>
+    </tr>
+    <tr>
+      <td><strong>Idempotency Store</strong></td>
+      <td><code>internal/idempotency</code></td>
+      <td>Menjamin eksekusi persis satu kali (exactly-once semantics pada level aplikasi) untuk retry yang ambigu.</td>
+      <td>Penyimpanan key-response in-memory dengan penghapusan kedaluwarsa secara malas (lazy eviction) pada operasi Get ber-lock tulis.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. Implementasi Step-by-Step</h2>
+
+<p>Berikut adalah rincian implementasi teknis dari masing-masing paket internal yang dibangun dalam Lab 28, beserta analisis mendalam mengenai pilihan desain kodenya.</p>
+
+<h3>4.1 Pilar 1: Context Deadline Propagation dan Anti-Leak Goroutine</h3>
+<p>Paket <code>internal/deadline/deadline.go</code> menyediakan utilitas <code>ExecuteWithBudget</code>. Fungsi ini mengeksekusi closure <code>WorkerFunc</code> di dalam goroutine terpisah di bawah batasan waktu <code>time.Duration</code> tertentu:</p>
+
+<pre><code>package deadline
+
+import (
+	"context"
+	"errors"
+	"time"
+)
+
+var ErrDeadlineExceeded = errors.New("deadline exceeded")
+
+type WorkerFunc func(ctx context.Context) error
+
+func ExecuteWithBudget(ctx context.Context, budget time.Duration, fn WorkerFunc) error {
+	childCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done &lt;- fn(childCtx)
+	}()
+
+	select {
+	case &lt;-childCtx.Done():
+		return childCtx.Err()
+	case err := &lt;-done:
+		return err
+	}
+}</code></pre>
+
+<p>Ada tiga poin rancangan kritis dalam fungsi singkat ini:</p>
+<ol>
+  <li><strong>Penyaluran Warisan Context (Context Inheritance):</strong> <code>childCtx</code> diturunkan dari <code>ctx</code> induk menggunakan <code>context.WithTimeout(ctx, budget)</code>. Jika <code>ctx</code> induk sudah membawa deadline yang lebih pendek (misalnya sisa 20ms dari gateway hulu), maka Go secara otomatis mengunci deadline terpendek, mengabaikan durasi <code>budget</code> 100ms yang diminta oleh lokal. Ini dibuktikan oleh <code>TestExecuteWithBudget_ParentTimeoutInherited</code>.</li>
+  <li><strong>Pembersihan Timer Melalui <code>defer cancel()</code>:</strong> Fungsi <code>context.WithTimeout</code> membuat struktur internal timer di runtime Go. Jika operasi <code>fn</code> selesai jauh sebelum budget habis, tanpa pemanggilan <code>cancel()</code>, objek timer tersebut akan tetap hidup di heap sampai budget durasi waktu tercapai. Pemanggilan <code>defer cancel()</code> menjamin timer langsung dihentikan dan dibersihkan dari memori seketika fungsi <code>ExecuteWithBudget</code> kembali.</li>
+  <li><strong>Buffer Channel Berkapasitas 1 (<code>make(chan error, 1)</code>):</strong> Ini adalah mitigasi mutlak terhadap kebocoran goroutine (goroutine leak). Jika channel <code>done</code> dibuat tanpa buffer (unbuffered), dan skenario timeout terjadi, blok <code>select</code> akan langsung mengeksekusi cabang <code>case &lt;-childCtx.Done():</code> dan fungsi <code>ExecuteWithBudget</code> langsung keluar. Tidak ada lagi goroutine yang mendengarkan channel <code>done</code>. Ketika fungsi <code>fn</code> yang lambat akhirnya selesai beberapa detik kemudian, goroutine pekerja akan mencoba mengirim nilai ke <code>done &lt;- fn(childCtx)</code> dan memblokir selamanya karena tidak ada receiver. Goroutine tersebut akan tersangkut di memori sepanjang masa hidup aplikasi. Dengan memberi kapasitas 1 pada channel, goroutine pekerja dapat meletakkan error hasil eksekusi ke dalam buffer tanpa terblokir, lalu keluar secara alami dan membebaskan alokasi stack-nya.</li>
+</ol>
+
+<h3>4.2 Pilar 2: Exponential Backoff dengan Full Jitter</h3>
+<p>Paket <code>internal/retry/retry.go</code> mengimplementasikan algoritma retry cerdas berbasis temuan arsitektur Amazon Web Services (AWS Architecture Blog: <em>Exponential Backoff And Jitter</em> oleh Marc Brooker):</p>
+
+<pre><code>package retry
+
+import (
+	"context"
+	"errors"
+	"math/rand/v2"
+	"time"
+)
+
+var ErrMaxRetriesExceeded = errors.New("max retries exceeded")
+
+type Config struct {
+	MaxAttempts int
+	BaseBackoff time.Duration
+	MaxBackoff  time.Duration
+}
+
+type Retrier struct {
+	cfg Config
+}
+
+func NewRetrier(cfg Config) *Retrier {
+	if cfg.MaxAttempts &lt;= 0 {
+		cfg.MaxAttempts = 3
+	}
+	if cfg.BaseBackoff &lt;= 0 {
+		cfg.BaseBackoff = 10 * time.Millisecond
+	}
+	if cfg.MaxBackoff &lt;= 0 {
+		cfg.MaxBackoff = 100 * time.Millisecond
+	}
+	return &amp;Retrier{cfg: cfg}
+}
+
+func (r *Retrier) CalculateBackoff(attempt int) time.Duration {
+	if attempt &lt;= 0 {
+		return 0
+	}
+	multiplier := 1 &lt;&lt; uint(attempt-1)
+	temp := float64(r.cfg.BaseBackoff) * float64(multiplier)
+	maxVal := float64(r.cfg.MaxBackoff)
+	if temp &gt; maxVal {
+		temp = maxVal
+	}
+	// Full Jitter: durasi acak terdistribusi seragam di antara [0, temp]
+	sleep := rand.Float64() * temp
+	return time.Duration(sleep)
+}</code></pre>
+
+<p>Formula matematika yang digunakan adalah:</p>
+<pre><code>temp = min(MaxBackoff, BaseBackoff * 2^(attempt - 1))
+sleep = uniform_random(0, temp)</code></pre>
+
+<p>Fungsi <code>Do</code> menjalankan loop retry dengan memantau status context pada setiap fase, memastikan proses tidur (sleep) dapat dibatalkan seketika jika context induk kedaluwarsa:</p>
+
+<pre><code>func (r *Retrier) Do(ctx context.Context, fn func(ctx context.Context) error) error {
+	var lastErr error
+	for attempt := 1; attempt &lt;= r.cfg.MaxAttempts; attempt++ {
+		select {
+		case &lt;-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		err := fn(ctx)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+
+		if attempt == r.cfg.MaxAttempts {
+			break
+		}
+
+		backoff := r.CalculateBackoff(attempt)
+		select {
+		case &lt;-ctx.Done():
+			return ctx.Err()
+		case &lt;=time.After(backoff):
+		}
+	}
+	return errors.Join(ErrMaxRetriesExceeded, lastErr)
+}</code></pre>
+
+<p>Kombinasi <code>errors.Join(ErrMaxRetriesExceeded, lastErr)</code> memungkinkan fungsi pemanggil untuk melakukan pemeriksaan error ganda menggunakan <code>errors.Is</code>, baik untuk mengecek apakah kuota retry habis maupun untuk menginspeksi error akar penyebab kegagalan transaksi.</p>
+
+<h3>4.3 Pilar 3: Circuit Breaker State Machine</h3>
+<p>Paket <code>internal/circuit/circuit.go</code> menyediakan pemutus arus logika berbasis 3 status utama: <code>CLOSED</code> (normal, semua request lewat), <code>OPEN</code> (sistem hilir rusak, semua request ditolak seketika dengan error lokal), dan <code>HALF_OPEN</code> (masa cooldown berakhir, sejumlah kecil permintaan uji coba dilewatkan untuk menguji kesehatan layanan hilir).</p>
+
+<pre><code>package circuit
+
+import (
+	"errors"
+	"sync"
+	"time"
+)
+
+type State int
+
+const (
+	StateClosed State = iota
+	StateOpen
+	StateHalfOpen
+)
+
+type Breaker struct {
+	mu           sync.RWMutex
+	cfg          Config
+	state        State
+	failures     int
+	successes    int
+	lastStateChg time.Time
+}
+
+func (b *Breaker) Allow() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.checkCooldown()
+
+	if b.state == StateOpen {
+		return ErrCircuitOpen
+	}
+	return nil
+}
+
+func (b *Breaker) checkCooldown() {
+	if b.state == StateOpen &amp;&amp; time.Since(b.lastStateChg) &gt;= b.cfg.Cooldown {
+		b.state = StateHalfOpen
+		b.successes = 0
+		b.failures = 0
+		b.lastStateChg = time.Now()
+	}
+}</code></pre>
+
+<p>Pola transisi status dijalankan melalui <code>RecordSuccess</code> dan <code>RecordFailure</code>:</p>
+<pre><code>func (b *Breaker) RecordFailure() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.state == StateHalfOpen {
+		// Satu kegagalan pada masa probing langsung melempar kembali ke OPEN
+		b.state = StateOpen
+		b.failures = 0
+		b.successes = 0
+		b.lastStateChg = time.Now()
+	} else if b.state == StateClosed {
+		b.failures++
+		if b.failures &gt;= b.cfg.FailureThreshold {
+			b.state = StateOpen
+			b.failures = 0
+			b.successes = 0
+			b.lastStateChg = time.Now()
+		}
+	}
+}
+
+func (b *Breaker) Execute(fn func() error) error {
+	if err := b.Allow(); err != nil {
+		return err
+	}
+	err := fn()
+	if err != nil {
+		b.RecordFailure()
+		return err
+	}
+	b.RecordSuccess()
+	return nil
+}</code></pre>
+
+<p>Desain ini elegan karena bersifat lazy evaluation: transisi dari <code>OPEN</code> ke <code>HALF_OPEN</code> tidak membutuhkan goroutine background atau timer scheduler aktif. Pengecekan <code>time.Since(b.lastStateChg) &gt;= b.cfg.Cooldown</code> dilakukan secara on-demand saat pemanggil berikutnya memanggil <code>Allow()</code> atau <code>State()</code>.</p>
+
+<h3>4.4 Pilar 4: Idempotency Key Store dengan Lazy TTL Eviction</h3>
+<p>Paket <code>internal/idempotency/idempotency.go</code> membangun store in-memory untuk menyimpan relasi kunci unik transaksi dengan hasil eksekusinya:</p>
+
+<pre><code>package idempotency
+
+import (
+	"sync"
+	"time"
+)
+
+type Record struct {
+	Response  string
+	CreatedAt time.Time
+}
+
+type Store struct {
+	mu      sync.RWMutex
+	records map[string]Record
+	ttl     time.Duration
+}
+
+func NewStore(ttl time.Duration) *Store {
+	if ttl &lt;= 0 {
+		ttl = 1 * time.Minute
+	}
+	return &amp;Store{
+		records: make(map[string]Record),
+		ttl:     ttl,
+	}
+}
+
+func (s *Store) Get(key string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rec, ok := s.records[key]
+	if !ok {
+		return "", false
+	}
+	if time.Since(rec.CreatedAt) &gt; s.ttl {
+		delete(s.records, key)
+		return "", false
+	}
+	return rec.Response, true
+}
+
+func (s *Store) Set(key string, response string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.records[key] = Record{
+		Response:  response,
+		CreatedAt: time.Now(),
+	}
+}</code></pre>
+
+<p>Karakteristik penting implementasi ini adalah penguncian eksklusif (<code>s.mu.Lock()</code>) pada fungsi <code>Get</code>. Karena operasi pembersihan dilakukan secara malas (lazy eviction) via pemanggilan <code>delete(s.records, key)</code> saat kunci ditemukan sudah usang, goroutine memerlukan write lock. Jika digunakan read lock biasa (<code>RLock</code>), penghapusan data dari Go map akan memicu fatal error <em>concurrent map read and map write</em>. Pembersihan malas ini menjamin memori sistem tidak bocor seiring waktu tanpa memerlukan background daemon goroutine.</p>
+
+<h2>5. Hasil Pengujian / Test Output</h2>
+
+<p>Seluruh kode pada Lab 28 diuji secara ketat menggunakan race detector Go (<code>go test -race -v ./...</code>). Sebanyak 13 pengujian independen di seluruh empat paket internal dan suite integrasi dinyatakan 100% lulus tanpa adanya kondisi balapan data (zero data races).</p>
+
+<h3>5.1 Ringkasan Output Unit Test dan Integrasi</h3>
+<p>Berikut adalah output riil dari eksekusi test runner Go:</p>
+
+<pre><code>=== RUN   TestCircuitBreaker_StateTransitions
+--- PASS: TestCircuitBreaker_StateTransitions (0.06s)
+=== RUN   TestCircuitBreaker_HalfOpenFailureTripsOpen
+--- PASS: TestCircuitBreaker_HalfOpenFailureTripsOpen (0.04s)
+=== RUN   TestCircuitBreaker_DefaultZeroConfig
+--- PASS: TestCircuitBreaker_DefaultZeroConfig (0.00s)
+PASS
+ok  	timeouts-and-deadlines/internal/circuit	0.108s
+
+=== RUN   TestExecuteWithBudget_Success
+--- PASS: TestExecuteWithBudget_Success (0.00s)
+=== RUN   TestExecuteWithBudget_Timeout
+--- PASS: TestExecuteWithBudget_Timeout (0.02s)
+=== RUN   TestExecuteWithBudget_ParentTimeoutInherited
+--- PASS: TestExecuteWithBudget_ParentTimeoutInherited (0.02s)
+PASS
+ok  	timeouts-and-deadlines/internal/deadline	0.045s
+
+=== RUN   TestStore_GetSet
+--- PASS: TestStore_GetSet (0.12s)
+=== RUN   TestStore_ConcurrentAccess
+--- PASS: TestStore_ConcurrentAccess (0.00s)
+=== RUN   TestStore_LazyEvictionOnGet
+--- PASS: TestStore_LazyEvictionOnGet (0.03s)
+PASS
+ok  	timeouts-and-deadlines/internal/idempotency	0.156s
+
+=== RUN   TestRetrier_SuccessOnFirstTry
+--- PASS: TestRetrier_SuccessOnFirstTry (0.00s)
+=== RUN   TestRetrier_RetryUntilSuccess
+--- PASS: TestRetrier_RetryUntilSuccess (0.00s)
+=== RUN   TestRetrier_ExceedMaxAttempts
+--- PASS: TestRetrier_ExceedMaxAttempts (0.00s)
+=== RUN   TestRetrier_ContextCanceled
+--- PASS: TestRetrier_ContextCanceled (0.02s)
+=== RUN   TestRetrier_JitterBoundsAndZeroConfig
+--- PASS: TestRetrier_JitterBoundsAndZeroConfig (0.00s)
+PASS
+ok  	timeouts-and-deadlines/internal/retry	0.028s
+
+=== RUN   TestIntegration_RetryWithCircuitBreaker
+--- PASS: TestIntegration_RetryWithCircuitBreaker (0.02s)
+=== RUN   TestIntegration_IdempotentRetry
+--- PASS: TestIntegration_IdempotentRetry (0.00s)
+PASS
+ok  	timeouts-and-deadlines/tests	0.029s</code></pre>
+
+<h3>5.2 Analisis Skenario Integrasi</h3>
+<p>Dua test integrasi pada <code>tests/integration_test.go</code> membuktikan kohesi antar-komponen:</p>
+<ol>
+  <li><code>TestIntegration_RetryWithCircuitBreaker</code>: Menguji integrasi antara retrier (4 percobaan) dengan circuit breaker (threshold 2). Ketika fungsi downstream selalu gagal, percobaan ke-1 dan ke-2 mencatat kegagalan dan membuka sirkuit (OPEN). Percobaan ke-3 dan ke-4 langsung ditolak secara lokal dengan <code>ErrCircuitOpen</code> dalam mikrodetik tanpa membebani backend. Beban panggilan riil ke backend terpangkas 50%.</li>
+  <li><code>TestIntegration_IdempotentRetry</code>: Menguji fungsi pembayaran di dalam retry loop dengan kuota 3 percobaan. Fungsi simulasi hanya meningkatkan penghitung transaksi <code>actualExecutions</code> jika kunci belum ada di store. Hasil pengujian menunjukkan bahwa meskipun retrier mencoba memanggil fungsi berulang kali, <code>actualExecutions</code> bernilai tepat 1. Pembayaran ganda berhasil dicegah 100%.</li>
+</ol>
+
+<h3>5.3 Output Demo Eksekusi Nyata</h3>
+<p>Menjalankan demonstrasi langsung melalui <code>go run cmd/demo/main.go</code> memberikan gambaran perilaku sistem secara transparan:</p>
+
+<pre><code>=== Timeouts &amp; Deadlines Laboratory Demo ===
+
+--- Demo 1: Context Deadline &amp; Budget Propagation ---
+Deadline propagation result: context deadline exceeded
+
+--- Demo 2: Exponential Backoff with Full Jitter ---
+  Attempt #1 executed
+  Attempt #2 executed
+  Attempt #3 executed
+Retry execution result: &lt;nil&gt; (total attempts: 3)
+
+--- Demo 3: Circuit Breaker State Transitions ---
+Initial state: CLOSED
+State after 2 failures: OPEN
+Execution attempt while OPEN: circuit breaker is open
+State after cooldown: HALF_OPEN
+Execution attempt in HALF_OPEN (success): &lt;nil&gt; -&gt; New State: CLOSED
+
+--- Demo 4: Idempotent Request Retry Protection ---
+First request execution: Charged $100 successfully
+Retried request execution: Charged $100 successfully (DEDUPLICATED)
+
+=== Demo Completed Successfully ===</code></pre>
+
+<h2>6. Perbandingan Before vs After</h2>
+
+<p>Menerapkan keempat mekanisme ketahanan sistem ini mentransformasi karakteristik operasional sistem dari status rentan menjadi sangat tangguh:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Dimensi Karakteristik</th>
+      <th>Sebelum Proteksi (Tanpa Timeout / Breaker)</th>
+      <th>Sesudah Proteksi (Lab 28 Architecture)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Respon Terhadap Layanan Lambat</strong></td>
+      <td>Goroutine dan socket tertahan tak terbatas hingga default TCP timeout OS (biasanya 2 jam).</td>
+      <td>Diputus secara deterministik saat budget deadline habis (misal 50ms-2s) via <code>context.WithTimeout</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Dampak Terhadap Endpoint Lain</strong></td>
+      <td>Cascading failure total: worker pool habis, healthcheck gagal, seluruh container di-restart (starvation).</td>
+      <td>Isolasi kegagalan penuh: hanya endpoint yang memanggil layanan bermasalah yang terpengaruh; endpoint lain tetap cepat.</td>
+    </tr>
+    <tr>
+      <td><strong>Pola Percobaan Ulang (Retry)</strong></td>
+      <td>Fixed interval atau no jitter: menghasilkan lonjakan thundering herd tersinkronisasi yang menenggelamkan server hilir.</td>
+      <td>Exponential backoff dengan Full Jitter: panggilan acak terdistribusi merata dalam domain <code>[0, temp]</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Perilaku Saat Outage Berkepanjangan</strong></td>
+      <td>Klien terus membombardir jutaan request gagal ke server yang sedang mati, memboroskan CPU dan network gateway.</td>
+      <td>Circuit Breaker memutus arus (OPEN), langsung menolak request di tepi aplikasi dalam orde sub-mikrodetik.</td>
+    </tr>
+    <tr>
+      <td><strong>Keamanan Transaksi Non-Idempoten</strong></td>
+      <td>Klien melakukan retry pada timeout jaringan, memicu debit ganda (double-charge) atau duplicate order creation.</td>
+      <td>Deduplikasi instan via Idempotency Key Store; retry mengembalikan hasil tersimpan tanpa eksekusi mutasi ulang.</td>
+    </tr>
+    <tr>
+      <td><strong>Alokasi Sumber Daya Goroutine</strong></td>
+      <td>Rawan kebocoran goroutine (goroutine leak) akibat unbuffered channel yang tidak pernah menerima nilai saat timeout.</td>
+      <td>Nol kebocoran: pemanfaatan buffered channel kapasitas 1 dan pembersihan otomatis timer via <code>defer cancel()</code>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>7. Trade-off &amp; Batasan Implementasi</h2>
+
+<p>Dalam rekayasa sistem, setiap keputusan arsitektur menuntut kompromi. Berikut adalah analisis batasan dan trade-off dari implementasi di dalam Lab 28:</p>
+
+<h3>7.1 In-Memory Idempotency Store vs Distributed Cache (Redis/DB)</h3>
+<p>Di Lab 28, <code>Store</code> disimpan dalam memori proses tunggal menggunakan <code>map[string]Record</code> dan <code>sync.RWMutex</code>. Keuntungannya adalah kecepatan akses mikrodetik tanpa overhead dependensi eksternal. Namun batasannya nyata: jika aplikasi berjalan dalam cluster multi-pod di Kubernetes di balik Load Balancer, permintaan retry pertama mungkin mendarat di Pod A sedangkan permintaan retry kedua mendarat di Pod B. Pod B tidak mengetahui riwayat dari Pod A dan tetap akan menjalankan eksekusi mutasi kedua.</p>
+<p>Dalam skala produksi, store ini harus diganti dengan penyimpanan terdistribusi seperti Redis menggunakan perintah atomik <code>SET key response NX EX ttl</code> atau tabel database PostgreSQL dengan unique constraint pada kolom <code>idempotency_key</code>.</p>
+
+<h3>7.2 Single-Process Context vs Distributed Wire Protocol</h3>
+<p>Fungsi <code>ExecuteWithBudget</code> mengikat goroutine di dalam runtime lokal Go. Namun dalam arsitektur mikroservis multi-hop (Service A -&gt; Service B -&gt; Service C), sisa durasi waktu harus ditransmisikan melintasi batas jaringan fisik (over-the-wire context propagation). Jika Service A memiliki batas 500ms dan telah menghabiskan 200ms sebelum memanggil Service B via HTTP/REST, Service B harus diinformasikan bahwa budget tersisa tinggal 300ms. Jika tidak, Service B akan mengalokasikan budget baru sebesar 500ms secara naif, sehingga total durasi melampaui toleransi klien hulu.</p>
+<p>Protokol modern seperti gRPC menyelesaikan ini secara bawaan menggunakan header HTTP/2 <code>grpc-timeout</code>, sedangkan pada arsitektur RESTful diperlukan injeksi manual header seperti <code>X-Request-Deadline</code> atau standar W3C Baggage.</p>
+
+<h3>7.3 Static Budget vs Adaptive Latency Windows</h3>
+<p>Konfigurasi <code>Config</code> pada breaker dan retrier di Lab 28 menggunakan parameter statis (misal 3 percobaan, failure threshold 2, cooldown 50ms). Di lingkungan dinamis dengan pola beban fluktuatif, nilai statis yang terlalu ketat dapat menyebabkan false alarm (circuit breaker terbuka saat lonjakan trafik wajar), sedangkan nilai yang terlalu longgar memperlambat deteksi kegagalan. Pendekatan tingkat lanjut (sebagaimana diterapkan pada Netflix Hystrix atau Google SRE client-side adaptive throttling) menggunakan statistik latensi adaptif berbasis jendela persentil (p99 latency sliding window) dan laju kesalahan berbasis rasio probabilistik.</p>
+
+<h2>8. Kapan Menggunakan Pattern Ini</h2>
+
+<p>Panduan praktis bagi arsitek dan insinyur perangkat lunak dalam menentukan kapan harus menerapkan masing-masing pilar pola ketahanan ini:</p>
+
+<h3>8.1 Kapan Menerapkan Context Deadline?</h3>
+<ul>
+  <li><strong>Wajib:</strong> Pada setiap panggilan I/O jaringan keluar (outbound network call), termasuk HTTP request, gRPC invocation, koneksi message broker (Kafka/RabbitMQ), dan query database.</li>
+  <li><strong>Wajib:</strong> Pada ingress API gateway untuk mencegah penumpukan permintaan klien yang lambat.</li>
+  <li><strong>Tidak Perlu:</strong> Pada operasi komputasi in-memory murni yang deterministik dan tidak berpotensi mengalami infinite loop.</li>
+</ul>
+
+<h3>8.2 Kapan Menerapkan Retrier dengan Full Jitter?</h3>
+<ul>
+  <li><strong>Tepat:</strong> Untuk operasi yang bersifat idempotent secara alami (seperti HTTP <code>GET</code>, <code>HEAD</code>, <code>PUT</code>, <code>DELETE</code> standar).</li>
+  <li><strong>Tepat:</strong> Untuk jenis kesalahan transien (HTTP status code 503 Service Unavailable, 504 Gateway Timeout, connection reset by peer, DNS resolution temporary failure).</li>
+  <li><strong>Dilarang:</strong> Mencoba ulang kesalahan non-transien seperti HTTP 400 Bad Request, 401 Unauthorized, 403 Forbidden, atau 404 Not Found.</li>
+  <li><strong>Dilarang:</strong> Menjalankan retry pada operasi mutasi (seperti <code>POST /charges</code>) tanpa menyertakan Idempotency Key!</li>
+</ul>
+
+<h3>8.3 Kapan Menerapkan Circuit Breaker?</h3>
+<ul>
+  <li><strong>Tepat:</strong> Pada integrasi pihak ketiga eksternal (third-party SaaS, payment gateways, vendor logistik) yang berada di luar kendali infrastruktur tim kita.</li>
+  <li><strong>Tepat:</strong> Di antara dependensi internal mikroservis kritis di mana kegagalan downstream dapat memicu keruntuhan berantai hulu.</li>
+  <li><strong>Kurang Tepat:</strong> Untuk resource lokal di dalam mesin yang sama (seperti membaca file lokal dari hard disk) di mana degradasi bersifat permanen atau membutuhkan investigasi OS langsung.</li>
+</ul>
+
+<h3>8.4 Kapan Menerapkan Idempotency Key?</h3>
+<ul>
+  <li><strong>Wajib:</strong> Pada semua endpoint mutasi finansial atau sumber daya bernilai tinggi (pembayaran, pengisian saldo, penempatan pesanan e-commerce, pengiriman notifikasi berbayar via SMS).</li>
+  <li><strong>Wajib:</strong> Setiap kali klien diizinkan atau diinstruksikan untuk melakukan retry otomatis pada kondisi timeout jaringan ambigu.</li>
+</ul>
+
+<h2>9. Referensi &amp; Commit Hash</h2>
+
+<p>Implementasi dan analisis teknis pada artikel ini merujuk langsung pada riset arsitektur terdistribusi dan dokumentasi resmi standar industri berikut:</p>
+
+<ul>
+  <li><strong>Google SRE Book:</strong> Bab <em>Addressing Cascading Failures</em> dan bab <em>Handling Overload</em> yang memformulasikan penanganan kuota batas waktu (deadlines) dan degradasi beban secara anggun.</li>
+  <li><strong>AWS Architecture Blog:</strong> <em>Exponential Backoff And Jitter</em> oleh Marc Brooker (2015), riset fundamental yang membuktikan secara simulatif keunggulan Full Jitter atas Decorrelated Jitter dan Exponential Backoff murni dalam meredam thundering herd.</li>
+  <li><strong>gRPC Documentation:</strong> Spesifikasi resmi <em>gRPC Deadlines and Cancellation Propagation</em> untuk protokol komunikasi biner lintas batas jaringan melalui HTTP/2.</li>
+  <li><strong>PostgreSQL 18 Documentation:</strong> Bab <em>Client Connection Defaults / Statement Behavior</em> mengenai konfigurasi kritis tingkat penyimpanan:
+    <ul>
+      <li><code>statement_timeout</code>: Membatasi durasi eksekusi statement SQL dari sisi server database.</li>
+      <li><code>lock_timeout</code>: Mencegah transaksi antre selamanya saat menunggu pelepasan table atau row lock.</li>
+      <li><code>idle_in_transaction_session_timeout</code>: Menutup koneksi yang membuka transaksi lalu ditinggalkan menggantung oleh aplikasi klien.</li>
+    </ul>
+  </li>
+  <li><strong>Stripe API Reference:</strong> Standar industri untuk implementasi <em>Idempotent Requests</em> menggunakan header HTTP <code>Idempotency-Key</code> dan deduplikasi berbasis basis data relasional.</li>
+</ul>
+
+<div class="callout">
+  <p><strong>Commit Hash Sumber Kode:</strong> <code>bdb285d35a71c9a309e83a0e4497b9dbd842ceb8</code></p>
+  <p><strong>Tautan Repositori Laboratorium:</strong><br>
+  <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/28-timeouts-and-deadlines" target="_blank" rel="noopener noreferrer">https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/28-timeouts-and-deadlines</a></p>
+</div>
+
+</div>
+</body>
+</html>
