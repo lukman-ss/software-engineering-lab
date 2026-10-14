@@ -1,0 +1,127 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Property-Based Testing: Menemukan Edge-Case Tersembunyi via Universal Invariant & Shrinking</title><meta name="description" content="Pelajari Property-Based Testing lewat simulasi Go, antrean, arsitektur, dan verifikasi metrik."><meta property="og:title" content="Property-Based Testing: Menemukan Edge-Case Tersembunyi via Universal Invariant & Shrinking"><meta property="og:description" content="Pelajari Property-Based Testing lewat simulasi Go, antrean, arsitektur, dan verifikasi metrik."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>Property-Based Testing: Menemukan Edge-Case Tersembunyi via Universal Invariant & Shrinking</h1><p class="subtitle">Menemukan Edge-Case Tersembunyi via Universal Invariant & Shrinking</p><p>Lukman / lukman-ss · Software Engineering Lab 40</p><img src="lab-40-property-based-testing-cover-id.png" alt="Cover Lab 40 Property-Based Testing oleh Lukman / lukman-ss"><h2>Ilusi Keamanan Example-Based Testing</h2><p>Unit test berbasis contoh (example-based testing) bekerja dengan menegaskan bahwa f(x) == y untuk segelintir sampel statis. Masalah mendasarnya adalah bias konfirmasi: engineer cenderung hanya menguji kombinasi nilai yang telah mereka antisipasi dalam implementasi. Pada dataset kecil atau input tipikal, kode tampak sempurna dan seluruh baris assertions berstatus PASS. Namun ketika berhadapan dengan data acak tak terduga di lingkungan produksi, asumsi tersembunyi runtuh seketika dan memicu kegagalan sistemik yang fatal.</p><h2>Tiga Pilar Siklus Property-Based Testing</h2><p>Siklus kerja Property-Based Testing membagi tugas antara komputasi mesin dan perancangan manusia secara elegan. Manusia bertanggung jawab mendefinisikan batasan domain serta relasi invariant matematika yang wajib selalu bernilai benar. Mesin PBT kemudian bertindak sebagai musuh (adversary) yang mengeksekusi ratusan kombinasi data acak melalui generator, memverifikasi invariant pada setiap iterasi, dan segera mengisolasi kegagalan ke bentuk data paling sederhana menggunakan algoritma shrinking deterministik.</p><table><tr><th>Tahap</th><th>Tanggung Jawab</th><th>Output Sistem</th></tr><tr><td>1. Generator</td><td>Buat ratusan sampel input acak terdistribusi</td><td>Slices, numbers, structs</td></tr><tr><td>2. Invariant</td><td>Evaluasi properti universal f(x)</td><td>Validasi true / false</td></tr><tr><td>3. Shrinker</td><td>Pangkas kegagalan ke bentuk terkecil</td><td>Minimal counterexample (e.g. [-1])</td></tr></table><h2>Empat Pola Invariant Kanonikal</h2><p>Kunci keberhasilan PBT terletak pada pemilihan pola invariant yang tepat tanpa menulis ulang logika implementasi di dalam assertion test. Pola Roundtrip menjamin integritas transformasi bolak-balik tanpa data corruption. Pola Idempotence memastikan stabilitas state di mana pemanggilan berulang tidak mengubah hasil. Pola Test Oracle membandingkan algoritma berperforma tinggi terhadap implementasi referensi sederhana. Pola Easy-to-Verify memeriksa keabsahan properti solusi akhir dengan biaya komputasi murah.</p><table><tr><th>Pola Invariant</th><th>Formula Formal</th><th>Contoh Kasus Nyata</th></tr><tr><td>Roundtrip</td><td>Decode(Encode(x)) == x</td><td>Serialisasi JSON, mata uang, kompresi</td></tr><tr><td>Idempotence</td><td>f(f(x)) == f(x)</td><td>Normalisasi teks, merge interval, cleanup</td></tr><tr><td>Oracle Equiv</td><td>f_robust(x) == f_naive(x)</td><td>Verifikasi algoritma teroptimasi vs referensi</td></tr><tr><td>Easy-to-Verify</td><td>HardToSolve(x) -> EasyVerify(res)</td><td>Validasi shortest path, partisi graf</td></tr></table><h2>Kegagalan Presisi Float pada Mata Uang</h2><p>Menyimpan nilai moneter dalam tipe floating-point float64 adalah anti-pattern klasik dalam rekayasa perangkat lunak. Pemformatan dengan sintaks pembulatan desimal string memotong digit pecahan sub-cent tanpa kendali. Lebih buruk lagi, konversi string kembali ke float64 tunduk pada aproksimasi biner IEEE 754. Pada pengujian konvensional dengan nilai bulat rapi, bug ini tidak pernah muncul, menciptakan ilusi bahwa modul akuntansi bekerja normal padahal pembulatan sen terus bocor.</p><pre><code>type NaiveCurrency struct{}
+
+func (n NaiveCurrency) Format(dollars float64) string {
+    return fmt.Sprintf("$%.2f", dollars)
+}
+
+func (n NaiveCurrency) Parse(s string) (float64, error) {
+    s = strings.TrimPrefix(s, "$")
+    return strconv.ParseFloat(s, 64)
+}</code></pre><h2>PBT Mendeteksi Kebocoran Float 100%</h2><p>Ketika properti roundtrip diuji menggunakan paket standar Go testing/quick, kelemahan implementasi float64 langsung terekspos tanpa ampun. Dari 1.000 iterasi angka acak, seluruh 1.000 input mengalami kegagalan roundtrip karena nilai desimal asli terpotong oleh format dua angka di belakang koma. PBT membuktikan secara empiris bahwa fungsi Parse(Format(x)) bukanlah fungsi identitas bagi domain float64, mematahkan asumsi keamanan yang sebelumnya diberikan oleh unit test statis.</p><pre><code>func TestPropertyNaiveCurrencyFails(t *testing.T) {
+    naive := NaiveCurrency{}
+    prop := func(val NaiveFloat) bool {
+        dollars := float64(val)
+        formatted := naive.Format(dollars)
+        parsed, err := naive.Parse(formatted)
+        if err != nil { return false }
+        return parsed == dollars // Gagal pada sub-cent!
+    }
+    err := quick.Check(prop, &amp;quick.Config{MaxCount: 100})
+    // quick.Check mengembalikan error counterexample
+}</code></pre><h2>Desain Robust: Integer Cents Representation</h2><p>Solusi rekayasa yang terbukti secara industri untuk domain mata uang adalah merepresentasikan nominal terkecil sebagai bilangan bulat utuh (integer cents bertipe int64). Format visual desimal hanyalah proyeksi tampilan pada lapisan presentasi string, sedangkan operasi aritmatika internal dan penyimpanan data tetap berada di ranah bilangan diskrit. Pendekatan ini secara definitif menutup peluang terjadinya distorsi presisi IEEE 754 dan menjamin determinisme mutlak.</p><pre><code>type RobustAmount struct {
+    Cents int64
+}
+
+func (r RobustAmount) Format() string {
+    absCents := r.Cents; sign := ""
+    if absCents &lt; 0 { sign = "-"; absCents = -absCents }
+    dollars := absCents / 100; cents := absCents % 100
+    return fmt.Sprintf("%s$%d.%02d", sign, dollars, cents)
+}</code></pre><h2>Custom Generator & Boundary Value Bias</h2><p>Generator acak yang murni seragam (uniform distribution) sering kali melewatkan titik-titik krusial tempat bersarangnya bug batas logika. Implementasi generator RobustAmount pada Lab 40 sengaja menyuntikkan bias probabilitas ke arah nilai rawan: batas nol, transisi bilangan negatif kecil di sekitar nol (-100 hingga +99 sen), serta nilai nominal raksasa multi-miliar sen. Generator yang cerdas secara agresif membombardir tepi spektrum domain untuk menguji ketahanan boundary handling.</p><pre><code>func (RobustAmount) Generate(r *rand.Rand, size int) reflect.Value {
+    switch r.Intn(5) {
+    case 0: cents = 0                         // Boundary zero
+    case 1: cents = int64(r.Intn(200) - 100)  // Near-zero negatives
+    case 2: cents = int64(r.Intn(1000000))    // Normal positive
+    case 3: cents = -int64(r.Intn(1000000))   // Normal negative
+    default: cents = r.Int63n(1e12) - 5e11    // Multi-billion bounds
+    }
+    return reflect.ValueOf(RobustAmount{Cents: cents})
+}</code></pre><h2>1.000 Iterasi Lolos Roundtrip Integer Cents</h2><p>Dengan beralih ke integer cents dan parser yang presisi, pengujian properti TestPropertyRobustAmountRoundtrip berhasil mengeksekusi 1.000 iterasi berturut-turut tanpa satu pun pelanggaran invariant. Terlepas dari apakah input berupa angka negatif dengan tanda minus, nilai nol bersih, atau nominal transaksi skala enterprise, relasi Parse(Format(x)) == x selalu terpenuhi. Ini membuktikan bahwa arsitektur data baru telah memenuhi kontrak integritas serialisasi secara matematis.</p><table><tr><th>Metrik Uji</th><th>Naive Float64</th><th>Robust Integer Cents</th></tr><tr><td>Total Iterasi Acak</td><td>1.000 iterasi</td><td>1.000 iterasi</td></tr><tr><td>Tingkat Kelulusan</td><td>0% (1.000 gagal)</td><td>100% (1.000 lolos)</td></tr><tr><td>Cakupan Domain</td><td>Terbatas hand-picked</td><td>Nol, negatif, triliun sen</td></tr><tr><td>Invarian Terbukti</td><td>Gagal total</td><td>Parse(Format(x)) == x VALID</td></tr></table><h2>Kasus Interval Merge & Asumsi Tersembunyi</h2><p>Kelemahan algoritma sering kali berakar pada prakondisi implisit yang tidak dinyatakan secara tegas dalam kontrak kode. Fungsi NaiveMerge dirancang untuk menggabungkan interval waktu yang saling tumpang tindih. Namun, loop perulangan langsung membandingkan elemen berjalan terhadap elemen terakhir dari slice output, mengasumsikan input sudah terurut berdasarkan titik awal (Start). Ketika dipanggil dengan contoh terurut, fungsi bekerja mulus; namun begitu urutan berubah, output menjadi rusak.</p><pre><code>func NaiveMerge(intervals []Interval) []Interval {
+    if len(intervals) == 0 { return nil }
+    out := []Interval{intervals[0]}
+    for _, iv := range intervals[1:] {
+        last := &amp;out[len(out)-1]
+        if iv.Start &lt;= last.End {
+            if iv.End &gt; last.End { last.End = iv.End }
+        } else { out = append(out, iv) }
+    }
+    return out // BUG: Mengasumsikan input terurut!
+}</code></pre><h2>Test Oracle: Membongkar 85% Discrepancy</h2><p>Teknik Test Oracle memanfaatkan dua implementasi berbeda untuk input yang sama: f_naive(x) versus f_robust(x). RobustMerge secara eksplisit melakukan pengurutan sort.Slice sebelum proses penggabungan dilakukan. Ketika dievaluasi dengan generator irisan acak, pengujian membongkar bahwa 85 dari 100 input menghasilkan inkonsistensi keluaran antara NaiveMerge dan RobustMerge. Generator acak secara instan mengekspos betapa rapuhnya kode naif di hadapan array yang tidak terurut.</p><pre><code>func TestPropertyNaiveMergeFails(t *testing.T) {
+    prop := func(ivs IntervalSlice) bool {
+        naive := NaiveMerge([]Interval(ivs))
+        robust := RobustMerge([]Interval(ivs))
+        return intervalsEqual(naive, robust)
+    }
+    err := quick.Check(prop, &amp;quick.Config{MaxCount: 100})
+    // 85 dari 100 input acak menghasilkan ketidaksesuaian!
+}</code></pre><h2>Invariant Idempotence pada Penggabungan Data</h2><p>Idempotensi adalah sifat matematika fundamental dalam arsitektur komputasi: f(f(x)) == f(x). Dalam konteks pemrosesan data, menjalankan fungsi penggabungan pada kumpulan interval yang sudah digabungkan wajib menghasilkan output yang sama persis tanpa mutasi tambahan. Pengujian TestPropertyRobustMergeIdempotence memvalidasi 1.000 iterasi irisan acak, membuktikan bahwa operasi RobustMerge bersifat stabil dan aman dari efek samping mutasi berulang.</p><pre><code>Formula Teoretis: f(f(x)) == f(x)
+
+func TestPropertyRobustMergeIdempotence(t *testing.T) {
+    prop := func(ivs IntervalSlice) bool {
+        once := RobustMerge([]Interval(ivs))
+        twice := RobustMerge(once)
+        return intervalsEqual(once, twice)
+    }
+    quick.Check(prop, &amp;quick.Config{MaxCount: 1000})
+}</code></pre><h2>Invariant Struktural: Non-Overlapping Slices</h2><p>Selain relasi f(f(x)), kebenaran algoritma penggabungan interval harus memenuhi invariant struktural domain: untuk setiap indeks i dan i+1 pada irisan keluaran, titik akhir interval pertama harus lebih kecil dari titik awal interval berikutnya (out[i].End < out[i+1].Start). Pengujian 1.000 iterasi acak memastikan bahwa tidak ada irisan ganda atau fragmen bertumpuk yang lolos, menjamin partisi interval bebas anomali.</p><pre><code>func TestPropertyRobustMergeNonOverlapping(t *testing.T) {
+    prop := func(ivs IntervalSlice) bool {
+        merged := RobustMerge([]Interval(ivs))
+        for i := 0; i &lt; len(merged)-1; i++ {
+            if merged[i].End &gt;= merged[i+1].Start {
+                return false // Ada tumpang tindih!
+            }
+        }
+        return true
+    }
+    quick.Check(prop, &amp;quick.Config{MaxCount: 1000})
+}</code></pre><h2>Anatomi Masalah: Kompleksitas Counterexample</h2><p>Ketika mesin PBT mendeteksi pelanggaran invariant pada input acak berukuran besar, output mentahnya sering kali berupa struktur data raksasa yang membingungkan engineer. Pada contoh demo, input yang memicu kegagalan predicate adalah array 10 elemen acak yang bercampur antara ratusan angka positif dan dua bilangan negatif (-27 dan -7). Tanpa mekanisme reduksi, developer akan menghabiskan waktu berjam-jam memilah data mana yang sesungguhnya menjadi biang kerok kegagalan sistem.</p><h2>Konsep dan Algoritma Shrinking</h2><p>Algoritma counterexample shrinking dirancang untuk mentransformasikan input kegagalan mentah menjadi *minimal reproducible counterexample*. Algoritma bekerja secara deterministik dalam tiga fase bertingkat: pertama, melakukan pemotongan biner (halving) terhadap panjang array; kedua, mencoba menghapus elemen satu per satu; dan ketiga, memperkecil magnitudo nilai individual mendekati nol. Setiap langkah yang tetap mempertahankan status gagal (FAIL) diadopsi sebagai basis input baru.</p><table><tr><th>Fase Algoritma</th><th>Aksi Reduksi</th><th>Target Optimasi</th></tr><tr><td>1. Binary Sectioning</td><td>Potong separuh kiri / kanan array</td><td>Pangkas ukuran O(log N)</td></tr><tr><td>2. Element Removal</td><td>Hapus elemen individual satu per satu</td><td>Eliminasi noise non-kritis</td></tr><tr><td>3. Value Reduction</td><td>Bagi dua nilai elemen menuju 0</td><td>Minimalisasi magnitudo nilai</td></tr></table><h2>Binary Sectioning: Memangkas Panjang Array</h2><p>Fase pertama dari shrinking adalah binary chunking. Algoritma membagi slice menjadi dua bagian (kiri dan kanan), lalu mengevaluasi predicate pada masing-masing belahan. Jika belahan kiri masih memicu kegagalan, separuh bagian kanan langsung dibuang secara permanen. Dalam demo, array 10 elemen terpotong menjadi 5 elemen [137, 18, 100, -27, 95] pada langkah 1, lalu terpotong lagi menjadi 3 elemen [100, -27, 95] pada langkah 3, mempercepat pencarian secara eksponensial.</p><pre><code>if len(current) &gt; 1 {
+    mid := len(current) / 2
+    left := current[:mid]
+    if !predicate(left) {
+        current = append([]int(nil), left...)
+        changed = true; continue
+    }
+    right := current[mid:]
+    if !predicate(right) {
+        current = append([]int(nil), right...)
+        changed = true; continue
+    }
+}</code></pre><h2>Reduksi Elemen & Magnitudo Menuju Nol</h2><p>Setelah panjang array dipangkas hingga tersisa 1 elemen tunggal berisi [-27], algoritma melanjutkan ke strategi ketiga: reduksi nilai numerik. Nilai -27 secara bertahap dibagi dua mendekati nol: -27 -> -13 -> -6 -> -3 -> -1. Setiap langkah diverifikasi apakah invarian masih dilanggar. Ketika mencapai -1, langkah berikutnya yaitu 0 menghasilkan PASS (karena 0 bukan negatif). Algoritma berhenti dan menetapkan [-1] sebagai nilai batas minimal mutlak.</p><pre><code>// Coba set elemen menjadi 0 atau bagi dua nilainya
+candidates := []int{0, current[i] / 2}
+for _, cand := range candidates {
+    testSlice := append([]int(nil), current...)
+    testSlice[i] = cand
+    if !predicate(testSlice) {
+        current = testSlice
+        changed = true; break
+    }
+}</code></pre><h2>Jejak 21 Langkah Menuju Minimal</h2><p>Log terminal dari eksekusi demo memperlihatkan transparansi penuh dari proses reduksi data. Dari input awal acak sebanyak 10 elemen yang berantakan, mesin hanya membutuhkan 21 evaluasi predikat untuk mengeliminasi 9 elemen yang tidak relevan serta memperkecil nilai -27 menjadi -1. Hasil akhir [-1] memberikan kejelasan diagnostik instan bagi developer: masalah bukan pada panjang array atau interaksi elemen, melainkan keberadaan bilangan negatif sekecil apa pun.</p><pre><code>Input Awal (10 elemen): [137 18 100 -27 95 107 126 78 -7 79]
+Step  1: remove-right-half         [5 elem] [137 18 100 -27 95] -&gt; FAIL
+Step  3: remove-left-half          [3 elem] [100 -27 95]        -&gt; FAIL
+Step  5: remove-left-half          [2 elem] [-27 95]            -&gt; FAIL
+Step  6: remove-right-half         [1 elem] [-27]               -&gt; FAIL
+Step  9: reduce-val to -13         [1 elem] [-13]               -&gt; FAIL
+Step 12: reduce-val to -6          [1 elem] [-6]                -&gt; FAIL
+Step 15: reduce-val to -3          [1 elem] [-3]                -&gt; FAIL
+Step 18: reduce-val to -1          [1 elem] [-1]                -&gt; FAIL
+Hasil Akhir (Minimal Counterexample): [-1] (Tepat 21 langkah evaluasi!)</code></pre><h2>Integrasi Go Standard Library testing/quick</h2><p>Salah satu keunggulan ekosistem Go adalah ketersediaan paket bawaan testing/quick di dalam standard library tanpa memerlukan dependensi pihak ketiga. Paket ini menyediakan fungsi quick.Check yang mengeksekusi properti hingga ribuan kali dengan konfigurasi MaxCount dan seed kustom. Generator bawaan secara otomatis merefleksikan tipe data dasar, sementara interface quick.Generator memungkinkan engineer menyuntikkan generator buatan sendiri untuk tipe data kompleks.</p><pre><code>cfg := &amp;quick.Config{
+    MaxCount: 1000, // Jumlah iterasi acak yang dieksekusi
+    Rand:     rand.New(rand.NewSource(seed)), // Determinisme
+}
+
+err := quick.Check(func(a RobustAmount) bool {
+    return ParseRobust(a.Format()) == a
+}, cfg)
+if err != nil {
+    t.Fatalf("property violation: %v", err)
+}</code></pre><h2>Determinisme, Seeding, & CI/CD Pipeline</h2><p>Kritik yang kerap diarahkan pada PBT adalah risiko munculnya flaky tests jika seed acak berubah di setiap run CI. Solusi profesional adalah menerapkan dual-strategy: pada local testing dan PR verification, gunakan seed tetap dengan 100–500 iterasi agar eksekusi berlangsung sub-detik dan stabil. Pada nightly build atau background fuzzer, aktifkan seed dinamis berbasis timestamp dengan 50.000 iterasi. Setiap kali kegagalan ditemukan, log seed wajib dicatat agar developer dapat mereproduksinya secara instan.</p><table><tr><th>Lingkungan</th><th>Konfigurasi Seed</th><th>Iterasi</th><th>Tujuan</th></tr><tr><td>Local PR Check</td><td>Fixed Seed (deterministik)</td><td>100 - 500</td><td>Cepat & lolos tanpa flakiness</td></tr><tr><td>Nightly CI</td><td>Dynamic Time Seed</td><td>10.000 - 50.000</td><td>Eksplorasi bug liar & boundary</td></tr><tr><td>Bug Reproduction</td><td>Injeksi Failing Seed</td><td>1 run minimal</td><td>Reproduksi 100% konsisten</td></tr></table><h2>Matriks Komparasi Example vs PBT</h2><p>Perbandingan matriks memperlihatkan pergeseran paradigma kualitas pengujian. Unit test konvensional sangat baik untuk memvalidasi kontrak fungsional spesifik dan regresi skenario bisnis tertentu. Namun, untuk sistem yang menangani kalkulasi finansial, protokol serialisasi, atau manipulasi struktur data kompleks, PBT memberikan jaminan kebenaran yang jauh lebih kokoh melalui eksplorasi batas domain secara otomatis dan reduksi kegagalan yang deterministik.</p><table><tr><th>Dimensi Evaluasi</th><th>Example-Based Testing</th><th>Property-Based Testing</th></tr><tr><td>Cakupan Input</td><td>Titik diskrit statis (hand-picked)</td><td>Spektrum kontinu acak terdistribusi</td></tr><tr><td>Bias Pengujian</td><td>Tinggi (mengikuti intuisi engineer)</td><td>Rendah (adversarial fuzzing)</td></tr><tr><td>Bug Boundary</td><td>Kerap terlewat (sub-cent, negative)</td><td>Terdeteksi via biased generator</td></tr><tr><td>Isolasi Bug</td><td>Manual via trace & debugger</td><td>Otomatis via counterexample shrinking</td></tr><tr><td>Tingkat Keyakinan</td><td>False confidence (jalur aman)</td><td>Calibrated confidence (invarian kokoh)</td></tr></table><h2>Praktik Terbaik & Anti-Pattern PBT</h2><p>Kesalahan paling sering terjadi saat mengadopsi PBT adalah kecenderungan developer menduplikasi logika fungsi yang diuji ke dalam assertion test. Praktik ini salah karena jika implementasi memiliki bug logika, assertion duplikat akan ikut menyetujuinya. Fokuslah murni pada sifat relasional independen. Selain itu, pastikan generator selalu mencakup nilai-nilai ekstrem (nol, batas maksimum integer, irisan kosong), dan simpan counterexample yang ditemukan sebagai unit test regresi permanen.</p><h2>Panduan Reproduksi Mandiri & Verifikasi</h2><p>Seluruh implementasi pada Lab 40 dibangun di atas Go 1.22 standar tanpa dependensi luar, menjamin reproduksibilitas penuh di lingkungan macOS, Linux, maupun Windows. Perintah go test -v ./... mengeksekusi suite unit test, uji properti testing/quick, serta algoritma shrinking. Perintah go run ./cmd/demo menampilkan perbandingan interaktif antara kegagalan float, perbandingan oracle interval, dan jejak reduksi 21 langkah secara real-time.</p><pre><code># 1. Masuk ke direktori lab
+cd labs/40-property-based-testing
+
+# 2. Jalankan seluruh property &amp; unit test
+go test -v ./...
+
+# 3. Verifikasi ketiadaan race condition
+go test -race ./...
+
+# 4. Eksekusi CLI interactive demo
+go run ./cmd/demo</code></pre><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/40-property-based-testing">Software Engineering Lab 40</a>, README.md, implementasi, dan pengujian. Snapshot commit 7d244968. Cuplikan kode digunakan dalam konteks package asal.</p></article></body></html>
