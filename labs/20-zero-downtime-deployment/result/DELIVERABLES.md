@@ -7,7 +7,7 @@
 | 1 | PowerPoint Carousel | [linkedin/lab-20-zero-downtime-deployment-carousel.pptx](linkedin/lab-20-zero-downtime-deployment-carousel.pptx) | File .pptx 24 slide 16:9 editable dengan Speaker Notes (via python-pptx) |
 | 2 | LinkedIn Carousel PDF | [linkedin/lab-20-zero-downtime-deployment-linkedin.pdf](linkedin/lab-20-zero-downtime-deployment-linkedin.pdf) | File PDF 24 slide rasio 16:9 (Cover CRT + 22 slide krem editorial + Penutup navy) |
 | 3 | Dev.to Article | [dev.to/lab-20-zero-downtime-deployment-devto.md](dev.to/lab-20-zero-downtime-deployment-devto.md) | Artikel Markdown Bahasa Inggris lengkap dengan frontmatter |
-| 4 | Medium Article | [medium/lab-20-zero-downtime-deployment-medium.html](medium/lab-20-zero-downtime-deployment-medium.html) | Artikel HTML lengkap Bahasa Indonesia (~1.340 kata) |
+| 4 | Medium Article | [medium/lab-20-zero-downtime-deployment-medium.html](medium/lab-20-zero-downtime-deployment-medium.html) | Artikel HTML lengkap Bahasa Indonesia (2.258 kata) |
 | 5 | Cover Image (ID) | [image-cover/lab-20-zero-downtime-deployment-cover-id.png](image-cover/lab-20-zero-downtime-deployment-cover-id.png) | Cover PNG 1920×1080 retro CRT terminal (Bahasa Indonesia) |
 | 6 | Cover Image (EN) | [image-cover/lab-20-zero-downtime-deployment-cover-en.png](image-cover/lab-20-zero-downtime-deployment-cover-en.png) | Cover PNG 1920×1080 retro CRT terminal (Bahasa Inggris) |
 | 7 | Medium Metadata | [medium/lab-20-zero-downtime-deployment-metadata.md](medium/lab-20-zero-downtime-deployment-metadata.md) | Metadata SEO, slug, tags, social preview, & hitungan karakter |
