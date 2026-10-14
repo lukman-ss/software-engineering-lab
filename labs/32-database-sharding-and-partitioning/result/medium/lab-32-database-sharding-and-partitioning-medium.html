@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Database Sharding dan Table Partitioning: Strategi Horizontal Scaling Melampaui Batas Single-Instance di Go</title>
+<style>
+body {
+    font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+    background-color: #f4f1e8;
+    color: #11283a;
+    line-height: 1.8;
+    margin: 0;
+    padding: 40px 20px;
+}
+.container {
+    max-width: 820px;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 50px 60px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+h1, h2, h3 {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #0b1b2d;
+    line-height: 1.3;
+}
+h1 {
+    font-size: 2.25rem;
+    margin-bottom: 12px;
+}
+.subtitle {
+    font-size: 1.25rem;
+    color: #52606b;
+    margin-bottom: 30px;
+    font-style: italic;
+}
+.author-meta {
+    font-size: 0.95rem;
+    color: #718096;
+    margin-bottom: 35px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 15px;
+}
+.cover-img {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin-bottom: 35px;
+}
+p {
+    font-size: 1.05rem;
+    margin-bottom: 24px;
+}
+pre {
+    background: #0b1b2d;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", Consolas, Monaco, "Courier New", monospace;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    margin: 28px 0;
+}
+code {
+    font-family: "JetBrains Mono", Consolas, Monaco, "Courier New", monospace;
+    background: #e2e8f0;
+    color: #087f76;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+pre code {
+    background: transparent;
+    color: #e2e8f0;
+    padding: 0;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 30px 0;
+    font-size: 0.98rem;
+}
+th, td {
+    border: 1px solid #cbd5e1;
+    padding: 12px 16px;
+    text-align: left;
+}
+th {
+    background-color: #f1f5f9;
+    color: #0b1b2d;
+    font-weight: bold;
+}
+tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+blockquote {
+    border-left: 4px solid #087f76;
+    padding-left: 20px;
+    margin: 28px 0;
+    color: #334155;
+    font-style: italic;
+}
+ul, ol {
+    margin-bottom: 24px;
+    padding-left: 28px;
+}
+li {
+    margin-bottom: 8px;
+    font-size: 1.05rem;
+}
+a {
+    color: #087f76;
+    text-decoration: underline;
+}
+.callout {
+    background: #e6f4f2;
+    border-left: 4px solid #087f76;
+    padding: 16px 20px;
+    margin: 25px 0;
+    border-radius: 0 4px 4px 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Database Sharding dan Table Partitioning: Strategi Horizontal Scaling Melampaui Batas Single-Instance di Go</h1>
+<div class="subtitle">Eksplorasi mendalam arsitektur table partitioning, mitigasi monotonic write hotspots, perbandingan Hash Modulo vs Consistent Hashing, serta penanganan query sekunder dan distributed unique ID.</div>
+
+<div class="author-meta">
+    Ditulis oleh <strong>Lukman (lukman-ss)</strong> • Seri Software Engineering Lab #32 • Commit <code>909bd4d</code>
+</div>
+
+<img class="cover-img" src="../image-cover/lab-32-database-sharding-and-partitioning-cover-id.png" alt="Cover Database Sharding and Table Partitioning Lab 32">
+
+<p>Setiap database relasional monolitik memiliki batas fisik yang pasti: kapasitas throughput I/O disk, batasan memori RAM untuk buffer pool, dan perebutan lock transaksi pada CPU server tunggal. Saat volume transaksi harian melompat dari ribuan menjadi puluhan juta baris data, pendekatan <em>vertical scaling</em> (menambah spesifikasi mesin server) menjadi sangat mahal dan pada akhirnya menyentuh batas fisik hardware.</p>
+
+<p>Arsitektur sistem terdistribusi menawarkan dua strategi utama untuk mengatasi hambatan tersebut: <strong>Logical Table Partitioning</strong> dan <strong>Physical Database Sharding</strong>. Pemahaman terhadap perbedaan fundamental kedua mekanisme ini, serta ketelitian dalam memilih sharding key dan algoritma routing, menentukan apakah infrastruktur database mampu tumbuh linear atau justru menciptakan downtime katastropik saat proses scale-out.</p>
+
+<h2>Mental Model: Logical Partitioning vs Physical Sharding</h2>
+
+<p>Dua konsep ini sering disamakan karena keduanya membagi kumpulan data besar menjadi segmen-segmen yang lebih kecil. Namun, lokasi eksekusi dan implikasi operasionalnya sangat berbeda:</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Dimensi Perbandingan</th>
+            <th>Logical Table Partitioning</th>
+            <th>Physical Database Sharding</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Topologi Node</strong></td>
+            <td>1 instance database fisik</td>
+            <td>N instance database otonom terpisah</td>
+        </tr>
+        <tr>
+            <td><strong>Tujuan Arsitektur</strong></td>
+            <td>Optimasi I/O engine & manajemen lifecycle data</td>
+            <td>Horizontal scaling melampaui batasan 1 mesin server</td>
+        </tr>
+        <tr>
+            <td><strong>Operasi Cross-Table JOIN</strong></td>
+            <td>Didukung penuh secara native oleh engine</td>
+            <td>Tidak didukung native; membutuhkan broadcast atau co-location</td>
+        </tr>
+        <tr>
+            <td><strong>Strategi Primary Key ID</strong></td>
+            <td>Cukup menggunakan native auto-increment engine</td>
+            <td>Wajib ID terdistribusi (UUIDv7 atau Sequencer terpusat)</td>
+        </tr>
+        <tr>
+            <td><strong>Transparansi Aplikasi</strong></td>
+            <td>Sangat transparan (ditangani query planner internal)</td>
+            <td>Aplikasi atau middleware proxy mengelola aturan routing</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="callout">
+    <strong>Prinsip Arsitektur:</strong> Logical Partitioning adalah optimasi penyimpanan internal satu mesin, sedangkan Physical Sharding adalah pembagian dataset ke berbagai mesin otonom untuk melipatgandakan kapasitas throughput agregat sistem.
+</div>
+
+<h2>Bencana Write Hotspot Akibat Monotonic Shard Key</h2>
+
+<p>Salah satu kesalahan fatal dalam perancangan sharded database adalah memilih atribut yang bernilai menaik secara teratur (monotonik) sebagai shard key, misalnya kolom timestamp <code>created_at</code> atau primary key auto-increment. Ketika router menggunakan rentang nilai monotonik untuk menentukan penempatan shard, seluruh transaksi penulisan data baru (write operations) akan dialirkan ke satu shard yang menampung rentang waktu paling mutakhir.</p>
+
+<p>Dalam pengujian demonstrasi Lab 32, kami mensimulasikan 1.000 operasi penulisan data pelanggan ke dalam kluster berisi 4 shard fisik:</p>
+
+<pre><code>[Skenario A] Monotonic Key (date-string) Sharding:
+  Node shard-0: 0 records
+  Node shard-1: 0 records
+  Node shard-2: 1000 records [##############################]
+  Node shard-3: 0 records
+Hasil: Terjadi Severe Write Hotspot! 100% write menumpuk pada shard tunggal.
+
+[Skenario B] High-Cardinality Key (user_id) Sharding:
+  Node shard-0: 400 records  [############                  ]
+  Node shard-1: 0 records    
+  Node shard-2: 200 records  [######                        ]
+  Node shard-3: 400 records  [############                  ]
+Hasil: Distribusi penulisan tersebar merata di seluruh shard fisik.</code></pre>
+
+<p>Shard key ideal harus memiliki tiga kriteria utama: <em>high-cardinality</em> (memiliki variasi nilai unik yang masif), <em>non-monotonic</em> (tidak bertambah secara sekuensial linear), dan <em>query alignment</em> (sering digunakan dalam filter pencarian agar routing point-lookup dapat langsung mengarah ke satu shard target).</p>
+
+<h2>Algoritma Routing: Hash Modulo vs Consistent Hashing</h2>
+
+<p>Router kluster bertugas memetakan key masukan ke identifier shard fisik tertentu. Pemilihan algoritma routing menentukan kompleksitas operasional saat melakukan penambahan server baru (scale-out).</p>
+
+<h3>1. Hash Modulo</h3>
+<p>Pendekatan paling dasar adalah menggunakan modulus jumlah shard: <code>hash(key) % N</code>. Meskipun eksekusinya instan <code>O(1)</code>, algoritma ini sangat rapuh terhadap perubahan kapasitas kluster. Ketika jumlah node bertambah dari N menjadi N+1, pembagi modulus berubah untuk seluruh dataset. Fraksi perpindahan data yang terdampak mencapai <code>N / (N + 1)</code>.</p>
+
+<p>Saat kluster bertambah dari 4 menjadi 5 node, <strong>79,84%</strong> data harus dipindahkan ke node yang berbeda:</p>
+
+<pre><code>Cluster Resize: 4 Shards -> 5 Shards (Total Keys: 10000)
+  Hash Modulo (N % M) Keys Remapped   : 7984 / 10000 (79.84% data berpindah)</code></pre>
+
+<h3>2. Consistent Hashing dengan Virtual Nodes</h3>
+<p>Consistent Hashing memetakan node dan kunci data ke dalam sebuah ring sirkular berkapasitas <code>2^64 - 1</code>. Ketika sebuah node baru disisipkan ke dalam ring, node tersebut hanya mengambil sebagian rentang kunci dari node tetangga terdekatnya. Secara matematis (berdasarkan riset Karger dkk., 1997), rata-rata kunci yang berpindah dibatasi hanya sebesar <code>~1 / N</code>.</p>
+
+<p>Untuk menghindari ketimpangan beban (data skew) ketika jumlah node fisik masih sedikit, setiap node fisik diduplikasi menjadi 100 hingga 150 <em>virtual nodes</em> (vnodes) yang tersebar acak di sepanjang ring:</p>
+
+<pre><code>func (ch *ConsistentHashRouter) GetShard(key string) (string, error) {
+    ch.mu.RLock()
+    defer ch.mu.RUnlock()
+
+    if len(ch.ring) == 0 {
+        return "", ErrNoShardsAvailable
+    }
+
+    h := hashKey(key)
+    idx := sort.Search(len(ch.ring), func(i int) bool {
+        return ch.ring[i].hash >= h
+    })
+    if idx == len(ch.ring) {
+        idx = 0 // Wrap-around ke awal ring sirkular
+    }
+    return ch.ring[idx].shardID, nil
+}</code></pre>
+
+<p>Hasil pengujian Lab 32 membuktikan bahwa pada penambahan node dari 4 ke 5, Consistent Hashing hanya memindahkan <strong>12,00%</strong> data. Mekanisme ini memangkas migrasi data dari 79,84% menjadi 12,00%, menjaga kestabilan jaringan produksi saat kluster diperluas.</p>
+
+<h2>Query Atribut Non-Shard Key: Scatter-Gather vs GSI</h2>
+
+<p>Tantangan klasik pada database sharded muncul saat aplikasi perlu melakukan pencarian berdasarkan atribut yang bukan merupakan shard key. Sebagai contoh, jika data pelanggan di-shard berdasarkan <code>tenant_id</code>, bagaimana cara aplikasi mencari akun berdasarkan <code>email</code>?</p>
+
+<h3>1. Parallel Scatter-Gather (Broadcast Query)</h3>
+<p>Router mengirimkan permintaan query ke setiap shard secara bersamaan menggunakan konkurensi goroutine di Go, mengumpulkan hasilnya, dan menggabungkannya kembali sebelum merespons klien. Pola ini membebani seluruh armada server (CPU dan koneksi) karena setiap node dipaksa melakukan pemindaian tabel lokal untuk menemukan satu baris data.</p>
+
+<h3>2. Global Secondary Index (Lookup Vindex)</h3>
+<p>Arsitektur enterprise seperti Vitess menggunakan tabel pemetaan sekunder terpisah (Lookup Vindex) yang menyimpan relasi <code>email -&gt; tenant_id</code>. Sebelum mengeksekusi query, router terlebih dahulu memeriksa index ini secara langsung, lalu melakukan direct route ke shard tujuan.</p>
+
+<pre><code>Scatter-Gather Query (by Email without Shard Key):
+  Nodes Broadcasted : 4 / 4
+  Records Matched   : 1
+  Execution Time    : 128.042 µs
+
+Global Secondary Index (Lookup Vindex) Query:
+  Nodes Broadcasted : 1 (Direct Point Lookup via Shard Key mapping)
+  Record Found      : ID=usr-342, Email=user_342@company.com, ShardKey=tenant-42
+  Execution Time    : 1.375 µs (GSI menghindari broadcast overhead)</code></pre>
+
+<p>GSI memangkas durasi pencarian dari 128 µs menjadi 1,37 µs (peningkatan efisiensi 93 kali lipat), dengan trade-off berupa overhead penulisan ganda (<em>double-write</em>) saat proses insert baris baru.</p>
+
+<h2>Pembangkitan Identitas Terdistribusi (Distributed ID)</h2>
+
+<p>Mekanisme <code>AUTO_INCREMENT</code> bawaan database tunggal tidak dapat digunakan pada kluster multi-node karena ketiadaan sinkronisasi global antar node akan menyebabkan tabrakan primary key. Lab 32 mendemonstrasikan dua strategi solusi:</p>
+
+<ol>
+    <li><strong>RFC 9562 UUIDv7 (Time-Ordered 128-bit)</strong>: Menggabungkan timestamp milidetik 48-bit pada bagian awal dengan nilai entropi kriptografis. Format ini menjamin nilai UUID terurut secara leksikografis (<code>u1 &lt; u2</code>), mencegah fragmentasi index B-Tree pada media penyimpanan.</li>
+    <li><strong>Sequence Block Allocator (Pola Vitess)</strong>: Server aplikasi mengambil alokasi blok ID bilangan bulat (misalnya rentang 1–1.000) dari server koordinasi pusat, lalu mendistribusikannya secara lokal di memori. Jika server mengalami restart, sisa blok yang belum terpakai akan hangus menghasilkan jeda angka kecil (<em>gap</em>), sebuah konsekuensi wajar demi kecepatan alokasi tanpa latensi jaringan.</li>
+</ol>
+
+<h2>Verifikasi Pengujian Otomatis</h2>
+
+<p>Seluruh modul diuji menggunakan Go standard library dengan flag pendeteksi kondisi balapan (<em>race detector</em>):</p>
+
+<pre><code>go test -race -v ./...
+=== RUN   TestPartitionPruning
+--- PASS: TestPartitionPruning (0.00s)
+=== RUN   TestRoutingAndConsistentHashRelocation
+    sharding_test.go:107: Hash Modulo moved 3756 / 5000 keys (75.12%)
+    sharding_test.go:108: Consistent Hash moved 800 / 5000 keys (16.00%)
+--- PASS: TestRoutingAndConsistentHashRelocation (0.02s)
+=== RUN   TestClusterScatterGatherAndGSI
+--- PASS: TestClusterScatterGatherAndGSI (0.00s)
+=== RUN   TestIDGenerators
+--- PASS: TestIDGenerators (0.00s)
+=== RUN   TestConcurrentClusterAccess
+--- PASS: TestConcurrentClusterAccess (0.00s)
+PASS
+ok      labs/32-database-sharding-and-partitioning/tests        1.492s</code></pre>
+
+<h2>Batasan Implementasi Laboratorium</h2>
+
+<p>Lab ini berfokus pada simulasi logika algoritma murni di dalam memori Go:</p>
+<ul>
+    <li>Penyimpanan shard beroperasi dalam memori RAM instans tanpa mesin persistensi disk (seperti B-Tree atau LSM-Tree).</li>
+    <li>Sinkronisasi GSI dijalankan secara sinkron langsung (<em>in-process synchronous double-write</em>). Di sistem produksi berskala besar, koordinasi GSI membutuhkan arsitektur transaksi terdistribusi atau mekanisme Change Data Capture (CDC) berbasis log.</li>
+    <li>Lab tidak mengimplementasikan protokol Two-Phase Commit (2PC) untuk transaksi lintas shard, yang di dunia nyata dapat menimbulkan risiko pembacaan terfragmentasi (<em>fractured reads</em>).</li>
+</ul>
+
+<h2>Kesimpulan</h2>
+
+<p>Pemisahan antara logical table partitioning dan physical sharding harus dipahami sejak awal perancangan sistem. Penggunaan Consistent Hashing dengan virtual nodes memangkas biaya migrasi data saat scale-out dari ~80% menjadi ~12%. Ditambah dengan pemilihan shard key berkardinalitas tinggi, Global Secondary Index untuk query non-shard, serta UUIDv7 untuk primary key terdistribusi, arsitektur database Anda siap melayani lonjakan beban horizontal secara linear dan tangguh.</p>
+
+<p>Kode sumber lengkap, suite pengujian, dan demo interaktif dapat diakses pada repository GitHub:</p>
+<p><a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/32-database-sharding-and-partitioning">github.com/lukman-ss/software-engineering-lab/tree/main/labs/32-database-sharding-and-partitioning</a></p>
+
+</div>
+</body>
+</html>
