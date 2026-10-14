@@ -11,158 +11,135 @@ A production system must remain resilient under load. Lab 17 makes that behavior
 
 > Architectural context without structural records becomes tribal knowledge.
 
-## Konteks Keputusan Arsitektur Hilang Tanpa Jejak
+## Konteks Arsitektur Hilang Tanpa Jejak
 
-Putaran architect merangkap code review: pertanyaan berulang 'kenapa kita pilih X?' di every PR. Keputusan diambil via chat atau meeting, lalu tenggelam dalam commit history. ADR lama tidak diperbarui saat sistem berubah; status dokumentasi drift dari kode aktual. Re-debate arsitektur lama memakan waktu engineering sprint tanpa solusi baru. Keputusan yang salah diterapkan karena engineer tidak mengetahui ADR penggantian.
+Keputusan arsitektur diambil via chat atau meeting tanpa catatan formal. Pertanyaan berulang muncul di review kode: mengapa sistem dibangun begini? ADR lama tidak diperbarui, sehingga status dokumen berbeda dari kode aktual.
 
-## Review Markdown Manual Lupa Relasi Penggantian
+## Review Manual Melewatkan Relasi Supersesi
 
-ADR 1 tetap berstatus 'Accepted' padahal sudah diganti ADR 2 — lupa di-update. ADR 2 menulis 'Supersedes: 1', tapi ADR 1 tidak pernah dicatat 'Superseded by 2'. Penomoran loncat: ADR 1, ADR 3 langsung — engineer lupa insert ADR 2. Status informal seperti 'Draft', 'In Review' diterima tanpa penolakan. ADR 1 ber-status Superseded by 99, padahal ADR 99 belum pernah dibuat.
+ADR baru menyatakan menggantikan ADR lama, tetapi ADR lama tidak diubah. ADR lama tetap bertanda aktif padahal keputusannya sudah ditinggalkan. Tautan referensi menunjuk ke nomor yang salah tanpa disadari.
 
-## ADR Bukan Dokumen, Tapi Record yang Bisa Dicek
+## ADR Bukan Dokumen, Tapi Record
 
-ADR diolah sebagai data, bukan sekadar teks human-readable. Parser mengekstrak ID, Title, Status, SupersededBy, Supersedes, Content. Linter memvalidasi aturan: monotonik ID, valid status, relasi timbal-balik. Keputusan arsitektur tetap ditulis manusiawi; mesin hanya memeriksa format.
+ADR diperlakukan sebagai data terstruktur, bukan sekadar teks bebas. Field kunci diekstrak: ID, Judul, Status, SupersededBy, dan Supersedes. Mesin memvalidasi konsistensi; manusia tetap menulis esensi keputusannya.
 
-## Pipeline: Markdown → Parser → Records → Linter
+## Pipeline Validasi Empat Tahap
 
-[Markdown ADR Text] → adr.Parser (Regex extraction: ID, Title, Status, refs) → []*adr.Record (In-Memory Structs) → adr.Linter.Validate(records)   ├─ Monotonic numbering check: sort + sequential scan   ├─ Cycle detection: DFS with visiting/visited states   └─ Bidirectional lineage: goroutines + sync.Mutex per-record validation → []error (empty = valid, non-empty = integrity breach)
+Markdown Files → adr.Parser (ekstraksi field & status) → []*adr.Record (in-memory struct) → adr.Linter (cek urutan ID, siklus, & relasi timbal-balik) → []error (laporan pelanggaran integritas)
 
-## Struct Record: Definisi Inti ADR
+## Struct Record: Fondasi Validasi Data
 
 ```go
-type Status string
-
-const (
-    StatusProposed   Status = "Proposed"
-    StatusAccepted   Status = "Accepted"
-    StatusSuperseded Status = "Superseded"
-    StatusDeprecated Status = "Deprecated"
-    StatusRejected   Status = "Rejected"
-)
-
 type Record struct {
     ID           int
     Title        string
     Status       Status
-    SupersededBy int // 0 if not superseded
-    Supersedes   int // 0 if does not supersede
+    SupersededBy int // 0 jika aktif
+    Supersedes   int // 0 jika tidak menggantikan
     Content      string
 }
 ```
 
-## Supersesi Patah: ADR 1 Merujuk ke ADR 99
-
-TestLinter_BrokenReferences / superseded points to non-existent → PASS TestLinter_BrokenReferences / supersedes points to non-existent → PASS
+## Deteksi Tautan Supersesi Patah
 
 ```go
-superseded points to non-existent:
-  ADR 1: Status Superseded by 99
-  → Error: superseded by non-existent ADR 99
+ADR 1: Status Superseded by 99
+→ Error: superseded by non-existent ADR 99
 
-supersedes points to non-existent:
-  ADR 1: Status Accepted, Supersedes: 99
-  → Error: supersedes non-existent ADR 99
+ADR 1: Status Accepted, Supersedes: 99
+→ Error: supersedes non-existent ADR 99
 ```
 
-## Biaya Tersembunyi: Lineage Drift Tanpa Deteksi
+## Biaya Tersembunyi: Lineage Drift Menumpuk
 
-Time to detect | Cause | Impact
+Tahap | Deteksi | Dampak
 |---|---|---|
-Instant (CI) | Linter reject di PR | Build gagal, engineer feedback loop cepat
-Mingguan | Manual audit dokumentasi | Engineer kebingungan siapa yang aktif
-Bulanan | Production incident review | Tim kehilangan konteks keputusan penting
-Selamanya | Keputusan salah diterapkan | Sistem berkembang dengan asumsi keliru
+CI Gate | Seketika | PR ditolak, feedback loop cepat
+Review Manual | Mingguan | Tim bingung dokumen mana yang aktif
+Insiden Sistem | Berbulan-bulan | Keputusan baru berpijak pada asumsi keliru
 
-## Setup Eksperimen: 3 ADR Evolusi Arsitektur
+## Skenario Demo: Tiga ADR Evolusi Arsitektur
 
-ADR 0001: Use Modular Monolith for Core SaaS ERP | Status: Superseded by 2 ADR 0002: Extract Notification Service to Microservice | Status: Accepted, Supersedes: 1 ADR 0003: Reject Event Sourcing for Order Management | Status: Rejected  Test suite: parser_test.go (valid + superseded + supersedes + invalid cases) Test suite: linter_test.go (valid sequence + 7 broken reference scenarios + concurrency)
+ADR 0001: Modular Monolith | Superseded by ADR 2 ADR 0002: Notification Microservice | Accepted, Supersedes ADR 1 ADR 0003: Event Sourcing | Rejected (alasan biaya operasional)
 
-## Output Demo: Parsing Berhasil, Linter Lolos
+## Output Demo: Validasi Integritas Lolos
 
 ```sh
 $ go run ./cmd/demo
-=== Architecture Decision Record (ADR) Lab ===
 Successfully parsed 3 ADRs:
-  - [0001] Use Modular Monolith for Core SaaS ERP | Status: Superseded -> Superseded by ADR 2
-  - [0002] Extract Notification Service to Microservice  | Status: Accepted   -> Supersedes ADR 1
-  - [0003] Reject Event Sourcing for Order Management    | Status: Rejected  
-
-Running ADR Integrity Linter...
-Integrity check passed! Decision lineage and lifecycle invariants are intact.
+  - [0001] Modular Monolith -> Superseded by ADR 2
+  - [0002] Notification Microservice -> Supersedes ADR 1
+  - [0003] Event Sourcing -> Rejected
+Running ADR Integrity Linter... Integrity check passed!
 ```
 
-## Apa Artinya Linter Passed di Lab Ini?
+## Lolos Linter Bukan Berarti Keputusan Benar
 
-Format parsing: judul, status, dan tautan supersesi terstruktur dengan benar. Monotonik: ID 1, 2, 3 berurutan tanpa celah. Bidirectional: ADR 1 ↔ ADR 2 memiliki tautan timbal-balik yang lengkap. Cycle-free: tidak ada sirkuit dalam graf supersesi. Kebenaran keputusan arsitektur di dalam field Content. Apakah ADR 1 seharusnya benar-benar digantikan ADR 2 di dunia nyata. Kesiapan sistem untuk production deployment.
+Nomor ID berurutan tanpa celah. Relasi timbal-balik utuh tanpa tautan gantung. Tidak ada siklus ketergantungan antar-dokumen. Kebenaran argumen teknis di bagian Decision. Apakah microservice memang solusi tepat bagi tim.
 
-## Trade-off: Enforced Structure vs Dokumentasi Fleksibel
+## Trade-off: Struktur Kaku vs Fleksibilitas
 
-Regex-based parsing memaksa format fixed (## Context, ## Decision, ## Consequences). Status wajib dari 5 enum resmi; status informal ditolak parser. Supersedes/SupersededBy wajib konsisten secara timbal-balik. Tidak mendukung ADR yang memerlukan struktur sub-section kustom di luar 3 section wajib. Tidak memvalidasi kualitas argumen dalam section Decision. Tidak menangani kasus ADR multi-author atau decision yang melibatkan beberapa sub-system.
+Wajib tiga section: Context, Decision, Consequences. Status dibatasi lima enum resmi. Memungkinkan CI gate otomatis dan deterministik. Tidak mendukung format paragraf naratif bebas. Memerlukan disiplin tim mengisi field relasi.
 
-## Validasi Paralel: Goroutine + Mutex untuk Agregasi Error
+## Validasi Paralel dengan Mutex
 
 ```go
-var wg sync.WaitGroup
 for _, r := range records {
     wg.Add(1)
     go func(rec *Record) {
         defer wg.Done()
-        var localErrs []error
-        // ... validate rec, append localErrs ...
-        if len(localErrs) > 0 {
-            mu.Lock(); errs = append(errs, localErrs...); mu.Unlock()
-        }
+        localErrs := validate(rec)
+        mu.Lock()
+        errs = append(errs, localErrs...)
+        mu.Unlock()
     }(r)
 }
-wg.Wait()
 ```
 
-## Before vs After: Otomasi Linter Menghilangkan Human Error
+## Sebelum vs Sesudah Validasi Otomatis
 
-Lineage break: ADR 1 Superseded by 2, ADR 2 tidak memiliki Supersedes: 1 → TIDAK TERDETEKSI Non-monotonic ID: ADR 1, ADR 3 meloncat → TIDAK TERDETEKSI selagi tidak inspect semua file Invalid status 'Draft' masuk ke repo → TIDAK TERDETEKSI oleh regex sederhana Self-supersession: ADR 1 Superseded by 1 → TIDAK TERDETEKSI Semua kasus di atas ditolak oleh TestLinter_BrokenReferences dalam <1ms CI gate menolak merge jika linter menemukan error Concurrent stress test membuktikan tidak ada race pada agregasi error
+Tautan supersesi sepihak sering terlewat. Nomor meloncat sulit disadari saat banyak file. Status non-standar masuk tanpa sengaja. Semua inkonsistensi ditolak otomatis di CI. Nomor ID wajib monotonik dan unik. Relasi timbal-balik divalidasi deterministik.
 
-## Batasan Lab: Validasi Format, Bukan Kualitas Keputusan
+## Batasan Lab: Hanya Validasi Format
 
-Parsing teks Markdown ke struct Record dengan regex. Memvalidasi urutan ID monotonik dan uniqueness. Memeriksa konsistensi timbal-balik SupersededBy ↔ Supersedes. Mendeteksi siklus dalam graf supersesi. Tidak menilai kualitas argumen di dalam section Decision. Tidak memverifikasi apakah ADR cocok dengan implementasi kode aktual. Tidak memeriksa apakah engineer sudah mendapatkan approval stakeholder sebelum Accepted. Simulasi ini tidak sama dengan production ADR management system seperti ADRtool atau Architect.js.
+Ekstraksi regex dari string Markdown. Pemeriksaan nomor urut dan relasi timbal-balik. Deteksi siklus pada graf supersesi. Tidak menilai kebenaran argumen keputusan. Simulasi in-memory, bukan pembacaan ribuan file disk.
 
-## Edge Case: Keputusan Dibatalkan Tanpa ADR Baru
+## Kasus Batas: Menghentikan Fitur Tanpa ADR
 
-ADR X berstatus Accepted, tapi tim memutuskan berhenti menggunakan fitur tersebut. Tanpa ADR baru, status ADR X tetap Accepted —误导 engineer lain以为 masih relevan. Solusi: buat ADR baru berstatus Deprecated merujuk ke alasan penghentian. Kegagalan: engineer menghapus file ADR langsung → lineage history hilang. Wajibkan policy tim: setiap penghentian fitur memerlukan ADR Deprecated baru. Linter bisa diperluas untuk mendeteksi ADR Accepted yang tidak memiliki successor dalam 12 bulan.
+Fitur dimatikan tetapi ADR tetap bertanda Accepted. Engineer baru mengira fitur masih menjadi standar aktif. Menghapus file justru menghilangkan konteks historis. Solusi: wajibkan ADR baru berstatus Deprecated.
 
-## Apa yang Dibuktikan Oleh Test Suite
+## Bukti yang Divalidasi oleh Test Suite
 
-TestParse_Valid: ID=1, Status=Accepted → PASS TestParse_Superseded: SupersededBy=2 berhasil diekstrak → PASS TestParse_Supersedes: Supersedes=1 berhasil diekstrak → PASS TestParse_Invalid: missing_title, missing_status, invalid_status, empty sections → semua PASS TestLinter_ValidSequence: 3 ADR valid, zero errors → PASS TestLinter_BrokenReferences: 7 sub-case (non-existent ref, mismatch, non-monotonic, self-super, duplicate ID, cyclical) → semua PASS TestLinter_ConcurrencyStress: concurrent validation, no data race → PASS
+Parser menolak status ilegal dan format tanpa judul. Linter menangkap 7 skenario referensi patah dan tautan gantung. Race detector bersih pada eksekusi pengujian konkuren.
 
-## Apa yang Tidak Dibuktikan Oleh Test Suite
+## Batas Integritas: Apa yang Tidak Diuji
 
-Kebenaran konten arsitektur di dalam section Decision dan Consequences. Adopsi ADR oleh seluruh anggota tim sesuai format yang ditetapkan. Integrasi linter dengan CI/CD pipeline (hanya test Go murni, bukan GitHub Actions). Skalabilitas linter pada ribuan ADR (hanya 3 record dalam demo, 3-7 dalam test). Parser bekerja pada string literal, bukan file system read dari ribuan dokumen Markdown.
+Kebenaran konten teknis di dalam section Decision. Disiplin tim dalam memperbarui ADR saat arsitektur bergeser. Kesiapan sistem monolit atau microservice di production. Performa I/O disk pada ribuan berkas dokumen.
 
-## Risiko Produksi: False Confidence dari Linter Hijau
+## Risiko Kepalsuan: Linter Hijau Bukan Aman
 
-Tim percaya ADR collection-nya 'bersih' hanya karena linter passing, padahal argumen Decision lemah. Engineer bisa mengisi Content dengan placeholder kosong selama section ada → linter tetap passing. Policy tim yang tidak enforcing bisa di-skip tanpa konsekuensi jika gate CI tidak dipasang. Tambah human review checkpoint: ADR Accepted wajib ditinjau architecture board. Validasi minimum content length pada section Context dan Decision.
+Dokumen lolos linter meski bagian Decision hanya berisi teks formalitas. Tim mengira arsitektur sudah matang hanya karena status CI hijau. Mitigasi: pertahankan review arsitek untuk menilai isi substansi.
 
-## Implementation Checklist: Menerapkan ADR Linter di Tim
+## Panduan Implementasi Linter ADR di Tim
 
-[ ] Define ADR template Markdown dengan 3 section wajib: Context, Decision, Consequences. [ ] Implement parser regex yang mengekstrak ID, Title, Status, SupersededBy, Supersedes. [ ] Tambahkan status enum valid (Proposed, Accepted, Superseded, Deprecated, Rejected). [ ] Implement linter dengan validasi monotonik + bidirectional supersession + cycle detection. [ ] Integrasikan ke CI/CD: go test ./... atau custom binary di PR gate. [ ] Dokumentasikan policy tim: setiap perubahan keputusan wajib ADR baru, bukan edit retroaktif.
+[ ] Tetapkan template Markdown dengan Context, Decision, Consequences. [ ] Gunakan enum status resmi (Accepted, Superseded, Rejected, dll.). [ ] Pasang parser dan linter pada pull request CI gate. [ ] Larang edit retroaktif: keputusan baru wajib nomor ADR baru.
 
-## Anti-Pattern: 5 Kebiasaan Buruk Saat Mengadopsi ADR
+## Anti-Pattern: Kesalahan Adopsi ADR
 
-Mengklik ADR untuk segala hal: refactor kecil, penamaan variabel → noise berlebihan. Mengedit ADR yang sudah Accepted secara silent, tanpa membuat ADR baru (retroactive edit). Menulis ADR hanya sebagai catatan meeting tanpa section Decision yang eksplisit. Status 'Draft' bertahan terlalu lama tanpa transisi ke Accepted atau Rejected. Melupakan update SupersededBy pada ADR lama saat ADR baru dibuat.
+Menulis ADR untuk hal sepele seperti penamaan variabel. Mengedit ADR Accepted diam-diam alih-alih membuat pengganti. Membiarkan status Draft berbulan-bulan tanpa kejelasan. Lupa mencatat nomor ADR pengganti saat membuat keputusan baru.
 
-## Reproduksi Mandiri: Jalankan Demo dan Test di Lokal
-
-TestParse_*: semua PASS TestLinter_*: semua PASS (14 sub-case total) go test -race: race detector clean Demo: 3 ADR parsed, Integrity check passed
+## Reproduksi Mandiri di Mesin Lokal
 
 ```sh
 cd labs/17-architecture-decision-record
-go test -v ./...
-go test -race ./...
-go run ./cmd/demo
+go test -v ./...    # validasi parser & linter
+go test -race ./... # cek race condition
+go run ./cmd/demo   # jalankan simulasi 3 ADR
 ```
 
-## ADR Diubah Jadi Data yang Bisa Dicek, Bukan Hanya Dokumen
+## ADR Diubah Jadi Data yang Bisa Dicek
 
-ADR yang diparse menjadi struct Record memungkinkan validasi otomatis yang tidak bisa dilakukan humans dengan andal. Bidirectional supersession link adalah invarian yang paling sering rusak; linter menangkapnya di detik pertama. Konkurensi goroutine + mutex pattern untuk error aggregation adalah reusable pattern untuk validation framework lain. Format standar membantu review; kualitas keputusan tetap ditentukan isi ADR.
+ADR terstruktur memungkinkan verifikasi otomatis relasi dokumen. Linter menutup kelalaian mekanis yang sering luput dari review manusia. Format standar membantu review; kualitas keputusan tetap ditentukan isi ADR.
 
 ## Source
 
