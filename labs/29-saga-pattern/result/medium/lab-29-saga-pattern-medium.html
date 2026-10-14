@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Go</title>
+<style>
+  body {
+    font-family: Georgia, serif;
+    background-color: #f4f1e8;
+    color: #11283a;
+    line-height: 1.75;
+    margin: 0;
+    padding: 24px;
+  }
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    padding: 40px 48px;
+    border: 1px solid #d5cfc1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  h1, h2, h3, h4 {
+    font-family: Arial, sans-serif;
+    color: #0b1b2d;
+    line-height: 1.3;
+    margin-top: 1.8em;
+    margin-bottom: 0.6em;
+  }
+  h1 {
+    font-size: 2.1rem;
+    margin-top: 0.4em;
+    border-bottom: 2px solid #0b1b2d;
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 1.45rem;
+    border-bottom: 1px solid #d5cfc1;
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 1.15rem;
+  }
+  p, li {
+    font-size: 1.02rem;
+  }
+  img.cover-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px 0 32px 0;
+    border: 1px solid #d5cfc1;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 0.95rem;
+  }
+  table, th, td {
+    border: 1px solid #0b1b2d;
+  }
+  th {
+    background-color: #0b1b2d;
+    color: #d8e9df;
+    padding: 10px 12px;
+    text-align: left;
+    font-family: Arial, sans-serif;
+  }
+  td {
+    padding: 10px 12px;
+    background-color: #faf9f6;
+    color: #11283a;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td {
+    background-color: #f0ede4;
+  }
+  pre {
+    background-color: #0b1b2d;
+    color: #88ddbb;
+    padding: 16px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  }
+  p code, li code {
+    background-color: #e6e2d6;
+    color: #0b1b2d;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  pre code {
+    background-color: transparent;
+    color: #88ddbb;
+    padding: 0;
+  }
+  blockquote {
+    margin: 20px 0;
+    padding: 12px 20px;
+    background-color: #ece8dc;
+    border-left: 4px solid #0b1b2d;
+    font-style: italic;
+  }
+  a {
+    color: #0b1b2d;
+    text-decoration: underline;
+  }
+  ul, ol {
+    padding-left: 28px;
+  }
+  .callout {
+    background-color: #e7eff0;
+    border: 1px solid #8baab1;
+    border-left: 4px solid #11283a;
+    padding: 14px 18px;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<img src="../image-cover/lab-29-saga-pattern-cover-id.png" alt="Saga Pattern Go" class="cover-image">
+
+<h1>Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Go</h1>
+
+<h2>1. Pendahuluan / Latar Belakang</h2>
+
+<p>Pola arsitektur monolitik tradisional mengandalkan basis data relasional tunggal dengan dukungan transaksi ACID (Atomicity, Consistency, Isolation, Durability) yang matang. Dalam paradigma ini, sebuah alur transaksi bisnis terpadu—misalnya sistem checkout e-commerce yang melibatkan pembuatan pesanan, pendebitan dana pelanggan, reservasi stok barang di gudang, dan pembaruan kuota pengiriman—dapat dieksekusi di dalam satu blok transaksi database tunggal: <code>BEGIN TRANSACTION</code>, serangkaian mutasi tabel melalui query SQL, lalu ditutup dengan <code>COMMIT</code>. Jika terjadi kegagalan sistem pada salah satu operasi baris data, mesin basis data secara otomatis membatalkan seluruh perubahan dengan instruksi <code>ROLLBACK</code>. Seluruh data kembali ke status awal secara instan dan tanpa meninggalkan jejak mutasi parsial.</p>
+
+<p>Ketika sistem bertransformasi mengadopsi arsitektur microservices, batasan desain mendasar yang diterapkan adalah pola <em>Database-per-Service</em>. Setiap modul layanan mikro memiliki kepemilikan mutlak terhadap penyimpanan datanya sendiri. Service Order memiliki basis datanya sendiri (misalnya PostgreSQL), Service Payment mengelola basis data transaksinya sendiri, dan Service Inventory memelihara inventaris gudang di cluster terpisah. Pola ini sengaja dipilih untuk menjaga otonomi deployment, skalabilitas independen, dan batas domain bisnis (bounded context) yang terisolasi.</p>
+
+<p>Dampak langsung dari penerapan Database-per-Service adalah hilangnya kemampuan transaksi ACID global. Tidak ada lagi satu database engine tunggal yang dapat mengunci baris data di tiga database fisik yang berbeda, mengoordinasikan log commit, dan menjamin isolasi mutlak. Setiap operasi database kini menjadi transaksi lokal yang terisolasi pada masing-masing node layanan. Transaksi checkout yang tadinya berjalan di satu mesin kini terfragmentasi menjadi tiga operasi fisik independen di atas jaringan komputer.</p>
+
+<p>Dalam kondisi ini, arsitektur perangkat lunak dipaksa beralih dari model konsistensi ketat (ACID) menuju model konsistensi bertahap (BASE: Basically Available, Soft state, Eventual consistency). Model BASE mengakui kenyataan fisik sistem terdistribusi:</p>
+
+<ul>
+  <li><strong>Basically Available:</strong> Sistem tetap melayani permintaan pengguna meskipun beberapa komponen transaksi sedang dalam proses atau mengalami gangguan sementara. Ketersediaan layanan diprioritaskan daripada konsistensi seketika.</li>
+  <li><strong>Soft State:</strong> Status data dapat berubah seiring berjalannya waktu tanpa adanya interaksi eksternal baru, karena proses kompensasi atau propagasi event asynchronous sedang berjalan di latar belakang.</li>
+  <li><strong>Eventual Consistency:</strong> Data di seluruh layanan mikro akan mencapai keadaan konsisten setelah seluruh transaksi lokal dan langkah-langkah kompensasi selesai dieksekusi secara penuh.</li>
+</ul>
+
+<p>Motivasi utama dari Lab 29 ini adalah merancang, mengimplementasikan, dan menguji mekanisme koordinasi transaksi terdistribusi berbasis Saga Pattern dalam bahasa Go standar tanpa dependensi pihak ketiga. Melalui implementasi ini, insinyur perangkat lunak dapat memahami cara menjaga keutuhan status bisnis lintas layanan independen tanpa mengorbankan ketersediaan sistem dan tanpa ketergantungan pada protokol penguncian terdistribusi yang rapuh.</p>
+
+<div class="callout">
+  <strong>Prinsip Inti Transaksi Terdistribusi:</strong> Menggabungkan beberapa basis data terpisah ke dalam ilusi transaksi ACID tunggal merupakan pelanggaran batas otonomi layanan. Pendekatan rekayasa yang realistis menerima fakta bahwa konsistensi di tingkat sistem terdistribusi dicapai melalui rangkaian aksi perbaikan bisnis (compensating actions) tanpa penguncian fisik tingkat storage.
+</div>
+
+<h2>2. Masalah yang Diselesaikan</h2>
+
+<p>Sebelum Saga Pattern populer di dunia microservices, solusi standar industri untuk transaksi terdistribusi adalah protokol <em>Two-Phase Commit (2PC)</em>, yang sering diimplementasikan dalam standar XA/Open. Protokol 2PC mencoba mempertahankan karakteristik ACID di beberapa node basis data terdistribusi melalui dua fase koordinasi terstruktur: Fase Voting (Prepare Phase) dan Fase Eksekusi (Commit/Abort Phase).</p>
+
+<p>Protokol 2PC memiliki serangkaian mode kegagalan kritis (failure modes) yang menjadikannya anti-pattern dalam arsitektur berskala tinggi:</p>
+
+<ol>
+  <li><strong>Blocking Protocol:</strong> Pada fase prepare, setiap partisipan yang memberikan suara <code>VOTE_COMMIT</code> wajib mengunci seluruh sumber daya lokal (row lock, index lock) yang terlibat dan menunggu hingga koordinator terpusat mengirimkan instruksi <code>GLOBAL_COMMIT</code>. Selama menunggu pesan kedua, tidak ada partisipan yang boleh melepaskan lock atau mengambil keputusan sepihak. Jika koordinator lambat atau mengalami gangguan, seluruh baris database di semua layanan terkunci tanpa batas waktu.</li>
+  <li><strong>Peningkatan Latensi Eksponensial:</strong> Durasi transaksi 2PC dibatasi oleh node partisipan paling lambat di seluruh cluster jaringan. Setiap transaksi membutuhkan minimal dua putaran komunikasi jaringan (two round-trip times) penuh antar seluruh partisipan. Dalam topologi cloud modern di mana latency jaringan berfluktuasi antara 5ms hingga 50ms, throughput transaksi merosot tajam.</li>
+  <li><strong>Koordinator Sebagai Single Point of Failure (SPOF):</strong> Apabila koordinator 2PC mengalami crash tepat setelah seluruh partisipan menyatakan kesiapan (commit-prepared) namun sebelum instruksi commit dipancarkan, seluruh node partisipan terdampar dalam kondisi menggantung (in-doubt state). Partisipan tidak dapat melakukan commit sendiri (karena mungkin ada partisipan lain yang gagal) dan tidak dapat melakukan rollback sendiri (karena mungkin koordinator sudah memutuskan commit).</li>
+  <li><strong>Tingginya Lock Contention:</strong> Penguncian sumber daya yang berdurasi panjang menyebabkan antrean thread pemanggil menumpuk drastis. Permintaan baca dan tulis lain pada record yang sama akan mengalami timeout, menghabiskan pool koneksi database, dan memicu cascading failure di seluruh layanan upstream.</li>
+  <li><strong>Kerentanan Terhadap Partisi Jaringan (Network Partition Scenario):</strong> Teorema CAP dan Teorema FLP (Fischer-Lynch-Paterson) membuktikan bahwa konsensus atomik tidak dapat dicapai dalam sistem asinkron jika terdapat kegagalan node atau jaringan. Jika terjadi partisi jaringan di antara koordinator dan salah satu partisipan selama fase prepare, sistem 2PC harus memilih antara memblokir eksekusi atau membatalkan seluruh transaksi, meruntuhkan metrik ketersediaan (availability) sistem.</li>
+</ol>
+
+<p>Masalah-masalah 2PC tersebut diselesaikan oleh Saga Pattern dengan menghilangkan penguncian global secara permanen. Alih-alih menahan lock di tiga database terpisah selama proses transaksi berlangsung, Saga mengeksekusi transaksi lokal secara langsung dan segera melakukan commit pada masing-masing database layanan. Dengan demikian, lock database lokal langsung dilepaskan dalam hitungan milidetik. Sumber daya komputasi dan pool koneksi dibebaskan kembali seketika untuk melayani beban kerja lainnya.</p>
+
+<h2>3. Arsitektur / Desain Solusi</h2>
+
+<p>Saga Pattern pertama kali diperkenalkan dalam makalah akademis oleh Hector Garcia-Molina dan Kenneth Salem pada tahun 1987 sebagai solusi untuk <em>Long-Lived Transactions (LLTs)</em>. Dalam arsitektur microservices modern, Saga didefinisikan sebagai urutan transaksi lokal (sequence of local transactions) <code>T1, T2, ..., Tn</code>. Setiap transaksi lokal memperbarui status pada satu layanan tunggal dan memicu langkah berikutnya.</p>
+
+<p>Jika salah satu transaksi lokal mengalami kegagalan pada langkah <code>Tk</code>, Saga menjamin konsistensi sistem dengan mengeksekusi rangkaian transaksi kompensasi (compensating transactions) <code>Ck-1, ..., C2, C1</code> dalam urutan terbalik (Last-In, First-Out / LIFO). Transaksi kompensasi adalah tindakan bisnis eksplisit yang membatalkan dampak efek samping dari transaksi lokal yang telah terlanjur di-commit sebelumnya.</p>
+
+<h3>Klasifikasi Transaksi dalam Saga</h3>
+
+<p>Berdasarkan taksonomi arsitektural yang didokumentasikan dalam Microsoft Azure Architecture Center dan literatur Chris Richardson, langkah-langkah di dalam saga diklasifikasikan ke dalam tiga kategori transaksi:</p>
+
+<ul>
+  <li><strong>Compensable Transactions:</strong> Transaksi lokal yang dapat dibatalkan atau dikompensasi secara semantik jika langkah di masa depan mengalami kegagalan. Contohnya adalah reservasi saldo rekening atau penandaan status order sebagai PENDING.</li>
+  <li><strong>Pivot Transaction:</strong> Titik penentu tanpa kembali (point of no return) dalam alur saga. Jika transaksi pivot berhasil di-commit, saga dipastikan terus melaju hingga selesai dan tidak akan pernah dibatalkan ke belakang. Jika transaksi pivot gagal, seluruh langkah kompensabel sebelumnya wajib di-rollback.</li>
+  <li><strong>Retryable Transactions:</strong> Transaksi yang dieksekusi setelah transaksi pivot berhasil. Transaksi ini dijamin pasti berhasil pada akhirnya melalui mekanisme retry otomatis dan wajib memiliki sifat idempoten.</li>
+</ul>
+
+<h3>Dua Gaya Koordinasi: Orchestration vs. Choreography</h3>
+
+<p>Saga dapat dikoordinasikan menggunakan dua pola topologi yang berbeda:</p>
+
+<ol>
+  <li><strong>Orchestration (Terpusat):</strong> Sebuah komponen koordinator dedicated (Orchestrator) memiliki wewenang penuh untuk mengatur alur kerja transaksi. Orchestrator memanggil API setiap layanan secara berurutan, mengevaluasi hasil eksekusi, memelihara log status (Saga State Machine / Execution Log), dan mengeksekusi rollback LIFO jika ada langkah yang gagal. Keuntungannya adalah dependensi terpusat, alur bisnis mudah dipantau, dan tidak ada siklus dependensi antar-layanan. Kekurangannya adalah orchestrator dapat menjadi titik penumpukan logika bisnis (anemic services).</li>
+  <li><strong>Choreography (Terdesentralisasi):</strong> Setiap layanan mikro berkomunikasi secara asinkron melalui message broker atau EventBus. Setiap layanan mendengarkan domain event tertentu, menjalankan transaksi lokalnya sendiri, lalu mempublikasikan event baru yang menjadi pemicu bagi layanan berikutnya. Jika terjadi kegagalan, layanan mempublikasikan event kegagalan (misalnya <code>InventoryFailed</code>) dan layanan lain mendengarkan event tersebut untuk menjalankan kompensasi masing-masing. Keuntungannya adalah decoupling yang longgar. Kekurangannya adalah sulitnya melacak alur transaksi end-to-end dan risiko dependensi sirkular antar-event.</li>
+</ol>
+
+<h3>Mekanisme Penjamin Konsistensi: Semantic Locks dan Idempotency Keys</h3>
+
+<p>Karena Saga tidak memiliki isolasi ACID global, sistem rentan terhadap anomali data seperti dirty reads dan lost updates. Untuk memitigasi hal ini, Lab 29 mengimplementasikan dua countermeasure arsitektural:</p>
+
+<ul>
+  <li><strong>Semantic Lock:</strong> Status data aplikasi diubah menjadi penanda sementara (misalnya <code>OrderPending</code>) dengan flag penguncian semantik selama transaksi saga berlangsung. Permintaan eksternal lain yang mencoba memodifikasi entitas tersebut akan ditolak atau dipaksa menunggu hingga status saga mencapai status final (<code>OrderApproved</code> atau <code>OrderCancelled</code>).</li>
+  <li><strong>Idempotency Key:</strong> Setiap instruksi eksekusi dan kompensasi dilengkapi identifier unik (UUID atau OrderID). Ketika terjadi pengulangan pesan akibat kegagalan jaringan, sistem penerima memeriksa histori pemrosesan dan mengembalikan hasil yang telah dicatat tanpa mengulang mutasi saldo.</li>
+</ul>
+
+<h3>Diagram Alur Koordinasi Saga</h3>
+
+<p>Berikut adalah representasi arsitektur alur koordinasi pada kedua pendekatan:</p>
+
+<pre><code>=== ALUR ORKESTRASI (ORCHESTRATOR-DRIVEN) ===
+
+               +-------------------------------+
+               |       Saga Orchestrator       |
+               +---------------+---------------+
+                               |
+       [1] CreateOrder()       |       [2] ProcessPayment()
+      +------------------------+------------------------+
+      |                                                 |
+      v                                                 v
++------------------+                             +------------------+
+|   OrderService   |                             |  PaymentService  |
+|  (PENDING/Lock)  |                             |   (IDEMP-KEY)    |
++------------------+                             +------------------+
+                               |
+                               | [3] ReserveInventory()
+                               v
+                     +--------------------+
+                     |  InventoryService  |
+                     |  (Stok Dikurangi)  |
+                     +--------------------+
+                               |
+             [4] Kegagalan Stok: Reserve() -> FAIL
+                               |
+       [5] LIFO Compensate: RefundPayment() (Index 1)
+       [6] LIFO Compensate: CancelOrder()   (Index 0)
+</code></pre>
+
+<pre><code>=== ALUR KOREOGRAFI (EVENT-DRIVEN CHOREOGRAPHY) ===
+
+OrderService ---> EventBus: OrderCreated
+                       |
+                       +---> PaymentService (Consume OrderCreated)
+                                   |
+                             Execute: ProcessPayment()
+                                   |
+PaymentService -> EventBus: PaymentCompleted
+                       |
+                       +---> InventoryService (Consume PaymentCompleted)
+                                   |
+                             Execute: Reserve() -> GAGAL (Out of Stock)
+                                   |
+InventoryService -> EventBus: InventoryFailed
+                       |
+                       +---> PaymentService (Consume InventoryFailed)
+                       |           |
+                       |     Execute: RefundPayment()
+                       |
+                       +---> OrderService (Consume InventoryFailed)
+                                   |
+                             Execute: CancelOrder() (Lepas Semantic Lock)
+</code></pre>
+
+<h2>4. Implementasi Step-by-Step</h2>
+
+<p>Implementasi Lab 29 dibangun secara mandiri di dalam paket <code>internal/saga</code> dan <code>internal/services</code> menggunakan pustaka standar Go. Struktur kode dirancang untuk memisahkan abstraksi mesin saga dari logika layanan domain.</p>
+
+<h3>4.1 Struktur Mesin Orkestrasi (internal/saga/orchestrator.go)</h3>
+
+<p>Orchestrator mengelola daftar langkah transaksi berurutan. Setiap langkah dibungkus ke dalam struct <code>Step</code> yang mendefinisikan nama langkah, closure fungsi <code>Execute</code>, dan closure fungsi <code>Compensate</code>:</p>
+
+<pre><code class="language-go">package saga
+
+import (
+	"context"
+	"fmt"
+	"sync"
+)
+
+type StepStatus string
+
+const (
+	StatusPending          StepStatus = "PENDING"
+	StatusExecuted         StepStatus = "EXECUTED"
+	StatusFailed           StepStatus = "FAILED"
+	StatusCompensated      StepStatus = "COMPENSATED"
+	StatusCompensateFailed StepStatus = "COMPENSATE_FAILED"
+)
+
+type Step struct {
+	Name       string
+	Execute    func(ctx context.Context) error
+	Compensate func(ctx context.Context) error
+}
+
+type StepLog struct {
+	Name   string
+	Status StepStatus
+}
+
+type Orchestrator struct {
+	mu    sync.Mutex
+	steps []Step
+	logs  []StepLog
+}
+
+func NewOrchestrator() *Orchestrator {
+	return &Orchestrator{
+		steps: make([]Step, 0),
+		logs:  make([]StepLog, 0),
+	}
+}
+
+func (o *Orchestrator) AddStep(step Step) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.steps = append(o.steps, step)
+}
+</code></pre>
+
+<p>Eksekusi langkah dilakukan secara berurutan di dalam method <code>Execute</code>. Jika salah satu langkah mengembalikan error atau context mengalami pembatalan (cancellation), orchestrator langsung menghentikan iterasi maju dan memanggil method privat <code>compensate</code>:</p>
+
+<pre><code class="language-go">func (o *Orchestrator) Execute(ctx context.Context) error {
+	o.mu.Lock()
+	steps := make([]Step, len(o.steps))
+	copy(steps, o.steps)
+	o.mu.Unlock()
+
+	executed := make([]Step, 0)
+
+	for _, step := range steps {
+		select {
+		case &lt;-ctx.Done():
+			o.mu.Lock()
+			o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusFailed})
+			o.mu.Unlock()
+			compErr := o.compensate(context.Background(), executed)
+			if compErr != nil {
+				return fmt.Errorf("saga cancelled: %w; compensation errors: %v", ctx.Err(), compErr)
+			}
+			return fmt.Errorf("saga cancelled: %w", ctx.Err())
+		default:
+		}
+
+		err := step.Execute(ctx)
+		o.mu.Lock()
+		if err != nil {
+			o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusFailed})
+			o.mu.Unlock()
+
+			// LIFO rollback algorithm: kompensasi berjalan terbalik
+			compErr := o.compensate(context.Background(), executed)
+			if compErr != nil {
+				return fmt.Errorf("step %s failed: %w; compensation errors: %v", step.Name, err, compErr)
+			}
+			return fmt.Errorf("step %s failed: %w", step.Name, err)
+		}
+		o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusExecuted})
+		o.mu.Unlock()
+		executed = append(executed, step)
+	}
+
+	return nil
+}
+</code></pre>
+
+<p>Perhatikan detail krusial pada baris pemanggilan kompensasi: ketika <code>ctx.Done()</code> terdeteksi, pemanggilan <code>o.compensate</code> menggunakan <code>context.Background()</code> baru. Hal ini wajib dilakukan agar eksekusi kompensasi tidak langsung gugur akibat context pemanggil yang sudah expired atau dibatalkan.</p>
+
+<p>Implementasi pembalikan LIFO (Last-In, First-Out) dirancang di dalam method <code>compensate</code>:</p>
+
+<pre><code class="language-go">func (o *Orchestrator) compensate(ctx context.Context, executed []Step) error {
+	var compErrors []error
+	for i := len(executed) - 1; i &gt;= 0; i-- {
+		step := executed[i]
+		if step.Compensate != nil {
+			err := step.Compensate(ctx)
+			o.mu.Lock()
+			if err != nil {
+				o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusCompensateFailed})
+				compErrors = append(compErrors, fmt.Errorf("compensation %s: %w", step.Name, err))
+			} else {
+				o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusCompensated})
+			}
+			o.mu.Unlock()
+		}
+	}
+	if len(compErrors) &gt; 0 {
+		return fmt.Errorf("%v", compErrors)
+	}
+	return nil
+}
+</code></pre>
+
+<p>Algoritma berjalan mundur dari <code>len(executed)-1</code> menuju <code>0</code>. Jika ada kompensasi yang gagal, status dicatat sebagai <code>StatusCompensateFailed</code> dan error dikumpulkan secara agregat tanpa menghentikan kompensasi langkah sebelumnya.</p>
+
+<h3>4.2 Pola EventBus untuk Koreografi (internal/saga/choreography.go)</h3>
+
+<p>Untuk mendukung gaya koordinasi koreografi, lab menyediakan struktur <code>EventBus</code> thread-safe yang mendukung publikasi dan langganan event domain:</p>
+
+<pre><code class="language-go">package saga
+
+import (
+	"context"
+	"sync"
+)
+
+type EventType string
+
+const (
+	OrderCreated      EventType = "OrderCreated"
+	OrderCancelled    EventType = "OrderCancelled"
+	PaymentCompleted  EventType = "PaymentCompleted"
+	PaymentFailed     EventType = "PaymentFailed"
+	InventoryReserved EventType = "InventoryReserved"
+	InventoryFailed   EventType = "InventoryFailed"
+)
+
+type Event struct {
+	Type    EventType
+	SagaID  string
+	Payload any
+}
+
+type EventHandler func(ctx context.Context, e Event)
+
+type EventBus struct {
+	mu       sync.RWMutex
+	handlers map[EventType][]EventHandler
+}
+
+func NewEventBus() *EventBus {
+	return &EventBus{
+		handlers: make(map[EventType][]EventHandler),
+	}
+}
+
+func (b *EventBus) Subscribe(t EventType, h EventHandler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.handlers[t] = append(b.handlers[t], h)
+}
+
+func (b *EventBus) Publish(ctx context.Context, e Event) {
+	b.mu.RLock()
+	handlers := append([]EventHandler(nil), b.handlers[e.Type]...)
+	b.mu.RUnlock()
+
+	for _, h := range handlers {
+		h(ctx, e)
+	}
+}
+</code></pre>
+
+<h3>4.3 Domain Services: Semantic Lock & Idempotency Key (internal/services/services.go)</h3>
+
+<p>Layanan domain mengilustrasikan proteksi status data bisnis. <code>OrderService</code> menerapkan <em>semantic lock</em> menggunakan map internal. Saat pesanan dibuat, status awalnya adalah <code>OrderPending</code> dan identifier order dikunci. Upaya mutasi lain terhadap ID yang sama sebelum status menjadi final akan ditolak:</p>
+
+<pre><code class="language-go">type OrderService struct {
+	mu     sync.Mutex
+	orders map[string]OrderState
+	locks  map[string]bool // semantic lock
+}
+
+func (s *OrderService) CreateOrder(orderID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.locks[orderID] {
+		return errors.New("order is semantically locked by another operation")
+	}
+
+	s.orders[orderID] = OrderPending
+	s.locks[orderID] = true
+	return nil
+}
+
+func (s *OrderService) ApproveOrder(orderID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.orders[orderID] == OrderCancelled {
+		return errors.New("cannot approve cancelled order")
+	}
+	s.orders[orderID] = OrderApproved
+	delete(s.locks, orderID)
+	return nil
+}
+
+func (s *OrderService) CancelOrder(orderID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.orders[orderID] = OrderCancelled
+	delete(s.locks, orderID)
+	return nil
+}
+</code></pre>
+
+<p>Sementara itu, <code>PaymentService</code> memvalidasi <em>idempotency key</em> untuk memastikan bahwa instruksi pembayaran ganda dengan ID yang sama tidak mengakibatkan pendebitan berulang:</p>
+
+<pre><code class="language-go">type PaymentService struct {
+	mu          sync.Mutex
+	payments    map[string]float64
+	processedID map[string]bool // idempotency key
+}
+
+func (s *PaymentService) ProcessPayment(paymentID string, amount float64, shouldFail bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.processedID[paymentID] {
+		return nil // Idempotent success: sudah pernah diproses
+	}
+
+	if shouldFail {
+		return errors.New("insufficient funds")
+	}
+
+	s.payments[paymentID] = amount
+	s.processedID[paymentID] = true
+	return nil
+}
+
+func (s *PaymentService) RefundPayment(paymentID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.payments, paymentID)
+	return nil
+}
+</code></pre>
+
+<h2>5. Hasil Pengujian / Test Output</h2>
+
+<p>Kebenaran implementasi diverifikasi melalui demonstrasi skenario end-to-end pada <code>cmd/demo/main.go</code> serta 9 unit dan integration test pada <code>tests/saga_test.go</code>.</p>
+
+<h3>5.1 Output Eksekusi Demo CLI</h3>
+
+<p>Berikut adalah hasil tangkapan output aktual saat menjalankan perintah <code>go run cmd/demo/main.go</code>:</p>
+
+<pre><code>=== Saga Pattern Demonstration ===
+
+--- Scenario 1: Happy Path (Orchestrator) ---
+ -&gt; [OrderService] Creating order: ord-success
+ -&gt; [PaymentService] Processing payment for: ord-success
+ -&gt; [InventoryService] Reserving 1 laptop
+ -&gt; [OrderService] Finalizing order approval
+Scenario 1 Result: error=&lt;nil&gt;, OrderState=APPROVED, Remaining Stock=0
+
+--- Scenario 2: Rollback on Failure (Orchestrator) ---
+ -&gt; [OrderService] Creating order: ord-failed
+ -&gt; [PaymentService] Processing payment for: ord-failed
+ -&gt; [InventoryService] Reserving 1 laptop (current stock: 0 )
+ &lt;- [PaymentService] Compensating: Refunding payment for: ord-failed
+ &lt;- [OrderService] Compensating: Cancelling order: ord-failed
+Scenario 2 Result: error=step ReserveInventory failed: out of stock, OrderState=CANCELLED, HasPayment=false, Stock=0
+
+=== Demo Completed Successfully ===
+</code></pre>
+
+<p>Pada Skenario 1 (Happy Path), setiap transaksi lokal berhasil diselesaikan dan status order bertransisi menjadi <code>APPROVED</code> dengan sisa stok laptop berkurang menjadi 0. Pada Skenario 2 (Rollback on Failure), langkah <code>ReserveInventory</code> gagal karena stok habis (stock: 0). Orchestrator langsung mengeksekusi kompensasi LIFO: merefund pembayaran pada <code>PaymentService</code> terlebih dahulu, lalu membatalkan order pada <code>OrderService</code>. Kondisi akhir mencerminkan konsistensi penuh: <code>OrderState=CANCELLED</code>, <code>HasPayment=false</code>, dan inventaris tetap utuh pada nilai 0.</p>
+
+<h3>5.2 Hasil Pengujian Suite dan Race Detector</h3>
+
+<p>Seluruh suite pengujian diuji menggunakan perintah <code>go test -v -race ./...</code> untuk memastikan integritas logika dan ketiadaan kondisi perlombaan memori (data race). Berikut adalah output aktual pengujian:</p>
+
+<pre><code>=== RUN   TestOrchestrator_HappyPath
+--- PASS: TestOrchestrator_HappyPath (0.00s)
+=== RUN   TestOrchestrator_FailureCompensatesLIFO
+--- PASS: TestOrchestrator_FailureCompensatesLIFO (0.00s)
+=== RUN   TestPayment_Idempotency
+--- PASS: TestPayment_Idempotency (0.00s)
+=== RUN   TestSemanticLock
+--- PASS: TestSemanticLock (0.00s)
+=== RUN   TestOrchestrator_Concurrency
+--- PASS: TestOrchestrator_Concurrency (0.00s)
+=== RUN   TestChoreography_Flow
+--- PASS: TestChoreography_Flow (0.00s)
+=== RUN   TestChoreography_FailureCompensates
+--- PASS: TestChoreography_FailureCompensates (0.00s)
+=== RUN   TestOrchestrator_CompensationErrorPropagated
+--- PASS: TestOrchestrator_CompensationErrorPropagated (0.00s)
+=== RUN   TestOrchestrator_ContextCancellation
+--- PASS: TestOrchestrator_ContextCancellation (0.00s)
+PASS
+ok  	labs/29-saga-pattern/tests	1.450s
+</code></pre>
+
+<p>Rincian pengujian yang berhasil dieksekusi mencakup sembilan skenario mendasar:</p>
+<ul>
+  <li><code>TestOrchestrator_HappyPath</code>: Memverifikasi eksekusi 4 langkah berurutan hingga order berstatus <code>APPROVED</code>.</li>
+  <li><code>TestOrchestrator_FailureCompensatesLIFO</code>: Menguji urutan log status <code>[EXECUTED, EXECUTED, FAILED, COMPENSATED, COMPENSATED]</code> secara presisi.</li>
+  <li><code>TestPayment_Idempotency</code>: Memastikan pemanggilan kedua dengan ID pembayaran yang sama berhasil tanpa menimbulkan efek samping ganda.</li>
+  <li><code>TestSemanticLock</code>: Memastikan pesanan yang sedang terkunci semantik menolak inisialisasi ulang.</li>
+  <li><code>TestOrchestrator_Concurrency</code>: Menjalankan 10 pekerja konkuren secara simultan untuk memvalidasi pengurangan stok inventaris yang aman dari kondisi race.</li>
+  <li><code>TestChoreography_Flow</code>: Menguji transmisi event asinkron berbasis <code>EventBus</code> dari <code>OrderCreated</code> hingga <code>OrderApproved</code>.</li>
+  <li><code>TestChoreography_FailureCompensates</code>: Menguji publikasi event <code>InventoryFailed</code> yang memicu kompensasi refund dan pembatalan order.</li>
+  <li><code>TestOrchestrator_CompensationErrorPropagated</code>: Memastikan kesalahan pada proses kompensasi dicatat ke log sebagai <code>COMPENSATE_FAILED</code> dan diteruskan ke pemanggil.</li>
+  <li><code>TestOrchestrator_ContextCancellation</code>: Memastikan bahwa jika context dibatalkan di tengah jalan, langkah berikutnya tidak dieksekusi dan langkah yang telah selesai langsung dikompensasi.</li>
+</ul>
+
+<h2>6. Perbandingan Before vs After</h2>
+
+<p>Untuk memahami posisi Saga Pattern di dalam lanskap arsitektur sistem pengolahan data, tabel perbandingan komprehensif berikut menganalisis karakteristik teknis antara ACID Monolitik, Two-Phase Commit (2PC), dan Saga Pattern:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Dimensi Evaluasi</th>
+      <th>ACID Monolitik</th>
+      <th>Two-Phase Commit (2PC)</th>
+      <th>Saga Pattern</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Model Konsistensi</strong></td>
+      <td>Konsistensi Keras (Immediate Consistency). Data selalu valid di setiap titik waktu.</td>
+      <td>Konsistensi Keras (Immediate Consistency) lintas database.</td>
+      <td>Konsistensi Bertahap (Eventual Consistency / BASE). Terdapat jendela inkonsistensi sementara.</td>
+    </tr>
+    <tr>
+      <td><strong>Isolasi Transaksi</strong></td>
+      <td>Penuh (Serializability / Read Committed). Tidak ada dirty reads pada konfigurasi standar.</td>
+      <td>Penuh. Sumber daya terkunci secara global hingga keputusan commit final tercapai.</td>
+      <td>Tidak Ada Isolasi ACID. Pembaruan lokal langsung terlihat oleh transaksi lain sebelum saga selesai.</td>
+    </tr>
+    <tr>
+      <td><strong>Mekanisme Pembatalan</strong></td>
+      <td>Rollback otomatis tingkat basis data (mengembalikan image data dari WAL / Undo Log).</td>
+      <td>Global Abort yang dipicu oleh koordinator; partisi lokal melepaskan lock dan membuang draft data.</td>
+      <td>Transaksi Kompensasi Semantik (LIFO). Menjalankan mutasi kebalikan secara eksplisit di tingkat bisnis.</td>
+    </tr>
+    <tr>
+      <td><strong>Ketersediaan Sistem (Availability)</strong></td>
+      <td>Tinggi untuk lingkup lokal node tunggal, namun rapuh jika database tunggal tersebut down.</td>
+      <td>Sangat Rendah. Jika satu partisipan atau koordinator tidak responsif, seluruh transaksi diblokir.</td>
+      <td>Sangat Tinggi. Partisipan hanya menjalankan transaksi lokal cepat; sistem toleran terhadap keterlambatan parsial.</td>
+    </tr>
+    <tr>
+      <td><strong>Durasi Penahanan Lock</strong></td>
+      <td>Milidetik (hanya selama query SQL di dalam blok transaksi lokal dieksekusi).</td>
+      <td>Panjang (menahan lock di semua node database sepanjang beberapa putaran round-trip jaringan).</td>
+      <td>Sangat Singkat. Lock hanya ditahan selama eksekusi transaksi lokal per layanan individu.</td>
+    </tr>
+    <tr>
+      <td><strong>Skalabilitas Horizontal</strong></td>
+      <td>Terbatas pada kemampuan penskalaan vertikal atau replikasi read-replica database tunggal.</td>
+      <td>Sangat Buruk. Kompleksitas koordinasi jaringan meningkat seiring bertambahnya jumlah node partisipan.</td>
+      <td>Sangat Baik. Setiap layanan mikro dapat diskalakan secara independen tanpa batas locking lintas database.</td>
+    </tr>
+    <tr>
+      <td><strong>Kompleksitas Implementasi</strong></td>
+      <td>Sangat Sederhana. Ditangani sepenuhnya oleh database engine dan framework ORM standar.</td>
+      <td>Tinggi pada lapisan infrastruktur (memerlukan manajer transaksi XA yang kompatibel).</td>
+      <td>Tinggi pada lapisan kode aplikasi. Pengembang wajib menulis logika kompensasi dan penanganan kegagalan.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Analisis trade-off di atas menegaskan bahwa Saga Pattern menukar garansi isolasi data seketika demi mendapatkan ketersediaan tinggi, skalabilitas horizontal bebas hambatan, dan throughput transaksi yang optimal pada arsitektur microservices.</p>
+
+<h2>7. Trade-off & Batasan Implementasi</h2>
+
+<p>Pengadopsian Saga Pattern menuntut pemahaman mendalam atas risiko dan kompromi arsitektural yang menyertainya:</p>
+
+<h3>7.1 Hilangnya Isolasi dan Munculnya Anomali Data</h3>
+
+<p>Ketiadaan isolasi ACID global merupakan harga termahal dari Saga Pattern. Begitu langkah lokal pertama berhasil di-commit, mutasi data tersebut langsung terbaca oleh pengguna lain atau saga lain yang sedang berjalan secara konkuren. Kondisi ini membuka peluang terjadinya tiga anomali data klasik:</p>
+
+<ul>
+  <li><strong>Dirty Reads:</strong> Transaksi atau pembaca lain melihat status data yang sebenarnya sedang dalam proses pembatalan. Contohnya: pengguna melihat slot tiket pesawat berkurang, padahal saga pemesanan tersebut sedang menunggu rollback karena pembayaran ditolak.</li>
+  <li><strong>Lost Updates:</strong> Sebuah saga membaca nilai data yang telah diubah oleh saga lain, lalu menimpanya tanpa memperhitungkan mutasi yang telah dilakukan oleh saga pertama.</li>
+  <li><strong>Non-repeatable Reads:</strong> Sebuah langkah membaca record data yang sama dua kali dan mendapatkan nilai yang berbeda karena transaksi lokal saga lain berhasil di-commit di antara dua pembacaan tersebut.</li>
+</ul>
+
+<p>Penanggulangan anomali ini mengharuskan arsitek menerapkan teknik kompensasi semantik tingkat lanjut, seperti penggunaan <em>Semantic Lock</em> (status PENDING), <em>Commutative Updates</em> (operasi matematis yang urutan eksekusinya tidak mempengaruhi hasil akhir, seperti mutasi debit/kredit saldo), dan <em>Pessimistic View</em> (menyembunyikan status pesanan dari query publik sampai saga mencapai status APPROVED).</p>
+
+<h3>7.2 Risiko Kegagalan Kompensasi (Status COMPENSATE_FAILED)</h3>
+
+<p>Dalam kondisi ideal, transaksi kompensasi diasumsikan selalu berhasil dijalankan. Namun dalam lingkungan produksi nyata, transaksi kompensasi itu sendiri dapat mengalami kegagalan. Penyebabnya beragam: kehabisan dana pada rekening penampung refund, sistem bank eksternal sedang mengalami pemadaman (downtime), atau anomali jaringan.</p>
+
+<p>Pada baris kode 100 <code>orchestrator.go</code>, implementasi Lab 29 menandai status ini dengan status eksplisit <code>StatusCompensateFailed</code>. Ketika sebuah kompensasi gagal dieksekusi, sistem berada dalam kondisi inkonsistensi yang berbahaya. Penanganan skenario ini membutuhkan strategi mitigasi operasional tingkat lanjut:</p>
+
+<ul>
+  <li><strong>Dead Letter Queue (DLQ):</strong> Payload kompensasi yang gagal dimasukkan ke dalam antrean DLQ untuk diproses ulang secara otomatis oleh worker rekonsiliasi berkala dengan interval exponential backoff.</li>
+  <li><strong>Manual Reconciliation Dashboard:</strong> Antarmuka operasional yang memungkinkan tim rekayasa atau tim operasional keuangan melakukan intervensi manual guna menyelesaikan sengketa status dana dan pesanan.</li>
+</ul>
+
+<h3>7.3 Batasan Implementasi Lab 29</h3>
+
+<p>Implementasi Lab 29 dirancang sebagai referensi arsitektur yang bersih, ringkas, dan fokus pada pemahaman konsep inti. Oleh karena itu, terdapat batasan desain yang disengaja:</p>
+
+<ul>
+  <li><strong>In-Memory Mock Storage:</strong> Status order, saldo pembayaran, dan kuota inventaris disimpan di dalam struktur memori Go (<code>map[string]...</code>) dengan proteksi <code>sync.Mutex</code>. Jika proses aplikasi berhenti atau mengalami crash mendadak di tengah eksekusi saga, seluruh status transaksi in-flight dan log eksekusi akan hilang.</li>
+  <li><strong>Ketiadaan Write-Ahead Logging (WAL) Persistent:</strong> Sistem produksi wajib mencatat status setiap langkah saga ke penyimpanan non-volatile (seperti PostgreSQL atau Kafka log) sebelum dan sesudah eksekusi. Dengan demikian, jika node orchestrator mati, node cadangan dapat membaca log transaksi dan melanjutkan proses kompensasi dari titik terakhir.</li>
+</ul>
+
+<h2>8. Kapan Menggunakan Pattern Ini</h2>
+
+<p>Memilih pola koordinasi transaksi terdistribusi yang tepat bergantung pada skala sistem, topologi jaringan, dan kompleksitas alur bisnis:</p>
+
+<h3>Kapan Menggunakan Orchestration</h3>
+<ul>
+  <li>Alur kerja transaksi bisnis memiliki banyak langkah berurutan (lebih dari 4 langkah, misalnya: validasi kupon, penagihan pembayaran, alokasi inventaris, penerbitan resi logistik, dan notifikasi SMS).</li>
+  <li>Kebutuhan audit visibilitas tinggi: tim operasional membutuhkan satu titik pemantauan terpusat untuk melihat status transaksi pelanggan secara visual.</li>
+  <li>Menghindari kekacauan ketergantungan sirkular antar-event yang sering terjadi pada sistem koreografi berskala besar.</li>
+</ul>
+
+<h3>Kapan Menggunakan Choreography</h3>
+<ul>
+  <li>Alur kerja sederhana yang hanya melibatkan 2 hingga 4 layanan mikro yang berinteraksi secara linier.</li>
+  <li>Kebutuhan performa throughput yang sangat tinggi di mana latensi koordinasi terpusat ingin diminimalkan melalui event messaging asinkron berkecepatan tinggi.</li>
+  <li>Setiap layanan mikro dikelola oleh tim rekayasa yang terdesentralisasi dan beroperasi tanpa ketergantungan pada tim pemilik orchestrator bersama.</li>
+</ul>
+
+<h3>Kapan Menggunakan Transaksi ACID Lokal</h3>
+<ul>
+  <li>Arsitektur aplikasi masih berupa monolit atau modular monolit dengan basis data tunggal.</li>
+  <li>Entitas data yang dimutasi berada di dalam domain boundary layanan mikro yang sama. Tidak ada alasan teknis memecah operasi ke dalam saga jika mutasi dapat dieksekusi di dalam satu blok transaksi database lokal.</li>
+</ul>
+
+<h3>Anti-Pattern Penggunaan Saga</h3>
+<ul>
+  <li><strong>Over-engineering pada Sistem Monolitik:</strong> Mengganti transaksi ACID lokal yang sudah terbukti andal dengan pola saga di dalam aplikasi monolitik hanya akan menambah kompleksitas kode, memperlambat proses debugging, dan membuka celah anomali data tanpa memberikan manfaat skalabilitas.</li>
+  <li><strong>Menggunakan Saga untuk Alur Kerja Validasi Sederhana:</strong> Memasukkan pemeriksaan format data atau validasi aturan bisnis murni ke dalam langkah saga. Validasi harus diselesaikan secara sinkron sebelum saga diinisialisasi.</li>
+</ul>
+
+<h2>9. Referensi & Commit Hash</h2>
+
+<p>Artikel dan implementasi laboratorium ini merujuk pada standar arsitektur terdistribusi internasional dan repositori kode terbuka:</p>
+
+<ul>
+  <li><strong>Kode Sumber Laboratorium:</strong> Repositori resmi <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern">lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern</a>.</li>
+  <li><strong>Commit SHA Implementasi:</strong> <code>9c525944dc2de00e16513830a25ffa1c4834d742</code>.</li>
+  <li><strong>Buku Referensi:</strong> Chris Richardson, <em>Microservices Patterns: With examples in Java</em> (Manning Publications, 2018), Bab 4: "Managing transactions with sagas".</li>
+  <li><strong>Makalah Akademis Asli:</strong> Hector Garcia-Molina & Kenneth Salem, <em>Sagas</em>, ACM SIGMOD International Conference on Management of Data, 1987.</li>
+  <li><strong>Dokumentasi Arsitektur Cloud:</strong> Microsoft Azure Architecture Center, <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/saga">Saga distributed transactions pattern</a>.</li>
+</ul>
+
+</div>
+</body>
+</html>
