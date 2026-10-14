@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Optimistic vs Pessimistic Locking di Go</title>
+<style>
+body { font-family: Georgia, serif; background-color: #f4f1e8; color: #11283a; margin: 40px; line-height: 1.6; }
+h1, h2, h3 { font-family: Arial, sans-serif; color: #0b1b2d; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #11283a; padding: 8px; text-align: left; }
+pre code { background-color: #0b1b2d; color: #f4f1e8; display: block; padding: 15px; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Optimistic vs Pessimistic Locking di Go</h1>
+<p><img src="lab-23-optimistic-vs-pessimistic-locking-cover-id.png" alt="Cover Image"></p>
+
+<h2>Motivasi</h2>
+<p>Dalam sistem konkuren, pengaturan akses ke shared state menentukan konsistensi data. Lab ini menguji pendekatan pessimistic locking via sync.Mutex dan optimistic locking via pengecekan versioning.</p>
+
+<h2>Batas Lab</h2>
+<p>Implementasi menggunakan pustaka standar Go. Fokus pada single process memory tanpa rely pada distributed lock engine.</p>
+
+<h2>Bukti Kode</h2>
+<pre><code>// Pessimistic
+mu.Lock()
+defer mu.Unlock()
+
+// Optimistic
+if record.Version != expectedVersion {
+    return ErrConflict
+}
+record.Version++
+</code></pre>
+
+<h2>Temuan</h2>
+<p>Pessimistic locking lebih stabil untuk beban tulis tinggi dengan konflik sering. Optimistic locking unggul di skenario baca dominan dengan konflik minimal.</p>
+
+<p>Repository: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/23-optimistic-vs-pessimistic-locking">GitHub Lab 23</a> | Commit: {{COMMIT_SHA}}</p>
+</body>
+</html>
