@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SLI, SLO, dan Error Budget di Go: Multi-Window Multi-Burn-Rate Alerting</title>
+  <meta name="description" content="Implementasi time-bucketed sliding window, kalkulasi error budget deterministik, dan dual-window burn rate alert engine berbasis Google SRE di Go.">
+  <meta property="og:title" content="SLI, SLO, dan Error Budget di Go: Multi-Window Multi-Burn-Rate Alerting">
+  <meta property="og:description" content="Panduan arsitektur SRE di Go: perhitungan SLI rasio good/total, evaluasi matematis sisa error budget, dan multi-window multi-burn-rate alerting bebas false positive.">
+  <style>
+    body {
+      margin: 0;
+      background: #f4f1e8;
+      color: #11283a;
+      font: 19px/1.75 Georgia, serif;
+    }
+    article {
+      max-width: 850px;
+      margin: 48px auto;
+      padding: 0 28px 70px;
+    }
+    h1, h2, h3, .subtitle {
+      font-family: Arial, sans-serif;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 42px;
+      color: #0b1b2d;
+      margin-bottom: 8px;
+    }
+    h2 {
+      margin-top: 44px;
+      font-size: 28px;
+      color: #0b1b2d;
+      border-bottom: 2px solid #cad7cf;
+      padding-bottom: 8px;
+    }
+    h3 {
+      font-size: 22px;
+      color: #0b1b2d;
+      margin-top: 28px;
+    }
+    .subtitle {
+      font-size: 21px;
+      color: #52606b;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+    .author-line {
+      font-family: Arial, sans-serif;
+      font-size: 15px;
+      color: #087f76;
+      font-weight: bold;
+      margin-bottom: 28px;
+    }
+    img {
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      margin-bottom: 32px;
+      border: 1px solid #cad7cf;
+    }
+    pre {
+      background: #0b1b2d;
+      color: #d8e9df;
+      padding: 22px;
+      overflow: auto;
+      font: 14px/1.65 monospace;
+      border-radius: 8px;
+      margin: 24px 0;
+    }
+    code {
+      font-family: monospace;
+      background: #e4e0d4;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 28px 0;
+      font-family: Arial, sans-serif;
+      font-size: 15px;
+    }
+    th, td {
+      border: 1px solid #cad7cf;
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th {
+      background: #e4e0d4;
+      color: #0b1b2d;
+    }
+    blockquote {
+      border-left: 4px solid #087f76;
+      margin: 24px 0;
+      padding: 8px 18px;
+      background: #e8e4d8;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+<article>
+  <div class="author-line">SOFTWARE ENGINEERING LAB &bull; LAB 24</div>
+  <h1>SLI, SLO, dan Error Budget di Go: Multi-Window Multi-Burn-Rate Alerting</h1>
+  <p class="subtitle">Implementasi time-bucketed sliding window, kalkulasi error budget deterministik, dan dual-window burn rate alert engine berbasis prinsip Google SRE.</p>
+
+  <img src="lab-24-slo-sli-error-budget-cover-id.png" alt="Visual terminal retro CRT menampilkan arsitektur time-bucketed sliding window, evaluasi SLO, dan multi-window burn rate alert di Go">
+
+  <h2>Masalah Pengukuran Keandalan Tradisional</h2>
+  <p>Tim keandalan sering mengukur stabilitas layanan menggunakan metrik infrastruktur seperti utilisasi CPU, konsumsi memori host, atau panjang antrean disk. Metrik ini tidak mencerminkan pengalaman nyata pengguna yang mengakses aplikasi. Server dapat beroperasi pada beban CPU rendah 10% namun gagal memproses transaksi karena kegagalan database pool. Sebaliknya, mesin yang berjalan pada utilisasi CPU 90% dapat melayani 100% permintaan pengguna secara sukses tanpa penurunan performa.</p>
+  <p>Mengukur kesehatan sistem menggunakan metrik yang keliru menimbulkan dua kendala operasional:</p>
+  <ul>
+    <li><strong>False Sense of Safety</strong>: Dasbor infrastruktur berwarna hijau padahal pengguna menghadapi error HTTP 500 secara masif.</li>
+    <li><strong>Deployment Chaos</strong>: Tim pengembang tidak memiliki standar numerik objektif untuk menentukan kapan rilis fitur baru harus dihentikan demi stabilisasi sistem.</li>
+  </ul>
+  <p>Dalam <strong>Software Engineering Lab 24</strong>, kita membedah dan mengimplementasikan kerangka kerja Service Level Indicators (SLI), Service Level Objectives (SLO), kalkulasi Error Budget matematis, dan mesin peringatan Multi-Window Multi-Burn-Rate berbasis prinsip Google SRE di Go.</p>
+
+  <blockquote>
+    Keandalan bukanlah target 100%. Target 100% adalah target yang salah, memboroskan biaya rekayasa, dan melampaui keandalan jaringan pengguna. Error budget menyediakan batas toleransi kesalahan yang dapat dibelanjakan untuk rilis fitur secara terukur.
+  </blockquote>
+
+  <h2>Mental Model: Error Budget Sebagai Kuota Risiko</h2>
+  <p>Prinsip keandalan modern menetapkan target ketersediaan layanan secara realistis di bawah 100%. Batas selisih antara target layanan dengan batas sempurna merupakan kuota kesalahan yang diizinkan:</p>
+  <pre><code>SLO Target    : 99.9% (Uptime yang dijanjikan)
+Error Budget  : 1.0 - 0.999 = 0.001 (0.1% request diizinkan gagal)
+Total Trafik  : 1.000 request
+Kuota Gagal   : 1.000 × 0.1% = 1 request</code></pre>
+  <p>Error budget berfungsi sebagai penyeimbang antara kecepatan rilis fitur dan stabilitas layanan. Selama error budget tersisa bernilai positif, pengembang bebas merilis pembaruan perangkat lunak. Ketika insiden atau regresi performa menghabiskan budget hingga minus, kebijakan deployment freeze langsung diberlakukan.</p>
+
+  <h2>Pilar 1: Service Level Indicator (SLI)</h2>
+  <p>SLI didefinisikan sebagai rasio kuantitatif antara kejadian sukses (good events) terhadap seluruh kejadian valid (total events):</p>
+  <pre><code>SLI = Kejadian Sukses / Total Kejadian</code></pre>
+  <p>Pada implementasi <code>internal/metrics/tracker.go</code>, kualifikasi kejadian sukses ditentukan langsung oleh pemanggil melalui fungsi predikat closure <code>isGood</code>:</p>
+  <pre><code>type Event struct {
+	Timestamp  time.Time
+	Duration   time.Duration
+	StatusCode int
+	Endpoint   string
+}
+
+// Caller mendefinisikan kriteria kejadian sukses:
+isGood := func(e metrics.Event) bool {
+	return e.StatusCode < 500 && e.Duration <= latencyThreshold
+}</code></pre>
+  <p>Pemisahan logika kualifikasi ini menjaga komponen agregator metrik tetap agnostik terhadap format protokol atau status kode spesifik.</p>
+
+  <h2>Pilar 2: Agregasi Time-Bucketed Sliding Window</h2>
+  <p>Melacak metrik pada jendela waktu berjalan (rolling window) seperti 30 hari atau 1 jam membutuhkan struktur data yang efisien. Menyimpan jutaan struct request di dalam memori memicu lonjakan garbage collection. Lab ini menerapkan <code>WindowTracker</code> yang mengelompokkan request ke dalam bucket interval waktu deterministik:</p>
+  <pre><code>type Bucket struct {
+	StartTime  time.Time
+	TotalCount int64
+	GoodCount  int64
+	BadCount   int64
+}
+
+type WindowTracker struct {
+	mu         sync.RWMutex
+	windowSize time.Duration
+	bucketSize time.Duration
+	buckets    []*Bucket
+}</code></pre>
+  <p>Setiap kali event dicatat melalui <code>Record()</code>, tracker mengunci mutex, memangkas bucket kadaluarsa di luar jendela waktu (eviction), lalu menambahkan pencacah ke bucket yang sesuai berdasarkan timestamp terpotong (truncated timestamp):</p>
+  <pre><code>func (w *WindowTracker) Record(e Event, isGood bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.evict(e.Timestamp)
+
+	bucketStart := e.Timestamp.Truncate(w.bucketSize)
+	b := w.getOrCreateBucket(bucketStart)
+
+	b.TotalCount++
+	if isGood {
+		b.GoodCount++
+	} else {
+		b.BadCount++
+	}
+}</code></pre>
+
+  <h2>Pilar 3: Evaluator SLO dan Penegakan Deployment Freeze</h2>
+  <p>Komponen <code>Evaluator</code> di <code>internal/slo/evaluator.go</code> membaca ringkasan metrik dari window tracker dan menghitung sisa error budget secara absolut:</p>
+  <pre><code>func (e *Evaluator) Evaluate(now time.Time) Status {
+	total, good, bad := e.tracker.Summary(now)
+
+	if total == 0 {
+		return Status{
+			TargetSLO:       e.config.TargetUptime,
+			CurrentSLI:      1.0,
+			BudgetRemaining: 0,
+			CanDeploy:       true,
+		}
+	}
+
+	sli := float64(good) / float64(total)
+	totalErrorBudget := (1.0 - e.config.TargetUptime) * float64(total)
+	budgetRemaining := totalErrorBudget - float64(bad)
+	canDeploy := budgetRemaining > 0
+
+	return Status{
+		TargetSLO:       e.config.TargetUptime,
+		CurrentSLI:      sli,
+		TotalRequests:   total,
+		GoodRequests:    good,
+		BadRequests:     bad,
+		BudgetRemaining: budgetRemaining,
+		CanDeploy:       canDeploy,
+	}
+}</code></pre>
+  <p>Ketika volume trafik nol, evaluator mengembalikan <code>CurrentSLI: 1.0</code> dan <code>CanDeploy: true</code>. Penanganan kondisi batas ini mencegah pemblokiran rilis palsu saat layanan baru pertama kali dinyalakan.</p>
+
+  <h2>Pilar 4: Multi-Window Multi-Burn-Rate Alerting</h2>
+  <p>Peringatan berbasis satu jendela waktu memiliki kelemahan mendasar: jendela pendek (5 menit) memicu false alarm akibat lonjakan galat sesaat, sedangkan jendela panjang (24 jam) terlambat memberitahu insiden kritis. Kerangka Google SRE menyelesaikan dilema ini dengan mengevaluasi laju pembakaran budget (Burn Rate) secara simultan pada dua jendela waktu.</p>
+  <p>Burn Rate merefleksikan kecepatan penghabisan budget dibandingkan tingkat kegagalan yang diizinkan:</p>
+  <pre><code>Burn Rate = Tingkat Galat Nyata / Tingkat Galat Diizinkan
+          = (Bad / Total) / (1.0 - TargetSLO)</code></pre>
+  <p>Tabel konfigurasi ambang batas burn rate yang diterapkan pada lab:</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Tingkat Peringatan</th>
+        <th>Keparahan</th>
+        <th>Ambang Burn Rate</th>
+        <th>Jendela Pendek</th>
+        <th>Jendela Panjang</th>
+        <th>Budget Terbakar</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Page Fast</td>
+        <td>PAGE</td>
+        <td>14.4×</td>
+        <td>5 Menit</td>
+        <td>1 Jam</td>
+        <td>2% dalam 1 Jam</td>
+      </tr>
+      <tr>
+        <td>Ticket Slow</td>
+        <td>TICKET</td>
+        <td>6.0×</td>
+        <td>30 Menit</td>
+        <td>6 Jam</td>
+        <td>5% dalam 6 Jam</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Pada <code>internal/alerting/engine.go</code>, peringatan hanya diaktifkan jika laju pembakaran pada jendela pendek DAN jendela panjang secara simultan melampaui batas ambang:</p>
+  <pre><code>for _, rule := range e.rules {
+	if sBurn >= rule.BurnRateThreshold && lBurn >= rule.BurnRateThreshold {
+		alerts = append(alerts, Alert{
+			RuleName:      rule.Name,
+			Severity:      rule.Severity,
+			ShortBurnRate: sBurn,
+			LongBurnRate:  lBurn,
+			FiredAt:       now,
+		})
+	}
+}</code></pre>
+  <p>Lonjakan galat sementara yang menaikkan jendela pendek hingga 100x tidak akan membunyikan alarm jika jendela panjang tetap bersih.</p>
+
+  <h2>Verifikasi Pengujian dan Eksekusi Demo</h2>
+  <p>Pengujian otomatis di <code>tests/slo_test.go</code> memverifikasi kalkulasi matematis dan ketahanan konkurensi Go tanpa adanya kebocoran data race:</p>
+  <pre><code>$ go test -race -v ./...
+=== RUN   TestMetricsWindowTracker
+--- PASS: TestMetricsWindowTracker (0.00s)
+=== RUN   TestSLOEvaluator
+--- PASS: TestSLOEvaluator (0.00s)
+=== RUN   TestAlertEngineBurnRate
+--- PASS: TestAlertEngineBurnRate (0.01s)
+=== RUN   TestOutOfOrderTimestamps
+--- PASS: TestOutOfOrderTimestamps (0.00s)
+=== RUN   TestEvaluatorZeroTraffic
+--- PASS: TestEvaluatorZeroTraffic (0.00s)
+=== RUN   TestConcurrencyMetrics
+--- PASS: TestConcurrencyMetrics (0.00s)
+PASS
+ok      labs/24-slo-sli-error-budget/tests      2.904s</code></pre>
+
+  <p>Eksekusi demonstrasi melalui <code>cmd/demo/main.go</code> menyimulasikan siklus hidup 4 fase operasional:</p>
+  <pre><code>--- PHASE 1: Baseline Traffic (Healthy) ---
+Total: 1000 | Good: 1000 | Bad: 0 | SLI: 100.00% | Budget: +1.0000 | CanDeploy: true
+
+--- PHASE 2: Incident Injection (10% Error Burst) ---
+Injected 100 requests with 10 failures...
+Total: 1100 | Good: 1090 | Bad: 10 | SLI: 99.09% | Budget: -8.9000 | CanDeploy: false
+
+--- PHASE 3: Alert Engine Evaluation ---
+>>> ALERT TRIGGERED: [TICKET] Slow Burn Alert (6.0x - 5% in 6h)
+    | ShortBurn: 9.09x | LongBurn: 9.09x (Threshold: 6.00x)
+
+--- PHASE 4: Criticality-Based SLO Comparison ---
+[CRITICAL]  Payment Service: Target=99.900% | SLI=99.091% | Budget=-8.90 | Deploy=BLOCKED
+[STANDARD]  Reports Service: Target=95.000% | SLI=90.000% | Budget=-5.00 | Deploy=BLOCKED</code></pre>
+
+  <h2>Batasan Implementasi Laboratorium</h2>
+  <p>Implementasi pada lab ini dirancang untuk mendemonstrasikan algoritma inti dalam lingkungan terisolasi. Dalam lingkungan produksi skala besar, terdapat beberapa batasan yang harus disesuaikan:</p>
+  <ul>
+    <li><strong>Penyimpanan In-Memory</strong>: Metrik disimpan dalam slice RAM lokal. Restart pod akan menghapus histori jendela. Produksi memerlukan TSDB terdistribusi seperti Prometheus atau VictoriaMetrics.</li>
+    <li><strong>Kompresi Waktu Simulasi</strong>: Demo mengompresi jendela jam menjadi hitungan menit agar dapat diverifikasi secara instan.</li>
+    <li><strong>Kualifikasi Boolean</strong>: SLI dihitung berdasarkan predikat benar/salah pada closure, bukan agregasi kuantil histogram latency lengkap (P95/P99).</li>
+  </ul>
+
+  <h2>Kesimpulan</h2>
+  <p>Penerapan SLI, SLO, dan Error Budget mengubah perdebatan subjektif mengenai stabilitas sistem menjadi keputusan matematis yang dapat diverifikasi. Dengan melacak laju konsumsi budget menggunakan peringatan multi-jendela, tim rekayasa perangkat lunak dapat merilis fitur secara agresif tanpa mengorbankan keandalan yang menjadi hak pengguna.</p>
+
+  <hr>
+  <p>Kode sumber lengkap dan suite pengujian tersedia di repositori GitHub:<br>
+  <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/24-slo-sli-error-budget">https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/24-slo-sli-error-budget</a></p>
+</article>
+</body>
+</html>
