@@ -515,7 +515,7 @@ add_slide(
     mental_model="NOT VALID + VALIDATE avoids table lock and enables incremental validation.",
     source_path="labs/27-database-constraints/research/05-report.md",
     slide_num="17 / 24"
-}
+)
 
 # Slide 18: Limitations
 add_slide(
@@ -542,7 +542,7 @@ add_slide(
     mental_model="Constraints are row-scoped — cross-row invariants require different approaches.",
     source_path="labs/27-database-constraints/content/01-content-brief.md",
     slide_num="18 / 24"
-}
+)
 
 # Slide 19: Design Principles
 add_slide(
@@ -569,7 +569,7 @@ add_slide(
     mental_model="Application for UX, database for correctness — defense in depth.",
     source_path="labs/27-database-constraints/content/02-master-draft.md",
     slide_num="19 / 24"
-}
+)
 
 # Slide 20: When to Use Which
 add_slide(
@@ -599,7 +599,7 @@ add_slide(
     mental_model="Database constraint for mandatory integrity, app validation for optional UX.",
     source_path="labs/27-database-constraints/content/05-key-takeaways.md",
     slide_num="20 / 24"
-}
+)
 
 # Slide 21: Industry Standards
 add_slide(
@@ -629,7 +629,7 @@ add_slide(
     mental_model="SQLSTATE codes are stable — use codes, not error text, for classification.",
     source_path="labs/27-database-constraints/research/03-evidence.md",
     slide_num="21 / 24"
-}
+)
 
 # Slide 22: Lab Boundaries
 add_slide(
@@ -656,7 +656,7 @@ add_slide(
     mental_model="This lab proves constraint behavior conceptually — not production PostgreSQL.",
     source_path="labs/27-database-constraints/content/01-content-brief.md",
     slide_num="22 / 24"
-}
+)
 
 # Slide 23: Core Design Principles
 add_slide(
@@ -683,7 +683,7 @@ add_slide(
     mental_model="Three principles: delegate to DB, defense in depth, concurrent test.",
     source_path="labs/27-database-constraints/content/05-key-takeaways.md",
     slide_num="23 / 24"
-}
+)
 
 # Slide 24: Closing (Dark Navy, rich visual)
 add_slide(
