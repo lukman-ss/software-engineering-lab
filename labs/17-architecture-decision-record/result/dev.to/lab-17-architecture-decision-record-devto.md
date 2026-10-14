@@ -25,7 +25,7 @@ ADR diperlakukan sebagai data terstruktur, bukan sekadar teks bebas. Field kunci
 
 ## Pipeline Validasi Empat Tahap
 
-Markdown Files → adr.Parser (ekstraksi field & status) → []*adr.Record (in-memory struct) → adr.Linter (cek urutan ID, siklus, & relasi timbal-balik) → []error (laporan pelanggaran integritas)
+Markdown Files | Format teks mentah adr.Parser | Ekstraksi struct Record adr.Linter | Aturan & integritas graf Laporan Error | Deteksi inkonsistensi
 
 ## Struct Record: Fondasi Validasi Data
 
@@ -60,7 +60,7 @@ Insiden Sistem | Berbulan-bulan | Keputusan baru berpijak pada asumsi keliru
 
 ## Skenario Demo: Tiga ADR Evolusi Arsitektur
 
-ADR 0001: Modular Monolith | Superseded by ADR 2 ADR 0002: Notification Microservice | Accepted, Supersedes ADR 1 ADR 0003: Event Sourcing | Rejected (alasan biaya operasional)
+ADR 0001: Modular Monolith (Superseded by ADR 2) ADR 0002: Notification Microservice (Accepted • Supersedes ADR 1) ADR 0003: Event Sourcing (Rejected • Biaya operasional tinggi)
 
 ## Output Demo: Validasi Integritas Lolos
 
@@ -75,11 +75,11 @@ Running ADR Integrity Linter... Integrity check passed!
 
 ## Lolos Linter Bukan Berarti Keputusan Benar
 
-Nomor ID berurutan tanpa celah. Relasi timbal-balik utuh tanpa tautan gantung. Tidak ada siklus ketergantungan antar-dokumen. Kebenaran argumen teknis di bagian Decision. Apakah microservice memang solusi tepat bagi tim.
+Nomor ID berurutan tanpa celah. Relasi timbal-balik utuh tanpa tautan gantung. Tidak ada siklus ketergantungan antar-dokumen. Kebenaran argumen teknis di bagian Decision. Apakah rancangan arsitektur tepat untuk kapasitas tim. Evaluasi dampak performa dan biaya operasional sistem.
 
-## Trade-off: Struktur Kaku vs Fleksibilitas
+## Trade-off: Struktur Baku vs Fleksibilitas
 
-Wajib tiga section: Context, Decision, Consequences. Status dibatasi lima enum resmi. Memungkinkan CI gate otomatis dan deterministik. Tidak mendukung format paragraf naratif bebas. Memerlukan disiplin tim mengisi field relasi.
+Wajib tiga bagian: Context, Decision, Consequences. Status dibatasi lima enum resmi. Memungkinkan CI gate otomatis dan deterministik. Tidak mendukung format narasi paragraf bebas. Memerlukan disiplin tim mengisi field relasi. Perubahan format membutuhkan penyesuaian parser.
 
 ## Validasi Paralel dengan Mutex
 
@@ -98,15 +98,15 @@ for _, r := range records {
 
 ## Sebelum vs Sesudah Validasi Otomatis
 
-Tautan supersesi sepihak sering terlewat. Nomor meloncat sulit disadari saat banyak file. Status non-standar masuk tanpa sengaja. Semua inkonsistensi ditolak otomatis di CI. Nomor ID wajib monotonik dan unik. Relasi timbal-balik divalidasi deterministik.
+Tautan supersesi sepihak sering terlewat. Nomor meloncat sulit disadari saat banyak file. Status non-standar masuk tanpa sengaja. Semua inkonsistensi ditolak otomatis di CI. Nomor ID wajib monotonik dan teratur. Relasi timbal-balik divalidasi deterministik.
 
 ## Batasan Lab: Hanya Validasi Format
 
-Ekstraksi regex dari string Markdown. Pemeriksaan nomor urut dan relasi timbal-balik. Deteksi siklus pada graf supersesi. Tidak menilai kebenaran argumen keputusan. Simulasi in-memory, bukan pembacaan ribuan file disk.
+Ekstraksi regex dari string Markdown. Pemeriksaan nomor urut dan relasi timbal-balik. Deteksi siklus pada graf supersesi. Tidak menilai kebenaran argumen keputusan. Simulasi in-memory, bukan pembacaan ribuan berkas disk.
 
 ## Kasus Batas: Menghentikan Fitur Tanpa ADR
 
-Fitur dimatikan tetapi ADR tetap bertanda Accepted. Engineer baru mengira fitur masih menjadi standar aktif. Menghapus file justru menghilangkan konteks historis. Solusi: wajibkan ADR baru berstatus Deprecated.
+Fitur dimatikan tetapi ADR tetap bertanda Accepted. Engineer baru mengira fitur masih menjadi standar aktif. Menghapus berkas justru menghilangkan riwayat konteks. Solusi: wajibkan ADR baru berstatus Deprecated.
 
 ## Bukti yang Divalidasi oleh Test Suite
 
@@ -114,15 +114,15 @@ Parser menolak status ilegal dan format tanpa judul. Linter menangkap 7 skenario
 
 ## Batas Integritas: Apa yang Tidak Diuji
 
-Kebenaran konten teknis di dalam section Decision. Disiplin tim dalam memperbarui ADR saat arsitektur bergeser. Kesiapan sistem monolit atau microservice di production. Performa I/O disk pada ribuan berkas dokumen.
+Kebenaran konten teknis di dalam bagian Decision. Disiplin tim dalam memperbarui ADR saat arsitektur bergeser. Kesiapan sistem monolit atau microservice di production. Performa I/O disk pada ribuan berkas dokumen.
 
 ## Risiko Kepalsuan: Linter Hijau Bukan Aman
 
-Dokumen lolos linter meski bagian Decision hanya berisi teks formalitas. Tim mengira arsitektur sudah matang hanya karena status CI hijau. Mitigasi: pertahankan review arsitek untuk menilai isi substansi.
+Dokumen lolos linter meski bagian Decision hanya teks formalitas. Tim mengira arsitektur sudah matang hanya karena status CI hijau. Mitigasi: pertahankan review arsitek untuk menilai substansi.
 
 ## Panduan Implementasi Linter ADR di Tim
 
-[ ] Tetapkan template Markdown dengan Context, Decision, Consequences. [ ] Gunakan enum status resmi (Accepted, Superseded, Rejected, dll.). [ ] Pasang parser dan linter pada pull request CI gate. [ ] Larang edit retroaktif: keputusan baru wajib nomor ADR baru.
+Tetapkan template berkas: Context, Decision, Consequences. Gunakan enum status resmi (Accepted, Superseded, Rejected). Pasang parser dan linter pada CI gate pull request. Larang edit retroaktif: keputusan baru wajib nomor baru.
 
 ## Anti-Pattern: Kesalahan Adopsi ADR
 
@@ -133,7 +133,7 @@ Menulis ADR untuk hal sepele seperti penamaan variabel. Mengedit ADR Accepted di
 ```sh
 cd labs/17-architecture-decision-record
 go test -v ./...    # validasi parser & linter
-go test -race ./... # cek race condition
+go test -race ./... # verifikasi race-free
 go run ./cmd/demo   # jalankan simulasi 3 ADR
 ```
 
