@@ -1,29 +1,32 @@
-# Metadata Medium — Lab 26: Contract Testing
+# Metadata Publikasi Medium — Lab 26
 
-## Metadata Publikasi
+## Identitas Artikel
+- **Title**: Menghentikan Breaking Change API dengan Contract Testing dan CI Deployment Gate di Go
+- **Subtitle**: Bagaimana Consumer-Driven Contracts melindungi klien mobile dari kerusakan skema backend dan memindahkan verifikasi integrasi ke build pipeline.
+- **Proposed Slug**: `contract-testing-consumer-driven-contracts-ci-gate-go`
 
-- **Title**: Mencegah Breaking Change API dengan Consumer-Driven Contract Testing di Go
-- **Subtitle**: Panduan implementasi Consumer-Driven Contracts, CI verification gate, dan evolusi API mandiri tanpa ketergantungan end-to-end test yang rapuh.
-- **Proposed Slug**: lab-26-contract-testing-consumer-driven-contracts-go
-- **Cover Image Alt Text**: Ilustrasi terminal monitor CRT retro menampilkan hasil verifikasi contract testing dan status build CI gate.
-- **Publication Date**: 2026-10-14
-- **Author**: Lukman / lukman-ss
+## Konfigurasi SEO
+- **SEO Title**: Contract Testing & CI Deployment Gate di Go
+  *(Panjang: 43 karakter — batas maksimal 60 karakter)*
+- **SEO Description**: Pelajari cara mendeteksi breaking schema changes dan membangun CI deployment gate berbasis Consumer-Driven Contracts di Go secara deterministik.
+  *(Panjang: 151 karakter — batas rekomendasi 140–156 karakter)*
 
-## Karakter & Batasan SEO
+## Media & Visual
+- **Cover Image**: `image-cover/lab-26-contract-testing-cover-id.png`
+- **Alt Text Cover**: Ilustrasi retro CRT monitor beige menampilkan terminal verifikasi CDC contract testing, pemblokiran breaking change status, dan author lukman-ss.
 
-- **SEO Title**: Contract Testing & CI Gate di Go: Panduan CDC
-  - *Panjang*: 48 karakter (Batas: ≤ 60 karakter)
-- **SEO Description**: Cegah insiden breaking change microservices di produksi dengan Consumer-Driven Contracts dan automated CI verification gate di Go.
-  - *Panjang*: 142 karakter (Batas: 140–156 karakter)
-- **Social Media Title**: Mencegah Breaking Change API dengan Consumer-Driven Contract Testing di Go
-  - *Panjang*: 71 karakter
-- **Social Media Description**: Implementasi Consumer-Driven Contract testing dan CI gate di Go untuk memverifikasi kompatibilitas REST API sebelum proses deployment produksi.
-  - *Panjang*: 147 karakter
+## Konfigurasi Sosial Media
+- **Social Title**: Contract Testing: Consumer-Driven Contracts di Go
+- **Social Description**: Panduan teknis implementasi CDC, algoritma subset recursive diffing, dan CI/CD deployment gate untuk mencegah outage API microservices.
 
-## Tag Pilihan (Tepat 5 Tags)
-
-1. `Golang`
-2. `Microservices`
-3. `Software Architecture`
+## Klasifikasi Topik (Tepat 5 Tags)
+1. `Software Engineering`
+2. `Golang`
+3. `Microservices`
 4. `Testing`
-5. `DevOps`
+5. `Devops`
+
+## Verifikasi Karakter
+- SEO Title: 43 karakter (valid <= 60)
+- SEO Description: 151 karakter (valid 140-156)
+- Jumlah Tag: Tepat 5 tags (valid)
