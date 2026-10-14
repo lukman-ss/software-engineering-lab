@@ -1,17 +1,12 @@
-Lab 17 kali ini membahas pengelolaan keputusan arsitektur menggunakan Architecture Decision Record (ADR) serta validasi struktural otomatis di Go.
+Dokumentasi arsitektur sering kali menjadi artefak yang usang begitu kode berevolusi. Masalah yang lebih berbahaya: saat satu keputusan menggantikan keputusan lama, tautan penggantian sering kali lupa diperbarui di kedua berkas. Review manual pada dokumen Markdown rentan melewatkan relasi sepihak, penomoran urut yang loncat, atau status informal yang tidak baku.
 
-Masalah teknis yang sering terjadi adalah hilangnya konteks historis di balik keputusan desain penting saat anggota tim berganti. Dokumentasi yang terpisah di wiki luar cepat usang, memicu perdebatan teknis berulang atau pembatalan arsitektur secara sembarangan tanpa memahami batasan aslinya.
+Di Lab 17 dari seri Software Engineering Lab, kami mengeksplorasi bagaimana memperlakukan Architecture Decision Record (ADR) sebagai data terstruktur, bukan sekadar teks naratif bebas.
 
-Lab ini membuktikan tiga mekanisme konkret:
-1. Regex-Based Parsing: Mengekstrak ID, Title, Status, serta klausa silsilah SupersededBy dan Supersedes dari berkas Markdown, sekaligus memastikan bagian Context, Decision, dan Consequences tidak kosong.
-2. Monotonic & Lineage Integrity: Linter mendeteksi penomoran non-monotonik, ID duplikat, tautan sepihak, target fiktif, self-supersession, serta siklus penggantian tertutup melalui DFS cycle detection.
-3. Concurrent Verification: Validasi graf silsilah timbal-balik dieksekusi paralel dengan goroutine dan lolos 23 test assertions di bawah race detector tanpa peringatan data race.
+Dengan membangun parser baris berbasis regex dan linter konkuren di Go (tanpa dependensi pihak ketiga), sistem dapat memvalidasi urutan nomor monotonik, mendeteksi siklus sirkular dalam silsilah keputusan, dan memastikan tautan timbal-balik antara ADR lama dan ADR baru tetap konsisten.
 
-Mental model inti: Decisions as versioned invariants. Simpan keputusan arsitektural langsung bersama kode sumber sebagai catatan permanen yang tidak dapat disunting retroaktif, melainkan digantikan melalui silsilah penggantian timbal-balik yang divalidasi mesin. Usulan yang ditolak dicatat sebagai status Rejected agar argumen penolakan terdokumentasi.
+Hasil uji menunjukkan seluruh skenario kerusakan integritas referensial tertolak secara deterministik sebelum kode di-merge ke branch utama. Namun penting dicatat: linter hanya memvalidasi kepatuhan format struktural. Kualitas dan kedalaman analisis dari keputusan arsitektur itu sendiri tetap sepenuhnya berada di tangan pertimbangan tim rekayasa.
 
-Satu batasan penting: Lab ini menggunakan parser ekspresi reguler dengan format heading Markdown yang ketat dan bekerja pada struktur in-memory, belum menyediakan AST CommonMark umum atau pengait otomatis git pre-commit hook.
-
-Pelajari implementasi lengkap dan rangkaian pengujian di:
+Kode sumber lengkap, suite pengujian, dan implementasi demo tersedia di repositori:
 https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record
 
-#softwareengineering #golang #systemdesign #backend #architecture #cleancode
+#SoftwareEngineering #Go #SystemDesign #SoftwareArchitecture #CleanArchitecture #EngineeringManagement

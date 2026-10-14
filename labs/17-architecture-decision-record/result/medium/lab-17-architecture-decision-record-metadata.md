@@ -1,32 +1,21 @@
-# Metadata: Architecture Decision Record (ADR) dan Validasi Struktural Otomatis
+# Metadata Publikasi Medium: Lab 17 - Architecture Decision Record
 
-## Title
-Architecture Decision Record: Mengunci Silsilah Keputusan Arsitektur di Git
+## Informasi Umum
+- **Judul:** Architecture Decision Record: Parser & Linter untuk Validasi Struktural Keputusan Arsitektur
+- **Subtitle:** Menghindari lineage drift dan human error review melalui otomasi pengecekan Markdown ADR
+- **Penulis:** Lukman / lukman-ss
+- **Seri:** Software Engineering Lab | Lab 17
+- **Format:** In-depth Technical Article (22 Subsections + Code + Diagram)
+- **Estimasi Waktu Baca:** 7-9 menit
 
-## Subtitle
-Menjaga konteks teknis di repositori: parsing Markdown, penomoran monotonik, validasi timbal-balik supersedes, dan siklus rejected.
+## SEO & Metadata
+- **Canonical URL:** `https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record`
+- **Focus Keywords:** Architecture Decision Record, ADR Linter, Go Parser, Structural Validation, Markdown Linters, Software Architecture, Go Concurrency
+- **Meta Description:** Dokumentasi arsitektur sering kali usang atau putus silsilah penggantian. Pelajari cara membangun parser regex dan concurrent linter di Go untuk memvalidasi nomor urut monotonik dan relasi timbal-balik ADR secara otomatis.
 
-## SEO Title
-Architecture Decision Record di Go: Validasi Integritas ADR
-
-## SEO Description
-Pelajari Architecture Decision Record (ADR) di Go: parser Markdown, linter penomoran monotonik, validasi timbal-balik supersedes, dan pencatatan rejected.
-
-## Proposed Slug
-architecture-decision-record-go-linter-supersedes
-
-## Tags
-golang, software-architecture, documentation, backend, code-quality
-
-## Alt Text Cover
-Ilustrasi komputer CRT retro bertema pixel art menampilkan kode Architecture Decision Record di Go, relasi silsilah status ADR, dan identitas lukman-ss.
-
-## Social Title
-Architecture Decision Record: Validasi Integritas Silsilah Keputusan di Git
-
-## Social Description
-Bedah sistem validasi ADR di Go: parser regex Markdown, pemeriksa penomoran monotonik, pencegahan tautan putus supersedes, dan status rejected.
-
-## Karakter Hitung
-- SEO Title: 59 karakter (Target: <= 60 karakter)
-- SEO Description: 154 karakter (Target: 140–156 karakter)
+## Tag Medium
+1. Software Architecture
+2. Go
+3. Engineering Management
+4. Devops
+5. Code Quality

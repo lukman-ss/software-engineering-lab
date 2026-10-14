@@ -1,233 +1,89 @@
 ---
-title: "Architecture Decision Records: Enforcing Lineage and Integrity with Automated Linting"
+title: "Architecture Decision Record: Parser and Linter for Structural Validation of Architectural Decisions"
 published: false
-description: "Maintain architectural history in Git. Parse Markdown ADRs, enforce monotonic IDs, and validate bidirectional supersession links with automated linting."
-tags: go, architecture, testing, devops
+description: "Explore Architecture Decision Record in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
-# Architecture Decision Records: Enforcing Lineage and Integrity with Automated Linting
+# Architecture Decision Record: Parser and Linter for Structural Validation of Architectural Decisions
 
-Software systems suffer when engineering teams lose the historical context behind technical choices. When engineers rotate or scale increases, questions inevitably emerge: why was a modular monolith chosen over microservices? Why was event sourcing rejected for order management?
+A production system must remain resilient under load. Lab 17 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-Without a durable record of why a choice was made and what constraints dictated it at that moment, teams encounter two predictable failure modes:
-1. Reversing past decisions arbitrarily without understanding original constraints.
-2. Clinging to outdated patterns blindly even after system load and organization size outgrow them.
+> Architectural context without structural records becomes tribal knowledge.
 
-Traditional architecture documentation stored in third-party wikis drifts out of sync with code branches. Architecture Decision Records (ADRs) solve this by co-locating lightweight Markdown records directly inside the codebase. 
+## Konteks Keputusan Arsitektur Hilang Tanpa Jejak
 
-> Architecture decisions must form an immutable, verifiable directed acyclic graph. Once accepted, records are never edited retroactively; they are superseded through explicit bidirectional lineage.
+Putaran architect merangkap code review: pertanyaan berulang 'kenapa kita pilih X?' di every PR. Keputusan diambil via chat atau meeting, lalu tenggelam dalam commit history. ADR lama tidak diperbarui saat sistem berubah; status dokumentasi drift dari kode aktual. Re-debate arsitektur lama memakan waktu engineering sprint tanpa solusi baru. Keputusan yang salah diterapkan karena engineer tidak mengetahui ADR penggantian.
 
-Lab 17 demonstrates an automated parser and structural integrity linter in Go that treats ADRs as executable architectural invariants.
+## Review Markdown Manual Lupa Relasi Penggantian
 
-```
-ADR LINEAGE LIFECYCLE:
+ADR 1 tetap berstatus 'Accepted' padahal sudah diganti ADR 2 — lupa di-update. ADR 2 menulis 'Supersedes: 1', tapi ADR 1 tidak pernah dicatat 'Superseded by 2'. Penomoran loncat: ADR 1, ADR 3 langsung — engineer lupa insert ADR 2. Status informal seperti 'Draft', 'In Review' diterima tanpa penolakan. ADR 1 ber-status Superseded by 99, padahal ADR 99 belum pernah dibuat.
 
-  [ Proposed ] ──> [ Accepted ] ──> [ Superseded by N ] ──> [ Deprecated ]
-        │                                  ▲
-        └──> [ Rejected ]                  │ (Supersedes: M)
-                                    [ ADR N (Accepted) ]
-```
+## ADR Bukan Dokumen, Tapi Record yang Bisa Dicek
 
-Repository implementation reference:
-- Git Commit: `4636359a4376246c0af2abdea360ac0b014c7bc4`
-- Target Path: `labs/17-architecture-decision-record`
+ADR diolah sebagai data, bukan sekadar teks human-readable. Parser mengekstrak ID, Title, Status, SupersededBy, Supersedes, Content. Linter memvalidasi aturan: monotonik ID, valid status, relasi timbal-balik. Keputusan arsitektur tetap ditulis manusiawi; mesin hanya memeriksa format.
 
----
+## Pipeline: Markdown → Parser → Records → Linter
 
-## What Qualifies as an Architectural Decision?
+[Markdown ADR Text] → adr.Parser (Regex extraction: ID, Title, Status, refs) → []*adr.Record (In-Memory Structs) → adr.Linter.Validate(records)   ├─ Monotonic numbering check: sort + sequential scan   ├─ Cycle detection: DFS with visiting/visited states   └─ Bidirectional lineage: goroutines + sync.Mutex per-record validation → []error (empty = valid, non-empty = integrity breach)
 
-Not every code change or pull request warrants an ADR. Following Michael Nygard (2011) and Olaf Zimmermann (2020), an ADR is reserved strictly for Architecturally Significant Requirements (ASRs):
-
-- **Structure:** Subsystem boundaries, modular monolith vs microservices, packaging constraints.
-- **Non-Functional Requirements (NFRs):** Latency SLAs, scalability limits, failure isolation boundaries.
-- **Dependencies:** Selection of primary databases, message brokers, core frameworks.
-- **Interfaces:** Inter-service protocols (REST vs gRPC vs asynchronous messaging).
-- **Construction Techniques:** Testing standards, transaction handling strategies.
-
-Routine bug fixes, method refactoring, and local variable naming stay in commit messages and pull requests.
-
----
-
-## The ADR State Machine
-
-The parser models decision lifecycle states via strongly-typed status constants in `internal/adr/models.go`:
+## Struct Record: Definisi Inti ADR
 
 ```go
-// internal/adr/models.go:3-11
 type Status string
 
 const (
-	StatusProposed   Status = "Proposed"
-	StatusAccepted   Status = "Accepted"
-	StatusSuperseded Status = "Superseded"
-	StatusDeprecated Status = "Deprecated"
-	StatusRejected   Status = "Rejected"
+    StatusProposed   Status = "Proposed"
+    StatusAccepted   Status = "Accepted"
+    StatusSuperseded Status = "Superseded"
+    StatusDeprecated Status = "Deprecated"
+    StatusRejected   Status = "Rejected"
 )
-```
 
-Each record struct stores identifier metadata and bidirectional replacement links:
-
-```go
-// internal/adr/models.go:22-29
 type Record struct {
-	ID           int
-	Title        string
-	Status       Status
-	SupersededBy int // 0 if not superseded
-	Supersedes   int // 0 if does not supersede
-	Content      string
+    ID           int
+    Title        string
+    Status       Status
+    SupersededBy int // 0 if not superseded
+    Supersedes   int // 0 if does not supersede
+    Content      string
 }
 ```
 
-The lifecycle follows strict semantic rules:
-- `Proposed`: Under active team evaluation.
-- `Accepted`: Approved and actively binding for the architecture.
-- `Superseded`: No longer active; replaced by a subsequent record.
-- `Deprecated`: Decommissioned without a direct replacement.
-- `Rejected`: Evaluated and formally denied. Documenting rejection grounds prevents cyclical debates from resurfacing without fresh technical evidence.
+## Supersesi Patah: ADR 1 Merujuk ke ADR 99
 
----
-
-## Failure Scenarios in Unchecked ADR Directories
-
-When ADRs are maintained as free-form Markdown without automated validation, documentation integrity deteriorates rapidly:
-
-1. **Dangling Supersession Link:** An ADR marks `Status: Superseded by 99`, but ADR 99 does not exist in the repository.
-2. **One-Sided Supersession:** A new ADR declares `Supersedes: 1`, but ADR 1 remains marked as `Status: Accepted`, creating contradictory active guidance.
-3. **Non-Monotonic Numbering:** ADR IDs skip numbers (e.g., jump from 0001 to 0003), leaving ambiguity over whether a record was deleted or lost in a merge conflict.
-4. **Self-Supersession & Loops:** ADR 1 states `Superseded by 1` or cyclic dependencies emerge (`1 -> 2 -> 3 -> 1`).
-5. **Missing Mandatory Sections:** Authors omit `Context`, `Decision`, or `Consequences`, degrading the record to an unsubstantiated edict.
-
----
-
-## Parsing Markdown into Structured Invariants
-
-The parser in `internal/adr/parser.go` uses deterministic regular expressions to extract structured metadata and verify section integrity:
+TestLinter_BrokenReferences / superseded points to non-existent → PASS TestLinter_BrokenReferences / supersedes points to non-existent → PASS
 
 ```go
-// internal/adr/parser.go:12-18
-var (
-	titleRegex        = regexp.MustCompile(`^#\s+(\d+)\.\s+(.+)$`)
-	statusRegex       = regexp.MustCompile(`(?i)^Status:\s*([A-Za-z]+)(?:\s+by\s+(\d+))?`)
-	supersedesRegex   = regexp.MustCompile(`(?i)^Supersedes:\s*(\d+)`)
-	contextRegex      = regexp.MustCompile(`(?i)^##\s+Context`)
-	decisionRegex     = regexp.MustCompile(`(?i)^##\s+Decision`)
-	consequencesRegex = regexp.MustCompile(`(?i)^##\s+Consequences`)
-)
+superseded points to non-existent:
+  ADR 1: Status Superseded by 99
+  → Error: superseded by non-existent ADR 99
+
+supersedes points to non-existent:
+  ADR 1: Status Accepted, Supersedes: 99
+  → Error: supersedes non-existent ADR 99
 ```
 
-During scanning, `Parse` confirms that `Context`, `Decision`, and `Consequences` are present and contain substantive non-empty text:
+## Biaya Tersembunyi: Lineage Drift Tanpa Deteksi
 
-```go
-// internal/adr/parser.go:118-128
-if !foundContext || !contextHasContent {
-	return nil, fmt.Errorf("context section missing or empty")
-}
-if !foundDecision || !decisionHasContent {
-	return nil, fmt.Errorf("decision section missing or empty")
-}
-if !foundConsequences || !consequencesHasContent {
-	return nil, fmt.Errorf("consequences section missing or empty")
-}
-```
+Time to detect | Cause | Impact
+|---|---|---|
+Instant (CI) | Linter reject di PR | Build gagal, engineer feedback loop cepat
+Mingguan | Manual audit dokumentasi | Engineer kebingungan siapa yang aktif
+Bulanan | Production incident review | Tim kehilangan konteks keputusan penting
+Selamanya | Keputusan salah diterapkan | Sistem berkembang dengan asumsi keliru
 
----
+## Setup Eksperimen: 3 ADR Evolusi Arsitektur
 
-## Validating Lineage and Monotonicity Concurrently
+ADR 0001: Use Modular Monolith for Core SaaS ERP | Status: Superseded by 2 ADR 0002: Extract Notification Service to Microservice | Status: Accepted, Supersedes: 1 ADR 0003: Reject Event Sourcing for Order Management | Status: Rejected  Test suite: parser_test.go (valid + superseded + supersedes + invalid cases) Test suite: linter_test.go (valid sequence + 7 broken reference scenarios + concurrency)
 
-The linter (`internal/adr/linter.go`) performs integrity checks in three sequential phases:
+## Output Demo: Parsing Berhasil, Linter Lolos
 
-### 1. Monotonic ID Sequence Check
-
-```go
-// internal/adr/linter.go:34-39
-for i := 0; i < len(ids); i++ {
-	if ids[i] != i+1 {
-		errs = append(errs, fmt.Errorf("non-monotonic numbering, expected %d but got %d", i+1, ids[i]))
-		break
-	}
-}
-```
-
-### 2. Cycle Detection in Supersession Chains
-
-A depth-first search graph traversal detects directed cycles in `SupersededBy` chains:
-
-```go
-// internal/adr/linter.go:42-56
-state := make(map[int]int) // 0: unvisited, 1: visiting, 2: visited
-var detectCycle func(id int)
-detectCycle = func(id int) {
-	state[id] = 1
-	rec, exists := recordMap[id]
-	if exists && rec.SupersededBy != 0 && rec.SupersededBy != rec.ID {
-		nextID := rec.SupersededBy
-		if state[nextID] == 1 {
-			errs = append(errs, fmt.Errorf("cyclical supersession detected involving ADR %d", nextID))
-		} else if state[nextID] == 0 {
-			detectCycle(nextID)
-		}
-	}
-	state[id] = 2
-}
-```
-
-### 3. Concurrent Bidirectional Verification
-
-Each record is validated across goroutines using a `sync.WaitGroup` and `sync.Mutex` for error aggregation:
-
-```go
-// internal/adr/linter.go:72-85
-if rec.Status == StatusSuperseded {
-	if rec.SupersededBy == rec.ID {
-		localErrs = append(localErrs, fmt.Errorf("ADR %d cannot supersede itself", rec.ID))
-	} else if rec.SupersededBy == 0 {
-		localErrs = append(localErrs, fmt.Errorf("ADR %d is superseded but missing superseded_by reference", rec.ID))
-	} else {
-		replacement, exists := recordMap[rec.SupersededBy]
-		if !exists {
-			localErrs = append(localErrs, fmt.Errorf("ADR %d superseded by non-existent ADR %d", rec.ID, rec.SupersededBy))
-		} else if replacement.Supersedes != rec.ID {
-			localErrs = append(localErrs, fmt.Errorf("ADR %d superseded by ADR %d, but ADR %d does not declare it supersedes ADR %d", rec.ID, rec.SupersededBy, rec.SupersededBy, rec.ID))
-		}
-	}
-}
-```
-
-If record $A$ is marked `Superseded by B`, record $B$ must exist and explicitly declare `Supersedes: A`. Conversely, if record $B$ declares `Supersedes: A`, record $A$ must exist and have status `Superseded` with `SupersededBy: B`.
-
----
-
-## Case Study: SaaS ERP Architecture Evolution
-
-The demo executable (`cmd/demo/main.go`) evaluates a realistic architectural progression across three records:
-
-```
-[ ADR 0001: Modular Monolith ]  (Superseded by 2)
-              │
-              ▼
-[ ADR 0002: Notification Microservice ]  (Supersedes: 1)
-
-[ ADR 0003: Reject Event Sourcing ]  (Rejected)
-```
-
-1. **ADR 0001 (Modular Monolith):** Adopted when the team has 5 engineers and domain boundaries are evolving rapidly.
-   - *Forces:* Fast iteration, ACID transactional integrity, single deployable artifact.
-   - *Review Trigger:* Team size exceeds 20 engineers or specific subdomains experience burst loads.
-2. **ADR 0002 (Extract Notification Microservice):** Adopted when team size reaches 25 engineers and notification bursts impair core transaction throughput.
-   - Updates ADR 0001 to `Status: Superseded by 2`.
-   - ADR 0002 declares `Supersedes: 1`.
-   - Isolates failure domains at the expense of distributed consistency overhead.
-3. **ADR 0003 (Reject Event Sourcing):** Evaluated for order management audit history.
-   - Rejected because standard relational audit tables satisfy legal compliance without introducing event schema evolution and eventual consistency complexity.
-   - Preserves historical consensus against premature architectural rewrites.
-
-Executing `cmd/demo/main.go` parses all three records and passes all linter invariants:
-
-```text
+```sh
+$ go run ./cmd/demo
 === Architecture Decision Record (ADR) Lab ===
 Successfully parsed 3 ADRs:
-  - [0001] Use Modular Monolith for Core SaaS ERP        | Status: Superseded -> Superseded by ADR 2
+  - [0001] Use Modular Monolith for Core SaaS ERP | Status: Superseded -> Superseded by ADR 2
   - [0002] Extract Notification Service to Microservice  | Status: Accepted   -> Supersedes ADR 1
   - [0003] Reject Event Sourcing for Order Management    | Status: Rejected  
 
@@ -235,32 +91,79 @@ Running ADR Integrity Linter...
 Integrity check passed! Decision lineage and lifecycle invariants are intact.
 ```
 
----
+## Apa Artinya Linter Passed di Lab Ini?
 
-## What the Test Suite Actually Proves
+Format parsing: judul, status, dan tautan supersesi terstruktur dengan benar. Monotonik: ID 1, 2, 3 berurutan tanpa celah. Bidirectional: ADR 1 ↔ ADR 2 memiliki tautan timbal-balik yang lengkap. Cycle-free: tidak ada sirkuit dalam graf supersesi. Kebenaran keputusan arsitektur di dalam field Content. Apakah ADR 1 seharusnya benar-benar digantikan ADR 2 di dunia nyata. Kesiapan sistem untuk production deployment.
 
-The test suite consists of unit tests in `tests/parser_test.go` and `tests/linter_test.go`:
+## Trade-off: Enforced Structure vs Dokumentasi Fleksibel
 
-| Test Function | Target Behavior | Verified Invariant |
-| :--- | :--- | :--- |
-| `TestParse_Valid` | Valid ADR markdown | Correct extraction of ID, Title, Status, and Section contents |
-| `TestParse_Superseded` | `Status: Superseded by 2` | Parses `SupersededBy` field value accurately |
-| `TestParse_Supersedes` | `Supersedes: 1` clause | Parses `Supersedes` dependency pointer accurately |
-| `TestParse_Invalid` | Missing header, status, sections | Rejects malformed records and empty Context/Decision/Consequences |
-| `TestLinter_ValidSequence` | Coherent 3-record lineage | Zero errors reported on valid lineage |
-| `TestLinter_BrokenReferences` | Structural anomalies | Catches dangling pointer, one-sided link, non-monotonic ID, self-supersession, duplicate ID, and cyclic links |
-| `TestLinter_ConcurrencyStress` | 100 alternating records | Passes concurrent validation without data race (`-race`) |
+Regex-based parsing memaksa format fixed (## Context, ## Decision, ## Consequences). Status wajib dari 5 enum resmi; status informal ditolak parser. Supersedes/SupersededBy wajib konsisten secara timbal-balik. Tidak mendukung ADR yang memerlukan struktur sub-section kustom di luar 3 section wajib. Tidak memvalidasi kualitas argumen dalam section Decision. Tidak menangani kasus ADR multi-author atau decision yang melibatkan beberapa sub-system.
 
-All 23 tests pass cleanly under `go test -race ./...`.
+## Validasi Paralel: Goroutine + Mutex untuk Agregasi Error
 
----
+```go
+var wg sync.WaitGroup
+for _, r := range records {
+    wg.Add(1)
+    go func(rec *Record) {
+        defer wg.Done()
+        var localErrs []error
+        // ... validate rec, append localErrs ...
+        if len(localErrs) > 0 {
+            mu.Lock(); errs = append(errs, localErrs...); mu.Unlock()
+        }
+    }(r)
+}
+wg.Wait()
+```
 
-## Production Boundaries and Limitations
+## Before vs After: Otomasi Linter Menghilangkan Human Error
 
-This implementation isolates structural ADR verification. Note the explicit boundaries:
+Lineage break: ADR 1 Superseded by 2, ADR 2 tidak memiliki Supersedes: 1 → TIDAK TERDETEKSI Non-monotonic ID: ADR 1, ADR 3 meloncat → TIDAK TERDETEKSI selagi tidak inspect semua file Invalid status 'Draft' masuk ke repo → TIDAK TERDETEKSI oleh regex sederhana Self-supersession: ADR 1 Superseded by 1 → TIDAK TERDETEKSI Semua kasus di atas ditolak oleh TestLinter_BrokenReferences dalam <1ms CI gate menolak merge jika linter menemukan error Concurrent stress test membuktikan tidak ada race pada agregasi error
 
-1. **Strict Regex Parsing:** The parser expects exact `# <ID>. <Title>` and markdown section headings. It is not an arbitrary CommonMark AST parser.
-2. **In-Memory Strings:** The demo and tests execute against in-memory markdown strings rather than directly traversing the Git working tree.
-3. **No Automated Git Hook Integration:** The lab demonstrates the validation logic; wiring it into `.git/hooks/pre-commit` or GitHub Actions workflows is left to the infrastructure pipeline.
-4. **Contextual Example:** The SaaS ERP case study illustrates lifecycle mechanics, not an absolute architectural doctrine.
-5. **Structural vs. Semantic Validation:** Automated linters guarantee structural integrity, ID continuity, and referential completeness. They cannot evaluate whether an architectural decision is sound. Peer review remains essential.
+## Batasan Lab: Validasi Format, Bukan Kualitas Keputusan
+
+Parsing teks Markdown ke struct Record dengan regex. Memvalidasi urutan ID monotonik dan uniqueness. Memeriksa konsistensi timbal-balik SupersededBy ↔ Supersedes. Mendeteksi siklus dalam graf supersesi. Tidak menilai kualitas argumen di dalam section Decision. Tidak memverifikasi apakah ADR cocok dengan implementasi kode aktual. Tidak memeriksa apakah engineer sudah mendapatkan approval stakeholder sebelum Accepted. Simulasi ini tidak sama dengan production ADR management system seperti ADRtool atau Architect.js.
+
+## Edge Case: Keputusan Dibatalkan Tanpa ADR Baru
+
+ADR X berstatus Accepted, tapi tim memutuskan berhenti menggunakan fitur tersebut. Tanpa ADR baru, status ADR X tetap Accepted —误导 engineer lain以为 masih relevan. Solusi: buat ADR baru berstatus Deprecated merujuk ke alasan penghentian. Kegagalan: engineer menghapus file ADR langsung → lineage history hilang. Wajibkan policy tim: setiap penghentian fitur memerlukan ADR Deprecated baru. Linter bisa diperluas untuk mendeteksi ADR Accepted yang tidak memiliki successor dalam 12 bulan.
+
+## Apa yang Dibuktikan Oleh Test Suite
+
+TestParse_Valid: ID=1, Status=Accepted → PASS TestParse_Superseded: SupersededBy=2 berhasil diekstrak → PASS TestParse_Supersedes: Supersedes=1 berhasil diekstrak → PASS TestParse_Invalid: missing_title, missing_status, invalid_status, empty sections → semua PASS TestLinter_ValidSequence: 3 ADR valid, zero errors → PASS TestLinter_BrokenReferences: 7 sub-case (non-existent ref, mismatch, non-monotonic, self-super, duplicate ID, cyclical) → semua PASS TestLinter_ConcurrencyStress: concurrent validation, no data race → PASS
+
+## Apa yang Tidak Dibuktikan Oleh Test Suite
+
+Kebenaran konten arsitektur di dalam section Decision dan Consequences. Adopsi ADR oleh seluruh anggota tim sesuai format yang ditetapkan. Integrasi linter dengan CI/CD pipeline (hanya test Go murni, bukan GitHub Actions). Skalabilitas linter pada ribuan ADR (hanya 3 record dalam demo, 3-7 dalam test). Parser bekerja pada string literal, bukan file system read dari ribuan dokumen Markdown.
+
+## Risiko Produksi: False Confidence dari Linter Hijau
+
+Tim percaya ADR collection-nya 'bersih' hanya karena linter passing, padahal argumen Decision lemah. Engineer bisa mengisi Content dengan placeholder kosong selama section ada → linter tetap passing. Policy tim yang tidak enforcing bisa di-skip tanpa konsekuensi jika gate CI tidak dipasang. Tambah human review checkpoint: ADR Accepted wajib ditinjau architecture board. Validasi minimum content length pada section Context dan Decision.
+
+## Implementation Checklist: Menerapkan ADR Linter di Tim
+
+[ ] Define ADR template Markdown dengan 3 section wajib: Context, Decision, Consequences. [ ] Implement parser regex yang mengekstrak ID, Title, Status, SupersededBy, Supersedes. [ ] Tambahkan status enum valid (Proposed, Accepted, Superseded, Deprecated, Rejected). [ ] Implement linter dengan validasi monotonik + bidirectional supersession + cycle detection. [ ] Integrasikan ke CI/CD: go test ./... atau custom binary di PR gate. [ ] Dokumentasikan policy tim: setiap perubahan keputusan wajib ADR baru, bukan edit retroaktif.
+
+## Anti-Pattern: 5 Kebiasaan Buruk Saat Mengadopsi ADR
+
+Mengklik ADR untuk segala hal: refactor kecil, penamaan variabel → noise berlebihan. Mengedit ADR yang sudah Accepted secara silent, tanpa membuat ADR baru (retroactive edit). Menulis ADR hanya sebagai catatan meeting tanpa section Decision yang eksplisit. Status 'Draft' bertahan terlalu lama tanpa transisi ke Accepted atau Rejected. Melupakan update SupersededBy pada ADR lama saat ADR baru dibuat.
+
+## Reproduksi Mandiri: Jalankan Demo dan Test di Lokal
+
+TestParse_*: semua PASS TestLinter_*: semua PASS (14 sub-case total) go test -race: race detector clean Demo: 3 ADR parsed, Integrity check passed
+
+```sh
+cd labs/17-architecture-decision-record
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo
+```
+
+## ADR Diubah Jadi Data yang Bisa Dicek, Bukan Hanya Dokumen
+
+ADR yang diparse menjadi struct Record memungkinkan validasi otomatis yang tidak bisa dilakukan humans dengan andal. Bidirectional supersession link adalah invarian yang paling sering rusak; linter menangkapnya di detik pertama. Konkurensi goroutine + mutex pattern untuk error aggregation adalah reusable pattern untuk validation framework lain. Format standar membantu review; kualitas keputusan tetap ditentukan isi ADR.
+
+## Source
+
+[Software Engineering Lab 17 - Architecture Decision Record](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record), snapshot commit `def0f5a`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
