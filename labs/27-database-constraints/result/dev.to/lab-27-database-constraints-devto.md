@@ -1,63 +1,35 @@
 ---
-title: "Database Constraints: The Last Line of Data Integrity"
+title: "Database Constraints: The Last Line of Data Integrity: Preventing Race Conditions, Enforcing Schema Invariants, and Rejecting Duplicates Atomically in Go"
 published: false
-description: "Prevent race conditions, enforce schema invariants, and reject duplicates atomically in Go — with SQLSTATE taxonomy, partial indexes, and 50-goroutine stress tests."
-tags: go,database,integrity,concurrency,sqlstate
+description: "Explore Database Constraints: The Last Line of Data Integrity in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
-# Database Constraints: The Last Line of Data Integrity
+# Database Constraints: The Last Line of Data Integrity: Preventing Race Conditions, Enforcing Schema Invariants, and Rejecting Duplicates Atomically in Go
 
-Many backend architectures delegate data integrity entirely to application code. Under concurrent load, naive validation lets duplicate records and orphaned relations slip into persistent storage. Lab 27 empirically demonstrates how database constraints act as the unbreachable, atomic last line of defense — using a pure Go in-memory simulator under 50 concurrent goroutines.
+A production system must remain resilient under load. Lab 27 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-> Database constraints provide declarative, ACID-guaranteed enforcement that eliminates check-then-act vulnerabilities.
+> Application-level checks cannot bridge the race window between read and write operations under concurrency.
 
-## Real-World Problem: Application Validation Collapses Under Concurrency
+## Validasi Aplikasi Runtuh di Bawah Beban Konkuren
 
 The check-then-act pattern inspecting records via SELECT before issuing an INSERT invariably succeeds in sequential testing. Under concurrent traffic, however, two threads observe the same pre-write state before either commits. This failure does not stem from faulty conditional logic, but from lacking atomic isolation at the persistence tier.
 
-Duplicate detection via application-level memory checks leaves a race window that CPU scheduling can exploit. Manual deduplication in production demands reconciliation, complex migrations, and downtime. Unit tests without concurrency are misleading — they create an illusion of safety.
-
-## Why Manual Review and Naive Approaches Fail
+## Mengapa Review Manual dan Pengecekan Memori Gagal?
 
 Code reviews routinely miss integrity vulnerabilities because application-level checks appear impeccably structured on screen. Sequential unit tests pass reliably, fostering false confidence across engineering teams. Running validations purely in application services does not automatically ensure integrity without atomic database constraints.
 
-Three specific weaknesses exist:
+## Model Mental Dua Lapis: Kolaborasi Aplikasi dan Database
 
-1. **CPU scheduling interleaving** — milliseconds between SELECT and INSERT are enough for another thread to interleave.
-2. **Sequential unit tests deceive** — 100% pass rates with no goroutines create a false sense of correctness.
-3. **No automatic protection** — running validation in a separate microservice still lacks atomic locking.
+Modern software architectures divide integrity responsibilities into two layers: the application handles user experience, while the database guarantees absolute correctness. Application validation filters invalid formats swiftly. Only along this path, when concurrent collisions occur, does the database reject violations atomically with standard SQLSTATE codes.
 
-## Two-Layer Defense: Application and Database Collaboration
+## Urutan Evaluasi Constraint: Alur Validasi Internal Mesin
 
-Modern software architectures divide integrity responsibilities into two layers: the application handles user experience, while the database guarantees absolute correctness.
+The storage engine evaluates schema constraints in a deterministic sequence: NOT NULL runs first, followed by CHECK boolean expressions, UNIQUE index scans, and FOREIGN KEY verification. If any check fails, execution aborts immediately without mutating tables or indexes. This lab models this sequential evaluation atomically within a unified critical section.
 
-| Layer | Role | Responsibility |
-|---|---|---|
-| Application Validation | User Experience (UX) | Friendly error messages, fast format validation, input sanitization before the request reaches the database |
-| Database Constraints | Last Line of Truth | Declarative, atomic schema invariant enforcement with internal engine locks at write time |
-| Error Mapping Bridge | SQLSTATE Taxonomy | Maps database error 23xxx into structured domain errors like HTTP 409 Conflict |
+## Evaluasi Atomik Constraint di Bawah Mutex Lock
 
-Application validation filters invalid formats swiftly. Only along the path where concurrent collisions occur does the database reject violations atomically with standard SQLSTATE codes.
-
-## Constraint Evaluation Pipeline: Deterministic Internal Flow
-
-The storage engine evaluates schema constraints in a deterministic sequence:
-
-```
-NOT NULL (23502) → CHECK (23514) → UNIQUE / PARTIAL (23505) → FOREIGN KEY (23503) → ATOMIC COMMIT
-```
-
-1. **NOT NULL** — checks column emptiness; fails immediately if a mandatory field is empty.
-2. **CHECK** — evaluates boolean expressions on the row (e.g., `age >= 18`).
-3. **UNIQUE / PARTIAL** — scans B-tree indexes under exclusive lock protection.
-4. **FOREIGN KEY** — verifies parent record existence before commit.
-5. **ATOMIC COMMIT** — writes row data and index entries simultaneously.
-
-If any check fails, execution aborts immediately without mutating tables or indexes. This lab models this sequential evaluation atomically within a unified critical section.
-
-## Atomic Constraint Evaluation Under Mutex Lock
-
-The `InsertUser` method executes all constraint checks inside an exclusive mutex lock representing PostgreSQL's ROW EXCLUSIVE lock:
+The InsertUser method executes all constraint checks inside an exclusive mutex lock representing PostgreSQL's ROW EXCLUSIVE lock. Locking the critical section does not mean this lab implements low-level B-tree page latches; it cleanly models atomic guarantees so competing goroutines cannot insert conflicting emails.
 
 ```go
 func (e *Engine) InsertUser(u model.User, usePartial bool) (model.User, error) {
@@ -73,48 +45,31 @@ func (e *Engine) InsertUser(u model.User, usePartial bool) (model.User, error) {
 }
 ```
 
-Locking the critical section models atomic guarantees cleanly — it does not implement low-level B-tree page latches, but ensures no competing goroutine can insert a conflicting email during evaluation.
+## Kronologi Tabrakan: Dua Goroutine pada Validasi Naif
 
-## Race Condition Chronicle: Two Goroutines on Naive Validation
+When two goroutines execute UnsafeStore.RegisterUser concurrently, both observe that the requested email does not yet exist. CPU scheduling delays expose a vulnerability window, prompting both threads to issue INSERT calls. Only along this path do duplicate records infiltrate storage, proving memory checks without constraints are powerless.
 
-When two goroutines execute `UnsafeStore.RegisterUser` concurrently, both observe that the requested email does not yet exist. CPU scheduling delays expose a vulnerability window, prompting both threads to issue INSERT calls.
+## Matriks Taksonomi: Jenis Constraint vs Karakteristik
 
-The chronology:
+This matrix charts the five constraint mechanisms verified in our lab alongside standard PostgreSQL Class 23 SQLSTATE codes. Each mechanism addresses a distinct integrity dimension, ranging from single-column presence to cross-table referential integrity. Inspecting SQLSTATE codes enables backends to map low-level database errors into semantic HTTP responses.
 
-1. **Concurrent check** — Goroutine A and B both scan the table and read that the email is absent.
-2. **CPU scheduling gap** — Both enter a scheduling delay (`time.Sleep`) exposing the race window.
-3. **Dual write success** — Goroutine A writes the row; Goroutine B immediately follows with the same email.
-4. **Integrity collapse** — The table now holds 2 rows with identical email, violating the uniqueness invariant.
-
-Uncoordinated concurrent reads before unconstrained writes guarantee permanent data corruption.
-
-## Taxonomy Matrix: Constraint Types vs Characteristics
-
-This matrix charts the five constraint mechanisms verified in our lab alongside standard PostgreSQL Class 23 SQLSTATE codes:
-
-| Constraint Type | SQLSTATE | Evaluation Scope | Failure Prevention | HTTP Domain Mapping |
+Jenis Constraint | SQLSTATE | Cakupan Evaluasi | Pencegahan Kegagalan | HTTP Domain Mapping
 |---|---|---|---|---|
-| NOT NULL | 23502 | Single Column | Prevents identity-less empty records | 400 Bad Request |
-| CHECK | 23514 | Column / Row | Rejects values outside business-logical bounds | 422 Unprocessable Entity |
-| UNIQUE | 23505 | Cross-Row (Index) | Prevents duplicate registration race condition | 409 Conflict |
-| FOREIGN KEY | 23503 | Cross-Table | Prevents orphan records (missing parent) | 400 Reference Error |
-| PARTIAL UNIQUE | 23505 | Conditional Rows | Allows email reuse after soft-delete | 409 Conflict |
+NOT NULL | 23502 | Kolom Tunggal | Mencegah record kosong tak beridentitas | 400 Bad Request
+CHECK | 23514 | Kolom / Baris | Menolak nilai di luar batas bisnis logis | 422 Unprocessable Entity
+UNIQUE | 23505 | Antar Baris (Index) | Mencegah race condition registrasi ganda | 409 Conflict
+FOREIGN KEY | 23503 | Lintas Tabel | Mencegah orphan record (induk tidak ada) | 400 Reference Error
+PARTIAL UNIQUE | 23505 | Baris Bersyarat | Mengizinkan reuse email pasca soft-delete | 409 Conflict
 
-Each mechanism addresses a distinct integrity dimension, ranging from single-column presence to cross-table referential integrity.
+## Tiga Keputusan Kunci Merancang Integritas Skema
 
-## Three Key Decisions for Schema Integrity Design
+Robust schema design begins by enforcing mandatory fields via NOT NULL and permissible ranges via CHECK. When handling unique entities that support soft deletion, implement partial unique indexes so recycled identifiers remain valid. Adding foreign keys does not mean database optimization is complete; referenced foreign keys require manual indexing to sustain query performance.
 
-Robust schema design begins by defining mandatory fields with NOT NULL and value boundaries with CHECK. When managing unique entities that support soft deletion, use a partial unique index so recycled identifiers remain valid. Adding foreign keys does not mean the job is complete — referenced foreign key columns require manual indexing to sustain query performance.
+## Verifikasi Eksekusi: Test Suite dan Stress Test 50 Goroutine
 
-1. **Mandatory & Row Predicates** — Apply NOT NULL and CHECK on every column with an explicit domain boundary.
-2. **Uniqueness & Deletion Pattern** — Choose standard UNIQUE for permanent entities, or Partial Index for soft-delete systems.
-3. **Relational Integrity & Indexing** — Install FOREIGN KEY to prevent orphan rows; manual indexing on referencing columns is still required.
+Execution output confirms that all test suites pass with zero warnings from the Go race detector. In the demo stress test featuring 50 concurrent goroutines submitting an identical email, the storage engine admitted exactly 1 registration while rejecting 49 attempts with error 23505. This demonstrates flawless 100% data integrity under sustained parallel load.
 
-## Execution Evidence: Test Suite and 50-Goroutine Stress Test
-
-Execution output confirms that all test suites pass with zero warnings from the Go race detector:
-
-```
+```go
 === RUN   TestNotNullConstraints
 --- PASS: TestNotNullConstraints (0.00s)
 === RUN   TestCheckConstraints
@@ -134,54 +89,25 @@ PASS: ok  labs/27-database-constraints/internal/store  1.330s (race: clean)
 Results: Total=50 | Successful=1 | Rejected 23505=49 | Integrity Intact=true
 ```
 
-The stress test features 50 concurrent goroutines submitting an identical email. The storage engine admitted exactly 1 registration while rejecting 49 attempts with error 23505. This confirms 100% data integrity under sustained parallel load.
+## Batasan Bukti Lab: Yang Dibuktikan vs Belum
 
-## Evidence Boundary: What Is and Is Not Proven
+This lab proves SQLSTATE semantics, atomic locking efficacy, and partial unique index mechanics using a pure Go in-memory simulator. The test suite has not yet proven distributed constraints across multi-node databases or GiST exclusion operators. Maintaining this empirical boundary ensures engineers do not conflate simulator testing with production database benchmarking.
 
-This laboratory has definitive limitations that must be understood to prevent overclaiming.
+## Kompromi Rekayasa: Constraints vs Fleksibilitas Skema
 
-**Proven:** SQLSTATE 23xxx semantics, race condition prevention via atomic lock, and the lifecycle of partial indexes — all using a pure Go in-memory simulator.
+Enforcing database constraints introduces minor write overhead during INSERTs as the engine inspects B-tree indexes and parent records. Furthermore, attaching constraints to massive production tables demands phased migration workflows to prevent prolonged table locks. However, this overhead does not degrade overall throughput when weighed against the catastrophic cost of data repair.
 
-**Not Proven:** Distributed multi-node constraints, SERIALIZABLE isolation, GiST exclusion operators, real B-tree latches, and `ALTER TABLE ADD CONSTRAINT NOT VALID` migration techniques on massive production tables.
+## Pipeline Validasi Konkuren: Goroutine vs Mutex Lock
 
-The test suite has not been verified against actual PostgreSQL or any distributed storage engine. Maintaining this empirical boundary ensures engineers do not conflate simulator testing with production database benchmarking.
+This diagram visualizes how the storage engine handles 50 concurrent goroutines racing to register an identical email. The mutex serializes execution at the write boundary, allowing the initial winner to commit its record. All subsequent goroutines are deterministically rejected by the unique index lookup, proving that atomic isolation eliminates race windows entirely.
 
-## Engineering Trade-offs: Constraints vs Schema Flexibility
+## Transformasi: Dari UnsafeStore ke SafeStore
 
-Enforcing database constraints introduces minor write overhead during INSERTs as the engine inspects B-tree indexes and parent records. Furthermore, attaching constraints to massive production tables demands phased migration workflows to prevent prolonged table locks.
+Prior to implementing database constraints, UnsafeStore relied on in-memory loops that collapsed under 20 concurrent goroutines, allowing duplicate rows. Migrating to SafeStore delegates integrity to the storage engine, guaranteeing exactly one winner among 50 parallel requests. Retaining application validation upfront does not represent redundancy; it provides an essential bridge for friendly client feedback.
 
-However, this overhead does not degrade overall throughput when weighed against the catastrophic cost of data repair. The cost model is:
+## Verifikasi Test: Membuktikan Kebocoran Data pada UnsafeStore
 
-- **Write overhead** — every INSERT/UPDATE must evaluate B-tree indexes and FK relationships, adding marginal latency.
-- **Migration friction** — adding constraints on billion-row tables requires exclusive table locks unless phased validation patterns are used.
-- **Not inherently slow** — constraint index additions do not automatically degrade system performance; write overhead is repaid by guaranteed integrity.
-
-## Concurrent Pipeline: Goroutines vs Mutex Lock
-
-This diagram visualizes how the storage engine handles 50 concurrent goroutines racing to register an identical email:
-
-1. **50 Goroutines Spawn** — 50 workers run simultaneously attempting to register `race-target@domain.com`.
-2. **Mutex Lock Serialization** — The first goroutine acquires the exclusive lock; 49 workers queue orderly.
-3. **First Insert Success** — Worker 1 passes checks, commits the email to the table and index map, then releases the lock.
-4. **49 Abort SQLSTATE 23505** — Workers 2–50 enter the lock sequentially, detect the email already exists, and receive error 23505.
-
-Atomic serialization at the write boundary transforms concurrent race conditions into deterministic rejections. The mutex ensures only one writer succeeds; all competitors receive clean constraint violations.
-
-## Transformation: UnsafeStore to SafeStore
-
-Prior to implementing database constraints, UnsafeStore relied on in-memory loops that collapsed under 20 concurrent goroutines, allowing duplicate rows. Migrating to SafeStore delegates integrity to the storage engine, guaranteeing exactly one winner among 50 parallel requests. Retaining application validation upfront does not represent redundancy — it provides an essential bridge for friendly client feedback.
-
-| Before: UnsafeStore (App Check) | After: SafeStore (DB Constraint) |
-|---|---|
-| Relies on in-memory loop scanning | Delegates to storage engine |
-| 20 goroutines produce >1 duplicate user | 50 goroutines produce exactly 1 user + 49 SQLSTATE 23505 errors |
-| No atomicity guarantee | Atomic constraint enforcement |
-
-Retaining application validation serves as the initial filter for user-facing error messages; the database constraint serves as the final, unyielding gatekeeper.
-
-## Deep Analysis: UnsafeStore Race Condition Test
-
-This unit test empirically demonstrates that application-level validation collapses under concurrent workloads:
+This unit test empirically demonstrates that application-level validation collapses under concurrent workloads. Twenty goroutines submitting an identical email produce multiple duplicate records in the underlying table. The scope of this failure aligns strictly with lab tests, proving that systems lacking database constraints suffer inevitable data corruption under traffic spikes.
 
 ```go
 func TestConcurrentRegistration_Unsafe_SuffersRaceCondition(t *testing.T) {
@@ -198,11 +124,9 @@ func TestConcurrentRegistration_Unsafe_SuffersRaceCondition(t *testing.T) {
 }
 ```
 
-Twenty goroutines submitting an identical email produce multiple duplicate records in the underlying table. The scope of this failure aligns strictly with lab tests, proving that systems lacking database constraints suffer inevitable data corruption under traffic spikes.
+## Verifikasi Test: SafeStore Menjamin Tepat Satu Pemenang
 
-## Deep Analysis: SafeStore Uniqueness Enforcement Test
-
-This test verifies the resilience of SafeStore backed by engine constraints:
+This test verifies the resilience of SafeStore backed by engine constraints. Among 20 concurrently spawned goroutines, exactly one registration succeeds in persisting to storage, while the remaining 19 receive immediate rejections. Only along this path is table integrity strictly preserved at exactly 1 row, confirming the power of database-level protection.
 
 ```go
 func TestConcurrentRegistration_Safe_EnforcesUniqueness(t *testing.T) {
@@ -222,11 +146,9 @@ func TestConcurrentRegistration_Safe_EnforcesUniqueness(t *testing.T) {
 }
 ```
 
-Among 20 concurrently spawned goroutines, exactly one registration succeeds in persisting to storage, while the remaining 19 receive immediate rejections. Table integrity is strictly preserved at exactly 1 row, confirming the power of database-level protection.
+## Solusi Soft-Delete: Partial Unique Index WHERE deleted_at IS NULL
 
-## Deep Analysis: Partial Unique Index and Soft Delete
-
-Applying a standard UNIQUE constraint to tables with soft deletion creates severe friction: deactivated emails can never be re-registered. By leveraging a conditional Partial Unique Index with `WHERE deleted_at IS NULL`, the database enforces uniqueness exclusively on active rows.
+Applying a standard UNIQUE constraint to tables with soft deletion creates severe friction: deactivated emails can never be re-registered. By leveraging a conditional Partial Unique Index with WHERE deleted_at IS NULL, the database enforces uniqueness exclusively on active rows. Deactivated records are evicted from the index, allowing identifier recycling without conflict.
 
 ```go
 // PARTIAL UNIQUE: CREATE UNIQUE INDEX users_active_email_idx ON users (email) WHERE deleted_at IS NULL;
@@ -237,15 +159,13 @@ if usePartialUniqueIndex {
         }
     }
 }
-// On soft delete: delete(e.activeEmails, u.Email) -> email can be re-registered immediately
-// Rows with deleted_at != nil are not indexed, so multi-duplicate soft-deleted rows remain valid.
+// Saat soft delete: delete(e.activeEmails, u.Email) -> email langsung dapat didaftarkan kembali
+// Baris dengan deleted_at != nil tidak diindeks, sehingga multi-duplikat soft-delete tetap valid.
 ```
 
-Deactivated records are evicted from the index, allowing identifier recycling without conflict. Only active rows participate in the uniqueness predicate.
+## Mencegah Data Yatim Piatu dengan Foreign Key Constraint
 
-## Deep Analysis: Foreign Key Integrity — Preventing Orphan Records
-
-The `InsertOrder` function sequentially evaluates three constraints:
+The InsertOrder function sequentially evaluates three constraints: NOT NULL on UserID, CHECK on TotalCents, and referential FOREIGN KEY validation. If a UserID of 99999 is submitted without existing in the users table, the engine returns SQLSTATE 23503. This mechanism prevents orphaned order records that could compromise financial reconciliation.
 
 ```go
 func (e *Engine) InsertOrder(o model.Order) (model.Order, error) {
@@ -260,11 +180,9 @@ func (e *Engine) InsertOrder(o model.Order) (model.Order, error) {
 }
 ```
 
-If a UserID of 99999 is submitted without existing in the users table, the engine returns SQLSTATE 23503. This mechanism prevents orphaned order records that could compromise financial reconciliation.
+## Inspeksi SQLSTATE: Mengubah Error Database Menjadi Domain Error
 
-## Deep Analysis: SQLSTATE Taxonomy and Domain Error Mapping
-
-Many engineers parse raw error strings like "duplicate key," which break whenever database locales change. Class 23 SQLSTATE codes provide a standardized, permanent machine contract:
+Many engineers parse raw error strings like duplicate key, which break whenever database locales change. Class 23 SQLSTATE codes provide a standardized, permanent machine contract. Employing MapToDomainError allows applications to translate engine codes into clean domain errors without leaking internal database schemas to clients.
 
 ```go
 func MapToDomainError(err error) error {
@@ -285,56 +203,29 @@ func MapToDomainError(err error) error {
 }
 ```
 
-Inspecting stable SQLSTATE codes rather than brittle localized text strings enables robust application error mapping without leaking internal database schemas to clients.
+## Checklist Penerapan Database Constraints di Produksi
 
-## Production Implementation Checklist
+This checklist summarizes mandatory engineering steps before releasing schemas to production: declaring NOT NULL on mandatory fields, applying UNIQUE constraints to block race conditions, leveraging partial indexes for soft deletes, defining CHECK constraints for row limits, indexing foreign key columns, and inspecting SQLSTATE codes in application error handlers.
 
-This checklist summarizes mandatory engineering steps before releasing schemas to production:
+## Anti-Pattern Umum dalam Menjaga Integritas Data
 
-- Mark all mandatory columns with NOT NULL; do not rely solely on form validation.
-- Apply UNIQUE constraints on unique attributes instead of SELECT-before-INSERT patterns.
-- Use Partial Unique Index (`WHERE deleted_at IS NULL`) for entities supporting soft deletion.
-- Define CHECK constraints to limit numeric ranges and enum status columns.
-- Install explicit indexes on FOREIGN KEY referencing columns to prevent full table scans on parent DELETE.
-- Inspect Class 23 SQLSTATE codes (23502, 23505, 23514, 23503) in application error handlers.
+The most perilous anti-pattern is assuming safety from application-level SELECT-then-INSERT flows. Other prevalent traps include parsing localized error strings rather than SQLSTATE codes and assuming foreign keys automatically index referencing columns. Overlooking these realities creates ticking performance and data corruption time-bombs.
 
-## Common Anti-Patterns in Data Integrity Maintenance
+## Reproduksi Mandiri di Mesin Lokal Menggunakan Go
 
-The most perilous anti-pattern is assuming safety from application-level SELECT-then-INSERT flows. Other prevalent traps include parsing localized error strings rather than SQLSTATE codes and assuming foreign keys automatically index referencing columns.
-
-| Anti-Pattern | Risk |
-|---|---|
-| Check-Then-Act in Application | SELECT before INSERT always leaks under concurrent load |
-| Guessing Error Strings | Regex matching on DB error text breaks across versions and locales |
-| Assuming Auto-Indexing | FOREIGN KEY creation does not automatically index the referencing column |
-
-Overlooking these realities creates ticking performance and data corruption time-bombs.
-
-## Self-Directed Reproduction Commands
-
-The entire lab simulation is engineered strictly with the Go standard library, requiring no external packages or Docker containers:
+The entire lab simulation is engineered strictly with the Go standard library, requiring no external packages or Docker containers. While local tests prove constraint semantics deterministically, production environments still require phased migration strategies such as ADD CONSTRAINT NOT VALID.
 
 ```sh
 cd labs/27-database-constraints
-go test -v ./...     # runs 7 unit tests for NOT NULL, CHECK, UNIQUE, FK, and Partial Index
-go test -race ./...  # validates concurrent execution is free of data races (PASS in 1.33s)
-go run ./cmd/demo    # runs interactive CLI demo: SQLSTATE demo & 50-worker stress test
+go test -v ./...    # menjalankan 7 unit test untuk NOT NULL, CHECK, UNIQUE, FK, & Partial Index
+go test -race ./... # memvalidasi eksekusi konkuren bebas dari data race (PASS in 1.33s)
+go run ./cmd/demo   # eksekusi demonstrasi CLI interaktif: SQLSTATE demo & 50-worker stress test
 ```
 
-While local tests prove constraint semantics deterministically, production environments still require phased migration strategies such as `ADD CONSTRAINT NOT VALID`.
+## Prinsip Inti: Database Adalah Benteng Terakhir Kebenaran
 
-## Long-Term Architectural Principles
-
-Application layers will inevitably be refactored and microservices will proliferate, but persisted data outlives software lifecycles. Entrusting data integrity solely to application code is a high-risk architectural gamble.
-
-| Pillar | Description |
-|---|---|
-| Declarative at Write Point | Place data validity rules as close to the storage medium as possible for atomic protection |
-| Clear Role Separation | Application serves user interaction comfort; database constraints guarantee absolute truth |
-| Not Automatically Immune | Installing constraints does not automatically resolve cross-table rules; understand row-scoped vs trigger boundaries |
-
-Database constraints ensure that regardless of application-layer regressions, persistent data remains uncorrupted.
+Application layers will inevitably be refactored and microservices will proliferate, but persisted data outlives software lifecycles. Entrusting data integrity solely to application code is a high-risk architectural gamble. Database constraints guarantee that regardless of application-layer regressions, persistent data remains uncorrupted.
 
 ## Source
 
-[Software Engineering Lab 27 — Database Constraints](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/27-database-constraints), snapshot commit `c317c1d`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
+[Software Engineering Lab 27 - Database Constraints: The Last Line of Data Integrity](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/27-database-constraints), snapshot commit `c317c1d`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
