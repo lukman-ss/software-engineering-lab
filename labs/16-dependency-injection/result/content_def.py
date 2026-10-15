@@ -4,7 +4,6 @@ Publication Builder Definition for Software Engineering Lab 16: Dependency Injec
 """
 
 OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/16-dependency-injection/result"
-CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection"
 COMMIT_SHA = "3d936ba"
 LAB_NO = "16"
@@ -96,7 +95,7 @@ add_slide(
 # Slide 04: Mental Model Inti
 add_slide(
     categories=["MENTAL MODEL", "SEPARATION OF CONCERNS"],
-    title="Separation of Configuration from Use",
+    title="Pemisahan Konfigurasi dari Penggunaan",
     subtitle="Fase konfigurasi (composition root) terpisah dari fase penggunaan (business logic).",
     content_items=[
         {"type": "schema", "title": "DUA FASE DALAM SISTEM", "items": [
@@ -158,9 +157,9 @@ add_slide(
             "}"
         ]}
     ],
-    narrative="Constructor injection menjamin Processor hanya mengenal interface PaymentGateway, bukan implementasi konkrét RealGateway. Dependensi dibuat eksplisit di signature constructor.",
+    narrative="Constructor injection membuat Processor hanya mengenal interface PaymentGateway, bukan implementasi konkret RealGateway. Dependensi dibuat eksplisit di signature constructor.",
     narrative_en="Constructor injection ensures Processor only knows the PaymentGateway interface, not the concrete RealGateway implementation. Dependencies are made explicit in the constructor signature.",
-    mental_model="Inject dependencies via constructor parameters to enforce immutability and explicit contracts.",
+    mental_model="Constructor injection membuat dependensi eksplisit saat konstruksi.",
     source_path="internal/di/processor.go",
     slide_num="06 / 24",
     layout="code"
@@ -175,11 +174,11 @@ add_slide(
         {"type": "cards", "title": "SKENARIO KEGAGALAN LOKATOR", "items": [
             {"title": "Dependensi Tersembunyi", "desc": "Constructor hanya menerima Container; developer tidak tahu method butuh PaymentGateway."},
             {"title": "Pencarian Dinamis", "desc": "ProcessPayment memanggil p.container.GetPaymentGateway() saat runtime, menambah indirection."},
-            {"title": "Pengujian Ribet", "desc": "Test harus membuat MockContainer yang mengembalikan MockGateway, bukan MockGateway langsung."},
-            {"title": "Bukan Berarti Lebih Baik", "desc": "Service Locator bukan berarti anti-pattern mutlak; PSR-11 menggunakan SHOULD NOT, bukan MUST NOT."}
+            {"title": "Beban Mocking Tambahan", "desc": "Pengujian unit terpaksa menyusun MockContainer bertingkat hanya untuk menyuplai gateway konkret."},
+            {"title": "Kopling Container Kaku", "desc": "BadProcessor terikat langsung pada interface Container, bukan abstraksi domain spesifik."}
         ]}
     ],
-    narrative="Service Locator menyembunyikan dependensi sebenarnya di balik interface container. Hal ini mengurangi keterbacaan dan mempersulit mocking karena test harus menyiapkan container, bukan dependensi langsung.",
+    narrative="Service Locator menyembunyikan dependensi nyata di balik lookup method container saat runtime. Hal ini menyulitkan pelacakan dependensi dan membebani pengujian unit karena developer wajib menyiapkan MockContainer bertingkat hanya untuk menyuplai gateway konkret.",
     narrative_en="Service Locator hides actual dependencies behind a container interface. This reduces readability and makes mocking harder because tests must prepare a container instead of the dependency directly.",
     mental_model="Service Locator obscures dependencies, complicating testing and reducing code transparency.",
     source_path="internal/di/locator.go",
@@ -197,9 +196,9 @@ add_slide(
             "Aspek | Constructor Injection | Service Locator",
             "Dependensi | Eksplisit di constructor | Tersembunyi di container",
             "Mocking | Langsung inject mock | Harus mock container + get()",
-            "Kekekalan | Field immutable setelah konstruksi | Bisa berubah jika container berubah",
+            "Kontrak Dependensi | Membuat dependensi eksplisit saat konstruksi | Tersembunyi di balik lookup container",
             "Kompleksitas | Mudah dipahami | Menambah indirection layer",
-            "Standar Industri | Diproleh sebagai best practice | Disebabkan sebagai anti-pattern"
+            "Standar Industri | Diterima sebagai best practice | Dipandang sebagai anti-pattern"
         ], "type": "table"}
     ],
     narrative="Tabel ini memetakan perbedaan mendasar antara dua pendekatan. Constructor injection menghasilkan dependensi yang eksplisit dan mudah diuji; service locator memperkenalkan lapisan tambahan yang menyulitkan isolasi.",
@@ -217,14 +216,14 @@ add_slide(
     subtitle="Tiga keputusan arsitektural yang menentukan struktur kode.",
     content_items=[
         {"type": "cards", "title": "KEPUTUSAN PENTING", "items": [
-            {"title": "Pilih Constructor Injection", "desc": "Default modern; menjamin valid state sejak objek lahir dan dependensi eksplisit."},
+            {"title": "Pilih Constructor Injection", "desc": "Default modern; membantu menjaga kontrak dependensi tetap terlihat dan eksplisit."},
             {"title": "Hindari Service Locator di Domain", "desc": "Container hanya digunakan di composition root; tidak disuntikkan ke service."},
             {"title": "Gunakan Value Object Langsung", "desc": "Money diinstansiasi langsung karena tidak memiliki dependensi infrastruktur."}
         ]}
     ],
-    narrative="Lab ini memilih constructor injection sebagai pola default karena memberikan kekekalan dan kejelasan dependensi. Service Locator hanya digunakan untuk mendemonstrasikan anti-pattern, bukan sebagai solusi.",
+    narrative="Lab ini memilih constructor injection sebagai pola default karena membantu menjaga kontrak dependensi tetap terlihat. Service Locator hanya digunakan untuk mendemonstrasikan anti-pattern, bukan sebagai solusi arsitektur utama.",
     narrative_en="This lab chooses constructor injection as the default pattern because it provides immutability and dependency clarity. Service Locator is used only to demonstrate the anti-pattern, not as a solution.",
-    mental_model="Choose constructor injection for explicit dependencies, avoid service locator in domain code, instantiate value objects directly.",
+    mental_model="Choose constructor injection to make dependencies explicit at construction time.",
     source_path="content/02-master-draft.md:91-101",
     slide_num="09 / 24",
     layout="cards"
@@ -285,15 +284,15 @@ add_slide(
 add_slide(
     categories=["TRADE-OFF", "COSTS & BENEFITS"],
     title="Trade-off Penerapan DI Manual vs Framework",
-    subtitle="Manual wiring menambah boilerplate tetapi menjamin type safety tanpa dependensi eksternal.",
+    subtitle="Manual wiring menambah boilerplate tetapi memperjelas kontrak tipe tanpa dependensi eksternal.",
     content_items=[
         {"type": "cards", "title": "KOMPROMI REKAYASA DI", "items": [
-            {"title": "Boilerplate vs Convenience", "desc": "Manual wiring memerlukan kode extra di main.go; framework mengurangi boilerplate tetapi menambah kompleksitas."},
-            {"title": "Type Safety vs Flexibilitas", "desc": "Constructor injection enforced pada compile time; reflection-based framework lebih fleksibel tetapi kurang aman."},
-            {"title": "Tidak Otomatis_scalable", "desc": "Pada object graph sangat besar, manual wiring menjadi sulit dikelola; bukan berarti DI framework selalu diperlukan."}
+            {"title": "Boilerplate vs Kemudahan", "desc": "Manual wiring memerlukan kode ekstra di main.go; framework mengurangi boilerplate tetapi menambah kompleksitas."},
+            {"title": "Type Safety vs Fleksibilitas", "desc": "Compiler memeriksa tipe parameter, bukan seluruh validitas graph; framework refleksi lebih fleksibel tetapi menambah risiko runtime."},
+            {"title": "Tidak Otomatis Skalabel", "desc": "Pada object graph sangat besar, manual wiring memerlukan ketelitian perakitan; bukan berarti framework refleksi selalu diperlukan."}
         ]}
     ],
-    narrative="Penerapan DI manual menuntut penulis composition root yang jelas. Pada skala besar, overhead boilerplate dapat signifikan, namun trade-off ini sering diterima demi kejelasan dan kemudahan pengujian.",
+    narrative="Penerapan DI manual menuntut penulisan composition root yang jelas. Pada skala besar, overhead boilerplate dapat bertambah, namun trade-off ini sering diterima demi kejelasan kontrak dan kemudahan pengujian.",
     narrative_en="Manual DI implementation requires a clear composition root. At large scale, boilerplate overhead can become significant, but this trade-off is often accepted for clarity and testability.",
     mental_model="DI manual wiring trades boilerplate for type safety and zero external dependencies.",
     source_path="content/02-master-draft.md:76-81",
@@ -319,9 +318,9 @@ add_slide(
             "}"
         ]}
     ],
-    narrative="Race detector Go memeriksa akses konkuren ke memori. Implementasi DI ini tidak menggunakan goroutine atau shared state, sehingga test berlari bersih tanpa warning race condition.",
-    narrative_en="Go's race detector checks concurrent memory accesses. This DI implementation uses no goroutines or shared state, so tests run cleanly without race condition warnings.",
-    mental_model="Dependency injection promotes stateless, testable components that naturally avoid race conditions.",
+    narrative="Race detector Go memeriksa akses memori konkuren. Pada pengujian ini, skenario test ini tidak menunjukkan race pada jalur yang dieksekusi karena komponen bersifat stateless.",
+    narrative_en="Go's race detector checks concurrent memory accesses. In these tests, no race was detected on the executed test paths because components remain stateless.",
+    mental_model="Skenario test ini tidak menunjukkan race pada jalur yang dieksekusi.",
     source_path="tests/processor_test.go:23-35",
     slide_num="13 / 24",
     layout="code"
@@ -334,12 +333,12 @@ add_slide(
     subtitle="Perbandingan kode sebelum dan sesudah penerapan DI.",
     content_items=[
         {"type": "cards", "title": "SEBELUM (TIGHT COUPLING) VS SESUDAH (DI)", "items": [
-            {"title": "Sebelum: Hard-Coded", "desc": "Processor baru RealGateway di dalam method; tidak bisa di-mock tanpa mengubah kode sumber."},
+            {"title": "Sebelum: Hard-Coded", "desc": "Processor membuat RealGateway di dalam method; tidak bisa di-mock tanpa mengubah kode sumber."},
             {"title": "Sesudah: DI Manual", "desc": "NewProcessor menerima PaymentGateway; mock disuntikkan langsung pada test."},
-            {"title": "Bukan Berarti Sempurna", "desc": "DI bukan solusi ajaib; tetap perlu disiplin composition root dan避免 over-injection."}
+            {"title": "Bukan Berarti Sempurna", "desc": "DI bukan solusi ajaib; tetap perlu disiplin composition root dan hindari over-injection."}
         ]}
     ],
-    narrative="Sebelum DI, kelas bisnis langsung menginstal dependensi kongkrit, mengunci pada satu implementasi. Setelah DI, dependensi datang dari luar, memungkinkan penggantian dan pengujian terisolasi.",
+    narrative="Sebelum DI, kelas bisnis langsung menginstansiasi dependensi konkret, mengunci pada satu implementasi. Setelah DI, dependensi datang dari luar, memungkinkan penggantian dan pengujian terisolasi.",
     narrative_en="Before DI, business classes directly instantiate concrete dependencies, locking to one implementation. After DI, dependencies come from outside, enabling substitution and isolated testing.",
     mental_model="Replace internal instantiation with external injection to achieve loose coupling.",
     source_path="internal/di/processor.go internal/di/locator.go",
@@ -443,7 +442,7 @@ add_slide(
             "}"
         ]}
     ],
-    narrative="Composition root adalah fungsi main yang bertanggung jawab merakit object graph. Ia satu-satunya place yang mengimpor implementasi konkret RealGateway.",
+    narrative="Composition root adalah fungsi main yang bertanggung jawab merakit object graph. Ia satu-satunya tempat yang mengimpor implementasi konkret RealGateway.",
     narrative_en="The composition root is the main function responsible for assembling the object graph. It is the only place that imports the concrete RealGateway implementation.",
     mental_model="Centralize concrete instantiation in a single composition root to maintain separation of concerns.",
     source_path="cmd/demo/main.go:16-26",
@@ -531,7 +530,7 @@ add_slide(
         {"type": "code", "title": "COMMAND RUNNER", "items": [
             "cd labs/16-dependency-injection",
             "go test -v ./...    # jalankan semua test case",
-            "go test -race ./... # verifikasi race safety",
+            "go test -race ./... # skenario test ini tidak menunjukkan race pada jalur yang dieksekusi",
             "go run ./cmd/demo   # eksekusi demo constructor injection & service locator"
         ]}
     ],
@@ -575,9 +574,9 @@ add_slide(
             "content/02-master-draft.md • content/01-content-brief.md"
         ]},
         {"type": "bullet", "title": "VERIFIKASI & STATUS", "items": [
-            f"Commit: {COMMIT_SHA[:7]} • Status: APPROVED",
+            f"Commit: {COMMIT_SHA[:7]} • Repositori: software-engineering-lab",
             "Test passing: 6 test scenarios (success, error propagation, invalid amount)",
-            "Race detector: Clean (go test -race ./... PASS)",
+            "Race detector: Skenario test ini tidak menunjukkan race pada jalur yang dieksekusi (PASS)",
             "Zero external dependencies: 100% Go standard library."
         ]}
     ],

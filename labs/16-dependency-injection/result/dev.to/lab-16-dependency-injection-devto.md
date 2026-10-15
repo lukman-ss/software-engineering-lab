@@ -19,7 +19,7 @@ When a class builds its own dependencies, business logic becomes locked to exter
 
 Manual code review relies on human attention to catch coupling patterns. This approach does not automatically guarantee that every external dependency has been injected through constructors.
 
-## Separation of Configuration from Use
+## Pemisahan Konfigurasi dari Penggunaan
 
 The core principle of Dependency Injection is separating object construction from its use. The composition root assembles the object graph, while business modules only consume dependencies that are provided.
 
@@ -61,9 +61,9 @@ Aspek | Constructor Injection | Service Locator
 |---|---|---|
 Dependensi | Eksplisit di constructor | Tersembunyi di container
 Mocking | Langsung inject mock | Harus mock container + get()
-Kekekalan | Field immutable setelah konstruksi | Bisa berubah jika container berubah
+Kontrak Dependensi | Membuat dependensi eksplisit saat konstruksi | Tersembunyi di balik lookup container
 Kompleksitas | Mudah dipahami | Menambah indirection layer
-Standar Industri | Diproleh sebagai best practice | Disebabkan sebagai anti-pattern
+Standar Industri | Diterima sebagai best practice | Dipandang sebagai anti-pattern
 
 ## Keputusan Desain DI pada Lab Ini
 
@@ -100,7 +100,7 @@ Manual DI implementation requires a clear composition root. At large scale, boil
 
 ## Race Safety pada Implementasi DI
 
-Go's race detector checks concurrent memory accesses. This DI implementation uses no goroutines or shared state, so tests run cleanly without race condition warnings.
+Go's race detector checks concurrent memory accesses. In these tests, no race was detected on the executed test paths because components remain stateless.
 
 ```go
 func TestProcessor_Success(t *testing.T) {
@@ -210,7 +210,7 @@ All code uses the Go standard library with zero external dependencies. The test 
 ```sh
 cd labs/16-dependency-injection
 go test -v ./...    # jalankan semua test case
-go test -race ./... # verifikasi race safety
+go test -race ./... # skenario test ini tidak menunjukkan race pada jalur yang dieksekusi
 go run ./cmd/demo   # eksekusi demo constructor injection & service locator
 ```
 
