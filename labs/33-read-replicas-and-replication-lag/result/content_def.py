@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-Publication Builder Definition for Software Engineering Lab 33: Read Replicas and Replication Lag.
-Defines metadata, colors, 24 slides, and helper structures.
-DO NOT DELETE THIS FILE.
+Publication Builder for Software Engineering Lab 33: Read Replicas and Replication Lag.
+Generates 24-slide LinkedIn carousel covering stale read anomalies, sticky-session routing,
+causal LSN tokens, lag-aware filtering, and synchronous remote_apply strategies.
 """
+import os
 
 OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/33-read-replicas-and-replication-lag/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/33-read-replicas-and-replication-lag"
-COMMIT_SHA = "cfba3b76824f0ee03b5fa526462d1b72858144e7"
+COMMIT_SHA = "b41fffb"
 LAB_NO = "33"
 SLUG = "read-replicas-and-replication-lag"
-TITLE_ID = "Read Replicas & Replication Lag"
-SUBTITLE_ID = "Mitigasi Stale Read & Menjaga Konsistensi Read-Your-Own-Writes"
-TITLE_EN = "Read Replicas & Replication Lag"
-SUBTITLE_EN = "Mitigating Stale Reads and Enforcing Read-Your-Own-Writes Guarantees"
+TITLE_ID = "Read Replica dan Replication Lag"
+SUBTITLE_ID = "Menjaga Read-Your-Own-Writes Tanpa Mengorbankan Skalabilitas Baca"
+TITLE_EN = "Read Replicas and Replication Lag"
+SUBTITLE_EN = "Guaranteeing Read-Your-Own-Writes Without Sacrificing Read Scalability"
 AUTHOR = "Lukman / lukman-ss"
+COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/33-read-replicas-and-replication-lag/result/image-cover/cover_art.jpg"
 
-# Brand color constants
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"
 CREAM = "f4f1e8"
@@ -25,13 +26,9 @@ WHITE = "ffffff"
 SLATE = "52606b"
 ORANGE = "d97706"
 
-DEVTO_DESC = "Explore read replicas, replication lag anomalies, and session guarantees (read-your-own-writes) in Go with causal tokens and sticky routing."
-DEVTO_TAGS = "database, go, systemdesign, backend"
-MEDIUM_DESC = "Panduan lengkap mitigasi replication lag pada read replica database: stale read anomaly, sticky session, causal token LSN, dan synchronous replication."
-
 SLIDES = []
 
-def add_slide(categories, title, subtitle, content_items, mental_model, source_path="", slide_num="", title_en="", narrative_en="", narrative=""):
+def add_slide(categories, title, subtitle, content_items, mental_model, source_path="", slide_num="", narrative="", narrative_en="", layout=""):
     SLIDES.append({
         "categories": categories,
         "title": title,
@@ -40,749 +37,743 @@ def add_slide(categories, title, subtitle, content_items, mental_model, source_p
         "mental_model": mental_model,
         "source": source_path,
         "slide_num": slide_num,
-        "title_en": title_en or title,
-        "narrative_en": narrative_en,
         "narrative": narrative,
+        "narrative_en": narrative_en,
+        "layout": layout
     })
 
-# Slide 1: Cover (Dark Navy)
+# =====================================================================
+# 24 SLIDE DEFINITIONS
+# =====================================================================
+
+# Slide 1: Cover
 add_slide(
     categories=["COVER"],
     title=TITLE_ID,
     subtitle=SUBTITLE_ID,
     content_items=[
         {"type": "cover", "title": "", "items": [
-            "Retro CRT monitor with scanlines and glowing database WAL stream",
-            "Primary node broadcasting monotonic LSN to lagging replicas",
-            f"Author: {AUTHOR}",
+            "Diagram cluster primary-replica dengan panah WAL streaming",
+            "Ilustrasi replication lag dan jalur routing read (naive vs sticky vs token vs sync)",
+            f"Penulis: {AUTHOR}",
         ]}
     ],
-    mental_model="",
-    source_path="",
-    slide_num=""
+    mental_model="Replication lag is the distance between primary LSN and replica applied-LSN; every read strategy is a closing mechanism for that gap.",
+    source_path=REPO_URL,
+    slide_num="01 / 24",
+    narrative="Laboratorium ini membahas masalah nyata yang dihadapi setiap backend engineer yang menggunakan read replica untuk scaling database: stale read. Ketika write baru commit ke primary, replica menerima aliran WAL secara asinkron dengan delay tertentu. Jika aplikasi langsung mengarahkan read user ke replica tanpa mekanisme penutupan jarak tersebut, user akan melihat data lama bahkan menerima not-found untuk key yang baru saja ditulis. Lab ini mengimplementasikan empat strategi mitigasi — time-based sticky routing, causal token dengan LSN wait, lag-aware dynamic filtering, dan synchronous remote_apply — dalam simulasi cluster in-memory Go yang utuh.",
+    narrative_en="This laboratory explores the real-world problem encountered by every backend engineer using read replicas for database scaling: stale reads. When a new write commits to the primary, replicas receive the WAL stream asynchronously with some delay. If the application immediately directs user reads to replicas without a closing mechanism, users see stale data or even receive not-found errors for recently written keys. This lab implements four mitigation strategies — time-based sticky routing, causal token with LSN wait, lag-aware dynamic filtering, and synchronous remote_apply — within a complete in-memory Go cluster simulation.",
+    layout="cover"
 )
 
-# Slide 2: Problem Definition (Stale Read Anomaly)
+# Slide 2: Problem nyata
 add_slide(
-    categories=["MASALAH SISTEM"],
-    title="Anomali Stale Read pada Read Replica",
-    subtitle="User menulis data baru, namun query berikutnya membaca data lama atau kosong",
+    categories=["MOTIVASI", "STALE READ RISK"],
+    title="Masalah Nyata: Ilusi Freshness di Balik Read Replica",
+    subtitle="User menulis profil baru, tapi dashboard menampilkan data lama atau kosong.",
     content_items=[
-        {"title": "GEJALA ANOMALI", "items": [
-            "User melakukan write profil atau checkout pesanan ke primary node",
-            "Request read berikutnya dialihkan round-robin ke replica",
-            "Replica belum menerapkan WAL entry terbaru, menghasilkan data basi atau 404",
-        ], "type": "bullet"},
-        {"title": "AKAR TEKNIS", "items": [
-            "Replikasi asinkron default pada PostgreSQL, MySQL, Aurora, dan MongoDB",
-            "Ada jeda propagasi jaringan dan waktu commit WAL antara master dan replica",
-            "Replica menjamin eventual consistency, bukan linearizability real-time",
-        ], "type": "bullet"},
-        {"title": "DAMPAK PENGGUNA", "items": [
-            "User mengira transaksi gagal lalu mengklik tombol submit berulang kali",
-            "Saldo rekening atau item keranjang belanja terlihat hilang sesaat",
-            "Inkonsistensi session yang merusak kepercayaan pengguna terhadap sistem",
-        ], "type": "bullet"},
+        {"title": "WRITE COMMITTED", "items": [
+            "User mengubah field 'tier' premium di endpoint PUT /profile.",
+            "Request dialihkan ke primary, LSN increment menjadi 47.",
+            "Write berhasil dengan status 200, response body berisi payload baru."
+        ], "type": "card"},
+        {"title": "REPLICA LAGGING", "items": [
+            "WAL entry dengan LSN 47 mengalir ke replica-1 namun belum di-apply.",
+            "Replica-1 masih menunjukkan appliedLSN = 44, data lama belum tersingkir.",
+            "Worker goroutine replica menunggu durasi lagDuration sebelum flush."
+        ], "type": "card"},
+        {"title": "STALE READ TERJADI", "items": [
+            "Load balancer mengalihkan read dashboard ke replica-1 secara round-robin.",
+            "Query SELECT profile WHERE id=user mendapat ErrNotFound atau data usang.",
+            "User merasa sistem rusak; actual cause adalah replication lag yang tak tertutup."
+        ], "type": "card"}
     ],
-    mental_model="Replication lag is the distance between primary commit and replica apply.",
-    source_path="labs/33-read-replicas-and-replication-lag/README.md",
+    narrative="Skenario ini terjadi secara default di hampir semua database production yang menggunakan primary-replica topology. PostgreSQL streaming replication, MySQL async replication, AWS RDS read replicas, dan Azure Database for PostgreSQL semuanya menjalankan replikasi asinkron secara default tanpa konfigurasi khusus. Ketika client application melakukan pattern write-then-read pada session yang sama, ia tidak memiliki awareness bahwa data yang baru ditulis belum tersedia di replica target. Akibatnya, user mengalami anomali UX yang sulit dilacak karena log menunjukkan write sukses, tapi query berikutnya gagal membaca data yang sama.",
+    narrative_en="This scenario occurs by default across nearly all production databases using primary-replica topology. PostgreSQL streaming replication, MySQL async replication, AWS RDS read replicas, and Azure Database for PostgreSQL all run asynchronous replication by default without explicit configuration. When the client application performs a write-then-read pattern on the same session, it has no awareness that the written data is unavailable at the target replica. The result is a hard-to-debug UX anomaly because logs show successful writes but subsequent queries fail to read the same data.",
+    mental_model="Stale reads are not bugs; they are the expected behavior of eventually consistent replica systems.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/01-content-brief.md",
     slide_num="02 / 24",
-    title_en="Stale Read Anomalies on Read Replicas",
-    narrative_en="When scaling database reads across secondary replicas, asynchronous replication creates a propagation window where replicas lag behind the primary. An immediate subsequent read by the writer can hit a replica that has not yet applied the latest write-ahead log entry, returning stale records or false not-found errors.",
-    narrative="Ketika arsitektur basis data memisahkan beban tulis ke primary dan beban baca ke beberapa replika sekunder, replikasi asinkron menimbulkan celah propagasi. Pengguna yang baru saja memperbarui data dapat langsung diarahkan ke replika yang belum menerapkan perubahan tersebut. Akibatnya, sistem menyajikan data lama atau bahkan melaporkan data tidak ditemukan, memicu kebingungan operasional dan duplikasi transaksi."
+    layout="cards"
 )
 
-# Slide 3: Asynchronous Replication Anatomy
+# Slide 3: Mengapa pendekatan naif gagal
 add_slide(
-    categories=["MEKANISME"],
-    title="Anatomi Aliran Asynchronous Replication",
-    subtitle="Write commit langsung di primary sementara replica mengejar secara background",
+    categories=["ANALISIS", "PENDEKATAN NAIF"],
+    title="Mengapa Read Naif ke Replica Selalu Berisiko?",
+    subtitle="Round-robin tanpa awareness LSN membuka celah read basi di setiap write window.",
     content_items=[
-        {"title": "ALIRAN WAL ENTRY", "items": [
-            "1. Primary menerima write, catat data, naikkan LSN monotonik",
-            "2. Primary kembalikan status commit sukses ke client tanpa menunggu replica",
-            "3. WAL entry disalurkan via stream jaringan ke antrean worker replica",
-            "4. Worker replica memproses dan menerapkan entry ke memory/disk lokal",
-        ], "type": "diagram"},
-        {"title": "PERSAMAAN LAG", "items": [
-            "Replication Lag = LSN_primary - AppliedLSN_replica",
-            "Lag Waktu (Δt) = Waktu Terima Primary - Waktu Apply Replica",
-            "Kapasitas antrean WAL dan beban I/O lokal menentukan besaran lag",
-        ], "type": "bullet"},
-        {"title": "TRADE-OFF UTAMA", "items": [
-            "Keuntungan: Latensi write sangat rendah dan throughput primary maksimal",
-            "Konsekuensi: Jendela waktu staleness tidak terhindarkan bagi replica read",
-        ], "type": "bullet"},
-    ],
-    mental_model="Async replication optimizes write latency by accepting eventual consistency on reads.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/cluster/cluster.go:193",
-    slide_num="03 / 24",
-    title_en="Anatomy of Asynchronous Replication Streams",
-    narrative_en="In asynchronous replication mode, the primary commits transactions locally, assigns a monotonically increasing Log Sequence Number, and immediately acknowledges the client. Write-ahead log records are queued and streamed to replicas in the background, making replication lag structurally inevitable under heavy traffic.",
-    narrative="Dalam mode replikasi asinkron, primary memproses transaksi, mencatat entri Write-Ahead Log dengan nomor urut monotonik LSN, lalu seketika mengembalikan respons sukses ke aplikasi. Salinan log dikirimkan ke worker replika di latar belakang. Karena proses pengiriman dan penerapan log bergantung pada latensi jaringan serta antrean lokal, perbedaan antara LSN primary dan applied LSN replika selalu muncul."
-)
-
-# Slide 4: Read-Your-Own-Writes Guarantee
-add_slide(
-    categories=["KONSISTENSI"],
-    title="Garansi Read-Your-Own-Writes",
-    subtitle="User harus selalu melihat update yang baru saja dilakukannya sendiri",
-    content_items=[
-        {"title": "DEFINISI FORMAL", "items": [
-            "Diformalkan oleh Terry et al. (1994) sebagai jaminan sesi terdistribusi",
-            "Jika operasi W1 dilakukan oleh sesi S pada waktu t, maka semua read R",
-            "berikutnya oleh sesi S pada t' > t wajib mengamati efek dari W1",
-        ], "type": "bullet"},
-        {"title": "SKOP GARANSI", "items": [
-            "Berlaku khusus untuk sesi atau user yang melakukan penulisan",
-            "User lain diperbolehkan melihat data yang sedikit tertinggal (stale)",
-            "Menghindari kebutuhan linearizability penuh pada seluruh cluster",
-        ], "type": "bullet"},
-        {"title": "STRATEGI PENYELESAIAN", "items": [
-            "Time-Based Sticky: Paksa read ke primary selama jendela waktu tertentu",
-            "Causal Token / Min LSN: Tunggu replika mengejar LSN commit transaksi",
-            "Synchronous Mode: Terapkan perubahan ke semua replika sebelum commit",
-        ], "type": "bullet"},
-    ],
-    mental_model="Read-your-own-writes is a session guarantee, not global linearizability.",
-    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md:20",
-    slide_num="04 / 24",
-    title_en="The Read-Your-Own-Writes Consistency Guarantee",
-    narrative_en="Read-your-own-writes ensures that an individual user session immediately observes its own updates, even if global readers observe eventual consistency. Formally proven by Terry et al., this session-scoped constraint prevents user-facing anomalies without the crippling overhead of global consensus.",
-    narrative="Garansi read-your-own-writes memastikan pengguna selalu dapat membaca hasil perubahannya sendiri sesaat setelah commit berhasil. Berbeda dari konsistensi ketat global, aturan ini dibatasi pada level sesi pengguna. Pengguna lain di belahan sistem lain masih dapat menerima data eventual consistency, sehingga sistem tetap memiliki skalabilitas baca yang tinggi tanpa mengorbankan pengalaman pengguna penulis."
-)
-
-# Slide 5: Why Naive Read-Split Fails
-add_slide(
-    categories=["ANALISIS KEGAGALAN"],
-    title="Mengapa Naive Read-Split Gagal",
-    subtitle="Memisahkan write ke primary dan read round-robin ke replica memicu bug",
-    content_items=[
-        {"title": "KODE READ NAIF", "items": [
-            "func (r *Router) ReadNaive(key string) {",
-            "    target := replicas[rrIndex.Add(1) % len(replicas)]",
-            "    return target.Read(key)",
-            "}",
+        {"title": "KODE ROUTING NAIF", "items": [
+            "func (r *Router) ReadNaive(key string) (string, string, uint64, error) {",
+            "    replicas := r.cluster.Replicas()",
+            "    if len(replicas) == 0 {",
+            "        return r.cluster.Primary().Read(key)  // Fallback aman",
+            "    }",
+            "    idx := r.rrIndex.Add(1) % uint64(len(replicas))",
+            "    target := replicas[idx]",
+            "    return target.Read(key)  // Tanpa cek appliedLSN!",
+            "}"
         ], "type": "code"},
-        {"title": "URUTAN KEGAGALAN", "items": [
-            "1. Client Write('user:profile:123', 'Alice') -> Primary LSN 1",
-            "2. Client ReadNaive('user:profile:123') -> Replika-2 (Applied LSN 0)",
-            "3. Replika-2 mengembalikan ErrNotFound karena WAL belum di-apply",
-        ], "type": "bullet"},
-        {"title": "TITIK BUTA PENGEMBANG", "items": [
-            "Di lingkungan lokal, lag bernilai ~0ms sehingga bug tidak pernah muncul",
-            "Di staging, volume data rendah menyembunyikan antrean replikasi",
-            "Di produksi dengan network latency dan disk I/O, bug meledak sporadis",
-        ], "type": "bullet"},
+        {"title": "KEGAGALAN FUNDAMENTAL", "items": [
+            "Tidak ada validasi AppliedLSN vs currentLSN sebelum melayani read.",
+            "Round-robin indifferent terhadap freshness state setiap replica.",
+            "Stale read probability berbanding lurus dengan throughput write dan lag duration.",
+            "Write-after-read pada session yang sama paling rentan terhadap anomali ini."
+        ], "type": "bullet"}
     ],
-    mental_model="Naive round-robin blindly routes reads to replicas without freshness verification.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/router/router.go:67",
-    slide_num="05 / 24",
-    title_en="Why Naive Read-Splitting Strategies Fail",
-    narrative_en="A naive read-write splitter routes all writes to the primary and distributes all reads round-robin across replicas without inspecting replication status. In local development environments with zero network delay, this appears flawless. In production under real I/O pressure, it causes intermittent not-found and stale read regressions.",
-    narrative="Pola pemisahan read-write konvensional mengarahkan seluruh operasi tulis ke primary dan membagi query baca secara round-robin ke seluruh replika tanpa memeriksa status replikasi. Pada mesin pengembangan lokal dengan latensi nol, pola ini tampak berjalan sempurna. Namun di lingkungan produksi dengan beban I/O nyata, replika tertinggal beberapa ratus milidetik dan memicu anomali baca kosong."
+    narrative="Implementasi ReadNaive menunjukkan pendekatan paling sederhana dalam read splitting: arahkan setiap request ke replica berikutnya secara berputar. Namun pendekatan ini mengabaikan fakta fundamental bahwa setiap replica memiliki appliedLSN yang mungkin jauh di belakang currentLSN primary. Dalam kondisi write-heavy workload dengan replication lag 200 milidetik, probabilitas mendapatkan stale read bisa mendekati 100% untuk key yang baru ditulis. Bug ini termasuk subtle karena tidak menghasilkan panic atau crash — hanya mengembalikan data salah yang terasa aneh bagi pengguna akhir.",
+    narrative_en="The ReadNaive implementation represents the simplest approach to read splitting: round-robining each request across replicas in turn. However, this approach ignores the fundamental fact that every replica may have an appliedLSN significantly behind the primary currentLSN. Under heavy write workloads with a 200-millisecond replication lag, the probability of serving a stale read can approach 100 percent for recently written keys. This bug is particularly subtle because it never panics or crashes — it silently returns incorrect data that perplexes end users.",
+    mental_model="Naive load-balancing optimizes for throughput; it abandons consistency entirely.",
+    source_path="internal/router/router.go:67-78",
+    slide_num="03 / 24",
+    layout="code-bullet"
 )
 
-# Slide 6: Architecture Overview
+# Slide 4: Mental model inti / schema card
 add_slide(
-    categories=["ARSITEKTUR"],
-    title="Arsitektur Lab 33: Tiga Layer Utama",
-    subtitle="Cluster simulator in-memory, Dynamic Router, dan Test Verifier",
+    categories=["MENTAL MODEL", "SCHEMA"],
+    title="Mental Model: LSN sebagai Jangkar Konsistensi",
+    subtitle="Log Sequence Number membangun urutan kausal yang memungkinkan routing deterministic.",
     content_items=[
-        {"title": "KOMPONEN CLUSTER", "items": [
-            "Node: Menyimpan map KV, appliedLSN, dan antrean channel WAL",
-            "Primary: Atomic increment currentLSN, eksekusi write real-time",
-            "Replica: Worker goroutine dengan delay lag terkonfigurasi dan sync.Cond",
-        ], "type": "bullet"},
-        {"title": "DYNAMIC ROUTER", "items": [
-            "Session State: Tracking LastWriteTime dan LastWriteLSN via sync.Map",
-            "Strategi Routing: Naive, Sticky Session, Causal Token, Lag-Aware",
-            "Primary Fallback: Pengalihan otomatis saat replika melebihi batas toleransi",
-        ], "type": "bullet"},
-        {"title": "VERIFIKASI SISTEM", "items": [
-            "Test Suite deterministik: 7 skenario pengujian unit dan integrasi",
-            "Race detector: Bebas data race pada ratusan goroutine konkuren",
-        ], "type": "bullet"},
-    ],
-    mental_model="Layered separation decouples cluster replication mechanics from client routing decisions.",
-    source_path="labs/33-read-replicas-and-replication-lag/engineering/01-design.md:32",
-    slide_num="06 / 24",
-    title_en="Architecture Overview: A Three-Layer Simulation System",
-    narrative_en="The lab architecture isolates cluster mechanics from client-side routing intelligence. The Cluster layer handles concurrent WAL broadcasting and replica worker routines, while the Router layer maintains session metadata and evaluates freshness policies before executing physical reads.",
-    narrative="Arsitektur sistem Lab 33 dirancang memisahkan mekanisme replikasi fisik dari lapisan perutean query klien. Lapisan Cluster mensimulasikan penyimpanan data in-memory dengan nomor urut log LSN dan goroutine worker replika. Lapisan Router memelihara status sesi pengguna dan menjalankan strategi pemilihan simpul baca berdasarkan kebijakan kesegaran data yang diinginkan."
-)
-
-# Slide 7: Primary Node & Atomic LSN
-add_slide(
-    categories=["BUKTI KODE"],
-    title="Primary Node & Monotonic LSN Tracking",
-    subtitle="Setiap operasi tulis menaikkan sequence number global secara atomic",
-    content_items=[
-        {"title": "STRUKTUR WAL & NODE", "items": [
+        {"title": "STRUKTUR DATA WAL", "items": [
             "type WALEntry struct {",
-            "    LSN       uint64",
+            "    LSN       uint64    // monotonik naik dari primary",
             "    Key       string",
             "    Value     string",
             "    Timestamp time.Time",
-            "}",
+            "}"
         ], "type": "code"},
-        {"title": "EKSEKUSI TULIS ATOMIK", "items": [
-            "lsn := c.currentLSN.Add(1)",
-            "c.primary.mu.Lock()",
-            "c.primary.data[key] = value",
-            "c.primary.appliedLSN = lsn",
-            "c.primary.mu.Unlock()",
-        ], "type": "code"},
-        {"title": "KARAKTERISTIK LSN", "items": [
-            "Monotonik strictly increasing tanpa gap",
-            "Menjadi representasi posisi kemajuan commit log basis data",
-            "Dasar penentuan komparasi kesegaran data antar simpul",
-        ], "type": "bullet"},
+        {"title": "DUO KEADAAN SETIAP NODE", "items": [
+            "Primary: mengasign LSN atomic saat commit write; sumber kebenaran tunggal.",
+            "Replica: menyimpan map data KV + appliedLSN + goroutine worker consumption WAL.",
+            "Gap: delta(PrimaryLSN, ReplicaAppliedLSN) = ukuran replikasi lag saat ini.",
+            "Kunci: setiap read strategy harus meminimalkan atau menutup gap ini untuk sesi yang relevan."
+        ], "type": "bullet"}
     ],
-    mental_model="Monotonic LSN provides a global logical clock for ordering database state.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/cluster/cluster.go:193",
+    narrative="Model mental ini memisahkan dua lapisan abstraction: lapisan konsistensi (LSN sequence) dan lapisan ketersediaan (data distribution). Primary bertindak sebagai single writer yang memberi nomor urut absolut pada setiap transaksi. Setiap replica secara independen consume dan apply entry WAL dengan latensi tertentu. Router membaca appliedLSN setiap replica untuk membuat keputusan routing yang informed. Tanpa LSN, kita tidak bisa membedakan replica yang fresh versus lagging secara terukur — routing menjadi guesswork belaka.",
+    narrative_en="This mental model separates two layers of abstraction: the consistency layer through LSN sequences and the availability layer through data distribution. The primary acts as a single writer assigning absolute monotonic ordering to every transaction. Each replica independently consumes and applies WAL entries with some latency. The router inspects every replica's appliedLSN to make informed routing decisions. Without LSN tracking, distinguishing fresh from lagging replicas becomes impossible, reducing routing to uninformed guesswork.",
+    mental_model="LSN is the universal causal anchor; replication lag is simply distance from that anchor.",
+    source_path="internal/cluster/cluster.go:18-23 • internal/router/router.go:34-37",
+    slide_num="04 / 24",
+    layout="schema-card"
+)
+
+# Slide 5: Diagram alur/pipeline
+add_slide(
+    categories=["ARSITEKTUR", "PIPELINE"],
+    title="Pipeline Write-Read dengan Replication Lag",
+    subtitle="Dari client write sampai routing decision: empat jalur strategi mitigasi.",
+    content_items=[
+        {"title": "SEKUENSI PIPELINE DISTRIBUSI", "items": [
+            "1. Client.Write(session, key, value) → Primary commit, LSN increment atomic, WAL entry broadcast ke replica channel",
+            "2. Replica worker sleep(lagDuration) → entry apply ke local data map, appliedLSN = entry.LSN, cond.Broadcast wake WaitForLSN",
+            "3a. ReadNaive: round-robin pilih replica → jika appliedLSN < lastWriteLSN → stale read atau ErrNotFound",
+            "3b. ReadWithStickySession: cek time.Since(lastWriteTime) < T_sticky → redirect ke primary; setelah TTL expired → ReadLagAware",
+            "3c. ReadWithToken: iterasi replica untuk appliedLSN >= minLSN; blocking WaitForLSN + timeout context → fallback primary",
+            "3d. ReadLagAware: hitung diff = primaryLSN - appliedLSN; filter eligible diff <= MaxLSNDiff; fallback primary jika kosong"
+        ], "type": "diagram"}
+    ],
+    narrative="Pipeline ini menggambarkan perjalanan lengkap sebuah request dari penulisan hingga pembacaan dengan empat varian routing strategy. Jalur pertama menelusuri write path di mana primary mengincrement currentLSN secara atomik lalu broadcasting WAL entry ke channel setiap replica. Jalur kedua mensimulasikan replication lag melalui goroutine worker yang tidur sesuai duration sebelum apply. Empat jalur ketiga menunjukkan bagaimana router memilih target read: naive round-robin tanpa proteksi, sticky session berbasis waktu, token-based LSN wait dengan blocking, atau lag-aware dynamic filtering dengan threshold.",
+    narrative_en="This pipeline illustrates the complete request journey from write commit through read with four distinct routing variants. The first path traces the write flow where the primary atomically increments currentLSN then broadcasts WAL entries to every replica channel. The second path simulates replication lag through worker goroutines sleeping for the configured duration before applying entries. The four sub-paths show how the router selects read targets: naive round-robin without protection, time-based sticky sessions, token-driven LSN waiting with blocking, or lag-aware dynamic filtering with threshold predicates.",
+    mental_model="Writes flow forward in LSN order; reads must synchronize with that order or fall back to the source.",
+    source_path="cmd/demo/main.go:15-64 • internal/cluster/cluster.go:148-178",
+    slide_num="05 / 24",
+    layout="pipeline-diagram"
+)
+
+# Slide 6: Cuplikan kode dominan
+add_slide(
+    categories=["IMPLEMENTASI", "CODE"],
+    title="Implementasi Sticky Session Router",
+    subtitle="Cek lastWriteTime per session untuk mengalihkan read ke primary selama jendela sticky.",
+    content_items=[
+        {"title": "READ WITH STICKY SESSION", "items": [
+            "func (r *Router) ReadWithStickySession(sessionID, key string) (string, string, uint64, error) {",
+            "    if stateVal, ok := r.sessions.Load(sessionID); ok {",
+            "        state := stateVal.(SessionState)",
+            "        if time.Since(state.LastWriteTime) < r.config.StickyDuration {",
+            "            val, lsn, err := r.cluster.Primary().Read(key)",
+            "            return val, r.cluster.Primary().ID(), lsn, err",
+            "        }",
+            "    }",
+            "    return r.ReadLagAware(key)",
+            "}"
+        ], "type": "code"}
+    ],
+    narrative="Potongan kode ini merupakan implementasi time-based sticky routing yang paling sederhana namun efektif. Method pertama-tama memeriksa apakah session ID memiliki state yang terekam di sync.Map. Jika state ditemukan dan waktu sejak lastWrite masih dalam batas StickyDuration, router secara deterministik mengarahkan read ke primary — bukan replica manapun. Ini memastikan read-your-own-writes dalam jendela sticky tanpa biaya LSN check. Setelah jendela habis, flow jatuh ke ReadLagAware yang menggunakan threshold filtering.",
+    narrative_en="This code snippet implements the simplest yet most effective form of time-based sticky routing. The method first checks whether the session ID has a recorded state in the sync.Map. If the state exists and the elapsed time since last write remains within the StickyDuration bound, the router deterministically directs reads to the primary instead of any replica. This guarantees read-your-own-writes within the sticky window without any LSN overhead. After the window expires, the flow degrades gracefully into lag-aware threshold filtering.",
+    mental_model="Sticky windows trade read throughput for guaranteed freshness within a bounded temporal envelope.",
+    source_path="internal/router/router.go:80-90",
+    slide_num="06 / 24",
+    layout="code-dominant"
+)
+
+# Slide 7: Failure path / dangling reference konkret
+add_slide(
+    categories=["FAILURE PATH", "BUKTI"],
+    title="Failure Path: Stale Read Anomali di Demo CLI",
+    subtitle="Output terminal membuktikan read ke replica-2 gagal meski write baru sukses di primary.",
+    content_items=[
+        {"title": "TERMINAL FAILURE LOG", "items": [
+            "[Write Primary] Wrote key 'user:profile:123', Primary LSN: 1",
+            "[Naive Read] Node: replica-2, Applied LSN: 0, Val: '', Err: key not found",
+            "",
+            "Analisis:",
+            "Primary commit LSN 1 tetapi replica-2 appliedLSN masih 0 karena lag 200ms belum berlalu.",
+            "ReadNaive memilih replica-2 via round-robin tanpa pengecekan LSN.",
+            "Key tidak ditemukan karena belum di-apply di replica; user menerima ErrNotFound senyap."
+        ], "type": "terminal"},
+        {"title": "Dampak UX", "items": [
+            "User melihat halaman kosong atau 404 setelah upload data baru.",
+            "Trust erosion: user yakin input berhasil tetapi output tidak mencerminkan input.",
+            "Debug cost tinggi karena write log sukses dan read log juga 'berhasil' (bukan error sistem)."
+        ], "type": "bullet"}
+    ],
+    narrative="Failure path ini diambil langsung dari demo CLI ketika ReadNaive dipanggil tepat setelah write. Primary LSN meningkat ke 1, namun replica-2 masih berada di appliedLSN 0 karena worker goroutine belum menyelesaikan sleep 200 milidetik. Load balancer round-robin memilih replica-2 untuk read berikutnya, menyebabkan key not found karena data belum tersedia. Error ini berbeda dengan koneksi mati atau timeout — aplikasi merespons 200 dengan body kosong, membuat debugging menjadi nightmare bagi engineer yang tidak memahami replication topology.",
+    narrative_en="This failure path is extracted directly from the demo CLI when ReadNaive is invoked immediately after a write. The primary LSN increments to 1, but replica-2 remains at appliedLSN 0 because the worker goroutine has not yet completed its 200-millisecond sleep. The round-robin load balancer selects replica-2 for the subsequent read, causing a key-not-found error since the data is unavailable. This error differs from connection failures or timeouts — the application responds with 200 and an empty body, creating a debugging nightmare for engineers unfamiliar with replication topology.",
+    mental_model="Silent correctness failures hurt more than loud crashes; they erode trust without trace.",
+    source_path="cmd/demo/main.go:23-32 • engineering/03-execution-result.md:53-58",
     slide_num="07 / 24",
-    title_en="Primary Node Execution and Atomic LSN Generation",
-    narrative_en="To establish a rigorous order of mutations, the primary node utilizes an atomic 64-bit unsigned integer counter representing the Log Sequence Number. Every write acquires the lock, mutates local state, assigns the new LSN, and packages a WALEntry for asynchronous replica distribution.",
-    narrative="Untuk menetapkan urutan mutasi data yang tidak terbantahkan, simpul primary memanfaatkan pencacah atomik 64-bit yang merepresentasikan Log Sequence Number. Setiap kali transaksi tulis terjadi, primary memperbarui data lokal, mencatat nomor urut LSN terbaru, dan membungkus data tersebut ke dalam paket entri WAL untuk didistribusikan ke simpul replika."
+    layout="failure-path"
 )
 
-# Slide 8: Replica Worker & Lag Simulation
+# Slide 8: Tabel perbandingan mekanisme vs gejala
 add_slide(
-    categories=["BUKTI KODE"],
-    title="Replica Worker & Simulasi Lag Terkontrol",
-    subtitle="Worker goroutine menerapkan jeda waktu sebelum memperbarui memory dan LSN",
+    categories=["PERBANDINGAN", "MEKANISME"],
+    title="Mekanisme vs Gejala: Evaluasi Strategi Read Routing",
+    subtitle="Membandingkan empat pendekatan dalam hal jaminan, overhead, dan fallback behavior.",
     content_items=[
-        {"title": "GOROUTINE WORKER", "items": [
-            "for entry := range replica.walChannel {",
-            "    if lag > 0 { time.Sleep(lag) }",
-            "    replica.mu.Lock()",
-            "    replica.data[entry.Key] = entry.Value",
-            "    replica.appliedLSN = entry.LSN",
-            "    replica.cond.Broadcast()",
-            "    replica.mu.Unlock()",
-            "}",
-        ], "type": "code"},
-        {"title": "MEKANISME NOTIFIKASI", "items": [
-            "sync.Cond digunakan untuk mem-broadcast event ke reader yang menunggu",
-            "Channel buffer 1024 mencegah blocking write pada primary",
-            "Lag dapat diubah secara dinamis melalui SetLag(d) saat pengujian",
-        ], "type": "bullet"},
-        {"title": "KONDISI REPLIKASI", "items": [
-            "Selama jeda lag berlangsung, AppliedLSN simpul tetap bernilai lama",
-            "Query yang masuk pada rentang ini akan membaca snapshot usang",
-        ], "type": "bullet"},
+        {"title": "TABEL PERBANDINGAN STRATEGI", "items": [
+            "Strategi | Jaminan | Overhead | Fallback | Cocok Untuk",
+            "ReadNaive | None | Zero | Primary jika replica kosong | Development, debugging",
+            "Sticky Session | Session-level fresh | Time check O(1), session map | Lag-aware filtering | Session-bound writes",
+            "Causal Token | Causal ordering | LSN check + blocking wait | Context timeout + primary | Critical data reads",
+            "Lag-Aware | Threshold-bound | Delta LSN calculation + filter | Primary jika eligible kosong | Bulk reads, analytics"
+        ], "type": "table"}
     ],
-    mental_model="Replicas lag when ingestion outpaces application speed or network delays intervene.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/cluster/cluster.go:148",
+    narrative="Tabel ini mengklasifikasikan empat strategi routing berdasarkan empat dimensi evaluasi. ReadNaive menghilangkan overhead komunikasi tetapi mengorbankan konsistensi sepenuhnya. Sticky session menawarkan jaminan session-level freshness dengan overhead minimal berupa time comparison dan session map lookup. Causal token memberikan jaminan kausal terukur tetapi memperkenalkan blocking wait yang dapat meningkatkan p99 latency. Lag-aware filtering menyeimbangkan throughput dan freshness melalui threshold predicate, degraded gracefully ke primary ketika tidak ada replica yang memenuhi syarat.",
+    narrative_en="This table classifies the four routing strategies across four evaluation dimensions. ReadNaive eliminates communication overhead but sacrifices consistency entirely. Sticky session offers session-level freshness guarantees with minimal overhead consisting of a time comparison and session map lookup. Causal tokens provide measurable causal ordering guarantees but introduce blocking waits that can elevate p99 latency. Lag-aware filtering balances throughput and freshness through threshold predicates, degrading gracefully to primary when no eligible replica exists.",
+    mental_model="Every routing strategy sits on a spectrum between consistency, latency, and operational complexity.",
+    source_path="content/02-master-draft.md:62-70",
     slide_num="08 / 24",
-    title_en="Replica Worker Goroutine and Lag Ingestion Pipeline",
-    narrative_en="Each replica runs a dedicated worker goroutine consuming from a buffered WAL channel. Artificial delay simulates network transit and disk synchronization latencies. Once applied, sync.Cond broadcasts trigger waiting causal read queries to wake up deterministically.",
-    narrative="Setiap replika menjalankan sebuah goroutine worker yang membaca antrean channel WAL berkapasitas 1024 entri. Durasi lag disimulasikan melalui jeda waktu terkontrol sebelum data disinkronkan ke memori lokal. Begitu data diterapkan, variabel kondisi sync.Cond memicu sinyal siaran guna membangunkan operasi baca yang sedang menunggu pencapaian LSN tertentu."
+    layout="comparison-table"
 )
 
-# Slide 9: Strategy 1 - Time-Based Sticky Routing
+# Slide 9: Decision sequence (3 focused decision cards)
 add_slide(
-    categories=["STRATEGI ROUTING"],
-    title="Strategi 1: Time-Based Sticky Routing",
-    subtitle="Arahkan read ke primary selama jendela waktu T_sticky setelah write",
+    categories=["DESIGN DECISION", "ARSITEKTUR"],
+    title="3 Keputusan Desain Kritis Replication Strategy",
+    subtitle="Urutan keputusan arsitektur untuk menyeimbangkan consistency dan throughput.",
     content_items=[
-        {"title": "LOGIKA SESI STICKY", "items": [
-            "if stateVal, ok := r.sessions.Load(sessionID); ok {",
-            "    state := stateVal.(SessionState)",
-            "    if time.Since(state.LastWriteTime) < r.config.StickyDuration {",
-            "        return r.cluster.Primary().Read(key)",
-            "    }",
-            "}",
-            "return r.ReadLagAware(key)",
-        ], "type": "code"},
-        {"title": "KEUNGGULAN OPERASIONAL", "items": [
-            "Implementasi sangat ringan: hanya membandingkan timestamp lokal",
-            "Tidak memerlukan query status LSN atau koordinasi antar simpul",
-            "Secara drastis mereduksi anomali post-write pada navigasi umum user",
-        ], "type": "bullet"},
-        {"title": "KELEMAHAN HEURISTIK", "items": [
-            "Jendela 5 detik adalah estimasi, bukan jaminan pasti replika sudah catch-up",
-            "Beban primary tetap tinggi jika user aktif menulis dan membaca bersamaan",
-        ], "type": "bullet"},
+        {"title": "1. TENTUKAN CONSISTENCY REQUIREMENT", "items": [
+            "Apakah session ini memerlukan read-your-own-writes (CRUD critical)?",
+            "Jika ya → sticky session atau causal token wajib digunakan.",
+            "Jika tidak → lag-aware filtering cukup untuk bulk analytics reads."
+        ], "type": "card"},
+        {"title": "2. KALIBRASI PARAMETER WAKTU", "items": [
+            "T_sticky harus ≥ p99 replication lag aktual di production.",
+            "Default industri 5 detik bersifat heuristik; perlu tuning berbasis monitoring.",
+            "WaitTimeout pada causal token harus ≥ worst-case catch-up duration + buffer."
+        ], "type": "card"},
+        {"title": "3. PILIH FENCING LAYER YANG TEPAT", "items": [
+            "Gunakan mode synchronous remote_apply jika freshness mutlak dibutuhkan.",
+            "Accept async replication + application-level fencing untuk throughput maksimal.",
+            "Jangan mencampuradukkan semi-sync (durability) dengan synchronous (visibility)."
+        ], "type": "card"}
     ],
-    mental_model="Time-based sticky routing trades primary capacity for simplicity without cluster round-trips.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/router/router.go:80",
+    narrative="Tiga keputusan desain ini membentuk kerangka kerja strategis sebelum memilih implementasi teknis. Keputusan pertama menentukan level consistency requirement yang membedakan use case mana yang memerlukan protection ketat versus mana yang bisa menerima eventual consistency. Keputusan kedua menyangkut kalibrasi parameter waktu berdasarkan observasi empiris production latency distribution — bukan asumsi teoretis. Keputusan ketiga memilih lapisan proteksi yang sesuai dengan SLA bisnis, antara synchronous replication berbiaya tinggi atau application-level fencing dengan graceful degradation.",
+    narrative_en="These three design decisions form a strategic framework before selecting any technical implementation. The first decision determines the consistency requirement level that distinguishes which use cases need strict protection versus those accepting eventual consistency. The second decision involves calibrating time parameters based on empirical production latency observations rather than theoretical assumptions. The third decision selects the appropriate protection layer aligned with business SLAs between high-cost synchronous replication or application-level fencing with graceful degradation.",
+    mental_model="Design decisions cascade from requirements to parameters to implementation; never skip upstream thinking.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/05-key-takeaways.md",
     slide_num="09 / 24",
-    title_en="Strategy 1: Time-Based Sticky Session Routing",
-    narrative_en="Time-based sticky routing tracks the timestamp of each session's last write. Any subsequent read within a configurable TTL (e.g., 5 seconds) routes unconditionally to the primary node. It eliminates stale reads for the writer with zero coordination overhead, though it relies on empirical latency assumptions.",
-    narrative="Strategi sticky routing berbasis waktu mencatat stempel waktu penulisan terakhir dari masing-masing sesi pengguna. Setiap operasi baca yang dilakukan dalam rentang jendela waktu TTL akan dialihkan langsung ke primary. Pendekatan ini sangat efisien karena tidak membutuhkan pengecekan status simpul, meskipun bersifat heuristik dan bergantung pada estimasi latensi."
+    layout="decision-cards"
 )
 
-# Slide 10: Strategy 2 - Causal Token & LSN Wait
+# Slide 10: Bukti eksekusi / terminal output
 add_slide(
-    categories=["STRATEGI ROUTING"],
-    title="Strategi 2: Causal Token / Minimum LSN Routing",
-    subtitle="Client membawa commit token LSN dan menunggu replica mengejar posisi tersebut",
+    categories=["BUKTI", "DEMO"],
+    title="Bukti Eksekusi: Siklus Lengkap Replication & Mitigasi",
+    subtitle="Output demo CLI mengkonfirmasi empat skenario berjalan sesuai spesifikasi.",
     content_items=[
-        {"title": "PENCARIAN SIMPUL FRESH", "items": [
-            "for _, replica := range replicas {",
-            "    if replica.AppliedLSN() >= minLSN {",
-            "        return replica.Read(key)",
-            "    }",
-            "}",
-        ], "type": "code"},
-        {"title": "BLOCKING WAIT & TIMEOUT", "items": [
-            "waitCtx, cancel := context.WithTimeout(ctx, r.config.WaitTimeout)",
-            "defer cancel()",
-            "if err := targetReplica.WaitForLSN(waitCtx, minLSN); err == nil {",
-            "    return targetReplica.Read(key)",
-            "}",
-            "return r.cluster.Primary().Read(key) // Fallback aman",
-        ], "type": "code"},
-        {"title": "GARANSI MATEMATIS", "items": [
-            "Pasti mengamati mutasi transaksi karena AppliedLSN >= minLSN terjamin",
-            "Jika replika lambat, fallback ke primary melindungi ketersediaan sistem",
-        ], "type": "bullet"},
+        {"title": "DEMO EXECUTION TRACE", "items": [
+            "=== Lab 33: Read Replicas and Replication Lag Demo ===",
+            "",
+            "--- 1. Async Replication Lag Anomaly ---",
+            "[Write Primary] Wrote key 'user:profile:123', Primary LSN: 1",
+            "[Naive Read] Node: replica-2, Applied LSN: 0, Val: '', Err: key not found",
+            "",
+            "--- 2. Sticky Session Routing ---",
+            "[Sticky Read (within 500ms)] Node: primary, LSN: 1, Val: '{...}', Err: nil",
+            "[Sticky Read (after TTL)] Node: replica-1, LSN: 1, Val: '{...}', Err: nil",
+            "",
+            "--- 3. Causal Token / LSN Wait ---",
+            "[Token Read (MinLSN=2)] Node: replica-1, LSN: 2, Val: '{...}', Err: nil",
+            "",
+            "--- 4. Synchronous Replication ---",
+            "[Sync Write] LSN: 1, Write Duration: 104.055166ms",
+            "[Sync Naive Read] Node: replica-2, LSN: 1, Val: '{...}', Err: nil"
+        ], "type": "terminal"}
     ],
-    mental_model="Causal token routing guarantees causal consistency by conditioning reads on commit LSN.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/router/router.go:92",
+    narrative="Output terminal ini menyajikan empat bukti eksekusi yang masing-masing mengonfirmasi perilaku strategi routing. Bagian pertama membuktikan anomali stale read terjadi ketika ReadNaive dipanggil pasca-write. Bagian kedua menunjukkan sticky session berhasil mengarahkan read ke primary dalam jendela 500ms, kemudian beralih ke replica setelah TTL expire. Bagian ketiga memverifikasi causal token menunggu catch-up sekitar 200ms sebelum melayani read dari replica yang sudah sesuai LSN. Bagian keempat memperlihatkan synchronous replication membutuhkan tambahan ~104ms pada write latency untuk menjamin freshness instan.",
+    narrative_en="This terminal output presents four execution proofs each confirming the behavior of different routing strategies. The first section demonstrates the stale read anomaly when ReadNaive is called immediately post-write. The second section shows sticky session successfully directing reads to the primary within the 500-millisecond window then falling back to a replica after TTL expiration. The third section verifies causal tokens wait approximately 200 milliseconds for catch-up before serving reads from matching replicas. The fourth section reveals synchronous replication requiring approximately 104 additional milliseconds on write latency to guarantee instant freshness.",
+    mental_model="Terminal traces convert abstract consistency guarantees into observable execution evidence.",
+    source_path="cmd/demo/main.go:1-65 • engineering/03-execution-result.md:48-73",
     slide_num="10 / 24",
-    title_en="Strategy 2: Causal Token and Minimum LSN Routing",
-    narrative_en="Causal token routing binds each write's commit LSN to subsequent read requests. The router evaluates replicas for applied LSN progress. If no replica has reached the target LSN, it executes an event-driven wait with a deadline, falling back to the primary if timeout thresholds expire.",
-    narrative="Pendekatan causal token menyertakan token LSN hasil transaksi tulis pada setiap query baca berikutnya. Router memeriksa apakah terdapat replika yang telah mencapai nomor urut tersebut. Jika belum ada, sistem menunggu secara efisien menggunakan variabel kondisi hingga batas waktu tercapai, lalu melakukan fallback ke primary bila replika mengalami keterlambatan parah."
+    layout="terminal-output"
 )
 
-# Slide 11: Event-Driven WaitForLSN
+# Slide 11: Analisis batasan bukti
 add_slide(
-    categories=["BUKTI KODE"],
-    title="Event-Driven WaitForLSN dengan sync.Cond",
-    subtitle="Menghilangkan polling CPU yang boros dengan sinkronisasi variabel kondisi",
+    categories=["BATASAN", "ANALISIS"],
+    title="YANG TIDAK DIBUKTIKAN",
+    subtitle="Batasan ruang lingkup laboratorium yang wajib dipahami sebelum implementasi produksi.",
     content_items=[
-        {"title": "KODE SINKRONISASI", "items": [
-            "func (n *Node) WaitForLSN(ctx context.Context, target uint64) error {",
+        {"title": "YANG TIDAK DIBUKTIKAN", "items": [
+            "Cluster in-memory tanpa persistence layer; tidak membuktikan recovery pasca-crash.",
+            "Tidak ada topologi cascading replica (replica-of-replica) atau multi-region replication.",
+            "Sticky 500ms dan lag 200ms bersifat ilustratif lab; bukan rekomendasi tuning produksi.",
+            "Router state disimpan di sync.Map single-process; tidak membuktikan stateless horizontal scaling.",
+            "Tidak mencakup network partition antar primary dan replica, only simulated timing lag.",
+            "p99 lag multi-region dan cross-datacenter topology tidak diuji di dalam lab.",
+            "Tidak mengimplementasikan change data capture (CDC) atau binlog-based synchronization."
+        ], "type": "bullet"}
+    ],
+    narrative="Klaim teknis laboratorium ini dibatasi oleh parameter lingkungan pengujian yang disederhanakan. Cluster yang digunakan berjalan in-memory tanpa persistence disk, sehingga tidak bisa membuktikan perilaku recovery setelah node crash. State router disimpan dalam sync.Map lokal single-process, berbeda dengan arsitektur stateless production yang memerlukan Redis atau shared session store. Simulasi replication lag menggunakan timer sleep 200 milidetik, bukan network latency riil yang bervariasi. Konstanta timing seperti sticky 500ms dipilih untuk deterministik demo, bukan sebagai guideline tuning produksi.",
+    narrative_en="The technical claims established in this lab are explicitly bounded by simplified test-environment parameters. The in-memory cluster lacks any persistence layer, so it cannot demonstrate post-crash recovery behavior. Router state resides in a local single-process sync.Map, differing from stateless production architectures that require Redis or shared session stores. Replication lag simulation uses deterministic timer sleeps rather than variable real network latency. Timing constants such as 500-millisecond stickiness were chosen for demonstrable predictability, not as production tuning guidelines.",
+    mental_model="Lab proofs establish behavioral correctness, not production-scale resilience or observability.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/01-content-brief.md • research-audit/06-gaps.md",
+    slide_num="11 / 24",
+    layout="constraints-list"
+)
+
+# Slide 12: Trade-off arsitektur
+add_slide(
+    categories=["TRADE-OFF", "ARSITEKTUR"],
+    title="Trade-off Arsitektur: Freshness vs Throughput",
+    subtitle="Menilai biaya operasional penambahan routing intelligence dibandingkan benefit konsistensi.",
+    content_items=[
+        {"title": "MANFAAT & KEUNGGULAN", "items": [
+            "Read-Your-Own-Writes Guaranteed: User selalu melihat hasil tulisannya sendiri segera.",
+            "Scalable Reads: Replica menanggung sebagian besar beban read after sticky window expired.",
+            "Graceful Degradation: Fallback ke primary terjadi secara eksplisit, bukan silent failure.",
+            "Observability: LSN metrics dapat di-monitor untuk mendeteksi anomaly replication topology."
+        ], "type": "bullet"},
+        {"title": "KONSEKUENSI & BIAYA", "items": [
+            "Sticky Window Overhead: Primary menerima traffic read ekstra selama T_sticky per session.",
+            "Blocking Latency: Causal token wait menambah p99 read latency saat replica belum catch-up.",
+            "Complexity Cost: Router membutuhkan session state management dan LSN inspection logic.",
+            "Fallback Concentration: Semua degraded reads terakumulasi di primary → potential bottleneck."
+        ], "type": "bullet"}
+    ],
+    narrative="Penerapan strategi replication lag mitigation menuntut kompromi arsitektural antara freshness guarantee dan read throughput. Sticky session menambahkan overhead berupa concentrated primary reads selama jendela waktu, tetapi eliminasi stale read sepenuhnya untuk session-bound operations. Causal token menawarkan presisi deterministik namun memperkenalkan blocking wait yang menggeser p99 latency read path. Lag-aware filtering menyeimbangkan keduanya dengan filtering threshold yang dapat dikonfigurasi, degraded gracefully ke primary ketika semua replica terlambat. Synchronous replication menghilangkan lag sama sekali dengan harga write latency ekstra yang proporsional dengan jumlah replica.",
+    narrative_en="Implementing replication lag mitigation strategies demands architectural trade-offs between freshness guarantees and read throughput. Sticky sessions introduce overhead through concentrated primary reads during the time window but completely eliminate stale reads for session-bound operations. Causal tokens offer deterministic precision while introducing blocking waits that shift p99 read latency. Lag-aware filtering balances both approaches through configurable threshold predicates, degrading gracefully to primary when all replicas lag excessively. Synchronous replication eliminates lag entirely at the cost of proportionally increased write latency across all replicas.",
+    mental_model="Consistency is purchased with either latency, complexity, or primary throughput sacrifice.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md",
+    slide_num="12 / 24",
+    layout="tradeoff"
+)
+
+# Slide 13: Concurrency / validation pipeline
+add_slide(
+    categories=["CONCURRENCY", "VALIDATION"],
+    title="Validasi Konkurensi: 15 Goroutine × 20 Operasi Race-Free",
+    subtitle="TestConcurrentAccess_RaceFree membuktikan thread-safety Router dan Cluster di bawah beban.",
+    content_items=[
+        {"title": "KODE TEST KONKURENSI", "items": [
+            "func TestConcurrentAccess_RaceFree(t *testing.T) {",
+            "    c := cluster.NewCluster(3, 10*time.Millisecond, cluster.AsyncReplication)",
+            "    defer c.Close()",
+            "    r := router.NewRouter(c, router.DefaultConfig())",
+            "",
+            "    var wg sync.WaitGroup",
+            "    for i := 0; i < 15; i++ {",
+            "        wg.Add(1)",
+            "        go func(id int) {",
+            "            defer wg.Done()",
+            "            sid := fmt.Sprintf('s%d', id)",
+            "            _, _ = r.Write(sid, fmt.Sprintf('k%d', id), fmt.Sprintf('v%d', id))",
+            "            for j := 0; j < 20; j++ {",
+            "                _, _, _, _ = r.ReadWithStickySession(sid, fmt.Sprintf('k%d', id))",
+            "            }",
+            "        }(i)",
+            "    }",
+            "    wg.Wait()",
+            "}"
+        ], "type": "code"},
+        {"title": "HASIL VERIFIKASI", "items": [
+            "Race Detector: PASS (go test -race ./... tanpa flag data race).",
+            "Session Isolation: 15 session unik tidak saling mengganggu state sync.Map.",
+            "Write-Read Consistency: Setiap session melihat data yang ditulis sendiri setelah sticky window.",
+            "Cluster Stability: 3 replica workers tetap stabil tanpa goroutine leak atau deadlock."
+        ], "type": "bullet"}
+    ],
+    narrative="Uji konkurensi ini membuktikan ketahanan implementasi saat 15 goroutine bersamaan mengeksekusi pattern write-then-read pada 20 iterasi per session. Setiap goroutine menggunakan session ID unik yang menjaga isolation state di Router sync.Map. Cluster dengan tiga replica worker memproses WAL entries secara paralel dengan gap 10 milidetik. Di bawah go race detector, tidak ada data race terdeteksi di seluruh memory accesses Router methods maupun Cluster nodes. Test ini mengonfirmasi bahwa concurrent access ke shared state tetap linearizable berkat mutex proteksi di setiap node.",
+    narrative_en="This concurrency test validates implementation robustness when fifteen goroutines simultaneously execute write-then-read patterns across twenty iterations per session. Each goroutine employs a unique session ID maintaining isolation state within the Router sync.Map. The cluster with three replica workers processes WAL entries in parallel with ten-millisecond gaps. Under the Go race detector, no data races are detected across all Router method or Cluster node memory accesses. This confirms concurrent access to shared state remains linearizable through mutex protections at every node.",
+    mental_model="Thread-safe shared state requires explicit mutex boundaries; race detector catches what humans miss.",
+    source_path="tests/replication_test.go:173-210",
+    slide_num="13 / 24",
+    layout="concurrency-flow"
+)
+
+# Slide 14: Before vs After comparison cards
+add_slide(
+    categories=["BEFORE/AFTER", "PERUBAHAN"],
+    title="Before vs After: Evolusi Read Routing Strategy",
+    subtitle="Transformasi dari read naif berisiko stale hingga arsitektur four-layer mitigation.",
+    content_items=[
+        {"title": "BEFORE (Naive Round-Robin)", "items": [
+            "Routing: Pilih replica secara acak tanpa awareness LSN state.",
+            "Failure Mode: Stale read atau ErrNotFound terjadi setiap write-then-read window.",
+            "Observability: Tidak ada metric untuk mendeteksi replication lag anomaly.",
+            "Dampak: User experience degradasi senyap tanpa error reporting yang meaningful."
+        ], "type": "card"},
+        {"title": "AFTER (Four-Layer Mitigation)", "items": [
+            "Routing: Sticky session untuk session-bound writes, token wait untuk causal reads.",
+            "Failure Mode: Fallback eksplisit ke primary dengan logging node ID dan LSN delta.",
+            "Observability: appliedLSN per replica dapat dipromonitor untuk alerting threshold breach.",
+            "Dampak: Read-your-own-writes terjamin 100% dengan graceful degradation ketika replica lagging."
+        ], "type": "card"}
+    ],
+    narrative="Perbandingan before-after ini menunjukkan evolusi arsitektur read routing dari pendekatan naif yang rentan stale read menuju sistem four-layer mitigation dengan fallback bertingkat. Sebelum penerapan strategi, setiap write-then-read cycle berisiko tinggi menghasilkan data usang karena tidak ada mekanisme penutupan replication gap. Setelah implementasi, sistem memiliki tiga lapis proteksi: sticky session untuk session-bound operations, causal token untuk critical reads, dan lag-aware filtering untuk bulk analytics. Setiap lapis memiliki fallback eksplisit ke primary dengan logging yang dapat diobservasi.",
+    narrative_en="This before-and-after comparison highlights the architectural evolution from fragile naive routing prone to stale reads toward a four-layer mitigation system with tiered fallbacks. Prior to strategy implementation, every write-then-read cycle carried high risk of serving stale data due to absent gap-closing mechanisms. After deployment, the system features three protection layers: sticky sessions for session-bound operations, causal tokens for critical reads, and lag-aware filtering for bulk analytics. Each layer maintains explicit fallback logging to the primary with observable node identifiers and LSN deltas.",
+    mental_model="Before: blind distribution amplifies inconsistency. After: informed routing turns lag into a measurable variable.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md",
+    slide_num="14 / 24",
+    layout="before-after"
+)
+
+# Slide 15: Analisis mendalam - Test 1 Naive Stale Read
+add_slide(
+    categories=["BUKTI TEST", "STALE READ"],
+    title="Test 1: Stale Read Terjadi Tanpa Proteksi",
+    subtitle="TestNaiveReplicationLag_StaleRead membuktikan anomaly read-then-write window.",
+    content_items=[
+        {"title": "TEST KONTRAK STALE READ", "items": [
+            "func TestNaiveReplicationLag_StaleRead(t *testing.T) {",
+            "    c := cluster.NewCluster(2, 200*time.Millisecond, cluster.AsyncReplication)",
+            "    defer c.Close()",
+            "    r := router.NewRouter(c, router.DefaultConfig())",
+            "",
+            "    _, err := r.Write(\"s1\", \"key:A\", \"value-A\")",
+            "    if err != nil { t.Fatalf(\"Write failed: %v\", err) }",
+            "",
+            "    // Immediately read without any mitigation",
+            "    val, nodeID, lsn, err := r.ReadNaive(\"key:A\")",
+            "    if err == nil {",
+            "        t.Fatalf(\"Expected stale read error, got val=%s node=%s lsn=%d\", val, nodeID, lsn)",
+            "    }",
+            "    // After waiting for lag to expire, read should succeed",
+            "    time.Sleep(250 * time.Millisecond)",
+            "    val, nodeID, lsn, err = r.ReadNaive(\"key:A\")",
+            "    if err != nil { t.Fatalf(\"Post-lag read failed: %v\", err) }",
+            "}"
+        ], "type": "code"},
+        {"title": "VERIFIKASI INVARIAN", "items": [
+            "Immediate Read: ReadNaive pasca-write langsung menghasilkan ErrNotFound (stale read).",
+            "Post-Lag Read: Setelah sleep 250ms (> lag 200ms), read berhasil dengan nilai fresh.",
+            "Node Affinity: Setelah catch-up, read dapat berhasil dari replica manapun.",
+            "Timing Proof: Perbedaan hasil sebelum dan sesudah lag membuktikan anomali temporal."
+        ], "type": "bullet"}
+    ],
+    narrative="Unit test pertama membuktikan keberadaan stale read anomaly secara eksplisit. Setelah write ke primary dengan key 'key:A', panggilan ReadNaive seketika menghasilkan error ErrNotFound karena replica belum menerapkan WAL entry. Setelah menunggu 250 milidetik yang melampaui batas lag 200 milidetik, read yang sama berhasil mengembalikan value yang benar. Test ini mengonfirmasi bahwa anomali bersifat temporal — bukan permanen — dan dapat dicegah dengan menambahkan lapisan routing intelligence di antara write commit dan read dispatch.",
+    narrative_en="The first unit test explicitly proves the existence of stale read anomalies. Immediately after writing to the primary with key 'key:A', the ReadNaive call produces an ErrNotFound error because replicas have not yet applied the WAL entry. After waiting 250 milliseconds to exceed the 200-millisecond lag threshold, the same read succeeds returning the correct value. This test confirms the anomaly is purely temporal — not permanent — and can be prevented by adding a routing intelligence layer between write commit and read dispatch.",
+    mental_model="Stale reads are deterministic consequences of timing gaps, not random network failures.",
+    source_path="tests/replication_test.go:1-45",
+    slide_num="15 / 24",
+    layout="test-analysis"
+)
+
+# Slide 16: Analisis mendalam - Test 2 Sticky Session
+add_slide(
+    categories=["BUKTI TEST", "STICKY ROUTING"],
+    title="Test 2: Sticky Session Menjamin Read-Your-Own-Writes",
+    subtitle="TestStickySessionRouting membuktikan primary redirect dalam jendela T_sticky.",
+    content_items=[
+        {"title": "TEST KONTRAK STICKY ROUTING", "items": [
+            "func TestStickySessionRouting(t *testing.T) {",
+            "    c := cluster.NewCluster(2, 200*time.Millisecond, cluster.AsyncReplication)",
+            "    defer c.Close()",
+            "    cfg := router.DefaultConfig()",
+            "    cfg.StickyDuration = 500 * time.Millisecond",
+            "    r := router.NewRouter(c, cfg)",
+            "",
+            "    _, err := r.Write(\"s1\", \"key:B\", \"value-B\")",
+            "    if err != nil { t.Fatalf(\"Write failed: %v\", err) }",
+            "",
+            "    // Read within sticky window — must hit primary",
+            "    val, nodeID, _, err := r.ReadWithStickySession(\"s1\", \"key:B\")",
+            "    if err != nil || val != \"value-B\" || !strings.HasSuffix(nodeID, \"primary\") {",
+            "        t.Fatalf(\"Sticky read failed or hit wrong node: val=%s node=%s err=%v\", val, nodeID, err)",
+            "    }",
+            "",
+            "    time.Sleep(600 * time.Millisecond) // Expire sticky window",
+            "    val, nodeID, _, err = r.ReadWithStickySession(\"s1\", \"key:B\")",
+            "    if err != nil || nodeID == \"primary\" {",
+            "        t.Fatalf(\"Post-sticky read should route to replica, got node=%s\", nodeID)",
+            "    }",
+            "}"
+        ], "type": "code"},
+        {"title": "ATURAN STRICT TIMING", "items": [
+            "Pre-Expiration: Read dalam 500ms pertama selalu diarahkan ke primary, bukan replica.",
+            "Post-Expiration: Setelah 600ms, routing berubah ke ReadLagAware (replica eligible).",
+            "Value Integrity: Payload 'value-B' konsisten tersedia di primary dan replica catch-up.",
+            "Session Isolation: Session ID lain tidak terpengaruh oleh sticky state session s1."
+        ], "type": "bullet"}
+    ],
+    narrative="Unit test kedua mengonfirmasi bahwa sticky session routing berhasil mencegah stale read dalam jendela waktu yang ditentukan. Read yang dipanggil dalam 500 milidetik pasca-write secara konsisten diarahkan ke primary node, menjamin data fresh tersedia. Setelah jendela expire dengan sleep 600 milidetik, routing otomatis bergeser ke ReadLagAware yang menyeleksi replica berdasarkan threshold eligibility. Test ini membuktikan bahwa pendekatan time-based sederhana namun efektif untuk session-bound read patterns tanpa memerlukan LSN tracking di setiap request.",
+    narrative_en="The second unit test confirms that sticky session routing successfully prevents stale reads within the specified time window. Reads invoked within 500 milliseconds post-write consistently route to the primary node, guaranteeing fresh data availability. After the window expires with a 600-millisecond sleep, routing automatically shifts to ReadLagAware which selects replicas based on threshold eligibility. This test proves the time-based approach is both simple and effective for session-bound read patterns without requiring per-request LSN tracking.",
+    mental_model="Time-bounded primary redirection trades read throughput for guaranteed session consistency.",
+    source_path="tests/replication_test.go:47-98",
+    slide_num="16 / 24",
+    layout="test-analysis"
+)
+
+# Slide 17: Analisis mendalam - Test 3 Causal Token
+add_slide(
+    categories=["BUKTI TEST", "CAUSAL TOKEN"],
+    title="Test 3: Causal Token Tunggu Catch-Up Sebelum Serve Read",
+    subtitle="TestReadWithToken_LSN membuktikan blocking wait dengan LSN deterministik.",
+    content_items=[
+        {"title": "TEST KONTRAK CAUSAL TOKEN", "items": [
+            "func TestReadWithToken_LSN(t *testing.T) {",
+            "    c := cluster.NewCluster(1, 200*time.Millisecond, cluster.AsyncReplication)",
+            "    defer c.Close()",
+            "    r := router.NewRouter(c, router.DefaultConfig())",
+            "",
+            "    lsn, err := r.Write(\"s1\", \"key:C\", \"value-C\")",
+            "    if err != nil { t.Fatalf(\"Write failed: %v\", err) }",
+            "",
+            "    start := time.Now()",
+            "    val, nodeID, readLSN, err := r.ReadWithToken(context.Background(), lsn, \"key:C\")",
+            "    elapsed := time.Since(start)",
+            "",
+            "    if err != nil { t.Fatalf(\"ReadWithToken failed: %v\", err) }",
+            "    if val != \"value-C\" { t.Fatalf(\"Expected value-C, got %s\", val) }",
+            "    if readLSN < lsn { t.Fatalf(\"Expected LSN >= %d, got %d\", lsn, readLSN) }",
+            "    if elapsed < 150*time.Millisecond {",
+            "        t.Fatalf(\"Expected token read to wait ~200ms, finished in %v on node %s\", elapsed, nodeID)",
+            "    }",
+            "}"
+        ], "type": "code"},
+        {"title": "INVARIAN BLOCKING WAIT", "items": [
+            "Deterministic Wait: ReadWithToken blocking hingga replica appliedLSN >= minLSN terbukti.",
+            "Elapsed Timing: Test asserting elapsed >= 150ms mengkonfirmasi blocking behavior aktif.",
+            "LSN Guarantee: readLSN >= minLSN menjamin causal ordering terpenuhi sebelum serve response.",
+            "Fallback Safety: Jika timeout, method fallback ke primary dengan suffix '(fallback)' di nodeID."
+        ], "type": "bullet"}
+    ],
+    narrative="Unit test ketiga menguji implementasi causal token routing yang melibatkan blocking wait mechanism. Setelah write dengan LSN tertentu, ReadWithToken iterasi replica untuk menemukan yang sudah mencapai threshold LSN. Ketika tidak ada replica yang match, method memanggil WaitForLSN pada replica pertama dengan context timeout. Test ini memvalidasi bahwa read blocked selama sekitar 200 milidetik menunggu replica catch-up, kemudian melayani response dengan nilai fresh dan LSN yang sesuai. Blocking behavior ini merupakan bedanya dengan sticky session yang hanya mengandalkan waktu tanpa memeriksa LSN aktual.",
+    narrative_en="The third unit test examines the causal token routing implementation involving a blocking wait mechanism. After writing with a specific LSN, ReadWithToken iterates replicas to find one already at or above the threshold. When no replica matches, the method calls WaitForLSN on the first replica with a context timeout. This test validates that the read blocks for approximately 200 milliseconds waiting for replica catch-up before serving a fresh response with the correct LSN. This blocking behavior distinguishes causal tokens from sticky sessions, which rely solely on time without checking actual LSN values.",
+    mental_model="Causal tokens convert temporal uncertainty into deterministic ordering guarantees.",
+    source_path="tests/replication_test.go:100-121",
+    slide_num="17 / 24",
+    layout="test-analysis"
+)
+
+# Slide 18: Studi Kasus Industri: AWS RDS vs PostgreSQL Streaming
+add_slide(
+    categories=["STUDI KASUS", "INDUSTRI"],
+    title="Studi Kasus Industri: Replication Lag di Database Production",
+    subtitle="Bagaimana ekosistem database kelas dunia menangani stale read problem secara praktis.",
+    content_items=[
+        {"title": "AWS RDS / AURORA READ REPLICAS", "items": [
+            "Default: Asynchronous replication dengan lag bervariasi tergantung region dan instance size.",
+            "Read-Your-Own-Writes: AWS DocumentDB menyediakan 'session consistency' via sticky routing otomatis.",
+            "Monitoring: CloudWatch metric 'ReplicaLag' exposing seconds behind primary secara real-time.",
+            "Failover: Automated promotion namun read splitter perlu rekonfigurasi sticky session state."
+        ], "type": "bullet"},
+        {"title": "POSTGRESQL STREAMING REPLICATION", "items": [
+            "Async Default: wal_level = replica, synchronous_commit = off, remote_apply belum diaktifkan.",
+            "Synchronous Commit: Setting synchronous_commit = remote_apply menjamin write visibility di semua replica.",
+            "pg_stat_replication: System view exposing replay_lsn vs write_lsn untuk monitoring lag.",
+            "Application Level: Driver seperti PgBouncer atau connection pooler bisa implement sticky routing."
+        ], "type": "bullet"}
+    ],
+    narrative="Studi kasus industri menunjukkan bahwa masalah replication lag bukan teoretis melainkan operasional sehari-hari di infrastruktur cloud modern. AWS RDS menyediakan metric ReplicaLag melalui CloudWatch yang memungkinkan tim SRE mendeteksi anomali sebelum user complaint muncul. PostgreSQL streaming replication memberikan kontrol granular melalui synchronous_commit parameter yang membedakan antara durability guarantee dan visibility guarantee. Aplikasi enterprise besar seperti Twitter dan Netflix mengimplementasikan custom session-affinity routing di layer client library untuk menutup gap readability tanpa menunggu perbaikan di database engine.",
+    narrative_en="Industry case studies demonstrate that replication lag is not merely theoretical but an everyday operational challenge in modern cloud infrastructure. AWS RDS provides the ReplicaLag metric through CloudWatch enabling SRE teams to detect anomalies before user complaints surface. PostgreSQL streaming replication offers granular control through the synchronous_commit parameter distinguishing between durability guarantees and visibility guarantees. Large enterprise applications like Twitter and Netflix implement custom session-affinity routing within client libraries to close readability gaps without waiting for database engine fixes.",
+    mental_model="Production systems treat replication lag as an operational variable, not an inflexible constraint.",
+    source_path="research/05-report.md • research/03-evidence.md",
+    slide_num="18 / 24",
+    layout="cards"
+)
+
+# Slide 19: Analisis Teknis: sync.Cond WaitForLSN vs Context Timeout
+add_slide(
+    categories=["ANALISIS TEKNIS", "RUNTIME"],
+    title="Bagaimana WaitForLSN Membedakan Blocking dan Timeout?",
+    subtitle="Konkurensi pattern menggunakan sync.Cond + context cancellation untuk polling efisien.",
+    content_items=[
+        {"title": "IMPLEMENTASI WAITER", "items": [
+            "func (n *Node) WaitForLSN(ctx context.Context, targetLSN uint64) error {",
+            "    ch := make(chan struct{})",
+            "    stop := make(chan struct{})",
             "    go func() {",
-            "        n.mu.Lock(); defer n.mu.Unlock()",
-            "        for n.appliedLSN < target {",
-            "            n.cond.Wait() // Dibangunkan oleh Broadcast worker",
+            "        n.mu.Lock()",
+            "        defer n.mu.Unlock()",
+            "        for n.appliedLSN < targetLSN {",
+            "            select {",
+            "            case <-stop:",
+            "                return",
+            "            default:",
+            "            }",
+            "            n.cond.Wait()  // Release lock, block until Broadcast",
             "        }",
             "        close(ch)",
             "    }()",
             "    select {",
-            "    case <-ctx.Done(): return ctx.Err()",
-            "    case <-ch: return nil",
+            "    case <-ctx.Done():",
+            "        close(stop); n.cond.Broadcast(); return ctx.Err()",
+            "    case <-ch:",
+            "        return nil",
             "    }",
-            "}",
+            "}"
         ], "type": "code"},
-        {"title": "EFISIENSI KOMPUTASI", "items": [
-            "Goroutine reader tertidur tanpa memakan siklus komputasi CPU",
-            "Langsung aktif seketika worker replika selesai menerapkan WAL",
-            "Mendukung pembatalan timeout context secara aman dan bersih",
-        ], "type": "bullet"},
-        {"title": "SAFETY CONCURRENCY", "items": [
-            "Mutex melindungi pembacaan dan penulisan variabel appliedLSN",
-            "Tidak terjadi kebocoran goroutine saat context kadaluarsa",
-        ], "type": "bullet"},
+        {"title": "MEKANISME PENGUNCIAN", "items": [
+            "cond.Wait() melepas mutex sementara goroutine block, menghindari busy-wait CPU spinning.",
+            "Worker goroutine memanggil cond.Broadcast() setelah apply entry, waking semua waiter.",
+            "Context deadline memicu close(stop) + Broadcast() untuk emergency wakeup dan cleanup."
+        ], "type": "bullet"}
     ],
-    mental_model="Event-driven condition variables eliminate busy-waiting during replication catch-up.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/cluster/cluster.go:79",
-    slide_num="11 / 24",
-    title_en="Event-Driven Catch-Up with Condition Variables",
-    narrative_en="Rather than wasting CPU cycles on repetitive polling, WaitForLSN suspends the reader goroutine on a sync.Cond condition variable. When the background replica worker applies the transaction, it broadcasts a wake-up signal, immediately resuming the reader with sub-millisecond precision.",
-    narrative="Alih-alih membebani CPU dengan mekanisme polling berulang, method WaitForLSN menidurkan goroutine pembaca menggunakan sync.Cond. Ketika worker replika selesai menerapkan transaksi WAL, sinyal siaran dikirimkan untuk membangunkan goroutine secara instan, menghasilkan waktu tunggu yang presisi dan hemat sumber daya."
-)
-
-# Slide 12: Strategy 3 - Lag-Aware Dynamic Routing
-add_slide(
-    categories=["STRATEGI ROUTING"],
-    title="Strategi 3: Lag-Aware Dynamic Routing",
-    subtitle="Mengecualikan replica yang tertinggal jauh dan fallback saat replica habis",
-    content_items=[
-        {"title": "FILTERING BERBASIS DELTA LSN", "items": [
-            "primaryLSN := r.cluster.CurrentLSN()",
-            "for _, replica := range replicas {",
-            "    diff := primaryLSN - replica.AppliedLSN()",
-            "    if diff <= r.config.MaxLSNDiff {",
-            "        eligible = append(eligible, replica)",
-            "    }",
-            "}",
-        ], "type": "code"},
-        {"title": "FALLBACK OTOMATIS", "items": [
-            "if len(eligible) == 0 {",
-            "    return r.cluster.Primary().Read(key) // Fallback-lag",
-            "}",
-            "idx := r.rrIndex.Add(1) % len(eligible)",
-            "return eligible[idx].Read(key)",
-        ], "type": "code"},
-        {"title": "PROTEKSI SISTEM", "items": [
-            "Mencegah query umum membaca data yang terlalu usang",
-            "Mengisolasi simpul replika yang mengalami gangguan I/O atau jaringan",
-            "Degradasi anggun (graceful degradation) menjaga ketersediaan layanan",
-        ], "type": "bullet"},
-    ],
-    mental_model="Dynamic lag-aware routing preserves consistency SLAs by shedding severely lagging nodes.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/router/router.go:117",
-    slide_num="12 / 24",
-    title_en="Strategy 3: Lag-Aware Dynamic Routing and Primary Fallback",
-    narrative_en="For general reads without explicit session constraints, the lag-aware routing strategy evaluates the delta between primary LSN and replica applied LSN. Nodes exceeding the maximum tolerable difference are temporarily removed from rotation, triggering automated fallback to primary if all replicas degrade.",
-    narrative="Untuk operasi baca umum yang tidak terikat sesi penulis, strategi lag-aware menghitung selisih delta antara LSN primary dan LSN terapan replika. Simpul yang melewati batas toleransi MaxLSNDiff dikeluarkan dari antrean beban. Jika seluruh replika mengalami gangguan, router secara otomatis mengalihkan beban baca ke primary demi menjaga integritas data."
-)
-
-# Slide 13: Strategy 4 - Synchronous Replication
-add_slide(
-    categories=["MODE REPLIKASI"],
-    title="Strategi 4: Synchronous Replication (remote_apply)",
-    subtitle="Write diblokir hingga semua replica menerapkan perubahan secara tuntas",
-    content_items=[
-        {"title": "EKSEKUSI TULIS SINKRON", "items": [
-            "if c.replMode == SyncReplication {",
-            "    for _, replica := range c.replicas {",
-            "        if lag > 0 { time.Sleep(lag) }",
-            "        replica.data[key] = value",
-            "        replica.appliedLSN = lsn",
-            "    }",
-            "}",
-        ], "type": "code"},
-        {"title": "GARANSI KESEGARAN", "items": [
-            "Semua replika seketika memiliki AppliedLSN == PrimaryLSN",
-            "Naive read sekalipun dijamin 100% bebas dari anomali stale read",
-            "Setara dengan parameter synchronous_commit = remote_apply di PostgreSQL",
-        ], "type": "bullet"},
-        {"title": "BIAYA PERFORMA TULIS", "items": [
-            "Latensi write membengkak sebanding dengan round-trip terlama replika",
-            "Satu replika lambat akan memperlambat seluruh proses penulisan sistem",
-            "Hanya direkomendasikan untuk sistem perbankan atau data finansial kritis",
-        ], "type": "bullet"},
-    ],
-    mental_model="Synchronous replication achieves immediate read freshness by penalizing write latency.",
-    source_path="labs/33-read-replicas-and-replication-lag/internal/cluster/cluster.go:214",
-    slide_num="13 / 24",
-    title_en="Strategy 4: Synchronous Replication and the Freshness Tax",
-    narrative_en="Synchronous replication halts the primary write process until all designated replica nodes acknowledge full local execution. While this completely eliminates stale reads across the entire cluster, it imposes a severe latency penalty on every write operation proportional to network round-trip delays.",
-    narrative="Replikasi sinkron menahan konfirmasi transaksi tulis pada primary hingga seluruh simpul replika selesai menerapkan perubahan ke penyimpanan lokal. Pola ini sepenuhnya melenyapkan anomali stale read pada semua replika, namun mengorbankan performa tulis secara drastis karena setiap operasi penulisan terhambat oleh latensi jaringan terjauh."
-)
-
-# Slide 14: Quantitative Comparison Table
-add_slide(
-    categories=["TABEL EVALUASI"],
-    title="Perbandingan 4 Strategi Mitigasi Lag",
-    subtitle="Evaluasi matriks trade-off antara garansi, latensi, dan beban primary",
-    content_items=[
-        {"title": "MATRIKS STRATEGI", "items": [
-            "Strategi | Garansi | Latensi Read | Overhead Primary | Kompleksitas",
-            "Naive Read | Eventual | Terendah | Nol | Sangat Rendah",
-            "Sticky Session | Read-Own-Writes | Terendah | Sedang (T_sticky) | Rendah",
-            "Causal Token | Causal Session | Sedang (Wait) | Rendah (Fallback) | Sedang",
-            "Lag-Aware | Bounded Lag | Rendah | Kondisional | Sedang",
-            "Sync Mode | Linearizable | Terendah | Nol (Write Mahal) | Tinggi",
-        ], "type": "table"},
-        {"title": "ANALISIS KEBUTUHAN", "items": [
-            "E-commerce umum: Kombinasi Sticky Session (checkout) + Lag-Aware (katalog)",
-            "Fintech / Ledger: Causal Token untuk transaksi atau Synchronous Replication",
-            "Analytics Dashboard: Lag-Aware dengan toleransi batas LSN yang longgar",
-        ], "type": "bullet"},
-        {"title": "ATURAN UTAMA", "items": [
-            "Tidak ada solusi perak: pilih strategi berdasarkan nilai toleransi bisnis",
-        ], "type": "bullet"},
-    ],
-    mental_model="Match your replication mitigation strategy to the cost of reading stale state.",
-    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md:62",
-    slide_num="14 / 24",
-    title_en="Quantitative Strategy Matrix: Trade-Off Evaluation",
-    narrative_en="Choosing a mitigation strategy requires balancing consistency guarantees against latency overhead and primary load. While sticky routing offers the lowest operational friction, causal token routing guarantees mathematical correctness without permanently overloading the primary cluster.",
-    narrative="Pemilihan strategi penanganan replication lag menuntut keseimbangan antara garansi konsistensi, latensi query, dan beban kerja simpul primary. Sticky routing menawarkan implementasi paling praktis untuk alur pengguna umum, sedangkan causal token memberikan kepastian matematis tanpa membebani primary secara berlebihan."
-)
-
-# Slide 15: Demo Execution & Quantitative Proof
-add_slide(
-    categories=["BUKTI DEMO"],
-    title="Hasil Eksekusi Demo CLI Lab 33",
-    subtitle="Bukti empiris terjadinya anomali dan keberhasilan masing-masing strategi",
-    content_items=[
-        {"title": "LOG SKENARIO 1 & 2", "items": [
-            "[Write Primary] key='user:profile:123', LSN: 1",
-            "[Naive Read] Node: replica-2, Applied LSN: 0, Err: key not found",
-            "[Sticky Read (within 500ms)] Node: primary, LSN: 1, Val: Alice",
-            "[Sticky Read (after TTL)] Node: replica-1, LSN: 1, Val: Alice",
-        ], "type": "code"},
-        {"title": "LOG SKENARIO 3 & 4", "items": [
-            "[Write Primary] key='order:101', LSN: 2",
-            "[Token Read (MinLSN=2)] Node: replica-1, LSN: 2, Val: completed",
-            "[Sync Write] LSN: 1, Write Duration: 102.19ms",
-            "[Sync Naive Read] Node: replica-2, LSN: 1, Val: Bob, Err: <nil>",
-        ], "type": "code"},
-        {"title": "INTERPRETASI HASIL", "items": [
-            "Skenario 1 membuktikan kegagalan fatal metode naif saat lag aktif",
-            "Skenario 2 membuktikan transisi mulus dari primary ke replika setelah TTL",
-            "Skenario 3 membuktikan penungguan deterministik hingga replika siap",
-            "Skenario 4 membuktikan kesegaran instan dengan penalti durasi tulis 102ms",
-        ], "type": "bullet"},
-    ],
-    mental_model="Empirical demo execution validates theoretical invariants under controlled conditions.",
-    source_path="labs/33-read-replicas-and-replication-lag/cmd/demo/main.go",
-    slide_num="15 / 24",
-    title_en="Interactive CLI Demonstration Execution Logs",
-    narrative_en="Running the lab demo CLI provides reproducible evidence of every failure mode and mitigation strategy. Naive reads fail immediately under asynchronous delay, sticky routing shields the author during post-write navigation, causal tokens block cleanly until catch-up, and synchronous writes record a measurable 102ms latency overhead.",
-    narrative="Eksekusi demo CLI membuktikan validitas seluruh skenario secara nyata. Pendekatan naif langsung memicu error data tidak ditemukan saat lag aktif, sticky routing berhasil melindungi pembacaan pengguna ke primary, causal token menunggu hingga replika siap secara presisi, dan mode sinkron mencatatkan penalti waktu tulis terukur sebesar 102ms."
-)
-
-# Slide 16: Test Suite Verification & Race Detector
-add_slide(
-    categories=["VERIFIKASI TEST"],
-    title="Verifikasi 7 Test Case & Bebas Data Race",
-    subtitle="Pengujian unit dan konkurensi membuktikan ketahanan sistem di bawah beban",
-    content_items=[
-        {"title": "DAFTAR TEST SUITE", "items": [
-            "TestNaiveReplicationLag_StaleRead: PASS (0.60s)",
-            "TestStickySessionRouting: PASS (0.55s)",
-            "TestReadWithToken_LSN: PASS (0.20s)",
-            "TestReplicaLagThreshold_Fallback: PASS (0.00s)",
-            "TestSynchronousReplication_Freshness: PASS (0.10s)",
-            "TestConcurrentAccess_RaceFree: PASS (1.10s)",
-            "TestWaitForLSN_ContextTimeout: PASS (0.05s)",
-        ], "type": "code"},
-        {"title": "UJI KONKURENSI EKSTRIM", "items": [
-            "5 Goroutine Writer + 10 Goroutine Reader",
-            "Masing-masing 20 operasi paralel (Total 300 operasi simultan)",
-            "Dijalankan dengan go test -race tanpa memicu race condition",
-        ], "type": "bullet"},
-        {"title": "UJI BATAS WAKTU", "items": [
-            "TestWaitForLSN membuktikan pengembalian context.DeadlineExceeded",
-            "Sistem tidak mengalami kebocoran memori atau dead lock goroutine",
-        ], "type": "bullet"},
-    ],
-    mental_model="Automated test assertions with race detection guarantee thread-safe correctness.",
-    source_path="labs/33-read-replicas-and-replication-lag/tests/replication_test.go",
-    slide_num="16 / 24",
-    title_en="Comprehensive Unit and Concurrency Test Verification",
-    narrative_en="All seven test cases pass under Go's race detector. The test suite verifies exact stale read occurrences, sticky session TTL hand-offs, causal LSN assertions, threshold fallback to primary, immediate synchronous visibility, and rigorous thread safety under concurrent writer-reader pressure.",
-    narrative="Seluruh 7 skenario pengujian unit lulus sempurna dengan pengaktifan Go race detector. Suite pengujian memvalidasi munculnya anomali stale read, transisi TTL sticky session, penungguan token LSN, fallback akibat lag berlebih, kesegaran replikasi sinkron, serta keamanan akses memori konkuren tanpa data race."
-)
-
-# Slide 17: Production Mapping: PostgreSQL & MySQL
-add_slide(
-    categories=["STANDAR INDUSTRI"],
-    title="Pemetaan ke PostgreSQL dan MySQL",
-    subtitle="Bagaimana konsep lab berkorespondensi dengan konfigurasi database populer",
-    content_items=[
-        {"title": "POSTGRESQL PRIMITIVES", "items": [
-            "LSN: pg_current_wal_lsn() & pg_last_wal_replay_lsn()",
-            "Sync Commit: synchronous_commit = on | remote_apply | off",
-            "Lag Metric: pg_stat_replication.replay_lag",
-            "Catch-Up Query: pg_wal_replay_pause() / pg_last_wal_receive_lsn()",
-        ], "type": "bullet"},
-        {"title": "MYSQL / VITESS PRIMITIVES", "items": [
-            "GTID: Global Transaction Identifier setara dengan LSN monotonik",
-            "Semi-Sync: rpl_semi_sync_master_enabled (durability, bukan visibility)",
-            "Lag Metric: Seconds_Behind_Master (kurang akurat) vs Heartbeat GTID",
-            "WAIT_FOR_EXECUTED_GTID_SET: Ekivalen native dari WaitForLSN",
-        ], "type": "bullet"},
-        {"title": "PERINGATAN SEMI-SYNC", "items": [
-            "MySQL semi-sync hanya menjamin relay log sampai di replika",
-            "Data belum tentu sudah di-apply ke storage engine (bisa tetap stale)",
-        ], "type": "bullet"},
-    ],
-    mental_model="Database engines provide native LSN/GTID primitives; applications orchestrate routing.",
-    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md:38",
-    slide_num="17 / 24",
-    title_en="Mapping In-Memory Concepts to Production PostgreSQL and MySQL",
-    narrative_en="The concepts implemented in this lab directly map to production database mechanisms. PostgreSQL exposes Write-Ahead Log positions via LSN functions, while MySQL leverages Global Transaction Identifiers (GTID) and WAIT_FOR_EXECUTED_GTID_SET to implement deterministic causal synchronization.",
-    narrative="Konsep yang disimulasikan pada Lab 33 memiliki padanan langsung pada basis data produksi. PostgreSQL menyediakan fungsi pemantauan LSN fisik dan konfigurasi synchronous_commit, sedangkan MySQL mengandalkan Global Transaction Identifiers (GTID) serta fungsi WAIT_FOR_EXECUTED_GTID_SET untuk sinkronisasi kausal deterministik."
-)
-
-# Slide 18: Cloud Managed Services (RDS, Aurora, Azure)
-add_slide(
-    categories=["CLOUD DATABASE"],
-    title="Replication Lag di Cloud Managed Services",
-    subtitle="Perbedaan karakteristik arsitektur replikasi shared-storage vs shared-nothing",
-    content_items=[
-        {"title": "AWS AURORA (SHARED STORAGE)", "items": [
-            "Arsitektur storage terdistribusi: Primary dan replica membaca volume sama",
-            "Replication lag sangat rendah (umumnya < 20ms)",
-            "Lag hanya berupa invalidasi buffer cache memori lokal di replica",
-        ], "type": "bullet"},
-        {"title": "AWS RDS / AZURE PG (SHARED NOTHING)", "items": [
-            "Replikasi streaming berbasis pengiriman byte WAL fisik antar instans",
-            "Lag berfluktuasi drastis saat terjadi transaksi batch besar atau spike I/O",
-            "Metrik: ReplicaLag (CloudWatch) & physical_replication_delay (Azure)",
-        ], "type": "bullet"},
-        {"title": "IMPLIKASI DESAIN", "items": [
-            "Aurora tetap membutuhkan mitigasi read-your-own-writes pada microsecond",
-            "Shared-nothing membutuhkan threshold MaxLSNDiff dan fallback yang ketat",
-        ], "type": "bullet"},
-    ],
-    mental_model="Shared storage reduces replication lag magnitude but does not eliminate cache staleness.",
-    source_path="labs/33-read-replicas-and-replication-lag/research/02-sources.md",
-    slide_num="18 / 24",
-    title_en="Cloud Managed Database Replicas: Aurora vs Traditional RDS",
-    narrative_en="Managed cloud databases approach replication differently. AWS Aurora utilizes a distributed log-structured storage volume where replicas observe minimal cache invalidation lag (<20ms). Standard AWS RDS and Azure PostgreSQL rely on traditional network streaming where I/O bottlenecks can induce significant replication lag.",
-    narrative="Layanan cloud terkelola memiliki arsitektur replikasi yang berbeda. AWS Aurora memisahkan komputasi dari penyimpanan terdistribusi bersama, sehingga replika hanya mengalami lag pembaruan cache memori dalam orde milidetik rendah. Sebaliknya, RDS standar dan Azure PG menggunakan aliran WAL konvensional yang rentan terhadap lonjakan lag saat lalu lintas data padat."
-)
-
-# Slide 19: Distributed Session State in Production
-add_slide(
-    categories=["ARSITEKTUR SKALA"],
-    title="Tantangan Scaling Session State di Produksi",
-    subtitle="Transisi dari sync.Map single-process menuju arsitektur stateless",
-    content_items=[
-        {"title": "BATASAN IN-MEMORY MAP", "items": [
-            "Router lab menyimpan sesi pada sync.Map lokal di satu instance aplikasi",
-            "Pada arsitektur horizontal (banyak pod API), map lokal tidak tersinkronisasi",
-            "Request berikutnya dari user bisa masuk ke pod yang tidak memiliki state sesi",
-        ], "type": "bullet"},
-        {"title": "SOLUSI 1: DISTRIBUTED CACHE", "items": [
-            "Simpan LastWriteTime dan LastWriteLSN di Redis dengan TTL terkonfigurasi",
-            "Semua pod API membaca status sesi dari cluster Redis terpusat",
-            "Biaya: Tambahan satu round-trip network lookup sebelum eksekusi query",
-        ], "type": "bullet"},
-        {"title": "SOLUSI 2: CLIENT TOKEN (JWT/COOKIE)", "items": [
-            "Kirim commit LSN kembali ke client via header HTTP response",
-            "Client mengirimkan kembali LSN via cookie/header pada request berikutnya",
-            "Stateless penuh pada backend, router langsung membaca nilai token dari header",
-        ], "type": "bullet"},
-    ],
-    mental_model="Stateless routing pushes causal tokens to client cookies or shared Redis clusters.",
-    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md:190",
+    narrative="Implementasi WaitForLSN menunjukkan pola konkurensi Go yang elegan untuk menunggu kondisi berbasis channel dan condvar. Goroutine waiter mengakuisisi mutex node, loop until appliedLSN memenuhi target, dan memanggil cond.Wait() yang secara atomik melepaskan mutex sambil memblokir goroutine. Worker goroutine setelah apply WAL entry memanggil cond.Broadcast() untuk membangunkan semua waiter yang sedang blocked. Context cancellation memberikan jalur escape yang aman dengan menutup stop channel dan memicu broadcast ulang agar waiter tidak stuck selamanya.",
+    narrative_en="The WaitForLSN implementation demonstrates an elegant Go concurrency pattern for condition-based waiting combining channels and condvars. The waiter goroutine acquires the node mutex, loops until appliedLSN satisfies the target, and calls cond.Wait() which atomically releases the mutex while blocking the goroutine. The worker goroutine invokes cond.Broadcast() after applying WAL entries to wake all blocked waiters. Context cancellation provides a safe escape hatch by closing the stop channel and triggering a re-broadcast ensuring waiters never remain permanently stuck.",
+    mental_model="Condition variables replace polling loops; context cancellation ensures graceful deadline enforcement.",
+    source_path="internal/cluster/cluster.go:79-107",
     slide_num="19 / 24",
-    title_en="Scaling Session State: From In-Memory Maps to Distributed Systems",
-    narrative_en="While the lab models session tracking via an in-memory sync.Map, horizontal production environments require distributed state coordination. Production systems either store session write tokens in Redis or encode minimum LSN requirements directly into signed client cookies and HTTP headers.",
-    narrative="Implementasi lab menggunakan sync.Map in-memory untuk melacak status sesi pada satu proses aplikasi. Pada sistem produksi berskala horizontal dengan banyak container, status sesi harus didistribusikan. Pendekatan praktis meliputi penyimpanan stempel sesi di Redis atau menyematkan token LSN secara stateless ke dalam cookie terenkripsi milik klien."
+    layout="code-bullet"
 )
 
-# Slide 20: Polling Overhead & Heartbeat Optimization
+# Slide 20: Checklist implementasi
 add_slide(
-    categories=["OPTIMASI PERFORMA"],
-    title="Overhead Polling LSN & Optimasi Heartbeat",
-    subtitle="Menghindari query metadata basis data berulang pada setiap request pembacaan",
+    categories=["CHECKLIST", "PRODUKSI"],
+    title="Checklist Implementasi Read Replica Strategy",
+    subtitle="10 poin verifikasi wajib sebelum merutekan traffic ke environment production.",
     content_items=[
-        {"title": "MASALAH PER-QUERY LSN CHECK", "items": [
-            "Menjalankan query LSN ke database pada setiap read melipatgandakan round-trip",
-            "Beban CPU basis data tersita untuk melayani query metadata, bukan query data",
-            "Koneksi pool cepat jenuh akibat query administratif yang berulang",
-        ], "type": "bullet"},
-        {"title": "SOLUSI BACKGROUND HEARTBEAT", "items": [
-            "Worker aplikasi melakukan polling lag replica secara berkala (misal tiap 100ms)",
-            "Status LSN dan kelaikan simpul dicatat di memory cache lokal aplikasi",
-            "Router membuat keputusan perutean murni berdasarkan data cache tanpa I/O",
-        ], "type": "bullet"},
-        {"title": "HEARTBEAT TABLE TECHNIQUE", "items": [
-            "Primary menulis timestamp periodik ke tabel khusus __heartbeat",
-            "Replika mereplikasi baris tersebut, router membaca selisih waktu secara pasif",
-        ], "type": "bullet"},
+        {"title": "CHECKLIST ARSITEKTUR REPLIKASI", "items": [
+            "[ ] Tentukan consistency requirement: session-bound vs casual reads untuk memilih strategi.",
+            "[ ] Kalibrasi T_sticky ≥ p99 replication lag aktual di production environment (bukan asumsi).",
+            "[ ] Konfigurasi MaxLSNDiff berdasarkan observasi delta LSN normal vs anomaly threshold.",
+            "[ ] Set WaitTimeout causal token ≥ worst-case catch-up duration + 20% buffer.",
+            "[ ] Deploy monitoring metrics: replica lag histogram, stale read rate, primary fallback frequency.",
+            "[ ] Implement circuit breaker untuk primary fallback ketika semua replica exceed threshold.",
+            "[ ] Distribusikan router session state ke shared store (Redis/memcached) untuk horizontal scaling.",
+            "[ ] Validasi bahwa sticky session map tidak memory-leak pada session idle jangka panjang.",
+            "[ ] Uji synchronous replication mode hanya untuk write-critical paths, bukan seluruh traffic.",
+            "[ ] Prepare runbook deteksi anomaly: cara membedakan network partition dari replication lag spike."
+        ], "type": "bullet"}
     ],
-    mental_model="Cache replica lag status asynchronously via heartbeats to avoid per-query metadata overhead.",
-    source_path="labs/33-read-replicas-and-replication-lag/research-audit/06-gaps.md",
+    narrative="Daftar periksa ini merangkum sepuluh prinsip krusial yang wajib dipenuhi sebelum deploying read replica strategy ke production. Parameter timing seperti sticky duration dan wait timeout tidak boleh di-set berdasarkan feeling, melainkan harus dikalibrasi dari data historis replication lag percentile. Monitoring dan alerting menjadi mata telinga operator untuk mendeteksi degradation sebelum user complain. State management router perlu diverifikasi tidak menyebabkan memory leak pada session lifecycle yang panjang. Terakhir, dibedakan antara synchronous replication untuk critical path versus asynchronous dengan application-level fencing untuk read-heavy workload.",
+    narrative_en="This checklist codifies ten critical principles required before deploying read replica strategies to production. Timing parameters such as sticky duration and wait timeout must never be guessed but calibrated against historical replication lag percentile data. Monitoring and alerting become the operator sensory system for detecting degradation before user complaints surface. Router state management must be verified for absence of memory leaks across long-lived session lifecycles. Finally, distinguish synchronous replication for critical paths versus asynchronous with application-level fencing for read-heavy workloads.",
+    mental_model="Calibrate timing empirically, monitor continuously, and distinguish path criticality explicitly.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/05-key-takeaways.md",
     slide_num="20 / 24",
-    title_en="Mitigating LSN Polling Overhead with Asynchronous Heartbeats",
-    narrative_en="Querying replica positions on every client request introduces severe database round-trip overhead. High-throughput architectures deploy background health workers that poll replica status periodically or read dedicated heartbeat tables, allowing routers to make routing decisions entirely in memory.",
-    narrative="Mengeksekusi query pemeriksaan LSN ke replika pada setiap request baca dapat memicu overhead round-trip yang masif. Arsitektur berkinerja tinggi mengatasi kendala ini dengan menjalankan worker background asinkron yang memperbarui metrik lag secara periodik ke dalam memori aplikasi, sehingga keputusan routing dapat diambil tanpa latensi tambahan."
+    layout="checklist"
 )
 
-# Slide 21: Operational Checklist for Database Replicas
+# Slide 21: Anti-pattern & cara reproduksi kegagalan
 add_slide(
-    categories=["PANDUAN OPERASIONAL"],
-    title="Checklist Penerapan Read Replica di Produksi",
-    subtitle="Panduan verifikasi arsitektur sebelum mengaktifkan perutean replika",
+    categories=["ANTI-PATTERN", "REPRODUKSI"],
+    title="Anti-Pattern: Kesalahan Desain yang Harus Dihindari",
+    subtitle="Kekeliruan arsitektur yang melumpuhkan jaminan keselamatan replication topology.",
     content_items=[
-        {"title": "CHECKLIST ARSITEKTUR", "items": [
-            "[ ] Identifikasi query kritis pasca-write dan pasang garansi sesi",
-            "[ ] Konfigurasi threshold MaxLSNDiff dan aktifkan fallback primary otomatis",
-            "[ ] Pasang monitoring metrik lag replika pada persentil p95 dan p99",
-            "[ ] Pastikan ukuran connection pool replika memadai untuk lonjakan read",
-            "[ ] Tetapkan batas waktu timeout yang ketat saat menunggu replika catch-up",
-            "[ ] Uji skenario failover dan isolasi replika yang mengalami disk stall",
-        ], "type": "bullet"},
-        {"title": "ATURAN THRESHOLD", "items": [
-            "Gunakan metrik lag berbasis byte/LSN, bukan hanya unit detik",
-            "Alarm harus berbunyi sebelum antrean replika menyebabkan OOM pada worker",
-        ], "type": "bullet"},
-        {"title": "DISIPLIN REKAYASA", "items": [
-            "Selalu siapkan jalur fallback ke primary untuk melindungi ketersediaan",
-        ], "type": "bullet"},
+        {"title": "ANTI-PATTERN UMUM", "items": [
+            "Mencampuradukkan semi-sync dengan synchronous: MySQL semi-sync menjamin relay log receipt, bukan apply visibility.",
+            "Sticky Duration Terlalu Pendek: T_sticky < p99 lag menyebabkan session masih mengalami stale read selepas jendela.",
+            "Tidak Ada Fallback Primary: ReadLagAware tanpa fallback utama menyebabkan total read unavailability saat semua replica lagging.",
+            "Ignore LSN pada Cached Reads: Read dari application cache tanpa invalidasi berdasarkan LSN menghasilkan dirty reads persisten.",
+            "Hardcode Waiting Durasi: Menggunakan time.Sleep statis alih-alih context timeout menyebabkan goroutine leak dan deadlock."
+        ], "type": "card"},
+        {"title": "CARA REPRODUKSI GAGAL DI LAB", "items": [
+            "1. Ubah router.go ReadLagAware: hapus fallback primary → test TestReplicaLagThreshold_Fallback akan fail.",
+            "2. Set MaxLSNDiff = 0 → semua replica terfilter, read selalu fallback primary; throughput read drop drastis.",
+            "3. Hapus WaitForLSN context timeout → TestReadWithToken_LSN hanging indefinitely pada replica yang crash."
+        ], "type": "card"}
     ],
-    mental_model="Enforce strict lag SLAs and automated primary fallbacks before scaling reads.",
-    source_path="labs/33-read-replicas-and-replication-lag/content/02-master-draft.md:240",
+    narrative="Mengabaikan prinsip desain replication topology dapat berakibat fatal bagi availability dan consistency system. Anti-pattern yang paling sering terjadi adalah underestimate durasi sticky window dibanding actual replication lag, menghasilkan false sense of security bagi engineer. Tidak menyertakan fallback primary pada lag-aware routing berarti read operations akan total unavailable ketika semua replica mengalami lag spike simultan. Hardcoding sleep duration alih-alih menggunakan context timeout juga menyebabkan goroutine leakage yang dapat mematikan seluruh cluster worker.",
+    narrative_en="Violating replication topology design principles compromises both system availability and data consistency. The most common anti-pattern is underestimating sticky window duration relative to actual replication lag, inducing a false sense of security for engineering teams. Omitting primary fallbacks in lag-aware routing guarantees total read unavailability whenever all replicas suffer simultaneous lag spikes. Furthermore, hardcoding sleep durations rather than respecting context timeouts invites severe goroutine leakage that can paralyze cluster workers.",
+    mental_model="Naive fallbacks and uncalibrated timers turn transient replication lag into catastrophic outages.",
+    source_path="labs/33-read-replicas-and-replication-lag/content/05-key-takeaways.md",
     slide_num="21 / 24",
-    title_en="Production Checklist for Database Read Replication",
-    narrative_en="Before distributing read traffic across secondary replicas, engineering teams must establish clear operational guardrails. Enforce automated primary fallbacks, monitor p99 replication lag metrics, and ensure post-write query pathways explicitly request session guarantees.",
-    narrative="Sebelum mendistribusikan lalu lintas baca ke replika sekunder di lingkungan produksi, tim pengembang wajib menerapkan parameter operasional yang ketat. Siapkan mekanisme fallback otomatis ke primary, pantau metrik lag replikasi pada persentil p99, serta pastikan alur query pasca-tulis dilindungi oleh garansi sesi read-your-own-writes."
+    layout="anti-pattern-cards"
 )
 
-# Slide 22: Lab Boundaries & Simulation Scope
+# Slide 22: Takeaway praktis & command block dominan
 add_slide(
-    categories=["BATAS LAB"],
-    title="Batasan Model & Ruang Lingkup Lab 33",
-    subtitle="Transparansi batasan simulasi in-memory dibanding database fisik",
+    categories=["PRAKTIS", "COMMAND"],
+    title="Verifikasi Mandiri: Uji & Jalankan Lab",
+    subtitle="Reproduksi seluruh bukti teknis, benchmark race detector, dan demo interaktif di terminal Anda.",
     content_items=[
-        {"title": "YANG DIMODELKAN (TERSEDIA)", "items": [
-            "Aliran data WAL terurut dengan LSN monotonik atomik",
-            "Simulasi lag deterministik via channel buffer dan time delay",
-            "Empat strategi routing lengkap dengan fallback dan event synchronization",
-            "Pengujian konkurensi multithreading bebas race condition",
-        ], "type": "bullet"},
-        {"title": "BATASAN LAB (BELUM DIMODELKAN)", "items": [
-            "Penyimpanan murni in-memory map tanpa persistensi disk / fsync",
-            "Tidak memodelkan engine SQL, indexing B-Tree, atau parsing transaksi",
-            "Tidak memodelkan topologi cascading replication atau partisi multi-region",
-            "Tidak memodelkan algoritma konsensus pemilihan primary (Raft / Paxos)",
-        ], "type": "bullet"},
-        {"title": "TUJUAN EDUKASI", "items": [
-            "Membuktikan logika mitigasi lag tanpa kompleksitas instalasi DB eksternal",
-        ], "type": "bullet"},
+        {"title": "PERINTAH VERIFIKASI RESMI", "items": [
+            "cd labs/33-read-replicas-and-replication-lag",
+            "go test -v ./...",
+            "go test -race ./...",
+            "go run ./cmd/demo"
+        ], "type": "code"},
+        {"title": "RINGKASAN METRIK LAB", "items": [
+            "Test Suite: 7 test cases lulus 100% tanpa kegagalan (2.13s total runtime).",
+            "Race Detector: Bersih dari thread contention dan data races (3.98s pass).",
+            "Dependencies: Murni Go Standard Library (sync, time, context, atomic) tanpa dependensi pihak ketiga."
+        ], "type": "bullet"}
     ],
-    mental_model="Simulations prove architectural invariants cleanly by stripping away disk and network noise.",
-    source_path="labs/33-read-replicas-and-replication-lag/content/01-content-brief.md:33",
+    narrative="Lab ini dirancang agar dapat diverifikasi secara mandiri dalam hitungan detik di mesin lokal. Seluruh implementasi dibangun murni menggunakan standard library Go tanpa memerlukan server eksternal seperti PostgreSQL atau MySQL. Perintah go test -v mengeksekusi tujuh pengujian komprehensif mulai dari anomali stale read hingga konkurensi race-free. Perintah go test -race memvalidasi keamanan thread di bawah beban 15 goroutine intensif, dan go run ./cmd/demo menampilkan demonstrasi terminal interaktif keempat skenario routing.",
+    narrative_en="This laboratory is engineered for immediate, frictionless local verification within seconds. The entire codebase is implemented with the Go standard library, eliminating external dependencies like PostgreSQL or MySQL instances. Running go test -v executes seven exhaustive test scenarios validating stale read anomalies and race-free concurrency. Executing go test -race proves thread safety under fifteen concurrent goroutines, while go run ./cmd/demo delivers an interactive terminal demonstration of all four routing scenarios.",
+    mental_model="Zero-dependency standard library code enables instant, deterministic peer verification.",
+    source_path="README.md:19-34 • engineering/03-execution-result.md",
     slide_num="22 / 24",
-    title_en="Implementation Scope and Architectural Boundaries",
-    narrative_en="This lab focuses strictly on validating routing logic and session guarantees. By implementing an in-memory key-value cluster with atomic LSN sequencing, it demonstrates replication lag phenomena deterministically without requiring heavyweight database infrastructure or multi-node clustering.",
-    narrative="Lab 33 berfokus murni pada pembuktian logika perutean query dan garansi konsistensi sesi. Dengan membangun kluster key-value in-memory yang dilengkapi pencatatan LSN atomik, sistem mampu mendemonstrasikan anomali lag dan solusinya secara deterministik tanpa hambatan instalasi basis data eksternal yang rumit."
+    layout="command-block"
 )
 
-# Slide 23: Core Takeaways & Architectural Principles
+# Slide 23: Prinsip arsitektural jangka panjang
 add_slide(
-    categories=["KESIMPULAN"],
-    title="Prinsip Inti Mengelola Replication Lag",
-    subtitle="Ringkasan pemikiran arsitektural untuk sistem basis data terdistribusi",
+    categories=["PRINSIP", "ARSITEKTUR"],
+    title="Prinsip Arsitektur: Desain untuk Asinkronitas",
+    subtitle="Pelajaran abadi dalam merancang sistem terdistribusi yang tahan terhadap replication lag.",
     content_items=[
-        {"title": "1. ASINKRON ADALAH DEFAULT", "items": [
-            "Semua database populer berjalan asinkron demi mempertahankan throughput",
-            "Mengharapkan konsistensi instan dari replika tanpa strategi adalah ilusi",
-        ], "type": "bullet"},
-        {"title": "2. GARANSI BERBASIS KEBUTUHAN", "items": [
-            "Gunakan Sticky Routing untuk alur pengguna umum yang berbiaya murah",
-            "Gunakan Causal Token saat kebenaran matematis mutlak dibutuhkan",
-        ], "type": "bullet"},
-        {"title": "3. DEGRADASI ANGGUN", "items": [
-            "Batasi replika dengan MaxLSNDiff dan selalu sediakan fallback ke primary",
-            "Sistem yang baik tetap melayani pembacaan meski seluruh replika tertinggal",
-        ], "type": "bullet"},
+        {"title": "1. ASINKRONITAS ADALAH KENYATAAN DEFAULT", "items": [
+            "Replication lag bukan anomali yang harus dihilangkan, melainkan realitas yang harus dikelola.",
+            "Asumsikan setiap read ke replica berpotensi stale kecuali dibuktikan sebaliknya oleh router."
+        ], "type": "card"},
+        {"title": "2. CLOSING MECHANISM ADALAH HAK KLIEN", "items": [
+            "Aplikasi bertanggung jawab memilih mekanisme penutupan jarak (sticky, token, threshold).",
+            "Database engine menyediakan primitives (LSN, WAL), tetapi router aplikasi menentukan kebijakan."
+        ], "type": "card"},
+        {"title": "3. DEGRADASI EKSPLISIT MENGALAHKAN CRASH SENYAP", "items": [
+            "Fallback ke primary dengan logging terstruktur jauh lebih baik daripada menyajikan data basi.",
+            "Transparansi status node dan LSN watermark menjaga integritas sistem jangka panjang."
+        ], "type": "card"}
     ],
-    mental_model="Asynchronous replication trades consistency for throughput; route by session when freshness matters.",
+    narrative="Tiga prinsip arsitektur ini berlaku universal di luar implementasi lab Go ini. Pertama, sadari bahwa asinkronitas adalah default industri dan upaya menghilangkannya secara total akan mengorbankan skalabilitas tulis. Kedua, tempatkan tanggung jawab penutupan replication gap di lapisan aplikasi karena hanya aplikasilah yang memahami konteks konsistensi setiap use case. Ketiga, prioritaskan degradasi eksplisit ke primary dengan observabilitas lengkap dibandingkan membiarkan user menerima data stale secara senyap.",
+    narrative_en="These three architectural principles transcend this specific Go implementation. First, recognize that asynchronous replication is the industry default, and attempting to eradicate it entirely sacrifices write scalability. Second, place the responsibility for closing replication gaps at the application layer because only the application understands the consistency context of each use case. Third, prioritize explicit degradation to the primary with rich observability over allowing users to silently ingest stale data.",
+    mental_model="Asynchrony is reality; smart routing bridges the gap between scalability and user trust.",
     source_path="labs/33-read-replicas-and-replication-lag/content/05-key-takeaways.md",
     slide_num="23 / 24",
-    title_en="Core Architectural Principles for Replication Management",
-    narrative_en="Asynchronous replication remains the dominant industry standard for high-throughput database systems. Enforcing read-your-own-writes requires thoughtful client routing rather than hoping for zero-lag replicas. Combining lightweight sticky routing with causal token fallbacks ensures both performance and consistency.",
-    narrative="Replikasi asinkron tetap menjadi pilihan standar industri untuk mencapai throughput penulisan yang tinggi. Menjaga integritas data pengguna pasca-transaksi menuntut kecerdasan pada lapisan perutean query. Kombinasi antara sticky routing yang ringan dan causal token yang presisi menghasilkan sistem yang cepat sekaligus konsisten."
+    layout="principles-list"
 )
 
-# Slide 24: Closing Slide (Dark Navy)
+# Slide 24: Closing slide
 add_slide(
-    categories=["RINGKASAN"],
-    title="Eksperimen kecil, interpretasi yang teliti.",
-    subtitle=f"Commit: {COMMIT_SHA[:8]} | Tests: 7/7 PASS | Repository: lukman-ss/software-engineering-lab",
+    categories=["CLOSING"],
+    title="Skalabilitas Baca Terjaga, Konsistensi Terjamin.",
+    subtitle="",
     content_items=[
-        {"title": "MODUL LAB 33", "items": [
-            "internal/cluster/cluster.go (Node, WAL, Replication)",
-            "internal/router/router.go (Sticky, Token, Lag-Aware)",
-            "tests/replication_test.go (7 Test Cases, Race Free)",
-            "cmd/demo/main.go (CLI Interactive Demonstration)",
+        {"title": "KOMPONEN ARSITEKTUR LAB", "items": [
+            "internal/cluster/cluster.go — Primary-replica simulation, WAL streaming, LSN tracking, & sync/async paths",
+            "internal/router/router.go — Four-strategy read splitter with session-affinity & dynamic lag filtering",
+            "tests/replication_test.go — 7 comprehensive test suites (stale reads, sticky routing, token wait, race-free)",
+            "cmd/demo/main.go — Complete interactive lifecycle demonstration of 4 routing scenarios"
         ], "type": "bullet"},
-        {"title": "VERIFIKASI & METADATA", "items": [
-            f"Penulis: {AUTHOR}",
-            f"Commit Hash: {COMMIT_SHA}",
-            "Status: PASS (go test -v -race ./...)",
-            "Model: In-Memory Primary-Replica Simulation",
-        ], "type": "bullet"},
+        {"title": "VERIFIKASI & REPOSITORI", "items": [
+            f"Commit SHA: {COMMIT_SHA[:8]}",
+            "Unit Tests: 7/7 PASS (100% clean, 2.13s)",
+            "Race Detector: PASS (zero data race, 3.98s)",
+            f"Repositori: github.com/lukman-ss/software-engineering-lab/tree/main/labs/{LAB_NO}-{SLUG}"
+        ], "type": "bullet"}
     ],
-    mental_model="Replication lag is inevitable in async systems; smart routing bridges the gap to consistency.",
-    source_path="labs/33-read-replicas-and-replication-lag/README.md",
-    slide_num=""
+    narrative="Laboratorium Read Replicas and Replication Lag ini membuktikan secara konkret bahwa dilema klasik antara skalabilitas baca dan konsistensi data dapat dijembatani secara elegan. Melalui kombinasi sticky session routing, causal LSN tokens, dan lag-aware threshold filtering, sistem mampu memaksimalkan offloading query ke replica tanpa mengorbankan garansi read-your-own-writes bagi pengguna. Seluruh kode sumber, dokumentasi arsitektur, dan instruksi verifikasi tersedia lengkap di repositori.",
+    narrative_en="This Read Replicas and Replication Lag laboratory definitively demonstrates that the classic dilemma between read scalability and data consistency can be elegantly reconciled. Through a combination of sticky session routing, causal LSN tokens, and lag-aware threshold filtering, the architecture maximizes read offloading to replicas without compromising read-your-own-writes guarantees for users. Complete source code, design specifications, and verification harnesses are available in the repository.",
+    mental_model="Replication scales reads; application routing safeguards consistency.",
+    source_path=REPO_URL,
+    slide_num="24 / 24",
+    layout="closing-dark-navy"
 )
 
 if __name__ == "__main__":
-    print(f"Total slides defined: {len(SLIDES)}")
+    print(f"Loaded {len(SLIDES)} slides for Lab {LAB_NO}: {TITLE_ID}")
