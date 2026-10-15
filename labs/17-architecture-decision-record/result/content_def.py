@@ -1,29 +1,27 @@
 #!/usr/bin/env python3
 """
-Publication Builder Definition for Software Engineering Lab 17: Architecture Decision Record.
+Publication Builder Definition for Software Engineering Lab 17: Architecture Decision Record (ADR).
 Follows:
-- cover-rules.md (Mandatory CRT retro computer, series identity lock, no micro-text, thumbnail-proof 320x180)
-- slide-rules.md / slide-content-rules.md (<=45 words prose, <=30 words on code slides, dominant visual anchors, 50% zoom test)
-- quality-bar.md (sharp engineering insights, strictly bounded claims, >=12 slides with limiting phrases, no overclaims)
-- article-rules.md (Dev.to 22-section mapping, Medium ID HTML 22-section mapping)
+- Cover hero image requirement: Mandatory raster image at COVER_IMAGE_PATH
+- Slide composition rules: <=45 words prose, <=30 words on code slides, dominant visual anchors
+- Quality bar: strict technical boundary, limiting phrases on >=12 slides, zero banned filler words
+- Concrete 24-slide LinkedIn Carousel structure
 """
-import os
-import sys
 
 OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/17-architecture-decision-record/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record"
-COMMIT_SHA = "774e97a"
+COMMIT_SHA = "36ff6c8"
 LAB_NO = "17"
 SLUG = "architecture-decision-record"
 
-TITLE_ID = "Architecture Decision Record & Linting Struktural"
-SUBTITLE_ID = "Mencegah Perdebatan Berulang dengan Silsilah Keputusan Terverifikasi di Go"
-TITLE_EN = "Architecture Decision Records & Structural Linting"
-SUBTITLE_EN = "Preventing Cyclical Debates with Verified Decision Lineage in Go"
+TITLE_ID = "Architecture Decision Record & Validasi Struktural"
+SUBTITLE_ID = "Mencegah Perdebatan Berulang dan Kerusakan Silsilah Keputusan di Go"
+TITLE_EN = "Architecture Decision Records & Structural Validation"
+SUBTITLE_EN = "Preventing Cyclical Debates and Decision Lineage Rot in Go"
 
 AUTHOR = "Lukman / lukman-ss"
-TOPIC_TAGS = "Architecture Decision Record • ADR • Go • Architecture • Software Engineering"
+TOPIC_TAGS = "Architecture Decision Record • ADR • Software Architecture • Go • Linting • Immutability"
 COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/17-architecture-decision-record/result/image-cover/cover_art.jpg"
 
 SLIDES = []
@@ -49,12 +47,12 @@ add_slide(
     subtitle=SUBTITLE_ID,
     content_items=[
         {"type": "cover", "title": "", "items": [
-            "Retro CRT Terminal Displaying Immutable Decision Ledger and DAG Lineage",
-            "Monotonic Index Registry: Linked ADR State Graph & Bidirectional Cross-Check",
+            "Retro Terminal Displaying ADR Parser, Monotonic Checks & Bidirectional Graph",
+            "Monolith to Microservice Evolution with Concurrency-Safe Linter in Go",
             f"Penulis: {AUTHOR}"
         ]}
     ],
-    mental_model="Architecture decisions require immutable records co-located with code and validated lineage.",
+    mental_model="Architecture Decision Records capture context, consequences, and immutable lifecycle progression within version control.",
     source_path="",
     slide_num="01 / 24",
     layout="cover"
@@ -63,19 +61,19 @@ add_slide(
 # Slide 02: Problem Nyata (Layout: cards)
 # Limiting phrase 1: "bukan berarti"
 add_slide(
-    categories=["PROBLEM", "CONTEXT LOSS"],
-    title="Kehilangan Konteks Memicu Perdebatan Teknis Berulang",
-    subtitle="Tanpa rekaman tertulis mengapa pilihan diambil, tim terjebak dalam dua kegagalan ekstrem.",
+    categories=["PROBLEM", "KNOWLEDGE ROT"],
+    title="Konteks Keputusan Hilang Memicu Debat Teknis Berulang",
+    subtitle="Ketika alasan pemilihan desain masa lalu lenyap, tim terjebak dalam siklus refactoring kontraproduktif.",
     content_items=[
-        {"type": "cards", "title": "DAMPAK HILANGNYA KONTEKS KEPUTUSAN", "items": [
-            {"title": "Pembalikan Prematur", "desc": "Arsitektur lama dibongkar sembarangan tanpa memahami batasan dan kompromi masa lalu."},
-            {"title": "Kepatuhan Buta", "desc": "Pola usang dipertahankan kaku meskipun skala beban dan kapasitas tim telah berubah total."},
-            {"title": "Debat Berulang", "desc": "Tim mendiskusikan kembali opsi yang sama berulang kali karena alasan penolakannya hilang."}
+        {"type": "cards", "title": "DAMPAK HILANGNYA REKAMAN ARSITEKTUR", "items": [
+            {"title": "Pembalikan Buta", "desc": "Keputusan masa lalu dibalik tanpa mengerti batasan awal yang memicunya saat peluncuran."},
+            {"title": "Dogma Usang", "desc": "Pola lama dipertahankan secara buta meski beban traffic dan skala tim telah melompat 5x lipat."},
+            {"title": "Bukan Berarti Malas", "desc": "Tim aktif berdiskusi teknis, tetapi bukan berarti produktif jika memperdebatkan opsi yang sama berulang kali."}
         ]}
     ],
-    narrative="Ketika latar belakang keputusan teknis hilang, tim terjebak dalam perdebatan siklis tanpa ujung. Memori pengembang bersifat fana, bukan berarti keputusan lama salah, tetapi tanpa catatan tertulis tim tidak tahu batasan apa yang memicunya.",
-    narrative_en="When technical rationale is forgotten, engineering teams enter cyclical debates. Individual memory fades quickly; this does not mean past decisions were flawed, but without written constraints teams cannot judge why trade-offs were made.",
-    mental_model="Unrecorded decisions force teams to re-litigate trade-offs repeatedly.",
+    narrative="Ketika konteks historis arsitektur hilang, pengembang baru tidak mengetahui batasan teknis di balik pilihan desain awal. Diskusi intensif bukan berarti tim produktif jika mereka hanya mengulang perdebatan yang sama tanpa acuan rekam jejak formal.",
+    narrative_en="When historical architectural context is lost, incoming engineers cannot deduce the real trade-offs behind foundational designs. Frequent technical debates do not imply productivity when teams repeatedly re-evaluate resolved trade-offs without written records.",
+    mental_model="Undocumented decisions trigger cyclical technical debates and blind reversal of proven architectural trade-offs.",
     source_path="content/02-master-draft.md:3-12",
     slide_num="02 / 24",
     layout="cards"
@@ -85,19 +83,19 @@ add_slide(
 # Limiting phrase 2: "tidak otomatis"
 add_slide(
     categories=["WHY FAILS", "DOCUMENTATION DRIFT"],
-    title="Wiki Terpisah dan Review Manual Mengalami Drift",
-    subtitle="Menyimpan keputusan di wiki eksternal memutus sinkronisasi antara dokumen dan kode sumber.",
+    title="Wiki dan Markdown Manual Cepat Mengalami Drift",
+    subtitle="Mencatat keputusan di luar repositori atau tanpa linter struktural menciptakan dokumen fiktif.",
     content_items=[
-        {"type": "cards", "title": "PENDEKATAN NAIF VS REALITA", "items": [
-            {"title": "Wiki Eksternal Usang", "desc": "Dokumen Confluence terpisah dari PR; kode berevolusi cepat, dokumen tertinggal permanen."},
-            {"title": "Review Manual Rapuh", "desc": "Reviewer luput memeriksa apakah tautan penggantian Supersedes konsisten di kedua belah pihak."},
-            {"title": "Tautan Patah Tak Terlacak", "desc": "Menandai Superseded by 99 manual tidak otomatis gagal saat file 99 tidak pernah ada di repo."}
+        {"type": "cards", "title": "PENDEKATAN NAIF VS REALITA TEKNIS", "items": [
+            {"title": "Wiki Eksternal Terisolasi", "desc": "Confluence dan Google Docs terpisah dari Git commit; segera usang saat kode di-refactor."},
+            {"title": "Dangling References", "desc": "ADR lama ditandai Superseded by 99, tetapi berkas 99 tidak pernah ditulis atau terhapus."},
+            {"title": "Tidak Otomatis Akurat", "desc": "Menulis format markdown di repo tidak otomatis valid tanpa aturan linter CI yang memverifikasi integritas graf."}
         ]}
     ],
-    narrative="Menaruh keputusan di wiki eksternal tidak otomatis menjamin dokumentasi dibaca atau diperbarui. Review manual rentan melewatkan broken reference dan inkonsistensi status dua arah saat commit digabungkan.",
-    narrative_en="Housing architecture decisions in external wikis does not automatically guarantee freshness. Manual PR reviews routinely overlook broken supersession pointers and asymmetric lifecycle mutations.",
-    mental_model="Documentation detached from the codebase rapidly suffers from documentation drift.",
-    source_path="content/02-master-draft.md:13-21",
+    narrative="Penyimpanan keputusan di wiki eksternal menyebabkan keterpisahan parah antara implementasi kode dan dokumentasi. Menaruh file markdown di repositori tidak otomatis menjaga kebenaran data jika tautan nomor dan siklus hidupnya tidak diuji mesin.",
+    narrative_en="Maintaining design docs in disconnected wikis guarantees documentation drift as code evolves through pull requests. Placing markdown files directly in repositories does not automatically ensure referential integrity unless automated linters enforce bidirectional links.",
+    mental_model="Unverified markdown ADRs accumulate broken links, phantom replacements, and invalid states over time.",
+    source_path="content/02-master-draft.md:13-22",
     slide_num="03 / 24",
     layout="cards"
 )
@@ -105,53 +103,268 @@ add_slide(
 # Slide 04: Mental Model Inti — Schema Card (Layout: schema)
 # Limiting phrase 3: "hanya pada jalur ini"
 add_slide(
-    categories=["MENTAL MODEL", "IMMUTABILITY & DAG"],
-    title="Ko-lokasi, Immutability, dan Graf Silsilah Timbal-Balik",
-    subtitle="ADR disimpan bersama kode; keputusan diterima tidak disunting melainkan digantikan.",
+    categories=["MENTAL MODEL", "IMMUTABILITY"],
+    title="Empat Pilar Siklus Hidup Architecture Decision Record",
+    subtitle="Keputusan berevolusi melalui penomoran monotonik dan riwayat penggantian timbal-balik.",
     content_items=[
-        {"type": "schema", "title": "EMPAT PILAR KONSEPTUAL ADR", "items": [
-            {"phase": "1. Co-location", "role": "Git Repository", "desc": "ADR disimpan di docs/adr/, berevolusi melalui PR dan code review yang sama dengan kode."},
-            {"phase": "2. Immutability", "role": "Historical Record", "desc": "ADR Accepted tidak diedit retroaktif; arah baru dicatat dalam file ADR baru bernomor urut."},
-            {"phase": "3. Directed Lineage", "role": "DAG Relations", "desc": "ADR baru mendeklarasikan Supersedes: X; ADR lama ditandai Superseded by Y secara resiprokal."},
-            {"phase": "4. Context Focus", "role": "Forces & Trade-offs", "desc": "Fokus pada 'mengapa' dan batasan kompromi; hanya pada jalur ini silsilah keputusan divalidasi."}
+        {"type": "schema", "title": "PILAR INTEGRITAS DOKUMENTASI ARSITEKTUR", "items": [
+            {"phase": "1. Ko-lokasi Git", "role": "Version Controlled", "desc": "ADR disimpan bersama kode; berevolusi melalui mekanisme Pull Request dan Code Review."},
+            {"phase": "2. Kekekalan Dokumen", "role": "Immutable History", "desc": "ADR Accepted dilarang diedit retroaktif; arah baru wajib dicatat pada ADR baru."},
+            {"phase": "3. Silsilah Berarah", "role": "Directed Graph", "desc": "Relasi timbal-balik: status Superseded by N wajib dibalas deklarasi Supersedes M."},
+            {"phase": "4. Validasi CI Otomatis", "role": "Linter Invariant", "desc": "Hanya pada jalur ini validasi terotomatisasi mencegah nomor lompat dan siklus sirkular."}
         ]}
     ],
-    narrative="ADR memperlakukan keputusan arsitektur sebagai artefak version-controlled yang kekal. Keputusan lama tidak dihapus dari Git, melainkan digantikan secara eksplisit. Hanya pada jalur ini integritas evolusi sistem dapat dilacak.",
-    narrative_en="ADRs treat architectural choices as immutable, version-controlled repository assets. Historical records are superseded rather than overwritten, establishing a traceable decision graph across git commits.",
-    mental_model="Decisions are immutable history; changes produce new nodes in a directed graph.",
-    source_path="content/02-master-draft.md:22-30",
+    narrative="ADR mengabadikan keputusan penting ke dalam repositori dengan sifat kekal setelah disetujui. Hanya pada jalur ini, yakni lewat validasi pipeline otomatis, silsilah keputusan terhindar dari pembaruan sepihak dan inkonsistensi nomor.",
+    narrative_en="ADRs preserve architectural decisions within version control as immutable artifacts once accepted. Only along this path, through automated validation checks, can decision lineages prevent one-sided status updates and non-monotonic gaps.",
+    mental_model="Treat architectural decisions as immutable nodes in an append-only directed acyclic graph.",
+    source_path="content/02-master-draft.md:23-32",
     slide_num="04 / 24",
     layout="schema"
 )
 
-# Slide 05: Diagram Alur / Pipeline Validasi (Layout: schema)
+# Slide 05: Diagram Alur / Pipeline (Layout: schema)
 # Limiting phrase 4: "belum membuktikan"
 add_slide(
-    categories=["PIPELINE", "WORKFLOW"],
-    title="Pipeline Validasi: Markdown ke Parsed Record ke Linter",
-    subtitle="Membedah teks Markdown menjadi representasi memori lalu menguji invarian struktural.",
+    categories=["PIPELINE", "VALIDATION FLOW"],
+    title="Pipeline Validasi: Dari Raw Markdown Menjadi Error List",
+    subtitle="Alur pemrosesan linear dari pembacaan teks, pemindaian regex, hingga pengujian paralel.",
     content_items=[
-        {"type": "schema", "title": "ALUR INTEGRITAS STRUKTURAL ADR", "items": [
-            {"phase": "1. Text Scanning", "role": "bufio.Scanner", "desc": "Membaca Markdown baris demi baris, mengekstrak ID, Title, Status, dan relasi supersedes."},
-            {"phase": "2. Section Guard", "role": "Content Verifier", "desc": "Memastikan bagian Context, Decision, dan Consequences hadir dan memiliki konten nyata."},
-            {"phase": "3. Monotonic Check", "role": "Sequence Validator", "desc": "Mengurutkan array ID dan memverifikasi ids[i] == i + 1 tanpa celah maupun duplikasi."},
-            {"phase": "4. Concurrent Lint", "role": "Goroutine Pool", "desc": "Memverifikasi tautan timbal balik SupersededBy vs Supersedes; belum membuktikan semantik isi."}
+        {"type": "schema", "title": "TAHAPAN PEMERIKSAAN INTEGRITAS ADR", "items": [
+            {"phase": "1. Text Ingestion", "role": "Reader", "desc": "Membaca string berkas markdown ADR dari repositori atau buffer memori."},
+            {"phase": "2. Regex Parsing", "role": "adr.Parse", "desc": "Mengekstrak ID, Title, Status, SupersededBy, Supersedes, dan seksi wajib."},
+            {"phase": "3. Monotonic Check", "role": "adr.Linter", "desc": "Memastikan kumpulan ID terurut 1..N tanpa duplikasi ID dan tanpa nomor lompat."},
+            {"phase": "4. Graph & Parallel", "role": "Goroutines", "desc": "Verifikasi referensi timbal-balik; belum membuktikan integrasi git hook otomatis."}
         ]}
     ],
-    narrative="Pipeline membaca dokumen Markdown, mengekstrak metadata melalui parser regex, lalu menguji urutan penomoran dan relasi graf keputusan secara paralel. Pipeline ini memvalidasi struktur, namun belum membuktikan kualitas logika desain teknisnya.",
-    narrative_en="The pipeline ingests raw Markdown, extracts metadata using regular expressions, and concurrently audits monotonic indexing and reciprocal linkage. This verifies structural integrity, but does not prove semantic design quality.",
-    mental_model="Transform raw markdown into strongly-typed nodes before verifying graph invariants.",
-    source_path="content/04-diagrams.md:63-90",
+    narrative="Alur validasi memindai string dokumen, memverifikasi kelengkapan seksi teks, mengurutkan ID penomoran, lalu memverifikasi tautan graf. Pipeline ini membuktikan validasi in-memory, tetapi belum membuktikan integrasi langsung dengan git pre-commit hook.",
+    narrative_en="The validation pipeline scans raw markdown strings, checks required sections, enforces monotonic numbering, and verifies graph references in parallel. While robust in memory, it has not yet proven automated git pre-commit hook integrations.",
+    mental_model="Sequential structural parsing followed by concurrent referential graph integrity verification.",
+    source_path="content/02-master-draft.md:60-74",
     slide_num="05 / 24",
     layout="schema"
 )
 
-# Slide 06: Cuplikan Kode Dominan — Model Record & Status (Layout: code)
+# Slide 06: Cuplikan Kode Dominan (Layout: code)
 # Limiting phrase 5: "bukan berarti"
 add_slide(
-    categories=["IMPLEMENTATION", "DATA MODEL"],
-    title="Model Status Siklus Hidup dan Entitas Record",
-    subtitle="Mendefinisikan 5 status siklus hidup formal dan relasi penggantian di Go.",
+    categories=["IMPLEMENTATION", "PARSER REGEX"],
+    title="Ekstraksi Metadata dan Seksi Wajib Lewat Regex",
+    subtitle="Parser memastikan judul bernomor, status valid, dan tiga seksi wajib terisi.",
+    content_items=[
+        {"type": "code", "title": "internal/adr/parser.go", "items": [
+            "var (",
+            "    titleRegex  = regexp.MustCompile(`^#\\s+(\\d+)\\.\\s+(.+)$`)",
+            "    statusRegex = regexp.MustCompile(`(?i)^Status:\\s*([A-Za-z]+)(?:\\s+by\\s+(\\d+))?`)",
+            "    contextRegex = regexp.MustCompile(`(?i)^##\\s+Context`)",
+            "    decisionRegex = regexp.MustCompile(`(?i)^##\\s+Decision`)",
+            ")",
+            "// Parse memverifikasi isi seksi Context, Decision, Consequences",
+            "if !foundContext || !contextHasContent { return nil, errors.New(\"context empty\") }"
+        ]}
+    ],
+    narrative="Parser mengekstrak nomor ID dan memeriksa keberadaan konten pada seksi Context, Decision, dan Consequences. Menggunakan regex kaku bukan berarti parser fleksibel terhadap semua dialek Markdown; parser ini sengaja membatasi diri pada konvensi baku Nygard.",
+    narrative_en="The parser extracts IDs and enforces non-empty content across Context, Decision, and Consequences headings. Relying on strict regexes does not imply universal markdown compatibility; it deliberately constrains documents to Nygard's structural standard.",
+    mental_model="Strict regex validation enforces mandatory architectural sections before records enter the graph.",
+    source_path="internal/adr/parser.go:11-36",
+    slide_num="06 / 24",
+    layout="code"
+)
+
+# Slide 07: Failure Path / Dangling Reference Konkret (Layout: cards)
+# Limiting phrase 6: "hanya pada jalur ini"
+add_slide(
+    categories=["FAILURE PATH", "REFERENTIAL ROT"],
+    title="Anatomi Kerusakan Graf: Tautan Sepihak & Referensi Hantu",
+    subtitle="Empat mode kegagalan silsilah keputusan yang langsung digagalkan oleh linter.",
+    content_items=[
+        {"type": "cards", "title": "SKENARIO KEGAGALAN STRUKTUR DOKUMENTASI", "items": [
+            {"title": "Supersession Sepihak", "desc": "ADR 2 mengklaim Supersedes: 1, tetapi ADR 1 masih berstatus Accepted tanpa tanda penggantian."},
+            {"title": "Referensi Hantu", "desc": "ADR 1 berstatus Superseded by 99, padahal ADR 99 tidak pernah ada di dalam repositori."},
+            {"title": "Penomoran Bolong", "desc": "ID melompat dari 1 langsung ke 3; menimbulkan keraguan apakah ada dokumen yang hilang."},
+            {"title": "Self-Supersession", "desc": "ADR 1 menandai dirinya digantikan oleh ADR 1; hanya pada jalur ini siklus konyol dicegah linter."}
+        ]}
+    ],
+    narrative="Kerusakan dokumentasi paling berbahaya terjadi saat penggantian dilakukan sepihak atau menunjuk ke dokumen hantu. Hanya pada jalur ini linter mendeteksi ketidaksesuaian relasi dan menggagalkan merge sebelum informasi keliru menyebar ke tim.",
+    narrative_en="The most hazardous documentation defect arises from one-sided supersession or referencing non-existent records. Only along this path does the linter intercept structural mismatches, failing PR checks before false architectural states mislead engineers.",
+    mental_model="Broken supersession links create split-brain architectural states where obsolete designs appear active.",
+    source_path="tests/linter_test.go:36-114",
+    slide_num="07 / 24",
+    layout="cards"
+)
+
+# Slide 08: Tabel Perbandingan Mekanisme vs Gejala (Layout: table)
+add_slide(
+    categories=["COMPARISON", "DIAGNOSTICS"],
+    title="Matriks Komparasi: Gejala Anomali vs Pencegahan Mesin",
+    subtitle="Membedah bagaimana aturan linter mengatasi kegagalan dokumentasi manual secara terstruktur.",
+    content_items=[
+        {"title": "GEJALA ANOMALI VS VALIDATOR LINTER", "items": [
+            "Anomali Dokumentasi | Dampak di Tim Engineering | Aturan Verifikasi Linter",
+            "Tautan Sepihak | Status ganda: dua arsitektur bentrok | Reciprocal Check (rec.Supersedes == old.ID)",
+            "Dangling Pointer | Konteks pengganti hilang tanpa jejak | Exist Check (replacement, exists := recordMap[ID])",
+            "Siklus Sirkular | Loop penggantian tanpa ujung (1->2->1) | DFS Cycle Detection (3-state coloring)",
+            "Nomor Tidak Urut | Ambiguitas file hilang dalam Git history | Monotonic Numbering Check (ids[i] == i+1)",
+            "Format Informal | Status 'Draft' / seksi wajib hilang | Parser Guard (IsValid() & Section Check)"
+        ], "type": "table"}
+    ],
+    narrative="Tabel ini memetakan dampak buruk anomali dokumentasi terhadap tim dan mekanisme kode yang mengatasinya. Pemeriksaan timbal-balik dan pewarnaan graf 3 status memastikan tidak ada rantai keputusan yang mengalami benturan status atau siklus berputar.",
+    narrative_en="This matrix contrasts symptoms of manual documentation drift against programmatic linter invariants. Bidirectional link verification and three-state graph coloring eliminate duplicate active states and cyclical supersession loops.",
+    mental_model="Map human documentation oversights to strict algorithmic invariants enforceable in compilation and CI.",
+    source_path="internal/adr/linter.go:27-100",
+    slide_num="08 / 24",
+    layout="table"
+)
+
+# Slide 09: Decision Sequence — 3 Focused Decision Cards (Layout: cards)
+# Limiting phrase 7: "bukan berarti"
+add_slide(
+    categories=["DECISION SEQUENCE", "SYSTEM EVOLUTION"],
+    title="Evolusi Arsitektur SaaS ERP: Dari Monolith ke Service",
+    subtitle="Tiga keputusan arsitektural berurutan yang menggambarkan siklus hidup nyata sistem.",
+    content_items=[
+        {"type": "cards", "title": "SEKUENS KEPUTUSAN ARSITEKTUR LAB", "items": [
+            {"title": "ADR 0001: Modular Monolith", "desc": "Dipilih saat tim 5 orang demi kecepatan iterasi dan integritas transaksi relasional."},
+            {"title": "ADR 0002: Extract Notification", "desc": "Menggantikan ADR 1 saat tim 25 orang dan lonjakan burst traffic membebani core ERP."},
+            {"title": "ADR 0003: Reject Event Sourcing", "desc": "Ditolak formal; bukan berarti anti Event Sourcing, melainkan tabel audit SQL sudah memadai."}
+        ]}
+    ],
+    narrative="Rangkaian keputusan memperlihatkan transisi matang dari Modular Monolith menuju ekstraksi microservice ketika beban meningkat. Menolak Event Sourcing pada ADR 3 bukan berarti anti inovasi, melainkan keputusan sadar menghindari kompleksitas skema yang belum dibutuhkan.",
+    narrative_en="The decision sequence reflects pragmatic architectural evolution: adopting a Modular Monolith initially, then extracting notification services at scale. Rejecting Event Sourcing does not indicate fear of innovation; standard relational audit logs satisfied requirements.",
+    mental_model="Record both accepted architectural migrations and rejected proposals to prevent unneeded complexity.",
+    source_path="cmd/demo/main.go:10-64",
+    slide_num="09 / 24",
+    layout="cards"
+)
+
+# Slide 10: Bukti Eksekusi / Terminal Output (Layout: code)
+add_slide(
+    categories=["EVIDENCE", "EXECUTION"],
+    title="Eksekusi Test Suite dan Demo cmd/demo Lolos Bersih",
+    subtitle="Output terminal membuktikan seluruh 13 sub-test dan eksekusi demo berjalan deterministik.",
+    content_items=[
+        {"type": "code", "title": "TERMINAL OUTPUT: go test -v -race ./... && go run ./cmd/demo", "items": [
+            "=== RUN   TestLinter_ValidSequence",
+            "--- PASS: TestLinter_ValidSequence (0.00s)",
+            "=== RUN   TestLinter_BrokenReferences (7 sub-tests)",
+            "--- PASS: TestLinter_BrokenReferences (0.00s)",
+            "=== RUN   TestLinter_ConcurrencyStress (100 records)",
+            "--- PASS: TestLinter_ConcurrencyStress (0.00s)",
+            "=== RUN   TestParse_Valid & TestParse_Invalid (9 sub-tests)",
+            "--- PASS: TestParse_Invalid (0.00s)",
+            "PASS: ok lab17/tests 1.469s (race detector: clean)",
+            "=== Architecture Decision Record (ADR) Lab ===",
+            "Successfully parsed 3 ADRs | Linter: Integrity check passed!"
+        ]}
+    ],
+    narrative="Verifikasi terminal membuktikan seluruh unit test parser dan linter lolos tanpa kebocoran data race pada stress test 100 record. Demo cmd/demo berhasil memvalidasi silsilah evolusi SaaS ERP dari Monolith ke Microservice.",
+    narrative_en="Terminal logs confirm the complete parser and linter test suite passes cleanly with zero data races across 100 concurrent records. The demo run confirms the ERP evolution scenario satisfies all referential invariants.",
+    mental_model="Executable verification provides undeniable proof of structural parsing and referential integrity.",
+    source_path="cmd/demo/main.go:66-103",
+    slide_num="10 / 24",
+    layout="code"
+)
+
+# Slide 11: Analisis Batasan Bukti (Layout: cards)
+# Limiting phrase 8: "belum membuktikan"
+add_slide(
+    categories=["AUDIT", "EVIDENCE BOUNDARY"],
+    title="Batasan Bukti Lab: Yang Dibuktikan vs Belum",
+    subtitle="Menegaskan batasan verifikasi in-memory terhadap skenario skala enterprise.",
+    content_items=[
+        {"type": "cards", "title": "BATAS PEMBUKTIAN SISTEM", "items": [
+            {"title": "YANG DIBUKTIKAN", "desc": "Parsing regex teks ADR, validasi nomor urut monotonik, dan deteksi siklus silsilah."},
+            {"title": "YANG TIDAK DIBUKTIKAN", "desc": "Integrasi file system riil, git hook commit gating, dan pembuatan berkas CLI otomatis."},
+            {"title": "BATAS KLAIM EMPIRIS", "desc": "Lab belum membuktikan klaim kuantitatif reduksi waktu onboarding pada tim 100+ engineer."}
+        ]}
+    ],
+    narrative="Lab ini memverifikasi kebenaran parsing in-memory dan integritas graf timbal-balik secara matematis. Pengujian ini belum membuktikan integrasi git hook otomatis maupun dampak kuantitatif terhadap kecepatan onboarding tim berskala ratusan engineer.",
+    narrative_en="This lab proves in-memory parsing invariants and bidirectional graph validation algorithms under race detection. It does not prove automated git hook integration or empirical velocity gains for organizations exceeding 100 engineers.",
+    mental_model="Strictly separate mathematically verified data structure invariants from unproven organizational claims.",
+    source_path="content/01-content-brief.md:33-41",
+    slide_num="11 / 24",
+    layout="cards"
+)
+
+# Slide 12: Trade-off Arsitektur (Layout: cards)
+# Limiting phrase 9: "tidak otomatis"
+add_slide(
+    categories=["TRADE-OFF", "COSTS & BENEFITS"],
+    title="Trade-off Penerapan ADR dan Validasi Terotomasi",
+    subtitle="Disiplin pencatatan menambah overhead di PR demi kejelasan jangka panjang.",
+    content_items=[
+        {"type": "cards", "title": "KOMPROMI REKAYASA PENCATATAN ADR", "items": [
+            {"title": "Overhead Pull Request", "desc": "Setiap perubahan arsitektur mewajibkan berkas ADR baru dan update status dokumen lama."},
+            {"title": "Rigiditas Format Teks", "desc": "Seksi Context, Decision, dan Consequences wajib diisi; menolak catatan singkat informal."},
+            {"title": "Tidak Otomatis Akurat", "desc": "Linter hanya mengecek sintaks; tidak otomatis menjamin bahwa keputusan teknis yang diambil tepat."}
+        ]}
+    ],
+    narrative="Penerapan ADR menambah beban penyusunan PR karena tim harus menyepakati kata-kata keputusan dan konsekuensi. Memiliki linter tidak otomatis menjamin keputusan arsitektur benar; linter hanya menjaga integritas struktural teks, bukan kualitas logika bisnis.",
+    narrative_en="Mandating ADRs introduces review friction by requiring formal documentation for major technical shifts. Running an automated linter does not automatically validate technical wisdom; it enforces structural integrity, not business correctness.",
+    mental_model="ADRs trade short-term pull request authoring overhead for long-term clarity and preserved technical context.",
+    source_path="content/02-master-draft.md:120-135",
+    slide_num="12 / 24",
+    layout="cards"
+)
+
+# Slide 13: Concurrency / Validation Pipeline (Layout: code)
+# Limiting phrase 10: "simulasi ini tidak sama dengan"
+add_slide(
+    categories=["CONCURRENCY", "RACE SAFETY"],
+    title="Validasi Graf Konkuren Menggunakan Goroutines & Mutex",
+    subtitle="Pemeriksaan referensi dieksekusi paralel dengan agregasi galat terlindungi thread-safe.",
+    content_items=[
+        {"type": "code", "title": "internal/adr/linter.go", "items": [
+            "var wg sync.WaitGroup",
+            "for _, r := range records {",
+            "    wg.Add(1)",
+            "    go func(rec *Record) {",
+            "        defer wg.Done()",
+            "        // Evaluasi referensi timbal balik rec.Supersedes & SupersededBy",
+            "        if len(localErrs) > 0 {",
+            "            mu.Lock()",
+            "            errs = append(errs, localErrs...)",
+            "            mu.Unlock()",
+            "        }",
+            "    }(r)",
+            "}",
+            "wg.Wait()"
+        ]}
+    ],
+    narrative="Validasi simpul graf dieksekusi secara konkuren menggunakan goroutine per record dan agregasi mutex. Simulasi ini tidak sama dengan operasi disk I/O riil pada ribuan berkas, namun membuktikan kebersihan dari race condition di memori.",
+    narrative_en="Graph edge validation runs concurrently via goroutines with mutex-protected error aggregation. While this in-memory simulation is not identical to reading thousands of physical markdown files from disk, it passes thread-sanitizer checks cleanly.",
+    mental_model="Validate independent graph vertices concurrently while protecting error collectors behind mutex locks.",
+    source_path="internal/adr/linter.go:64-106",
+    slide_num="13 / 24",
+    layout="code"
+)
+
+# Slide 14: Before vs After Comparison Cards (Layout: cards)
+# Limiting phrase 11: "bukan berarti"
+add_slide(
+    categories=["COMPARISON", "BEFORE VS AFTER"],
+    title="Transformasi: Dari Catatan Liar ke Graf Tervalidasi",
+    subtitle="Pergeseran dari dokumentasi pasif yang cepat usang menuju rekaman aktif di CI.",
+    content_items=[
+        {"type": "cards", "title": "SEBELUM (MANUAL WIKI) VS SESUDAH (AUTOMATED ADR)", "items": [
+            {"title": "Sebelum: Wiki Liar", "desc": "Keputusan tercecer di Slack atau Confluence; tautan rusak dan status usang tanpa peringatan."},
+            {"title": "Sesudah: Git ADR + Linter", "desc": "ADR berdampingan dengan kode; CI memvalidasi keutuhan nomor dan tautan silsilah."},
+            {"title": "Bukan Berarti Kaku", "desc": "Format terstruktur bukan berarti birokrasi berlebih; template minimal Nygard cukup 1 halaman."}
+        ]}
+    ],
+    narrative="Sebelum ada ADR, alasan pemilihan teknologi tercecer di arsip chat dan dokumen wiki yang tidak terawat. Menerapkan ADR dan linter bukan berarti menciptakan birokrasi kaku, melainkan mengunci kejelasan keputusan penting dengan usaha minimal.",
+    narrative_en="Prior to structured ADRs, technical decisions were lost in chat threads and decaying wiki repositories. Adopting version-controlled ADRs with automated linting does not impose rigid bureaucracy; it locks architectural clarity with minimal syntax.",
+    mental_model="Replace fragmented external documentation with version-controlled, lint-validated decision records.",
+    source_path="content/02-master-draft.md:13-32",
+    slide_num="14 / 24",
+    layout="cards"
+)
+
+# Slide 15: Analisis Mendalam — Siklus Hidup Status (Layout: code)
+# Limiting phrase 12: "cakupannya mengikuti test"
+add_slide(
+    categories=["ANALYSIS", "LIFECYCLE ENUM"],
+    title="Enforcing State Machine Siklus Hidup ADR",
+    subtitle="Mendefinisikan status resmi: Proposed, Accepted, Superseded, Deprecated, Rejected.",
     content_items=[
         {"type": "code", "title": "internal/adr/models.go", "items": [
             "type Status string",
@@ -162,358 +375,147 @@ add_slide(
             "    StatusDeprecated Status = \"Deprecated\"",
             "    StatusRejected   Status = \"Rejected\"",
             ")",
-            "type Record struct {",
-            "    ID, SupersededBy, Supersedes int",
-            "    Title string; Status Status; Content string",
-            "}"
+            "func (s Status) IsValid() bool { /* switch validasi */ }"
         ]}
     ],
-    narrative="Struct Record menampung metadata keputusan dan penunjuk silsilah penggantian. Penggunaan enum string bukan berarti sistem kebal salah input; parser tetap wajib memvalidasi kecocokan status via method IsValid.",
-    narrative_en="The Record struct captures decision metadata alongside forward and backward DAG pointers. Using typed strings does not mean validation is automatic; the parser must explicitly verify enum membership via IsValid.",
-    mental_model="Explicit lifecycle types anchor structural validation at the domain boundary.",
-    source_path="internal/adr/models.go:3-39",
-    slide_num="06 / 24",
-    layout="code"
-)
-
-# Slide 07: Failure Path / Dangling Reference Konkret (Layout: cards)
-# Limiting phrase 6: "hanya pada jalur ini"
-add_slide(
-    categories=["FAILURE PATH", "STRUCTURAL BREAK"],
-    title="Empat Titik Patah Silsilah Keputusan Arsitektur",
-    subtitle="Bagaimana ketidaksinkronan penyuntingan manual merusak integritas riwayat Git.",
-    content_items=[
-        {"type": "cards", "title": "SKENARIO KEGAGALAN TERVERIFIKASI", "items": [
-            {"title": "Dangling SupersededBy", "desc": "ADR 1 bertuliskan 'Superseded by 99', namun berkas ADR 99 tidak ada di repositori."},
-            {"title": "One-Sided Reference", "desc": "ADR 2 mengklaim 'Supersedes: 1', tetapi ADR 1 masih berstatus 'Accepted' tanpa pointer pengganti."},
-            {"title": "Non-Monotonic Gap", "desc": "Terdapat berkas ADR 1 dan ADR 3 tanpa ADR 2; memicu ambiguitas riwayat yang hilang."},
-            {"title": "Self & Cyclic Supersession", "desc": "ADR menunjuk dirinya sendiri atau membentuk loop 1 -> 2 -> 3 -> 1; hanya pada jalur ini dideteksi."}
-        ]}
-    ],
-    narrative="Ketidaksinkronan dua arah sering terjadi saat pengembang membuat ADR baru tetapi lupa memperbarui status ADR lama. Hanya pada jalur ini validator memeriksa kedua sisi relasi graf untuk mencegah dangling reference di repositori.",
-    narrative_en="One-sided references emerge when engineers write replacement ADRs without updating prior records. Only along this validation pathway does the tool cross-examine both nodes to eliminate broken pointers.",
-    mental_model="A DAG pointer without reciprocal back-reference is a silent documentation defect.",
-    source_path="tests/linter_test.go:36-175",
-    slide_num="07 / 24",
-    layout="cards"
-)
-
-# Slide 08: Tabel Perbandingan Mekanisme vs Gejala (Layout: table)
-add_slide(
-    categories=["COMPARISON", "DIAGNOSTICS"],
-    title="Matriks Mekanisme Linter vs Gejala Kerusakan",
-    subtitle="Pemetaan aturan validasi kode terhadap anomali struktural berkas Markdown.",
-    content_items=[
-        {"title": "VALIDASI VS GEJALA KERUSAKAN", "items": [
-            "Aturan Linter | Gejala Kerusakan Dokumen | Dampak Tim Rekayasa",
-            "Monotonic Order | Lompat nomor (1 langsung 3) | Keraguan riwayat commit hilang",
-            "Reciprocal Pointer | ADR 2 supersede 1 tanpa update 1 | Ambiguitas status operasional aktif",
-            "Target Existence | Superseded by 99 (file 99 nihil) | Referensi putus / dangling context",
-            "Cycle Detector | Siklus 1 -> 2 -> 3 -> 1 | Silsilah keputusan mengalami loop tak hingga",
-            "Section Guard | Context / Decision / Consequence kosong | Catatan kehilangan alasan teknis esensial"
-        ], "type": "table"}
-    ],
-    narrative="Tabel ini memetakan mekanisme linter terhadap gejala kerusakan dokumen riil. Setiap guard mencegah risiko ambiguitas arsitektural yang dapat menyesatkan teknisi saat mengambil keputusan di masa depan.",
-    narrative_en="This matrix maps validator checks directly against concrete documentation anomalies. Each validation rule safeguards against structural ambiguities that misinform future architectural reviews.",
-    mental_model="Enforce structural invariants to maintain reliable historical traceability.",
-    source_path="content/02-master-draft.md:51-73",
-    slide_num="08 / 24",
-    layout="table"
-)
-
-# Slide 09: Decision Sequence — 3 Focused Decision Cards (Layout: cards)
-# Limiting phrase 7: "bukan berarti"
-add_slide(
-    categories=["DECISION SEQUENCE", "CASE STUDY"],
-    title="Silsilah Evolusi SaaS ERP: Monolith ke Microservice",
-    subtitle="Tiga keputusan bertahap yang membuktikan siklus hidup Proposal, Accepted, hingga Rejected.",
-    content_items=[
-        {"type": "cards", "title": "SEKUENS KEPUTUSAN SAAS ERP", "items": [
-            {"title": "ADR 0001: Modular Monolith", "desc": "Tim 5 teknisi; fokus iterasi cepat dan transaksi ACID lokal. Status akhir: Superseded by 2."},
-            {"title": "ADR 0002: Notification Service", "desc": "Tim 25 teknisi; lonjakan beban notifikasi diisolasi ke microservice. Status: Accepted (Supersedes 1)."},
-            {"title": "ADR 0003: Reject Event Sourcing", "desc": "Usulan audit log via Event Sourcing ditolak demi kesederhanaan relasional. Status: Rejected."}
-        ]}
-    ],
-    narrative="Evolusi arsitektur ERP mendemonstrasikan transisi status alami. Memilih monolith di awal bukan berarti anti-microservices, melainkan respons rasional terhadap batasan tim 5 teknisi dan batas waktu peluncuran 3 bulan.",
-    narrative_en="The SaaS ERP case study illustrates realistic lifecycle progression. Adopting a modular monolith first does not indicate opposition to distributed systems; it represents a rational response to early-stage team constraints.",
-    mental_model="Architecture decisions evolve in response to changing organizational and technical forces.",
-    source_path="cmd/demo/main.go:10-64",
-    slide_num="09 / 24",
-    layout="cards"
-)
-
-# Slide 10: Bukti Eksekusi / Terminal Output (Layout: terminal)
-add_slide(
-    categories=["EVIDENCE", "EXECUTION"],
-    title="Eksekusi Demo cmd/demo dan Test Suite Lolos Bersih",
-    subtitle="Output terminal membuktikan parsing 3 ADR dan kelolosan linter tanpa galat integritas.",
-    content_items=[
-        {"type": "code", "title": "TERMINAL OUTPUT: go run ./cmd/demo && go test -v", "items": [
-            "=== Architecture Decision Record (ADR) Lab ===",
-            "Successfully parsed 3 ADRs:",
-            "  - [0001] Use Modular Monolith for Core SaaS ERP        | Status: Superseded -> Superseded by ADR 2",
-            "  - [0002] Extract Notification Service to Microservice  | Status: Accepted   -> Supersedes ADR 1",
-            "  - [0003] Reject Event Sourcing for Order Management    | Status: Rejected",
-            "",
-            "Running ADR Integrity Linter...",
-            "Integrity check passed! Decision lineage and lifecycle invariants are intact."
-        ]}
-    ],
-    narrative="Program demo mengekstrak seluruh metadata dan memvalidasi integritas silsilah tanpa kegagalan. Eksekusi ini membuktikan bahwa invarian penomoran monotonik dan tautan timbal balik bekerja tepat pada skenario SaaS ERP.",
-    narrative_en="The demo runner extracts document metadata and verifies graph invariants without error. This execution confirms that monotonic ordering and bidirectional pointers function correctly across the ERP case study.",
-    mental_model="Executable verification proves that structural validation rules hold under simulated workflows.",
-    source_path="engineering/03-execution-result.md:51-63",
-    slide_num="10 / 24",
-    layout="code"
-)
-
-# Slide 11: Analisis Batasan Bukti (Layout: cards)
-# Limiting phrase 8: "belum membuktikan"
-add_slide(
-    categories=["AUDIT", "EVIDENCE BOUNDARY"],
-    title="Batasan Bukti Lab: Yang Dibuktikan vs Belum",
-    subtitle="Memisahkan verifikasi struktural otomatis dari penilaian semantik arsitektur nyata.",
-    content_items=[
-        {"type": "cards", "title": "BATAS PEMBUKTIAN SISTEM", "items": [
-            {"title": "YANG DIBUKTIKAN", "desc": "Parsing regex mendeteksi header, status, section; linter menolak broken link, gap nomor, cycle, race."},
-            {"title": "YANG TIDAK DIBUKTIKAN", "desc": "Kelayakan teknis keputusan arsitektur; dampak kuantitatif terhadap onboarding; integrasi git hook."},
-            {"title": "BATAS LINGKUP TIM", "desc": "Lab belum membuktikan efektivitas skema pada skala 100+ engineer atau repositori terdistribusi multi-repo."}
-        ]}
-    ],
-    narrative="Lab ini membuktikan keandalan validasi sintaks dan integritas referensi graf. Hasil ini belum membuktikan kebenaran isi keputusan teknis itu sendiri, yang tetap memerlukan penilaian manusia melalui peer review arsitek.",
-    narrative_en="This lab proves regex-based syntax parsing and referential graph validation. It does not prove the soundness of the architectural decisions themselves, which still requires human peer review.",
-    mental_model="Structural linters verify document integrity, not human architectural wisdom.",
-    source_path="research-audit/07-verdict.md:Limitations",
-    slide_num="11 / 24",
-    layout="cards"
-)
-
-# Slide 12: Trade-off Arsitektur (Layout: cards)
-# Limiting phrase 9: "tidak otomatis"
-add_slide(
-    categories=["TRADE-OFF", "COSTS & BENEFITS"],
-    title="Trade-off Penerapan ADR dalam Alur Rekayasa",
-    subtitle="Biaya pemeliharaan dokumentasi terstruktur vs manfaat ketertelusuran jangka panjang.",
-    content_items=[
-        {"type": "cards", "title": "KOMPROMI IMPLEMENTASI ADR", "items": [
-            {"title": "Overhead Penulisan PR", "desc": "Pengembang wajib menyusun Context, Decision, dan Consequences sebelum merge arsitektural."},
-            {"title": "Disiplin Immutability", "desc": "Keputusan tidak boleh diedit langsung; harus membuat berkas baru saat strategi berubah."},
-            {"title": "Bukan Pengganti Diskusi", "desc": "Adanya ADR tidak otomatis mencegah perdebatan sengit jika tim tidak menyepakati batasan masalah."}
-        ]}
-    ],
-    narrative="Menerapkan ADR menuntut disiplin penulisan dan biaya review tambahan di setiap PR arsitektur. Keberadaan ADR tidak otomatis menyelesaikan perbedaan pendapat tim, melainkan menyediakan basis data objektif untuk pengambilan keputusan.",
-    narrative_en="Adopting ADRs imposes authoring friction and additional review overhead on architectural PRs. Having an ADR repository does not automatically eliminate disagreement, but grounds technical debates in documented facts.",
-    mental_model="ADRs trade short-term authoring friction for long-term organizational clarity.",
-    source_path="content/02-master-draft.md:228-251",
-    slide_num="12 / 24",
-    layout="cards"
-)
-
-# Slide 13: Concurrency / Validation Pipeline (Layout: code)
-# Limiting phrase 10: "simulasi ini tidak sama dengan"
-add_slide(
-    categories=["CONCURRENCY", "PARALLEL LINTER"],
-    title="Validasi Konkuren Graf Keputusan dengan Mutex Agregator",
-    subtitle="Goroutine memverifikasi tautan timbal balik secara independen dengan proteksi race.",
-    content_items=[
-        {"type": "code", "title": "internal/adr/linter.go", "items": [
-            "var wg sync.WaitGroup",
-            "for _, r := range records {",
-            "    wg.Add(1)",
-            "    go func(rec *Record) {",
-            "        defer wg.Done()",
-            "        var localErrs []error",
-            "        // Cek reciprocal SupersededBy & Supersedes",
-            "        if len(localErrs) > 0 {",
-            "            mu.Lock()",
-            "            errs = append(errs, localErrs...)",
-            "            mu.Unlock()",
-            "        }",
-            "    }(r)",
-            "}"
-        ]}
-    ],
-    narrative="Linter memanfaatkan goroutine untuk memverifikasi setiap simpul record secara paralel. Pengumpulan error lokal diproteksi sync.Mutex. Simulasi ini tidak sama dengan pemrosesan jutaan node graf, namun lolos go test -race pada 100 record.",
-    narrative_en="The linter distributes node validation across worker goroutines with mutex-guarded error aggregation. While this simulation is not equivalent to billion-node graph engines, it passes race detection cleanly across 100 records.",
-    mental_model="Fan-out node checks concurrently; aggregate errors through thread-safe synchronization.",
-    source_path="internal/adr/linter.go:64-106",
-    slide_num="13 / 24",
-    layout="code"
-)
-
-# Slide 14: Before vs After Comparison Cards (Layout: cards)
-# Limiting phrase 11: "bukan berarti"
-add_slide(
-    categories=["COMPARISON", "BEFORE VS AFTER"],
-    title="Transformasi Manajemen Keputusan: Sebelum vs Sesudah ADR",
-    subtitle="Perubahan fundamental dari memori fana pengembang ke repositori terstruktur.",
-    content_items=[
-        {"type": "cards", "title": "SEBELUM (NAIF) VS SESUDAH (ADR TERVERIFIKASI)", "items": [
-            {"title": "Sebelum: Asumsi Tribal", "desc": "Alasan arsitektur hanya ada di ingatan lead engineer; hilang seketika saat orang tersebut resign."},
-            {"title": "Sesudah: Riwayat Ko-lokasi", "desc": "Seluruh keputusan tersimpan di docs/adr/, terlacak via git blame dan pull request terikat."},
-            {"title": "Integritas Silsilah", "desc": "Mengganti arsitektur bukan berarti menghapus masa lalu, melainkan menghubungkan tautan timbal balik."}
-        ]}
-    ],
-    narrative="Sebelumnya pengetahuan arsitektural tersebar dalam chat dan obrolan lisan yang mudah hilang. Dengan ADR dan linter otomatis, silsilah keputusan tercatat kekal; memperbarui sistem bukan berarti menghapus riwayat sebelumnya.",
-    narrative_en="Previously, critical architectural context remained trapped in tribal discussions. Structured ADRs ensure architectural history survives personnel changes through co-located, immutable Git records.",
-    mental_model="Replace fragile oral traditions with permanent, version-controlled architecture ledgers.",
-    source_path="content/02-master-draft.md:1-21",
-    slide_num="14 / 24",
-    layout="cards"
-)
-
-# Slide 15: Analisis Mendalam — Parsing Regex & Validasi Section (Layout: code)
-# Limiting phrase 12: "cakupannya mengikuti test"
-add_slide(
-    categories=["ANALYSIS", "PARSER INTERNALS"],
-    title="Parser Memastikan Kehadiran Header dan Section Wajib",
-    subtitle="Regex mengekstrak atribut metadata sekaligus memvalidasi konten section tidak kosong.",
-    content_items=[
-        {"type": "code", "title": "internal/adr/parser.go", "items": [
-            "var (",
-            "    titleRegex   = regexp.MustCompile(`^#\\s+(\\d+)\\.\\s+(.+)$`)",
-            "    statusRegex  = regexp.MustCompile(`(?i)^Status:\\s*([A-Za-z]+)(?:\\s+by\\s+(\\d+))?`)",
-            "    contextRegex = regexp.MustCompile(`(?i)^##\\s+Context`)",
-            ")",
-            "if !foundTitle { return nil, fmt.Errorf(\"title not found\") }",
-            "if !foundStatus || !record.Status.IsValid() { ... }",
-            "if !foundContext || !contextHasContent { ... }"
-        ]}
-    ],
-    narrative="Parser memeriksa format Markdown baris demi baris menggunakan regex terarah. Parser menolak dokumen jika section Context, Decision, atau Consequences kosong. Namun, cakupannya mengikuti test skenario spesifik format lab ini.",
-    narrative_en="The parser evaluates Markdown lines sequentially using targeted regex patterns, rejecting missing or empty required sections. Its verification boundary is scoped strictly to the format defined in the test suite.",
-    mental_model="Mandate essential semantic sections at the syntax parsing stage.",
-    source_path="internal/adr/parser.go:12-164",
+    narrative="Tipe data Status mengikat status ADR hanya pada lima kondisi siklus hidup formal. Keputusan membatasi status ini cakupannya mengikuti test spesifik lab, mencegah masuknya istilah rancu seperti In-Review atau Draft ke cabang utama.",
+    narrative_en="The Status enum restricts records to five unambiguous lifecycle states. Enforcing these specific statuses directly reflects test coverage in this lab, preventing ambiguous labels like Draft from leaking into production branches.",
+    mental_model="Constrain document lifecycle states to a closed enumerated set validated at parse time.",
+    source_path="internal/adr/models.go:3-20",
     slide_num="15 / 24",
     layout="code"
 )
 
-# Slide 16: Analisis Mendalam — Validasi Urutan Monotonik (Layout: code)
+# Slide 16: Analisis Mendalam — Monotonic Numbering Check (Layout: code)
 # Limiting phrase 13: "tidak otomatis"
 add_slide(
     categories=["ANALYSIS", "MONOTONIC CHECK"],
-    title="Penomoran Monotonik Mencegah Kehilangan Riwayat",
-    subtitle="Mengurutkan array ID untuk mendeteksi celah urutan bernomor secara deterministik.",
+    title="Invarian Penomoran Monotonik Mencegah Berkas Hilang",
+    subtitle="Memastikan rangkaian ID terurut sempurna dari 1 sampai N tanpa jeda nomor.",
     content_items=[
         {"type": "code", "title": "internal/adr/linter.go", "items": [
             "ids := make([]int, 0, len(records))",
             "for id := range recordMap { ids = append(ids, id) }",
             "sort.Ints(ids)",
-            "",
             "for i := 0; i < len(ids); i++ {",
             "    if ids[i] != i+1 {",
-            "        errs = append(errs, fmt.Errorf(",
-            "            \"non-monotonic numbering, expected %d but got %d\",",
-            "            i+1, ids[i]))",
+            "        errs = append(errs, fmt.Errorf(\"non-monotonic numbering\"))",
             "        break",
             "    }",
             "}"
         ]}
     ],
-    narrative="Linter menyortir ID dan mencocokkan indeks ke-i dengan ekspektasi i+1. Jika ADR 2 terhapus atau terlompati, linter langsung menolak commit. Menjaga nomor urut tidak otomatis mudah saat merge branch konkuren tanpa linter ini.",
-    narrative_en="The linter sorts IDs and enforces that element i matches i+1 exactly. If ADR 2 is skipped, validation fails immediately. Sequential monotonicity is not automatically maintained in concurrent branches without this check.",
-    mental_model="Strict monotonic indexing ensures no historical decisions disappear unseen from Git history.",
+    narrative="Linter mengumpulkan seluruh ID dan mencocokkan nilainya tepat dengan indeks i+1 setelah diurutkan. Urutan penomoran yang rapi tidak otomatis menjamin tidak ada commit yang salah rebase, tetapi mencegah celah nomor yang membingungkan auditor.",
+    narrative_en="The linter sorts collected IDs and asserts each strictly matches its expected sequential index i+1. Enforcing unbroken sequences does not automatically prevent Git rebase mistakes, but it reliably exposes skipped numbers to reviewers.",
+    mental_model="Sequential monotonic numbering verifies that no historical decision records were deleted or omitted.",
     source_path="internal/adr/linter.go:27-39",
     slide_num="16 / 24",
     layout="code"
 )
 
-# Slide 17: Analisis Mendalam — Deteksi Siklus dan Self-Supersession (Layout: code)
+# Slide 17: Analisis Mendalam — Deteksi Siklus Supersession (Layout: code)
 # Limiting phrase 14: "hanya pada jalur ini"
 add_slide(
     categories=["ANALYSIS", "CYCLE DETECTION"],
-    title="Deteksi Siklus DFS Mencegah Infinite Loop Silsilah",
-    subtitle="Algoritma depth-first search berbasis 3-state menandai siklus pada graf keputusan.",
+    title="Deteksi Siklus Silsilah dengan Algoritma DFS 3-State",
+    subtitle="Mencegah loop penggantian melingkar yang merusak validitas historis arsitektur.",
     content_items=[
         {"type": "code", "title": "internal/adr/linter.go", "items": [
-            "state := make(map[int]int) // 0:unvisited, 1:visiting, 2:visited",
-            "var detectCycle func(id int)",
+            "state := make(map[int]int) // 0: unvisited, 1: visiting, 2: visited",
             "detectCycle = func(id int) {",
             "    state[id] = 1",
-            "    if rec, exists := recordMap[id]; exists && rec.SupersededBy != 0 {",
-            "        if state[rec.SupersededBy] == 1 {",
+            "    if rec, ok := recordMap[id]; ok && rec.SupersededBy != 0 {",
+            "        nextID := rec.SupersededBy",
+            "        if state[nextID] == 1 {",
             "            errs = append(errs, fmt.Errorf(\"cyclical supersession\"))",
-            "        } else if state[rec.SupersededBy] == 0 { detectCycle(rec.SupersededBy) }",
+            "        } else if state[nextID] == 0 { detectCycle(nextID) }",
             "    }",
             "    state[id] = 2",
             "}"
         ]}
     ],
-    narrative="Silsilah keputusan harus membentuk DAG murni tanpa loop. Algoritma DFS 3-state melacak simpul yang sedang ditelusuri. Hanya pada jalur ini linter menangkap anomali ketika ADR 1 digantikan oleh 2, 2 oleh 3, dan 3 kembali ke 1.",
-    narrative_en="Decision lineage must form a strict DAG without circular dependencies. A 3-state DFS algorithm tracks visiting nodes. Only along this path does the linter detect cycles like ADR 1 -> 2 -> 3 -> 1.",
-    mental_model="Architectural evolution must flow forward as a directed acyclic graph, never a cycle.",
+    narrative="Deteksi siklus memanfaatkan algoritma pewarnaan simpul DFS tiga status: unvisited, visiting, dan visited. Hanya pada jalur ini deteksi rekursif mampu menangkap skenario loop kompleks di mana ADR 1 digantikan 2, 2 digantikan 3, dan 3 kembali menunjuk 1.",
+    narrative_en="Cycle detection uses a depth-first search graph traversal with three visitation states. Only along this path can recursive checks catch multi-hop loops where ADR 1 is superseded by 2, 2 by 3, and 3 mistakenly points back to 1.",
+    mental_model="Detect invalid directed cycles using depth-first graph coloring before supersession chains corrupt lineage.",
     source_path="internal/adr/linter.go:41-62",
     slide_num="17 / 24",
     layout="code"
 )
 
-# Slide 18: Analisis Mendalam — Menolak Nilai Status Tidak Valid (Layout: code)
+# Slide 18: Analisis Mendalam — Validasi Timbal-Balik (Layout: code)
 # Limiting phrase 15: "bukan berarti"
 add_slide(
-    categories=["ANALYSIS", "SCHEMA GUARD"],
-    title="Validasi Status Siklus Hidup Menolak Status Informal",
-    subtitle="Mencegah status informal seperti 'Draft' atau 'In Review' masuk ke repositori utama.",
+    categories=["ANALYSIS", "RECIPROCAL INTEGRITY"],
+    title="Verifikasi Timbal-Balik: Konsistensi Hubungan Penggantian",
+    subtitle="Memastikan ADR lama dan ADR baru saling mengakui hubungan silsilah penggantian.",
     content_items=[
-        {"type": "code", "title": "tests/parser_test.go", "items": [
-            "func TestParse_Invalid(t *testing.T) {",
-            "    tests := []struct { name, content, wantErr string }{",
-            "        {",
-            "            name: \"invalid status\",",
-            "            content: \"# 1. Title\\nStatus: Draft\\n## Context\\nA\\n## Decision\\nB\\n## Consequences\\nC\\n\",",
-            "            wantErr: \"invalid status: Draft\",",
-            "        },",
+        {"type": "code", "title": "internal/adr/linter.go", "items": [
+            "if rec.Status == StatusSuperseded {",
+            "    replacement, exists := recordMap[rec.SupersededBy]",
+            "    if !exists { localErrs = append(localErrs, fmt.Errorf(\"non-existent\")) }",
+            "    else if replacement.Supersedes != rec.ID {",
+            "        localErrs = append(localErrs, fmt.Errorf(\"mismatched supersession\"))",
             "    }",
-            "    // Verifikasi penolakan status di luar 5 status formal",
+            "}",
+            "if rec.Supersedes != 0 && (old.Status != StatusSuperseded || old.SupersededBy != rec.ID) {",
+            "    localErrs = append(localErrs, fmt.Errorf(\"not marked as superseded\"))",
             "}"
         ]}
     ],
-    narrative="Status siklus hidup dibatasi secara tegas pada Proposed, Accepted, Superseded, Deprecated, dan Rejected. Menolak status Draft bukan berarti melarang peninjauan bertahap, melainkan mewajibkan draft diuji via branch PR sebelum di-merge.",
-    narrative_en="Lifecycle statuses are strictly restricted to five formal states. Rejecting 'Draft' status does not prevent collaborative review; it mandates that drafting occurs within branch PRs prior to merge.",
-    mental_model="Enforce formal lifecycle states at merge boundaries to avoid ambiguous intermediate records.",
-    source_path="tests/parser_test.go:126-132",
+    narrative="Linter memeriksa keselarasan dua arah antara SupersededBy dan Supersedes. Menjaga kedua deklarasi tetap sinkron bukan berarti menambah redudansi sia-sia, melainkan memastikan pembaca dokumen lama maupun baru mendapatkan visibilitas status yang utuh.",
+    narrative_en="The linter guarantees bidirectional agreement between SupersededBy and Supersedes declarations. Enforcing reciprocal metadata does not introduce useless redundancy; it ensures readers at either end of the transition observe consistent status.",
+    mental_model="Reciprocal supersession verification guarantees that obsolete and current records remain mutually consistent.",
+    source_path="internal/adr/linter.go:72-98",
     slide_num="18 / 24",
     layout="code"
 )
 
-# Slide 19: Analisis Mendalam — Rekam Usulan yang Ditolak (Rejected) (Layout: cards)
-# Limiting phrase 16: "tidak otomatis"
+# Slide 19: Analisis Mendalam — Parsing Seksi & Penolakan Dokumen Kosong (Layout: code)
+# Limiting phrase 16: "cakupannya mengikuti test"
 add_slide(
-    categories=["ANALYSIS", "REJECTED DECISIONS"],
-    title="Menyimpan Status 'Rejected' Menutup Debat Masa Depan",
-    subtitle="Merekam usulan yang ditolak mencegah tim mengulang analisis yang sama tanpa data baru.",
+    categories=["ANALYSIS", "PARSER ROBUSTNESS"],
+    title="Penolakan Berkas Cacat: Parser Guard Seksi Wajib",
+    subtitle="Memvalidasi bahwa seksi Context, Decision, dan Consequences bukan hanya header kosong.",
     content_items=[
-        {"type": "cards", "title": "NILAI STRATEGIS STATUS REJECTED", "items": [
-            {"title": "Dokumentasi Alasan Penolakan", "desc": "Mencatat mengapa Event Sourcing ditolak: kompleksitas migrasi skema event vs tabel relasional."},
-            {"title": "Mencegah Usulan Berulang", "desc": "Anggota tim baru tidak akan mengajukan ulang usulan serupa tanpa membawa bukti baru."},
-            {"title": "Bukan Kegagalan Rekayasa", "desc": "ADR Rejected tidak otomatis berarti buang-buang waktu; itu investasi pencegahan disrupsi."}
+        {"type": "code", "title": "tests/parser_test.go", "items": [
+            "func TestParse_Invalid(t *testing.T) {",
+            "    tests := []struct { name, content, wantErr string }{",
+            "        {\"missing title\", \"Status: Accepted\", \"title not found\"},",
+            "        {\"invalid status\", \"# 1. T\\nStatus: Draft\", \"invalid status: Draft\"},",
+            "        {\"empty context\", \"# 1. T\\nStatus: Accepted\\n## Context\\n## Decision\\nB...\",",
+            "         \"context section missing or empty\"},",
+            "    }",
+            "    for _, tt := range tests { /* assert strings.Contains(err, wantErr) */ }",
+            "}"
         ]}
     ],
-    narrative="Banyak tim menghapus dokumen usulan ketika ditolak. Praktik ini keliru karena menghilangkan alasan penolakannya. Menyimpan ADR berstatus Rejected tidak otomatis menambah beban, melainkan menjadi perisai dari perdebatan teknis berulang.",
-    narrative_en="Many teams discard rejected proposals, inadvertently deleting the technical rationale behind the decision. Retaining Rejected ADRs does not introduce clutter; it acts as a firewall against repeated, unfounded re-proposals.",
-    mental_model="Documenting why an option was rejected is as valuable as recording the chosen path.",
-    source_path="content/02-master-draft.md:272-280",
+    narrative="Pengujian unit memverifikasi bahwa parser menolak dokumen dengan judul cacat, status informal, atau seksi wajib tanpa konten. Aturan validasi ketat ini cakupannya mengikuti test suite yang menjamin setiap ADR memiliki bobot substansi arsitektur nyata.",
+    narrative_en="Unit tests prove the parser rejects records containing malformed titles, unofficial statuses, or empty required sections. This strict validation scope directly matches test coverage, guaranteeing every committed ADR contains actionable rationale.",
+    mental_model="Guard against hollow architectural documentation by validating mandatory content within each section.",
+    source_path="tests/parser_test.go:104-219",
     slide_num="19 / 24",
-    layout="cards"
+    layout="code"
 )
 
 # Slide 20: Checklist Implementasi (Layout: checklist)
 add_slide(
-    categories=["CHECKLIST", "GUIDELINES"],
-    title="Checklist Penerapan ADR dan Validasi Struktural",
-    subtitle="Pedoman wajib sebelum menggabungkan pull request arsitektur ke main branch.",
+    categories=["CHECKLIST", "BEST PRACTICES"],
+    title="Checklist Tata Kelola Architecture Decision Record",
+    subtitle="Standar wajib sebelum menggabungkan keputusan arsitektur baru ke repositori.",
     content_items=[
-        {"type": "checklist", "title": "KRITERIA MERGE ADR", "items": [
-            "ADR diberi nomor urut berikutnya secara kontigu tanpa melompati nomor.",
-            "Berkas disimpan di direktori yang sama dengan kode dalam format Markdown.",
-            "Bagian Context, Decision, dan Consequences terisi lengkap dengan analisis kompromi.",
-            "Jika menggantikan keputusan lama, update status lama (Superseded by) dan deklarasikan Supersedes.",
-            "Linter integritas dijalankan di CI/CD dan dinyatakan lulus tanpa peringatan tautan putus."
+        {"type": "checklist", "title": "KRITERIA IMPLEMENTASI ADR TERSTRUKTUR", "items": [
+            "ADR disimpan langsung di repositori Git dalam folder docs/adr/ berdampingan dengan kode.",
+            "Penomoran berkas menggunakan format monotonik 4 digit tanpa jeda (0001, 0002, ...).",
+            "Status keputusan strictly terbatas pada: Proposed, Accepted, Superseded, Deprecated, Rejected.",
+            "Dokumen yang telah Accepted bersifat immutable; pembaruan arah wajib membuat berkas ADR baru.",
+            "Penggantian keputusan mendeklarasikan tautan timbal-balik (Superseded by N dan Supersedes M).",
+            "Linter otomatis dijalankan pada pipeline CI untuk memvalidasi nomor, status, dan integritas graf."
         ]}
     ],
-    narrative="Checklist ini merangkum disiplin tata kelola ADR: nomor urut kontigu, ko-lokasi repositori, analisis konsekuensi dua arah yang terisi penuh, tautan resiprokal yang sinkron, dan verifikasi CI/CD otomatis.",
-    narrative_en="This checklist enforces robust ADR governance: contiguous numbering, code co-location, comprehensive consequence documentation, reciprocal pointers, and mandatory CI/CD gate passes.",
-    mental_model="Treat architectural documentation with the same testing rigor applied to production code.",
-    source_path="content/02-master-draft.md:281-293",
+    narrative="Checklist ini merangkum disiplin perancangan ADR: penyimpanan bersama kode, penomoran urut tanpa bolong, status formal terikat, sifat kekal tanpa revisi diam-diam, tautan timbal-balik, serta validasi otomatis pada continuous integration.",
+    narrative_en="This checklist codifies essential ADR governance: code co-location, gapless monotonic IDs, closed lifecycle states, immutable accepted records, reciprocal supersession links, and continuous integration linter enforcement.",
+    mental_model="Enforce structured decision governance to maintain an immutable, verifiable audit trail of system design.",
+    source_path="content/02-master-draft.md:148-160",
     slide_num="20 / 24",
     layout="checklist"
 )
@@ -522,19 +524,19 @@ add_slide(
 # Limiting phrase 17: "bukan berarti"
 add_slide(
     categories=["ANTI-PATTERN", "PITFALLS"],
-    title="Anti-Pattern Umum dalam Pengelolaan ADR",
-    subtitle="Kekeliruan pemeliharaan yang sering merusak fungsi dokumentasi arsitektur.",
+    title="Anti-Pattern Umum dalam Dokumentasi Arsitektur",
+    subtitle="Kekeliruan perancangan yang sering merusak reliabilitas rekaman keputusan tim.",
     content_items=[
         {"type": "cards", "title": "HINDARI KESALAHAN UMUM INI", "items": [
-            {"title": "Retroactive Mutation", "desc": "Mengedit teks ADR Accepted lama saat keputusan berubah alih-alih membuat ADR baru."},
-            {"title": "Trivial Decision Pollution", "desc": "Membuat ADR untuk hal mikro seperti nama variabel atau refaktorisasi internal rutin."},
-            {"title": "Pemberian Ulasan Kosong", "desc": "Mencatat keuntungan saja tanpa konsekuensi negatif; bukan berarti rancangannya sempurna."}
+            {"title": "Penyuntingan Retroaktif", "desc": "Mengubah isi ADR lama saat arah berubah; menghancurkan riwayat konteks historis arsitektur."},
+            {"title": "ADR untuk Hal Sepele", "desc": "Mencatat refactor nama variabel atau library helper kecil; menciptakan kebisingan dokumen."},
+            {"title": "Bukan Berarti Bebas", "desc": "Menolak ADR formal bukan berarti bebas bergerak; tim hanya menunda biaya debat di masa depan."}
         ]}
     ],
-    narrative="Menyunting ADR yang telah disetujui merusak integritas sejarah. Membuka ADR untuk keputusan mikro menciptakan polusi dokumen. Setiap keputusan memiliki konsekuensi negatif; mengabaikannya bukan berarti keputusan tersebut bebas kelemahan.",
-    narrative_en="Retroactively mutating approved ADRs invalidates historical truth. Registering trivial refactoring creates document bloat. Every architecture decision carries negative trade-offs; ignoring them does not make the design flawless.",
-    mental_model="Preserve history faithfully; record trade-offs honestly without omitting downsides.",
-    source_path="content/02-master-draft.md:241-250",
+    narrative="Mengedit ADR lama yang sudah disetujui menghapus jejak sejarah dan memicu kebingungan mengapa keputusan itu dibuat awalnya. Menolak menulis ADR bukan berarti tim lebih gesit; hal itu hanya menunda biaya debat berkepanjangan ketika arsitek berganti.",
+    narrative_en="Retroactively editing accepted ADRs erases historical reasoning and invites confusion regarding past trade-offs. Bypassing formal ADRs does not accelerate delivery; it merely compounds cognitive debt for future engineering teams.",
+    mental_model="Never edit historical decisions; append new records and update status links to reflect system evolution.",
+    source_path="content/02-master-draft.md:136-147",
     slide_num="21 / 24",
     layout="cards"
 )
@@ -544,19 +546,19 @@ add_slide(
 add_slide(
     categories=["REPRODUCTION", "COMMANDS"],
     title="Reproduksi Mandiri di Mesin Lokal Menggunakan Go",
-    subtitle="Eksperimen validasi mandiri tanpa dependensi pihak ketiga (zero-dependency).",
+    subtitle="Verifikasi mandiri parser dan linter ADR tanpa ketergantungan library eksternal.",
     content_items=[
         {"type": "code", "title": "COMMAND RUNNER (ZERO DEPENDENCIES)", "items": [
             "cd labs/17-architecture-decision-record",
-            "go test -v ./...    # validasi parser, linter, dan DAG lineage",
-            "go test -race ./... # verifikasi konkurensi linter bebas race",
-            "go run ./cmd/demo   # simulasi evolusi SaaS ERP 3-node"
+            "go test -v ./...    # validasi parser regex dan aturan linter struktural",
+            "go test -race ./... # verifikasi validasi graf konkuren bebas data race",
+            "go run ./cmd/demo   # eksekusi demo parsing 3 ADR evolusi SaaS ERP"
         ]}
     ],
-    narrative="Seluruh mekanisme validasi ditulis menggunakan Go standard library murni. Perintah ini mengeksekusi rangkaian uji unit, verifikasi race condition pada linter konkuren, serta simulasi end-to-end evolusi SaaS ERP.",
-    narrative_en="The entire validation suite runs on pure Go standard library with zero third-party dependencies. These commands execute unit tests, race-safe concurrent linting, and the SaaS ERP evolution demo.",
-    mental_model="Zero-dependency test harnesses guarantee fast, reliable verification across all developer environments.",
-    source_path="README.md",
+    narrative="Seluruh mekanisme validasi ditulis menggunakan Go standard library tanpa modul eksternal. Eksperimen lokal ini memvalidasi integritas data di memori, namun production masih perlu menambahkan skrip CLI berkas dan integrasi hook commit.",
+    narrative_en="The verification suite operates purely on the Go standard library with zero external modules. While this confirms in-memory algorithmic correctness, production systems still require file-crawling CLI tooling and Git pre-commit hooks.",
+    mental_model="Zero-dependency algorithmic verification guarantees fast, reliable validation in local and CI workflows.",
+    source_path="README.md:14-34",
     slide_num="22 / 24",
     layout="code"
 )
@@ -565,18 +567,18 @@ add_slide(
 # Limiting phrase 19: "tidak otomatis"
 add_slide(
     categories=["TAKEAWAY", "ARCHITECTURAL PRINCIPLES"],
-    title="Prinsip Inti: Rekam Konteks, Verifikasi Silsilah",
-    subtitle="Sistem berevolusi; pemahaman atas batasan masa lalu menjaga konsistensi masa depan.",
+    title="Prinsip Inti: Keputusan Adalah Kode yang Harus Diuji",
+    subtitle="Arsitektur bertahan lama ketika konteks, batasan, dan konsekuensi dirawat layaknya software.",
     content_items=[
         {"type": "cards", "title": "TIGA PILAR KELANGSUNGAN ARSITEKTUR", "items": [
-            {"title": "Rekam Mengapa", "desc": "Abadikan konteks, gaya dorong, dan kompromi saat keputusan diambil untuk generasi pengembang berikutnya."},
-            {"title": "Kekekalan Sejarah", "desc": "Keputusan adalah rekaman waktu; perubahan selalu melahirkan simpul baru dalam graf silsilah."},
-            {"title": "Validasi Otomatis", "desc": "Disiplin tim penting, tetapi tidak otomatis terjaga tanpa gerbang linter otomatis di pipeline CI."}
+            {"title": "Ko-lokasi dengan Kode", "desc": "Simpan rekam jejak keputusan di cabang Git yang sama agar selalu berevolusi bersama fitur."},
+            {"title": "Kekekalan Silsilah", "desc": "Perlakukan riwayat arsitektur sebagai append-only log; ubah arah hanya melalui dokumen pengganti."},
+            {"title": "Verifikasi Otomatis", "desc": "Dokumentasi tanpa tes tidak otomatis dipercaya; uji keutuhan graf keputusan di pipeline CI."}
         ]}
     ],
-    narrative="ADR bukan sekadar dokumen teks, melainkan instrumen mitigasi risiko teknis jangka panjang. Mendokumentasikan keputusan tidak otomatis menyelesaikan tantangan arsitektur, namun memastikan setiap evolusi bertumpu pada konteks yang jelas.",
-    narrative_en="ADRs function as an organizational risk mitigation tool rather than mere documentation. Maintaining decision records does not automatically resolve complex engineering trade-offs, but guarantees that future evolution builds upon clear context.",
-    mental_model="Capture why decisions were made; let automated linters protect the lineage.",
+    narrative="Dokumentasi keputusan arsitektur harus diperlakukan sama dengan kode sumber aplikasi. Menyimpan dokumen tanpa mekanisme pengujian otomatis tidak otomatis membuatnya berguna; keandalan dokumentasi hadir ketika strukturnya divalidasi oleh compiler dan CI.",
+    narrative_en="Architectural decisions must be governed with the same engineering rigor applied to source code. Storing markdown files without automated testing does not automatically guarantee truth; reliability emerges when structure is enforced via CI pipelines.",
+    mental_model="Treat architectural records as an append-only, machine-verified ledger of technical compromises.",
     source_path="content/05-key-takeaways.md",
     slide_num="23 / 24",
     layout="cards"
@@ -585,7 +587,7 @@ add_slide(
 # Slide 24: Closing Slide (Layout: closing)
 add_slide(
     categories=["CLOSING"],
-    title="Keputusan arsitektur yang tidak dicatat adalah hutang konteks yang harus dibayar di masa depan.",
+    title="Dokumentasi arsitektur yang tidak diuji mesin adalah dokumen yang perlahan berubah menjadi kebohongan.",
     subtitle="",
     content_items=[
         {"type": "bullet", "title": "MODUL IMPLEMENTASI", "items": [
@@ -595,12 +597,12 @@ add_slide(
         ]},
         {"type": "bullet", "title": "VERIFIKASI & STATUS", "items": [
             f"Commit: {COMMIT_SHA[:7]} • Status: APPROVED",
-            "Test passing: 15 assertions across parser, DAG, cycle detection, and race tests",
-            "Race detector: Clean (go test -race ./... PASS in 1.4s)",
-            "Validasi struktural Markdown Go murni; bukan parser AST umum."
+            "Test passing: 13 test scenarios (monotonic sequence, reciprocal links, DFS cycle detection)",
+            "Race detector: Clean (go test -race ./... PASS in 1.47s)",
+            "Zero external dependencies: 100% Go standard library."
         ]}
     ],
-    mental_model="Architectural decisions without verified records become forgotten context.",
+    mental_model="Architectural documentation unverified by machines gradually drifts into fiction.",
     source_path=REPO_URL,
     slide_num="24 / 24",
     layout="closing"
