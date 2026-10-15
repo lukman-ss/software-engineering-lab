@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
 """
 Publication Builder for Software Engineering Lab 22: N+1 Query Problem.
-Generates: PPTX, PDF, PNG covers, Dev.to MD, Medium HTML, Metadata, Caption, DELIVERABLES.md
-Adheres strictly to the Lab 13-15 editorial 2-column layout and in-depth technical narratives.
+Generates 24-slide LinkedIn carousel covering the N+1 query anti-pattern,
+eager loading batching, query counting verification, and production trade-offs.
 """
 import os
-import sys
 
 OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/22-n-plus-one-query-problem/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/22-n-plus-one-query-problem"
-COMMIT_SHA = "6649acb946725e993e78f99ec47833a5498cc870"
+COMMIT_SHA = "13224b48a35ba08f4a350b7d160ae4826f9e1f55"
 LAB_NO = "22"
 SLUG = "n-plus-one-query-problem"
 TITLE_ID = "N+1 Query Problem"
-SUBTITLE_ID = "Batching Relasi Data untuk Eliminasi Latensi Tersembunyi"
+SUBTITLE_ID = "Membunuh Latensi Tersembunyi dengan Eager Loading"
 TITLE_EN = "N+1 Query Problem"
-SUBTITLE_EN = "Batching Database Relations to Eliminate Hidden Latency"
+SUBTITLE_EN = "Eliminating Hidden Latency with Eager Loading"
 AUTHOR = "Lukman / lukman-ss"
-TOPIC_TAGS = "N+1 Query Problem • Batching • Relational Performance • Go"
+COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/22-n-plus-one-query-problem/result/image-cover/cover_art.jpg"
 
-# Slide data structure
+DARK_NAVY = "0b1b2d"
+TEAL = "087f76"
+CREAM = "f4f1e8"
+WHITE = "ffffff"
+SLATE = "52606b"
+ORANGE = "d97706"
+
 SLIDES = []
 
-def add_slide(categories, title, subtitle, content_items, mental_model, source_path="", slide_num="", narrative="", narrative_en=""):
-    """Add a slide to the presentation with support for in-depth editorial narratives."""
+def add_slide(categories, title, subtitle, content_items, mental_model, source_path="", slide_num="", narrative="", narrative_en="", layout=""):
     SLIDES.append({
         "categories": categories,
         "title": title,
@@ -34,568 +38,712 @@ def add_slide(categories, title, subtitle, content_items, mental_model, source_p
         "source": source_path,
         "slide_num": slide_num,
         "narrative": narrative,
-        "narrative_en": narrative_en
+        "narrative_en": narrative_en,
+        "layout": layout
     })
 
-# =====================================================================
-# SLIDE CONTENT DEFINITIONS (24 SLIDES - EDITORIAL LAB 13-15 STANDARD)
-# =====================================================================
-
-# Slide 1: Cover (Dark Navy retro terminal / art)
+# Slide 1: Cover
 add_slide(
     categories=["COVER"],
     title=TITLE_ID,
     subtitle=SUBTITLE_ID,
     content_items=[
         {"type": "cover", "title": "", "items": [
-            "Retro CRT monitor beige dengan scanlines",
-            "ASCII art terminal yang menampilkan query count",
             f"Penulis: {AUTHOR}",
+            f"Lab {LAB_NO}: {SLUG}",
+            f"Repository: {REPO_URL}",
         ]}
     ],
-    mental_model="",
-    source_path="",
-    slide_num="01 / 24"
+    mental_model="N+1 query problem causes hidden latency accumulation; eager loading batching reduces queries to O(1) relative to record count.",
+    source_path=REPO_URL,
+    slide_num="01 / 24",
+    narrative="N+1 query problem adalah masalah performa laten yang terjadi ketika aplikasi melakukan satu query awal untuk mengambil koleksi data, lalu mengeluarkan query terpisah untuk setiap item dalam koleksi tersebut. Lab ini membuktikan bahwa pendekatan naive menghasilkan jumlah query linear terhadap jumlah record, sementara eager loading dengan batching mengurangi query menjadi konstan. Solusi ini mengorbankan kompleksitas kode yang sedikit lebih tinggi untuk pengurangan latensi jaringan dan beban database yang signifikan.",
+    narrative_en="The N+1 query problem is a latent performance issue that occurs when an application performs one initial query to fetch a collection of data, then issues a separate query for each item in that collection. This lab proves that the naive approach generates a linear query count relative to the record count, while eager loading with batching reduces queries to a constant number. This solution trades slightly higher code complexity for significant reductions in network latency and database load.",
+    layout="cover"
 )
 
-# Slide 2: Satu Query Awal, Puluhan Query Mengikuti
+# Slide 2: Problem nyata
 add_slide(
-    categories=["MOTIVASI", "BUKTI LAB"],
-    title="Satu Query Awal, Puluhan Query Mengikuti",
-    subtitle="Pengambilan data berulang di dalam iterasi melipatgandakan latensi jaringan.",
+    categories=["MOTIVASI", "N+1 PROBLEM"],
+    title="Masalah Nyata: N+1 Query Menyembunyikan Latensi",
+    subtitle="Kode berfungsi sempurna pada data kecil, tetapi anjlok di produksi.",
     content_items=[
-        {"title": "MOTIVASI", "items": [
-            "Perilaku cepat di local development menipu engineer saat masuk ke beban production.",
-            "Setiap query individu terlihat sub-milidetik, sehingga lolos dari slow query logs.",
-            "Degradasi akumuler: request yang seharusnya 20ms membengkak menjadi beberapa detik."
-        ], "type": "bullet"},
-        {"title": "BUKTI LAB", "items": [
-            "Store query counter mencatat 1 query author + 3 query post = 4 query total pada 3 data.",
-            "Eager loading memangkas eksekusi menjadi 1 query author + 1 query post = 2 query total."
-        ], "type": "bullet"},
-        {"title": "BATASAN SISTEM", "items": [
-            "Lab memodelkan in-memory Store; pada RDBMS nyata overhead socket TCP memperparah bottleneck."
+        {"title": "SILENT LATENCY", "items": [
+            "Setiap query individual berlatensi rendah (sub-milidetik).",
+            "Latensi akumulatif tumbuh linear dengan jumlah record.",
+            "Pada dataset besar, request bisa memakan waktu berdetik-detik."
+        ], "type": "card"},
+        {"title": "CONNECTION POOL EXHAUSTION", "items": [
+            "Setiap request N+1 menghabiskan banyak slot koneksi database.",
+            "Under concurrent load, pool terdrain secara sequential.",
+            "Bisa menyebabkan connection timeout cascade."
+        ], "type": "card"},
+        {"title": "HARD TO DETECT", "items": [
+            "Slow query logs tidak menangkap karena tiap query cepat.",
+            "Performa hanya terlihat jelas pada skala produksi.",
+            "Unit test tanpa query counter gagal mendeteksi masalah."
+        ], "type": "card"}
+    ],
+    narrative="Masalah N+1 query sering lolos dari deteksi selama pengembangan karena dataset uji coba berukuran kecil. Setiap query individual berjalan cepat, sehingga developer tidak menyadari bahwa pola loop dengan query di dalamnya akan menghasilkan N kali round-trip ke database. Pada produksi dengan ribuan record, latensi akumulatif ini dapat meningkatkan response time dari ratusan milidetik menjadi beberapa detik. Selain itu, pola ini juga menekan connection pool database karena setiap request memerlukan banyak koneksi sequential.",
+    narrative_en="The N+1 query problem often escapes detection during development because test datasets are small. Each individual query runs quickly, so developers don't realize that a loop with queries inside will produce N times the database round-trips. In production with thousands of records, this accumulated latency can increase response time from hundreds of milliseconds to several seconds. Additionally, this pattern puts pressure on the database connection pool because each request requires many sequential connections.",
+    mental_model="Small dataset testing hides N+1; production scale exposes accumulated query overhead.",
+    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
+    slide_num="02 / 24",
+    layout="cards"
+)
+
+# Slide 3: Mengapa review manual / pendekatan naif gagal
+add_slide(
+    categories=["ANALISIS", "NAIVE APPROACH"],
+    title="Mengapa Pendekatan Naif Gagal?",
+    subtitle="Kode N+1 terlihat sederhana tetapi tidak scalable.",
+    content_items=[
+        {"title": "NAIVE CODE EXAMPLE", "items": [
+            "func GetAuthorsWithPosts() []AuthorWithPosts {",
+            "    authors := db.GetAllAuthors()",
+            "    var result []AuthorWithPosts",
+            "    for _, author := range authors {",
+            "        posts := db.GetPostsByAuthorID(author.ID)",
+            "        result = append(result, AuthorWithPosts{...})",
+            "    }",
+            "    return result",
+            "}"
+        ], "type": "code"},
+        {"title": "FATALITAS", "items": [
+            "Query count = 1 + len(authors).",
+            "Database connection dipakai berulang-ulang.",
+            "Tidak ada batching atau prefetching."
         ], "type": "bullet"}
     ],
-    narrative="N+1 query problem merupakan anti-pattern performa paling umum pada data access layer karena sifatnya yang tidak kasat mata pada volume data kecil. Ketika backend mengambil daftar entitas induk lalu menerbitkan query anak di dalam loop perulangan, jumlah round-trip jaringan meningkat secara linear O(N). Pada tahap development dengan segelintir data, eksekusi selesai sub-milidetik. Namun begitu memasuki lingkungan production dengan ratusan record, akumulasi latensi I/O dan perebutan connection pool akan langsung melumpuhkan throughput layanan.",
-    mental_model="N+1 is invisible until it hurts. Batch related queries, don't loop them.",
-    source_path="labs/22-n-plus-one-query-problem/README.md",
-    slide_num="02 / 24"
+    narrative="Implementasi naive N+1 query tampaknya intuitif dan mudah dibaca: ambil semua author, lalu iterasi setiap author untuk mengambil posts-nya satu per satu. Namun, pendekatan ini menghasilkan jumlah query yang linear terhadap jumlah record parent. Pada sistem dengan 1000 author, akan terjadi 1001 query tunggal. Setiap query memerlukan handshake TCP, parsing SQL, eksekusi, dan pengiriman hasil. Akumulasi overhead ini menyebabkan latensi yang dapat ditoleransi pada dataset kecil tetapi menjadi bottlenecks serius pada skala produksi.",
+    narrative_en="The naive N+1 query implementation appears intuitive and easy to read: fetch all authors, then iterate each author to fetch their posts one by one. However, this approach generates a query count that is linear relative to the parent record count. On a system with 1000 authors, there will be 1001 individual queries. Each query requires TCP handshake, SQL parsing, execution, and result transfer. This accumulated overhead causes tolerable latency on small datasets but becomes serious bottlenecks at production scale.",
+    mental_model="Naive nested loops produce O(N) queries; batching collapses it to O(1).",
+    source_path="internal/blog/repository.go:12-28",
+    slide_num="03 / 24",
+    layout="code-bullet"
 )
 
-# Slide 3: Arsitektur Tiga Layer Lab 22
+# Slide 4: Mental model inti / schema card
 add_slide(
-    categories=["ARSITEKTUR", "DATA ACCESS"],
-    title="Arsitektur Tiga Layer Lab 22",
-    subtitle="Store terisolasi, Repository data access, dan executable demo runner.",
+    categories=["MENTAL MODEL", "BATCHING"],
+    title="Mental Model: Eager Loading via Batching",
+    subtitle="Kumpulkan semua ID relasi, jalankan satu query batch, kelompokkan di memori.",
     content_items=[
-        {"title": "KOMPONEN ARSITEKTUR", "items": [
-            "Komponen | Peran | File Sumber",
-            "Store | Mock database thread-safe & query counter | internal/blog/store.go",
-            "Repository | Logika query Naive loop vs Eager batching | internal/blog/repository.go",
-            "Demo | Eksekusi CLI & verifikasi statistik I/O | cmd/demo/main.go"
-        ], "type": "table"}
-    ],
-    narrative="Arsitektur Lab 22 dibangun dengan pemisahan tanggung jawab yang ketat untuk mengisolasi pengukuran interaksi database. Paket Store bertindak sebagai mock database in-memory yang mencatat setiap operasi baca secara atomik melalui query counter thread-safe. Lapisan Repository mengonsumsi Store untuk menyediakan dua variasi endpoint data access: implementasi naive yang mengeksekusi query di dalam loop, serta implementasi eager yang melakukan batching via filter multi-ID. Pemisahan ini memungkinkan pengujian matematis yang deterministik tanpa dependensi eksternal.",
-    mental_model="Clean layer isolation enables precise query instrumentation and verification.",
-    source_path="internal/blog/store.go • internal/blog/repository.go",
-    slide_num="03 / 24"
-)
-
-# Slide 4: Entitas Domain: Author dan Post
-add_slide(
-    categories=["DOMAIN", "DATA MODEL"],
-    title="Entitas Domain: Author dan Post",
-    subtitle="Relasi satu-ke-banyak (one-to-many) antara penulis blog dan artikelnya.",
-    content_items=[
-        {"title": "DOMAIN MODELS", "items": [
-            "type Author struct {",
-            "    ID   int",
-            "    Name string",
-            "}",
-            "",
-            "type Post struct {",
-            "    ID       int",
-            "    AuthorID int",
-            "    Title    string",
-            "}",
-            "",
+        {"title": "DOMAIN SCHEMA", "items": [
+            "type Author struct { ID int; Name string }",
+            "type Post struct { ID int; AuthorID int; Title string }",
             "type AuthorWithPosts struct {",
             "    Author Author",
             "    Posts  []Post",
             "}"
-        ], "type": "code"}
+        ], "type": "code"},
+        {"title": "PRINSIP INTI", "items": [
+            "Batch all related IDs: [author1, author2, ...]",
+            "Single query: SELECT * FROM posts WHERE author_id IN (...)",
+            "Group results in memory by author_id",
+            "Compose final structs without additional queries"
+        ], "type": "bullet"}
     ],
-    narrative="Model domain merepresentasikan kasus klasik relational data: satu Author memiliki banyak entitas Post melalui referensi AuthorID. Struktur komposit AuthorWithPosts menjadi agregat yang harus dikembalikan kepada consumer API. Pada relasi one-to-many seperti ini, keputusan arsitektural apakah relasi child diambil secara lazily per item atau secara batched akan menentukan total beban jaringan antara service backend dan database engine.",
-    mental_model="Aggregate roots must balance relation completeness with network round-trips.",
-    source_path="internal/blog/models.go",
-    slide_num="04 / 24"
+    narrative="Mental model inti untuk menyelesaikan N+1 query problem adalah eager loading melalui batching. Alih-alih melakukan query terpisah untuk setiap entitas parent, kita mengumpulkan semua identifier relasi yang dibutuhkan dalam satu slice. Kemudian kita menjalankan satu query batch dengan klausa IN yang mengambil semua record child sekaligus. Setelah hasil dikembalikan, kita mengelompokkannya di memori menggunakan map, lalu menyusun struktur data akhir tanpa query tambahan. Pendekatan ini mengubah kompleksitas query dari O(N) menjadi O(1).",
+    narrative_en="The core mental model for solving the N+1 query problem is eager loading through batching. Instead of making separate queries for each parent entity, we collect all required relationship identifiers into one slice. Then we run a single batch query with an IN clause that fetches all child records at once. After the results are returned, we group them in memory using a map, then assemble the final data structure without additional queries. This approach changes query complexity from O(N) to O(1).",
+    mental_model="Collect IDs, run one batch query, group in memory → replace N queries with 2.",
+    source_path="internal/blog/models.go • internal/blog/repository.go:32-58",
+    slide_num="04 / 24",
+    layout="schema-card"
 )
 
-# Slide 5: Loop-Driven Data Retrieval (Anti-Pattern)
+# Slide 5: Diagram alur/pipeline
 add_slide(
-    categories=["IMPLEMENTASI", "ANTI-PATTERN"],
-    title="Loop-Driven Data Retrieval",
-    subtitle="Mengambil data relasi child satu per satu di dalam perulangan entitas parent.",
+    categories=["ARSITEKTUR", "PIPELINE"],
+    title="Alur Eksekusi: Dari Loop Naif ke Batch Eager",
+    subtitle="Komparasi pipeline N+1 versus eager loading batching.",
     content_items=[
-        {"title": "NAIVE REPOSITORY", "items": [
-            "func (r *Repository) GetAuthorsWithPostsNPlusOne() []AuthorWithPosts {",
+        {"title": "N+1 PIPELINE", "items": [
+            "1. App → DB: GetAllAuthors()",
+            "   DB → App: [Alice, Bob, Charlie]",
+            "2. Loop: for author in authors",
+            "   App → DB: GetPostsByAuthorID(author.ID)",
+            "   DB → App: posts untuk author",
+            "Total: 4 queries (1 + 3)"
+        ], "type": "diagram"},
+        {"title": "EAGER PIPELINE", "items": [
+            "1. App → DB: GetAllAuthors()",
+            "   DB → App: [Alice, Bob, Charlie]",
+            "2. Extract IDs: [1, 2, 3]",
+            "3. App → DB: GetPostsByAuthorIDs([1,2,3])",
+            "   DB → App: ALL posts",
+            "4. Group by AuthorID in map",
+            "5. Compose AuthorWithPosts",
+            "Total: 2 queries (1 + 1 batch)"
+        ], "type": "diagram"}
+    ],
+    narrative="Pipeline eksekusi N+1 dimulai dengan satu query untuk mengambil semua author, kemudian masuk ke loop untuk mengambil posts setiap author secara individual. Setiap iterasi loop menghasilkan satu round-trip database tambahan. Sebaliknya, pipeline eager loading juga memulai dengan query authors yang sama, tetapi kemudian mengekstrak semua author ID dan melakukan satu query batch menggunakan klausa IN. Hasil batch dikelompokkan dalam map memori sebelum akhirnya disusun ke struktur AuthorWithPosts. Perbedaan mendasar terletak pada pengurangan round-trip dari N menjadi 1.",
+    narrative_en="The N+1 execution pipeline starts with one query to fetch all authors, then enters a loop to fetch posts for each author individually. Each loop iteration produces one additional database round-trip. Conversely, the eager loading pipeline also starts with the same authors query, but then extracts all author IDs and performs one batch query using an IN clause. The batch results are grouped in a memory map before finally being assembled into AuthorWithPosts structures. The fundamental difference lies in reducing round-trips from N to 1.",
+    mental_model="Batching consolidates N sequential queries into one parallel fetch.",
+    source_path="internal/blog/store.go • internal/blog/repository.go",
+    slide_num="05 / 24",
+    layout="pipeline-diagram"
+)
+
+# Slide 6: Cuplikan kode dominan
+add_slide(
+    categories=["IMPLEMENTASI", "CODE"],
+    title="Implementasi Eager Loading Batching",
+    subtitle="Repository.go: GetAuthorsWithPostsEager — batch query + in-memory grouping.",
+    content_items=[
+        {"title": "EAGER LOADING CODE", "items": [
+            "func (r *Repository) GetAuthorsWithPostsEager() []AuthorWithPosts {",
             "    authors := r.store.GetAllAuthors()",
-            "    if len(authors) == 0 { return []AuthorWithPosts{} }",
+            "    if len(authors) == 0 {",
+            "        return []AuthorWithPosts{}",
+            "    }",
+            "",
+            "    authorIDs := make([]int, len(authors))",
+            "    for i, author := range authors {",
+            "        authorIDs[i] = author.ID",
+            "    }",
+            "",
+            "    allPosts := r.store.GetPostsByAuthorIDs(authorIDs)",
+            "",
+            "    postsByAuthor := make(map[int][]Post)",
+            "    for _, post := range allPosts {",
+            "        postsByAuthor[post.AuthorID] = append(postsByAuthor[post.AuthorID], post)",
+            "    }",
             "",
             "    var result []AuthorWithPosts",
             "    for _, author := range authors {",
-            "        posts := r.store.GetPostsByAuthorID(author.ID)",
             "        result = append(result, AuthorWithPosts{",
             "            Author: author,",
-            "            Posts:  posts,",
+            "            Posts:  postsByAuthor[author.ID],",
             "        })",
             "    }",
             "    return result",
             "}"
         ], "type": "code"}
     ],
-    narrative="Implementasi naive pada GetAuthorsWithPostsNPlusOne memperlihatkan bagaimana kode yang tampak bersih dan intuitif dapat menyembunyikan bencana skalabilitas. Pertama, metode memanggil GetAllAuthors yang menghasilkan 1 query. Selanjutnya, perulangan for mengiterasi setiap author dan memanggil GetPostsByAuthorID secara individual. Jika terdapat N author, sistem memicu N query tambahan sehingga total query yang dieksekusi menjadi 1 + N. Pola loop-query ini sangat sering dihasilkan secara otomatis oleh mekanisme lazy loading bawaan ORM.",
-    mental_model="Querying inside loops turns iteration into cumulative network latency.",
-    source_path="internal/blog/repository.go:13-28",
-    slide_num="05 / 24"
+    narrative="Implementasi eager loading batching pada method GetAuthorsWithPostsEager terdiri dari lima tahap utama. Pertama, mengambil semua author dari store. Kedua, mengekstrak semua author ID ke dalam slice integer. Ketiga, menjalankan satu query batch GetPostsByAuthorIDs dengan slice ID tersebut. Keempat, mengelompokkan semua post yang dikembalikan ke dalam map berdasarkan author_id. Kelima, menyusun struktur AuthorWithPosts akhir dengan iterasi author dan mengambil slice post dari map. Total query yang dieksekusi hanya dua: satu untuk authors dan satu untuk semua posts.",
+    narrative_en="The eager loading batching implementation in the GetAuthorsWithPostsEager method consists of five main stages. First, it fetches all authors from the store. Second, it extracts all author IDs into an integer slice. Third, it runs a single batch query GetPostsByAuthorIDs with the ID slice. Fourth, it groups all returned posts into a map based on author_id. Fifth, it assembles the final AuthorWithPosts structure by iterating authors and fetching the post slice from the map. The total queries executed are only two: one for authors and one for all posts.",
+    mental_model="Extract IDs → batch query → group in map → compose result = 2 queries total.",
+    source_path="internal/blog/repository.go:32-58",
+    slide_num="06 / 24",
+    layout="code-dominant"
 )
 
-# Slide 6: Mengapa Slow Query Log Gagal Mendeteksi
+# Slide 7: Failure path / dangling reference konkret
 add_slide(
-    categories=["OBSERVABILITAS", "DATABASE"],
-    title="Mengapa Slow Query Log Gagal Mendeteksi",
-    subtitle="Setiap query individual sangat cepat, tetapi total durasi request meledak.",
+    categories=["FAILURE PATH", "BUKTI"],
+    title="Failure Path: N+1 Menghasilkan Query Count Tinggi",
+    subtitle="Bukti dari TestGetAuthorsWithPostsNPlusOne: 4 queries untuk 3 authors.",
     content_items=[
-        {"title": "TITIK BUTA DETEKSI", "items": [
-            "Slow query log hanya menandai eksekusi dengan durasi di atas ambang batas (mis. >1000ms).",
-            "Query N+1 masing-masing berjalan sub-milidetik (<1ms) karena memakai primary/foreign key index.",
-            "Database engine menganggap sistem bekerja normal tanpa anomali query berat."
-        ], "type": "bullet"},
-        {"title": "AKUMULASI WAKTU", "items": [
-            "Development: 3 author memicu 4 query, selesai dalam tempo <5ms.",
-            "Production: 500 author memicu 501 query, menghabiskan waktu 2.4 detik.",
-            "Beban berpindah ke latency transfer jaringan dan serialisasi paket di aplikasi."
-        ], "type": "bullet"}
-    ],
-    narrative="Mekanisme pemantauan database standar seperti slow query log dirancang untuk menangkap eksekusi query tunggal yang tidak efisien—misalnya akibat full table scan atau hilangnya index. Namun, query pada N+1 biasanya berupa pencarian sederhana berbasis index (WHERE author_id = ?) yang selesai dalam waktu 0.5 milidetik. Akibatnya, database engine mencatat performa normal tanpa ada alert. Beban justru terakumulasi pada latensi perjalanan paket bolak-balik di jaringan dan serialisasi data di application server.",
-    mental_model="Sub-millisecond individual queries can aggregate into multi-second latency.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="06 / 24"
-)
-
-# Slide 7: Biaya Tersembunyi: Network Round-Trip Time
-add_slide(
-    categories=["NETWORK", "PERFORMA"],
-    title="Biaya Tersembunyi: Network Round-Trip Time",
-    subtitle="Overhead protokol, packet traversal, dan context switching aplikasi.",
-    content_items=[
-        {"title": "OVERHEAD JARINGAN", "items": [
-            "Komponen Biaya | 1 Query Batch | 100 Query N+1",
-            "Network RTT | 1 x 2ms = 2ms | 100 x 2ms = 200ms",
-            "TCP Wire Overhead | 1 frame exchange | 100 frame exchanges",
-            "DB Engine Parsing | 1x AST parse | 100x AST parse",
-            "App Context Switch | Minimal | Sangat tinggi (100x I/O)"
-        ], "type": "table"}
-    ],
-    narrative="Ketika aplikasi berkomunikasi dengan database melalui jaringan TCP, setiap query harus menanggung biaya Round-Trip Time (RTT), handshake protocol packet, context switching, serta parsing SQL abstract syntax tree di sisi database. Pada topologi cloud modern di mana database berada di server terpisah, RTT tipikal berkisar antara 1 hingga 5 milidetik. Menjalankan 100 query terpisah berarti membuang minimal 200 hingga 500 milidetik murni hanya untuk waktu transit paket jaringan, terlepas dari seberapa cepat mesin database mengeksekusinya.",
-    mental_model="Network round-trips dominate relational latency over raw query execution.",
-    source_path="labs/22-n-plus-one-query-problem/research/03-evidence.md",
-    slide_num="07 / 24"
-)
-
-# Slide 8: Bahaya Connection Pool Exhaustion
-add_slide(
-    categories=["RESOURCES", "CONCURRENCY"],
-    title="Bahaya Connection Pool Exhaustion",
-    subtitle="Rentetan query berurutan menahan koneksi dan memicu antrean thread backend.",
-    content_items=[
-        {"title": "SEQUENTIAL HOLD", "items": [
-            "Satu HTTP worker menahan koneksi database selama seluruh siklus iterasi loop N.",
-            "Koneksi tidak dapat dipakai oleh worker lain hingga iterasi terakhir selesai."
-        ], "type": "bullet"},
-        {"title": "POOL STARVATION", "items": [
-            "Kenaikan concurrency membuat kapasitas connection pool langsung habis (exhausted).",
-            "Request baru mengalami blocking queue di pool dan berakhir dengan gateway timeout (504)."
-        ], "type": "bullet"},
-        {"title": "CASCADING FAILURE", "items": [
-            "Satu endpoint lambat melumpuhkan seluruh service yang berbagi connection pool database."
-        ], "type": "bullet"}
-    ],
-    narrative="Dampak sistemik paling destruktif dari N+1 query problem adalah pengurasan connection pool (connection pool starvation). Dalam arsitektur pooling standar, satu thread web request meminjam koneksi database dan menahannya selama iterasi berlangsung. Jika 50 request konkuren masing-masing membutuhkan 100 query berurutan, pool database yang berkapasitas 20 koneksi akan langsung tersaturasi. Request lain yang membutuhkan query kilat 2 milidetik terpaksa mengantre di queue pool hingga timeout, menyebabkan kegagalan berantai di seluruh layanan.",
-    mental_model="Sequential queries monopolize connection pools and trigger cascading timeouts.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="08 / 24"
-)
-
-# Slide 9: Solusi Eager Loading: Pola Batch Data Retrieval
-add_slide(
-    categories=["SOLUSI", "BATCHING"],
-    title="Solusi Eager Loading: Pola Batch Data Retrieval",
-    subtitle="Ekstraksi seluruh identifier relasi sebelum mengirim satu query gabungan.",
-    content_items=[
-        {"title": "ALUR 4 TAHAP EAGER BATCHING", "items": [
-            "TAHAP 1: Ambil Parent ── GetAllAuthors() → [ID: 1, 2, 3] (Query #1)",
-            "TAHAP 2: Ekstraksi Kunci ── authorIDs = [1, 2, 3] di memori",
-            "TAHAP 3: Ambil Child Sekaligus ── GetPostsByAuthorIDs([1, 2, 3]) (Query #2)",
-            "TAHAP 4: Asosiasi Memori ── Kelompokkan posts ke author via map[int][]Post"
-        ], "type": "diagram"}
-    ],
-    narrative="Prinsip utama penyelesaian N+1 adalah memisahkan fase pengumpulan kebutuhan data dari fase eksekusi query database. Pendekatan eager batching membaca seluruh parent record terlebih dahulu, mengekstrak seluruh primary key yang relevan ke dalam slice memori, lalu menerbitkan satu query tunggal untuk mengambil seluruh child record yang cocok. Dengan pola ini, terlepas dari apakah terdapat 3, 50, atau 1000 author, jumlah interaksi database dipangkas secara drastis menjadi tepat dua query I/O.",
-    mental_model="Batch before you iterate: decouple query planning from data association.",
-    source_path="internal/blog/repository.go:30-58",
-    slide_num="09 / 24"
-)
-
-# Slide 10: Query Batching di Sisi Store
-add_slide(
-    categories=["STORE", "IN-MEMORY"],
-    title="Query Batching di Sisi Store",
-    subtitle="Memanfaatkan hash lookup dan filter multi-ID untuk mengambil child records.",
-    content_items=[
-        {"title": "BATCH QUERY METHOD", "items": [
-            "func (s *Store) GetPostsByAuthorIDs(authorIDs []int) []Post {",
-            "    s.mu.Lock()",
-            "    defer s.mu.Unlock()",
-            "    s.queryCount++",
-            "",
-            "    idMap := make(map[int]bool)",
-            "    for _, id := range authorIDs { idMap[id] = true }",
-            "",
-            "    var result []Post",
-            "    for _, p := range s.posts {",
-            "        if idMap[p.AuthorID] {",
-            "            result = append(result, p)",
-            "        }",
-            "    }",
-            "    return result",
-            "}"
-        ], "type": "code"}
-    ],
-    narrative="Di level Store, metode GetPostsByAuthorIDs merepresentasikan eksekusi klausa SQL WHERE author_id IN (...). Implementasi in-memory membangun idMap untuk lookup cepat bertipe O(1) sebelum memfilter koleksi posts. Yang paling krusial: fungsi ini hanya menaikkan counter queryCount sebanyak tepat 1 kali untuk seluruh daftar authorIDs. Di sistem produksi, operasi ini diterjemahkan menjadi satu perintah SQL dengan transmisi payload tunggal, menghemat 99% overhead protokol database.",
-    mental_model="A single set-based filter replaces hundreds of point lookups.",
-    source_path="internal/blog/store.go:63-80",
-    slide_num="10 / 24"
-)
-
-# Slide 11: In-Memory Map Grouping pada Layer Aplikasi
-add_slide(
-    categories=["ALGORITMA", "GO LOGIC"],
-    title="In-Memory Map Grouping pada Layer Aplikasi",
-    subtitle="Mengelompokkan hasil batch ke dalam hash map untuk asosiasi instan O(1).",
-    content_items=[
-        {"title": "REKONSTRUKSI HASH MAP", "items": [
-            "// 1. Kelompokkan posts berdasarkan author ID",
-            "postsByAuthor := make(map[int][]Post)",
-            "for _, post := range allPosts {",
-            "    postsByAuthor[post.AuthorID] = append(",
-            "        postsByAuthor[post.AuthorID], post)",
-            "}",
-            "",
-            "// 2. Susun agregat akhir dengan pencarian O(1)",
-            "var result []AuthorWithPosts",
-            "for _, author := range authors {",
-            "    result = append(result, AuthorWithPosts{",
-            "        Author: author,",
-            "        Posts:  postsByAuthor[author.ID],",
-            "    })",
-            "}"
-        ], "type": "code"}
-    ],
-    narrative="Tantangan setelah mengambil sekumpulan child records adalah merekonstruksi relasi hierarkis ke entitas parent aslinya. Solusi optimal di level aplikasi adalah mengelompokkan hasil batch ke dalam tabel hash lokal map[int][]Post dengan key berupa foreign key AuthorID. Iterasi rekonstruksi kemudian hanya membutuhkan pencarian hash O(1) untuk menyematkan slice posts ke masing-masing author. Menghindari nested loop di memori menjamin kompleksitas waktu pemrosesan aplikasi tetap linear O(N + M).",
-    mental_model="Group child entities in memory to preserve O(1) relational association.",
-    source_path="internal/blog/repository.go:45-56",
-    slide_num="11 / 24"
-)
-
-# Slide 12: Komparasi Kuantitatif Kompleksitas Sistem
-add_slide(
-    categories=["KOMPARASI", "BENCHMARK"],
-    title="Komparasi Kuantitatif Kompleksitas Sistem",
-    subtitle="Transformasi kompleksitas I/O dari ketergantungan data O(N) ke deterministik O(1).",
-    content_items=[
-        {"title": "MATRIKS KOMPARASI", "items": [
-            "Parameter | Naive (Loop) | Eager (Batch)",
-            "Query Count | 1 + N (Linear) | 1 + 1 (Konstan 2)",
-            "Kompleksitas I/O | O(N) relatif record | O(1) relatif record",
-            "Data Transfer | Header repetitif | Single packet payload",
-            "Memory Allocation | Fragmented allocations | Single pre-sized buffer",
-            "Network RTT | N + 1 round-trips | 2 round-trips"
-        ], "type": "table"}
-    ],
-    narrative="Tabel komparasi menggarisbawahi perubahan fundamental pada profil operasional sistem. Dalam pendekatan loop-driven, kompleksitas I/O bersifat O(N), yang berarti setiap penambahan data author di database secara langsung meningkatkan beban I/O jaringan. Sebaliknya, pendekatan eager loading menurunkan kompleksitas interaksi database menjadi O(1) relatif terhadap jumlah baris data—hanya bertambah jika terdapat entitas relasi tambahan (O(k) di mana k adalah jumlah entitas relasional). Ini menghasilkan stabilitas throughput yang terprediksi.",
-    mental_model="Shift complexity from database network I/O into deterministic in-memory grouping.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="12 / 24"
-)
-
-# Slide 13: SQL Translation: IN Clause vs Single JOIN
-add_slide(
-    categories=["SQL", "RDBMS"],
-    title="SQL Translation: IN Clause vs Single JOIN",
-    subtitle="Membandingkan strategi batch query terpisah versus query tunggal dengan JOIN.",
-    content_items=[
-        {"title": "DUA PENDEKATAN SQL", "items": [
-            "-- Strategi 1: Batching (Dua Query Terpisah)",
-            "SELECT id, name FROM authors;",
-            "SELECT id, author_id, title FROM posts",
-            "WHERE author_id IN (1, 2, 3);",
-            "",
-            "-- Strategi 2: Single JOIN (Satu Query Tunggal)",
-            "SELECT a.id, a.name, p.id, p.title",
-            "FROM authors a",
-            "LEFT JOIN posts p ON a.id = p.author_id;"
-        ], "type": "code"}
-    ],
-    narrative="Dalam dunia RDBMS, terdapat dua pendekatan utama untuk eager loading: dua query terpisah menggunakan klausa IN (split queries), atau satu query tunggal menggunakan LEFT JOIN. Meskipun single JOIN terdengar menggoda karena hanya membutuhkan 1 query, teknik ini menduplikasi data kolom parent pada setiap baris hasil child yang dikembalikan. Pada relasi one-to-many dengan kolom teks besar, duplikasi ini memboroskan bandwidth jaringan. Split queries via IN clause umumnya menjadi pilihan default ORM modern karena lebih efisien terhadap memori.",
-    mental_model="Split batch queries avoid parent column duplication inherent in wide JOINs.",
-    source_path="labs/22-n-plus-one-query-problem/research/03-evidence.md",
-    slide_num="13 / 24"
-)
-
-# Slide 14: Batasan Parameter IN Clause pada RDBMS
-add_slide(
-    categories=["BATASAN", "PRODUCTION"],
-    title="Batasan Parameter IN Clause pada RDBMS",
-    subtitle="Batas maksimum parameter dan overhead parsing abstract syntax tree database.",
-    content_items=[
-        {"title": "BATASAN PARAMETER", "items": [
-            "PostgreSQL & SQLite memiliki limit bind parameter (mis. 65,535 atau 999 parameter).",
-            "Melebihi batas ini menyebabkan error query execution langsung dari driver database."
-        ], "type": "bullet"},
-        {"title": "OVERHEAD PARSER", "items": [
-            "Statement SQL dengan ribuan literal ID membebani query planner dan parser CPU.",
-            "Waktu penyusunan AST di engine database dapat melebihi waktu eksekusi indeks."
-        ], "type": "bullet"},
-        {"title": "CHUNKED BATCHING", "items": [
-            "Pecah daftar ID besar menjadi chunk terkendali (misal 200–500 ID per batch query)."
-        ], "type": "bullet"}
-    ],
-    narrative="Batching menggunakan klausa IN bukan tanpa batas. Database engine memiliki batasan terhadap jumlah parameter bind dalam satu statement (misalnya batas 65.535 parameter pada PostgreSQL atau 999 pada SQLite versi terdahulu). Lebih jauh lagi, statement SQL dengan ribuan literal parameter memaksa query planner menghabiskan waktu CPU berharga hanya untuk mem-parsing sintaks string query. Oleh karena itu, pada skala data masif, aplikasi wajib menerapkan teknik chunked batching—memecah daftar ID menjadi batch terkendali (misal 500 ID per batch).",
-    mental_model="Unbounded IN clauses choke SQL parsers: chunk bulk IDs into manageable sizes.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="14 / 24"
-)
-
-# Slide 15: Bahaya Cartesian Product Explosion
-add_slide(
-    categories=["ARSITEKTUR", "RISIKO"],
-    title="Bahaya Cartesian Product Explosion",
-    subtitle="Risiko ekspansi baris berlipat ganda saat melakukan eager JOIN multi-relasi.",
-    content_items=[
-        {"title": "MULTIPLIKASI BARIS", "items": [
-            "Tingkat Relasi | Entitas Record | Total Baris Hasil JOIN",
-            "1 Author | 1 author | 1 baris",
-            "10 Posts | 10 post per author | 1 x 10 = 10 baris",
-            "5 Tags | 5 tag per post | 1 x 10 x 5 = 50 baris",
-            "10 Comments | 10 komentar per post | 1 x 10 x 5 x 10 = 500 baris!"
-        ], "type": "table"}
-    ],
-    narrative="Ketika pengembang mencoba mengoptimalkan beberapa relasi one-to-many sekaligus (misalnya mengambil Author beserta Posts dan Tags-nya) menggunakan JOIN tunggal, sistem akan terkena fenomena Cartesian Product Explosion. Database mengalikan setiap entitas parent dengan seluruh permutasi child records-nya. Data yang dikembalikan melalui jaringan membengkak ribuan kali lipat dan berpotensi memicu Out-Of-Memory (OOM) pada backend. Solusi arsitektural yang aman adalah membagi relasi menjadi batch queries independen terpisah.",
-    mental_model="Multiple relational JOINs cause combinatorial row explosions; use separate batches.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="15 / 24"
-)
-
-# Slide 16: Mapping-Level Eager vs Query-Level Eager
-add_slide(
-    categories=["ORM", "ANTI-PATTERN"],
-    title="Mapping-Level Eager vs Query-Level Eager",
-    subtitle="Bahaya anotasi global FetchType.EAGER dibandingkan selective fetching.",
-    content_items=[
-        {"title": "MAPPING-LEVEL (ANTI-PATTERN)", "items": [
-            "FetchType.EAGER pada schema entity menarik seluruh relasi setiap kali entitas dibaca.",
-            "Operasi sederhana seperti validasi email author terpaksa memuat seluruh riwayat postingan.",
-            "Menimbulkan memory bloat parah dan membebani garbage collector aplikasi."
-        ], "type": "bullet"},
-        {"title": "QUERY-LEVEL (BEST PRACTICE)", "items": [
-            "Relasi dibiarkan lazy secara default pada level definisi domain model.",
-            "Eager loading hanya diaktifkan secara eksplisit pada query yang benar-benar membutuhkannya."
-        ], "type": "bullet"}
-    ],
-    narrative="Kesalahan umum yang sering terjadi di level framework (khususnya JPA/Hibernate) adalah menerapkan mapping-level eager loading (FetchType.EAGER) secara global pada entity schema. Hal ini menyebabkan setiap pembacaan entitas Author otomatis menarik seluruh Posts, Comments, dan Metadata terkait di mana pun dipanggil. Pendekatan profesional menuntut query-level eager loading: biarkan relasi default terisolasi, dan aktifkan batching hanya secara eksplisit pada lapisan repository atau service yang benar-benar membutuhkan agregat data tersebut.",
-    mental_model="Enforce query-level eager fetching; avoid global schema-level eager mappings.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="16 / 24"
-)
-
-# Slide 17: Solusi Ekosistem: GraphQL DataLoader Pattern
-add_slide(
-    categories=["EKOSISTEM", "GRAPHQL"],
-    title="Solusi Ekosistem: GraphQL DataLoader Pattern",
-    subtitle="Mengotomatisasi penundaan dan batching query pada resolver independen.",
-    content_items=[
-        {"title": "ALUR RESOLVER COALESCING", "items": [
-            "Resolver #1 (Author 1) ──┐",
-            "Resolver #2 (Author 2) ──┼──> [DataLoader Queue] ──> Single Batch Query",
-            "Resolver #3 (Author 3) ──┘        (Tick Event)        WHERE author_id IN (1, 2, 3)"
-        ], "type": "diagram"}
-    ],
-    narrative="Pada arsitektur GraphQL, masalah N+1 muncul secara alami karena setiap field resolver dieksekusi secara independen. Filosofi batching diwujudkan melalui pola DataLoader. DataLoader bekerja dengan menampung (coalescing) permintaan fetch ID individual yang terjadi dalam satu event loop tick, menunda eksekusi ke database, lalu mengirimkan satu query batch terkonsolidasi. DataLoader membuktikan bahwa prinsip pemisahan pengumpulan kunci dari eksekusi I/O dapat diterapkan secara elegan pada lapisan middleware.",
-    mental_model="DataLoaders coalesce concurrent point queries across async resolver ticks.",
-    source_path="labs/22-n-plus-one-query-problem/research/03-evidence.md",
-    slide_num="17 / 24"
-)
-
-# Slide 18: Column Selection & Aggregation Optimization
-add_slide(
-    categories=["OPTIMASI", "SQL"],
-    title="Column Selection & Aggregation Optimization",
-    subtitle="Memilih kolom spesifik atau kalkulasi database saat entitas penuh tidak diperlukan.",
-    content_items=[
-        {"title": "AGGREGATION VS FULL ENTITY", "items": [
-            "-- 1. Ambil ringkasan agregasi alih-alih seluruh baris post",
-            "SELECT author_id, COUNT(*) AS post_count",
-            "FROM posts WHERE author_id IN (1, 2, 3)",
-            "GROUP BY author_id;",
-            "",
-            "-- 2. Proyeksikan kolom esensial saja",
-            "SELECT id, author_id, title",
-            "FROM posts WHERE author_id IN (1, 2, 3);"
-        ], "type": "code"}
-    ],
-    narrative="Eager loading penuh tidak selalu menjadi solusi terbaik jika kebutuhan bisnis hanyalah informasi ringkasan atau segelintir kolom. Jika use-case hanya ingin menampilkan jumlah artikel tiap penulis, memuat seluruh objek Post ke dalam memori aplikasi adalah pemborosan besar. Eksekusi agregasi langsung di database melalui GROUP BY atau subquery scalar menghasilkan efisiensi transfer data yang jauh lebih superior, menjaga footprint RAM aplikasi tetap ramping.",
-    mental_model="Push aggregation to the database engine before pulling bulk entities into memory.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="18 / 24"
-)
-
-# Slide 19: Demo CLI Execution Output
-add_slide(
-    categories=["DEMO", "VERIFIKASI"],
-    title="Demo CLI Execution Output",
-    subtitle="Bukti eksekusi nyata dari cmd/demo/main.go pada dataset 3 author.",
-    content_items=[
-        {"title": "OUTPUT TERMINAL", "items": [
-            "$ go run ./cmd/demo",
-            "--- 1. Simulating N+1 Query Problem ---",
-            "Loaded 3 authors with their posts.",
-            "Total queries executed: 4 (1 for authors + 3 queries for posts)",
-            "",
-            "--- 2. Simulating Eager Loading (Batching) ---",
-            "Loaded 3 authors with their posts.",
-            "Total queries executed: 2 (1 for authors + 1 batched query for posts)"
-        ], "type": "code"}
-    ],
-    narrative="Eksekusi demo pada cmd/demo/main.go mendemonstrasikan kontras performa secara langsung di terminal console. Pada dataset uji dengan 3 author (Alice, Bob, Charlie) dan 5 total post, implementasi naive mencatat tepat 4 query database. Sebaliknya, implementasi eager loading menyelesaikan seluruh pemuatan agregat dengan tepat 2 query. Verifikasi langsung ini menegaskan validitas teori tanpa bergantung pada konfigurasi database pihak ketiga yang rumit.",
-    mental_model="Empirical CLI verification validates algorithmic query reduction.",
-    source_path="labs/22-n-plus-one-query-problem/cmd/demo/main.go",
-    slide_num="19 / 24"
-)
-
-# Slide 20: Pengujian Otomatis Query Count Invariant
-add_slide(
-    categories=["TESTING", "CI/CD"],
-    title="Pengujian Otomatis Query Count Invariant",
-    subtitle="Memverifikasi jumlah query secara deterministik dalam unit test CI/CD.",
-    content_items=[
-        {"title": "TEST QUERY COUNT", "items": [
+        {"title": "TEST ASSERTION", "items": [
             "func TestGetAuthorsWithPostsNPlusOne(t *testing.T) {",
             "    store := NewStore()",
             "    repo := NewRepository(store)",
             "    store.ResetQueryCount()",
-            "",
             "    result := repo.GetAuthorsWithPostsNPlusOne()",
-            "    if len(result) != 3 { t.Fatalf(\"expected 3, got %d\", len(result)) }",
-            "",
             "    queryCount := store.GetQueryCount()",
             "    if queryCount != 4 {",
             "        t.Errorf(\"expected 4 queries (N+1), got %d\", queryCount)",
             "    }",
             "}"
-        ], "type": "code"}
+        ], "type": "code"},
+        {"title": "ANALISIS", "items": [
+            "Query count = 1 (getAllAuthors) + 3 (per-author loop).",
+            "Setiap iterasi loop memanggil GetPostsByAuthorID().",
+            "Pola ini akan menjadi 1+N untuk N author."
+        ], "type": "bullet"}
     ],
-    narrative="Salah satu tantangan terbesar N+1 adalah kerentanannya terhadap regresi kode di masa depan: seorang engineer baru dapat secara tidak sengaja menambahkan pemanggilan accessor di dalam template atau loop. Lab 22 menunjukkan bagaimana menulis unit test yang memverifikasi query count secara deterministik. Dengan menginstruksikan Store mock untuk menghitung pemanggilan query, pipeline CI/CD dapat secara otomatis menggagalkan build jika jumlah interaksi database melebihi ambang batas invarian.",
-    mental_model="Lock query count invariants into CI tests to permanently prevent regressions.",
+    narrative="Failure path N+1 query problem termanifestasi sebagai query count yang tumbuh linear seiring bertambahnya jumlah record parent. Test GetAuthorsWithPostsNPlusOne secara eksplisit mengassert bahwa untuk 3 author, total query yang dieksekusi adalah 4. Angka ini berasal dari satu query GetAllAuthors ditambah tiga query GetPostsByAuthorID dalam loop. Pada skala produksi dengan ribuan author, pola ini akan menghasilkan ribuan query tambahan yang secara signifikan membebani database dan connection pool.",
+    narrative_en="The N+1 query problem failure path manifests as a query count that grows linearly with the increasing number of parent records. The GetAuthorsWithPostsNPlusOne test explicitly asserts that for 3 authors, the total queries executed are 4. This figure comes from one GetAllAuthors query plus three GetPostsByAuthorID queries in the loop. At production scale with thousands of authors, this pattern will generate thousands of additional queries that significantly burden the database and connection pool.",
+    mental_model="Linear query growth (1+N) is the fingerprint of N+1 anti-pattern.",
     source_path="internal/blog/repository_test.go:8-25",
-    slide_num="20 / 24"
+    slide_num="07 / 24",
+    layout="failure-path"
 )
 
-# Slide 21: Validasi Kesetaraan Semantik (Deep Equivalence)
+# Slide 8: Tabel perbandingan mekanisme vs gejala
 add_slide(
-    categories=["INTEGRITAS", "ASSERTION"],
-    title="Validasi Kesetaraan Semantik (Deep Equivalence)",
-    subtitle="Memastikan optimasi query tidak merusak struktur atau kebenaran data bisnis.",
+    categories=["PERBANDINGAN", "MEKANISME"],
+    title="Mekanisme vs Gejala: N+1 vs Eager Loading",
+    subtitle="Tabel perbandingan perilaku kuantitatif kedua pendekatan.",
     content_items=[
-        {"title": "DEEP EQUIVALENCE TEST", "items": [
-            "// Memastikan hasil batching 100% identik dengan naive",
-            "nPlusOneResult := repo.GetAuthorsWithPostsNPlusOne()",
-            "if !reflect.DeepEqual(result, nPlusOneResult) {",
-            "    t.Errorf(\"eager result mismatch with N+1 result:\\n\"+",
-            "        \"Eager: %+v\\nN+1: %+v\", result, nPlusOneResult)",
+        {"title": "PERBANDINGAN", "items": [
+            "Aspek | N+1 (Naive) | Eager Loading (Batch)",
+            "Query Count | 1 + N | 2",
+            "Time Complexity | O(N) queries | O(1) queries",
+            "Connection Usage | N sequential connections | 2 connections",
+            "Memory Overhead | Lower (streaming) | Higher (batch load)",
+            "Detectability | Hard (each query fast) | Easy (query counter)"
+        ], "type": "table"}
+    ],
+    narrative="Tabel perbandingan ini menyoroti perbedaan fundamental antara pendekatan N+1 naive dan eager loading batching. Dari segi kuantitas query, N+1 menghasilkan 1+N query sedangkan eager loading hanya 2 query terlepas dari ukuran dataset. Kompleksitas waktu dalam hal jumlah query juga berbeda: O(N) versus O(1). Penggunaan koneksi database pun berbeda secara signifikan; N+1 membutuhkan N koneksi sequential sedangkan eager loading hanya 2 koneksi. Namun, eager loading memiliki overhead memori yang lebih tinggi karena memuat semua record sekaligus ke dalam memori.",
+    narrative_en="This comparison table highlights the fundamental differences between the N+1 naive approach and eager loading batching. In terms of query quantity, N+1 produces 1+N queries while eager loading only produces 2 queries regardless of dataset size. Time complexity in terms of query count also differs: O(N) versus O(1). Database connection usage also differs significantly; N+1 requires N sequential connections while eager loading only needs 2 connections. However, eager loading has higher memory overhead because it loads all records at once into memory.",
+    mental_model="Trade-off: fewer queries at the cost of higher memory consumption.",
+    source_path="internal/blog/repository_test.go • content/04-diagrams.md",
+    slide_num="08 / 24",
+    layout="comparison-table"
+)
+
+# Slide 9: Decision sequence (3 focused decision cards)
+add_slide(
+    categories=["DESIGN DECISION", "PATTERN"],
+    title="3 Keputusan Desain Kritis untuk Optimasi Query",
+    subtitle="Urutan keputusan arsitektural yang harus diambil saat mengatasi N+1.",
+    content_items=[
+        {"title": "KEPUTUSAN 1: QUERY COUNTER", "items": [
+            "Implementasikan query counter pada data access layer untuk mengukur jumlah query aktual.",
+            "Gunakan counter ini dalam unit test untuk mencegah regressi N+1."
+        ], "type": "card"},
+        {"title": "KEPUTUSAN 2: BATCH STRATEGY", "items": [
+            "Pilih strategi batching: single batch untuk dataset kecil, chunked batch untuk dataset besar.",
+            "Gunakan klausa IN dengan limit ukuran batch untuk menghindari cartesian explosion."
+        ], "type": "card"},
+        {"title": "KEPUTUSAN 3: MEMORY vs QUERY TRADE-OFF", "items": [
+            "Evaluasi trade-off antara jumlah query dan penggunaan memori.",
+            "Untuk relasi one-to-many besar, pertimbangkan column selection atau pagination."
+        ], "type": "card"}
+    ],
+    narrative="Tiga keputusan desain kritis ini membentuk fondasi implementasi optimasi N+1 query yang robust. Keputusan pertama menetapkan mechanisme pengukuran kuantitatif melalui query counter yang terintegrasi dengan test suite. Keputusan kedua memilih strategi batching yang sesuai dengan karakteristik dataset dan batasan memori. Keputusan ketiga mengevaluasi trade-off antara pengurangan query dan peningkatan penggunaan memori, yang menjadi pertimbangan penting saat menangani relasi one-to-many dalam skala besar.",
+    narrative_en="These three critical design decisions form the foundation of a robust N+1 query optimization implementation. The first decision establishes a quantitative measurement mechanism through query counters integrated with the test suite. The second decision selects an appropriate batching strategy based on dataset characteristics and memory constraints. The third decision evaluates the trade-off between query reduction and increased memory usage, which becomes an important consideration when handling large-scale one-to-many relationships.",
+    mental_model="Measure → Batch → Trade-off: the optimization decision triad.",
+    source_path="labs/22-n-plus-one-query-problem/content/05-key-takeaways.md",
+    slide_num="09 / 24",
+    layout="decision-cards"
+)
+
+# Slide 10: Bukti eksekusi / terminal output
+add_slide(
+    categories=["BUKTI", "DEMO"],
+    title="Bukti Eksekusi: Terminal Output Demo",
+    subtitle="Output langsung dari go run ./cmd/demo yang menunjukkan perbedaan query count.",
+    content_items=[
+        {"title": "DEMO TERMINAL", "items": [
+            "=== 1. Simulating N+1 Query Problem ---",
+            "Loaded 3 authors with their posts.",
+            "Total queries executed: 4 (1 query for authors + 3 queries for posts)",
+            "",
+            "--- 2. Simulating Eager Loading (Batching) ---",
+            "Loaded 3 authors with their posts.",
+            "Total queries executed: 2 (1 query for authors + 1 batched query for posts)"
+        ], "type": "terminal"}
+    ],
+    narrative="Terminal output dari demo CLI secara eksplisit menunjukkan perbedaan kuantitatif antara pendekatan N+1 dan eager loading. Untuk 3 author, pendekatan N+1 menghasilkan 4 query total, sedangkan eager loading hanya 2 query. Perbedaan ini terlihat jelas meskipun pada dataset kecil; pada skala produksi dengan ratusan atau ribuan record, gap antara 1+N query versus 2 query akan menjadi sangat signifikan. Demo ini membuktikan bahwa batching dapat mengurangi jumlah database round-trip hingga separuhnya.",
+    narrative_en="The terminal output from the CLI demo explicitly shows the quantitative difference between the N+1 and eager loading approaches. For 3 authors, the N+1 approach produces 4 total queries, while eager loading only produces 2 queries. This difference is clearly visible even on a small dataset; at production scale with hundreds or thousands of records, the gap between 1+N queries versus 2 queries will become very significant. This demo proves that batching can reduce database round-trips by half.",
+    mental_model="Demo output provides concrete evidence of query count reduction from N+1 to 2.",
+    source_path="cmd/demo/main.go • engineering/03-execution-result.md",
+    slide_num="10 / 24",
+    layout="terminal-output"
+)
+
+# Slide 11: Analisis batasan bukti (wajib ada heading kanan: "YANG TIDAK DIBUKTIKAN")
+add_slide(
+    categories=["BATASAN", "ANALISIS"],
+    title="Analisis Batasan: Yang Tidak Dibuktikan Lab Ini",
+    subtitle="Heading kanan: YANG TIDAK DIBUKTIKAN — batasan tegas dari demonstrasi.",
+    content_items=[
+        {"title": "YANG DIBUKTIKAN", "items": [
+            "Query count reduction dari 4 ke 2 untuk 3 author.",
+            "Deep equality antara hasil N+1 dan eager loading.",
+            "Thread-safety dengan race detector.",
+            "Edge case empty store."
+        ], "type": "card"},
+        {"title": "YANG TIDAK DIBUKTIKAN", "items": [
+            "Cartesian explosion pada relasi one-to-many besar.",
+            "Memory bloat akibat eager loading massive dataset.",
+            "Performa pada database relational sesungguhnya.",
+            "Trade-off dengan join-based eager loading.",
+            "Column selection dan aggregation optimization."
+        ], "type": "card"}
+    ],
+    narrative="Laboratorium ini memiliki batasan-batasan tegas yang perlu dipahami agar klaim tidak berlebihan. Yang dibuktikan adalah reduksi query count pada dataset kecil, kesamaan semantik hasil, thread-safety, dan penanganan edge case kosong. Yang tidak dibuktikan meliputi cartesian explosion pada relasi one-to-many berskala besar, memory bloat akibat memuat dataset massive secara eager, performa aktual pada database relational sesungguhnya, trade-off dengan strategi eager loading berbasis join, serta optimasi column selection dan aggregation.",
+    narrative_en="This laboratory has definitive limitations that must be understood to prevent overclaiming. What is proven includes query count reduction on small datasets, semantic result equality, thread-safety, and empty edge case handling. What is not proven includes cartesian explosion on large-scale one-to-many relationships, memory bloat from eagerly loading massive datasets, actual performance on real relational databases, trade-offs with join-based eager loading strategies, and column selection and aggregation optimizations.",
+    mental_model="Proof covers query count; unproven: scale, memory, join trade-offs.",
+    source_path="labs/22-n-plus-one-query-problem/content/01-content-brief.md",
+    slide_num="11 / 24",
+    layout="bounds-analysis"
+)
+
+# Slide 12: Trade-off arsitektur
+add_slide(
+    categories=["TRADE-OFF", "ARSITEKTUR"],
+    title="Trade-off Arsitektur: Memory vs Query Count",
+    subtitle="Eager loading mengurangi query tetapi meningkatkan memori dan potensi cartesian explosion.",
+    content_items=[
+        {"title": "PROS EAGER LOADING", "items": [
+            "Query count konstan (O(1)) terlepas dari ukuran dataset.",
+            "Mengurangi connection pool pressure.",
+            "Menghilangkan latency akumulatif dari banyak round-trip."
+        ], "type": "card"},
+        {"title": "CONS EAGER LOADING", "items": [
+            "Memory usage meningkat karena memuat semua record sekaligus.",
+            "Potensi cartesian explosion pada relasi one-to-many/many-to-many.",
+            "Perlu pagination atau chunking untuk dataset besar.",
+            "Kompleksitas kode lebih tinggi daripada N+1 naive."
+        ], "type": "card"}
+    ],
+    narrative="Trade-off arsitektural antara N+1 naive dan eager loading batching melibatkan pertukaran antara penggunaan query dan konsumsi memori. Eager loading secara signifikan mengurangi jumlah query database dari linear menjadi konstan, yang menghasilkan penghematan latency jaringan dan pengurangan tekanan pada connection pool. Namun, pengorbanannya adalah peningkatan penggunaan memori karena semua record dimuat sekaligus ke dalam memori aplikasi. Pada relasi one-to-many berskala besar, ini dapat menyebabkan cartesian product explosion jika tidak ditangani dengan chunking atau pagination yang tepat.",
+    narrative_en="The architectural trade-off between N+1 naive and eager loading batching involves exchanging query usage for memory consumption. Eager loading significantly reduces database query count from linear to constant, resulting in network latency savings and reduced pressure on the connection pool. However, the sacrifice is increased memory usage because all records are loaded at once into application memory. On large-scale one-to-many relationships, this can cause cartesian product explosion if not handled with proper chunking or pagination.",
+    mental_model="Fewer queries at the cost of higher memory; scale dictates the optimal strategy.",
+    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
+    slide_num="12 / 24",
+    layout="tradeoff-cards"
+)
+
+# Slide 13: Concurrency / validation pipeline (goroutine -> validate -> mutex -> append error)
+add_slide(
+    categories=["CONCURRENCY", "VALIDATION"],
+    title="Concurrency Safety: Thread-Safe Query Counter",
+    subtitle="Store.go menggunakan sync.Mutex untuk melindungi queryCount dan data.",
+    content_items=[
+        {"title": "THREAD-SAFE STORE", "items": [
+            "type Store struct {",
+            "    mu           sync.Mutex",
+            "    authors      []Author",
+            "    posts        []Post",
+            "    queryCount   int",
+            "}",
+            "",
+            "func (s *Store) GetQueryCount() int {",
+            "    s.mu.Lock()",
+            "    defer s.mu.Unlock()",
+            "    return s.queryCount",
+            "}"
+        ], "type": "code"},
+        {"title": "RACE DETECTOR", "items": [
+            "$ go test -race ./...",
+            "PASS",
+            "ok      github.com/.../internal/blog    (cached)"
+        ], "type": "terminal"}
+    ],
+    narrative="Implementasi store menggunakan sync.Mutex untuk memastikan thread-safety saat mengakses dan memodifikasi queryCount serta data koleksi. Setiap metode retrieval seperti GetAllAuthors, GetPostsByAuthorID, dan GetPostsByAuthorIDs mengunci mutex sebelum increment queryCount dan membebek hasilnya. Race detector Go mengonfirmasi bahwa tidak ada data race pada implementasi ini. Sifat thread-safe ini penting karena unit test dapat dijalankan secara paralel dan demo dapat diakses dari multiple goroutine.",
+    narrative_en="The store implementation uses sync.Mutex to ensure thread-safety when accessing and modifying queryCount and collection data. Each retrieval method like GetAllAuthors, GetPostsByAuthorID, and GetPostsByAuthorIDs locks the mutex before incrementing queryCount and returns the results. Go's race detector confirms no data races in this implementation. This thread-safe property is important because unit tests can run in parallel and demos can be accessed from multiple goroutines.",
+    mental_model="Mutex-protected state enables safe concurrent testing and production use.",
+    source_path="internal/blog/store.go:1-80",
+    slide_num="13 / 24",
+    layout="concurrency"
+)
+
+# Slide 14: Before vs After comparison cards
+add_slide(
+    categories=["PERBANDINGAN", "BEFORE-AFTER"],
+    title="Before vs After: N+1 vs Eager Loading",
+    subtitle="Perbandingan visual antara dua pendekatan pada dataset identik.",
+    content_items=[
+        {"title": "BEFORE: N+1 (NAIVE)", "items": [
+            "Query Count: 4",
+            "Time Complexity: O(N)",
+            "Code Simplicity: High",
+            "Scalability: Poor",
+            "Memory Usage: Low"
+        ], "type": "card"},
+        {"title": "AFTER: EAGER LOADING", "items": [
+            "Query Count: 2",
+            "Time Complexity: O(1)",
+            "Code Simplicity: Medium",
+            "Scalability: Good",
+            "Memory Usage: Higher"
+        ], "type": "card"}
+    ],
+    narrative="Perbandingan before dan after menunjukkan transformasi dari pendekatan N+1 naive ke eager loading batching. Sebelum optimasi, query count sebesar 4 dengan kompleksitas waktu O(N) yang berarti skalabilitas buruk pada dataset besar. Setelah optimasi, query count turun menjadi 2 dengan kompleksitas waktu O(1) yang menjamin performa konsisten terlepas dari ukuran dataset. Pertukaran utamanya adalah peningkatan memory usage dan sedikit penurunan code simplicity karena perlu logic batching dan grouping.",
+    narrative_en="The before and after comparison shows the transformation from N+1 naive approach to eager loading batching. Before optimization, query count is 4 with O(N) time complexity meaning poor scalability on large datasets. After optimization, query count drops to 2 with O(1) time complexity guaranteeing consistent performance regardless of dataset size. The main trade-off is increased memory usage and slight decrease in code simplicity due to the need for batching and grouping logic.",
+    mental_model="Before: 4 queries O(N); After: 2 queries O(1). Scale dictates the winner.",
+    source_path="internal/blog/repository_test.go:27-50",
+    slide_num="14 / 24",
+    layout="before-after"
+)
+
+# Slide 15: Analisis mendalam & bukti test
+add_slide(
+    categories=["ANALISIS", "TEST"],
+    title="Analisis Mendalam: TestGetAuthorsWithPostsEager",
+    subtitle="Verifikasi query count, deep equality, dan edge case kosong.",
+    content_items=[
+        {"title": "TEST LOGIC", "items": [
+            "func TestGetAuthorsWithPostsEager(t *testing.T) {",
+            "    store := NewStore()",
+            "    repo := NewRepository(store)",
+            "    store.ResetQueryCount()",
+            "    result := repo.GetAuthorsWithPostsEager()",
+            "    queryCount := store.GetQueryCount()",
+            "    if queryCount != 2 {",
+            "        t.Errorf(\"expected 2 queries (eager loading), got %d\", queryCount)",
+            "    }",
+            "    nPlusOneResult := repo.GetAuthorsWithPostsNPlusOne()",
+            "    if !reflect.DeepEqual(result, nPlusOneResult) {",
+            "        t.Errorf(\"eager result mismatch with N+1 result\")",
+            "    }",
             "}"
         ], "type": "code"}
     ],
-    narrative="Optimasi performa tidak ada artinya jika mengubah integritas atau susunan data yang diterima oleh pemanggil. Dalam TestGetAuthorsWithPostsEager, paket menguji bahwa slice AuthorWithPosts yang dihasilkan oleh algoritma batching identik secara mendalam (deeply equal) dengan hasil algoritma naive menggunakan reflect.DeepEqual. Pengujian ini membuktikan bahwa pengelompokan memori berbasis hash map mempertahankan struktur data bisnis secara sempurna tanpa efek samping.",
-    mental_model="Performance refactoring must guarantee semantic data equivalence.",
-    source_path="internal/blog/repository_test.go:45-50",
-    slide_num="21 / 24"
+    narrative="Test GetAuthorsWithPostsEager melakukan tiga verifikasi sekaligus. Pertama, memastikan query count tepat 2 setelah eksekusi eager loading. Kedua, membandingkan hasil eager loading dengan hasil N+1 menggunakan reflect.DeepEqual untuk menjamin kesamaan semantik. Ketiga, implicitly menguji bahwa hasil tidak berubah meskipun mekanisme fetching berbeda. Kombinasi verifikasi kuantitatif dan kualitatif ini memberikan confidence tinggi bahwa optimasi tidak mengubah perilaku bisnis.",
+    narrative_en="The TestGetAuthorsWithPostsEager performs three verifications simultaneously. First, it ensures the query count is exactly 2 after eager loading execution. Second, it compares the eager loading result with the N+1 result using reflect.DeepEqual to guarantee semantic equivalence. Third, it implicitly tests that the results remain unchanged despite different fetching mechanisms. This combination of quantitative and qualitative verification provides high confidence that the optimization does not alter business behavior.",
+    mental_model="Query count assertion + deep equality = correctness proof for batching.",
+    source_path="internal/blog/repository_test.go:27-50",
+    slide_num="15 / 24",
+    layout="test-analysis"
 )
 
-# Slide 22: Observability & Deteksi N+1 di Production
+# Slide 16: Analisis mendalam & bukti test
 add_slide(
-    categories=["OBSERVABILITAS", "TRACING"],
-    title="Observability & Deteksi N+1 di Production",
-    subtitle="Instrumentasi OpenTelemetry spans, query profiling, dan static linters.",
+    categories=["ANALISIS", "TEST"],
+    title="Analisis Mendalam: TestEmptyStore",
+    subtitle="Edge case kosong diuji untuk kedua pendekatan simultan.",
     content_items=[
-        {"title": "DISTRIBUTED TRACING", "items": [
-            "APM trace menampilkan 'waterfall graph' berisi puluhan span query identik berurutan.",
-            "Waktu tunggu jaringan antar span memperjelas latensi akumulatif yang dialami client."
-        ], "type": "bullet"},
-        {"title": "MIDDLEWARE AUDITING", "items": [
-            "Pasang query logger di database driver untuk mendeteksi repetisi query template per HTTP request.",
-            "Beri threshold alarm jika satu request mengeksekusi >20 query serupa dalam durasi <50ms."
-        ], "type": "bullet"},
-        {"title": "STATIC ANALYSIS", "items": [
-            "Gunakan linter kode untuk menandai eksekusi database calls di dalam perulangan loop for."
-        ], "type": "bullet"}
-    ],
-    narrative="Di lingkungan produksi skala besar, deteksi N+1 dilakukan melalui instrumentasi Application Performance Monitoring (APM) dan OpenTelemetry distributed tracing. Trace visual memperlihatkan serangkaian span database berurutan dengan query template yang sama persis (waterfall trace). Melengkapi tracing dengan query counter middleware dan static code analysis linter memastikan bahwa setiap anomali rasio query terhadap HTTP request langsung memicu notifikasi peringatan sebelum mengganggu ketersediaan sistem.",
-    mental_model="Waterfall APM traces and query-to-request ratios surface hidden runtime loops.",
-    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
-    slide_num="22 / 24"
-)
-
-# Slide 23: Reproduksi Mandiri & Panduan Verifikasi
-add_slide(
-    categories=["PANDUAN", "REPRODUKSI"],
-    title="Reproduksi Mandiri & Panduan Verifikasi",
-    subtitle="Seluruh implementasi berbasis Go standard library siap dijalankan dan diuji.",
-    content_items=[
-        {"title": "COMMAND RUNNER", "items": [
-            "cd labs/22-n-plus-one-query-problem",
-            "go test -v ./...",
-            "go test -race ./...",
-            "go run ./cmd/demo"
+        {"title": "EDGE CASE TEST", "items": [
+            "func TestEmptyStore(t *testing.T) {",
+            "    store := &Store{authors: nil, posts: nil}",
+            "    repo := NewRepository(store)",
+            "    n1 := repo.GetAuthorsWithPostsNPlusOne()",
+            "    eager := repo.GetAuthorsWithPostsEager()",
+            "    if len(n1) != 0 || len(eager) != 0 {",
+            "        t.Fatalf(\"expected empty results\")",
+            "    }",
+            "    if !reflect.DeepEqual(n1, eager) {",
+            "        t.Errorf(\"empty result mismatch\")",
+            "    }",
+            "}"
         ], "type": "code"}
     ],
-    narrative="Modul Lab 22 ditulis menggunakan Go 1.22 standar tanpa framework eksternal, memastikan portabilitas tinggi dan reproduksi instan di mesin apa pun. Perintah go test menjalankan seluruh suite pengujian query count dan edge cases tanpa data race. Perintah demo menjalankan perbandingan langsung antara kedua strategi. Semua artefak pengujian dan catatan audit terdokumentasi lengkap di direktori lab untuk studi arsitektur lebih lanjut.",
-    mental_model="Standard library benchmarks provide reliable, zero-dependency validation.",
-    source_path="labs/22-n-plus-one-query-problem/README.md • go.mod",
-    slide_num="23 / 24"
+    narrative="Test EmptyStore menguji edge case ketika store tidak memiliki author maupun post. Kedua pendekatan, N+1 dan eager loading, harus mengembalikan slice kosong dengan panjang nol. Selain itu, deep equality antara hasil keduanya juga diverifikasi. Test ini memastikan bahwa optimasi batching tidak memperkenalkan bug pada kasus ekstrem di mana koleksi sumber kosong. Empty check pada awal method GetAuthorsWithPostsEager mencegahpanic akibat iterasi slice kosong.",
+    narrative_en="The TestEmptyStore tests the edge case when the store has no authors or posts. Both approaches, N+1 and eager loading, must return empty slices with length zero. Additionally, deep equality between both results is verified. This test ensures that the batching optimization does not introduce bugs in the extreme case where the source collection is empty. The empty check at the beginning of method GetAuthorsWithPostsEager prevents panics from iterating an empty slice.",
+    mental_model="Empty collection edge case must yield identical nil/empty results.",
+    source_path="internal/blog/repository_test.go:52-65",
+    slide_num="16 / 24",
+    layout="test-analysis"
 )
 
-# Slide 24: Closing Slide (Dark Navy `#0b1b2d`)
+# Slide 17: Analisis mendalam & bukti test
 add_slide(
-    categories=["CLOSING"],
-    title="Eksperimen kecil, eliminasi latensi tersembunyi.",
-    subtitle="",
+    categories=["ANALISIS", "TEST"],
+    title="Analisis Mendalam: Race Detector Verification",
+    subtitle="Go race detector memastikan thread-safety tanpa data race.",
     content_items=[
-        {"title": "MODUL LAB", "items": [
-            "internal/blog/models.go • internal/blog/store.go",
-            "internal/blog/repository.go • repository_test.go",
-            "cmd/demo/main.go • README.md"
-        ], "type": "bullet"},
-        {"title": "VERIFIKASI & STATUS", "items": [
-            f"Sumber: commit {COMMIT_SHA[:8]}",
-            "Test passing dan diverifikasi (Race-Clean Go 1.22).",
-            "Invarian terbukti: 4 query (N+1) dipangkas menjadi 2 query (Batching)."
+        {"title": "RACE DETECTION", "items": [
+            "$ go test -race ./...",
+            "=== RUN   TestGetAuthorsWithPostsNPlusOne",
+            "--- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)",
+            "=== RUN   TestGetAuthorsWithPostsEager",
+            "--- PASS: TestGetAuthorsWithPostsEager (0.00s)",
+            "=== RUN   TestEmptyStore",
+            "--- PASS: TestEmptyStore (0.00s)",
+            "PASS",
+            "ok      github.com/lukman/.../internal/blog"
+        ], "type": "terminal"}
+    ],
+    narrative="Go race detector dijalankan untuk memverifikasi bahwa tidak ada data race pada akses concurrent ke store. Hasilnya menunjukkan semua test pass tanpa warning apapun. Thread-safety dijamin oleh penggunaan sync.Mutex pada setiap metode store yang mengakses atau memodifikasi queryCount dan slice data. Sifat ini memungkinkan test dijalankan secara paralel dan metode repository dapat dipanggil dari multiple goroutine tanpa risiko concurrent map write atau slice corruption.",
+    narrative_en="Go race detector is run to verify that no data races exist on concurrent access to the store. The results show all tests pass without any warnings. Thread-safety is guaranteed by the use of sync.Mutex on every store method that accesses or modifies queryCount and data slices. This property allows tests to run in parallel and repository methods to be called from multiple goroutines without risking concurrent map writes or slice corruption.",
+    mental_model="Mutex protection + race detector = production-ready concurrency.",
+    source_path="internal/blog/store.go • engineering/03-execution-result.md",
+    slide_num="17 / 24",
+    layout="test-analysis"
+)
+
+# Slide 18: Analisis mendalam & bukti test
+add_slide(
+    categories=["ANALISIS", "BUKTI"],
+    title="Analisis Mendalam: Query Counter sebagai Test Double",
+    subtitle="Store.go mensimulasikan database dengan query counter untuk verifikasi kuantitatif.",
+    content_items=[
+        {"title": "QUERY COUNTER PATTERN", "items": [
+            "type Store struct {",
+            "    mu         sync.Mutex",
+            "    queryCount int",
+            "}",
+            "",
+            "func (s *Store) GetAllAuthors() []Author {",
+            "    s.mu.Lock()",
+            "    defer s.mu.Unlock()",
+            "    s.queryCount++",
+            "    return s.authors",
+            "}",
+            "",
+            "func (s *Store) GetQueryCount() int {",
+            "    s.mu.Lock()",
+            "    defer s.mu.Unlock()",
+            "    return s.queryCount",
+            "}"
+        ], "type": "code"}
+    ],
+    narrative="Query counter pattern pada Store.go berfungsi sebagai test double yang mensimulasikan database dengan kemampuan pelacakan query. Setiap metode retrieval meningkatkan queryCount setelah mengambil lock. Method GetQueryCount memungkinkan test mengakses jumlah query aktual tanpa mengganggu state internal. Pola ini memungkinkan verifikasi kuantitatif atas optimasi query tanpa perlu instrumentasi database sesungguhnya. Implementasi ini juga thread-safe berkat penggunaan mutex.",
+    narrative_en="The query counter pattern in Store.go serves as a test double that simulates a database with query tracking capability. Each retrieval method increments queryCount after acquiring the lock. The GetQueryCount method allows tests to access the actual query count without disturbing internal state. This pattern enables quantitative verification of query optimization without needing real database instrumentation. The implementation is also thread-safe thanks to mutex usage.",
+    mental_model="Test double with query counter provides measurable proof of optimization.",
+    source_path="internal/blog/store.go:1-40",
+    slide_num="18 / 24",
+    layout="test-analysis"
+)
+
+# Slide 19: Analisis mendalam & bukti test
+add_slide(
+    categories=["ANALISIS", "BUKTI"],
+    title="Analisis Mendalam: Deep Equality Assurance",
+    subtitle="Reflect.DeepEqual memastikan hasil eager loading identik dengan N+1.",
+    content_items=[
+        {"title": "EQUALITY CHECK", "items": [
+            "if !reflect.DeepEqual(result, nPlusOneResult) {",
+            "    t.Errorf(\"eager result mismatch with N+1 result:\\nEager: %+v\\nN+1: %+v\", result, nPlusOneResult)",
+            "}"
+        ], "type": "code"},
+        {"title": "MAKNA ASSERTION", "items": [
+            "Structural equality: semua field Author dan Posts harus sama.",
+            "Order preservation: slice order harus identik.",
+            "Nil safety: empty slice vs nil slice dianggap berbeda."
         ], "type": "bullet"}
     ],
-    mental_model="N+1 is invisible until it hurts. Batch related queries, don't loop them.",
+    narrative="Deep equality check menggunakan reflect.DeepEqual memastikan bahwa hasil eager loading secara struktural identik dengan hasil N+1. Assertion ini memverifikasi bahwa semua field pada struct Author dan slice Posts memiliki nilai yang sama. Order preservation juga dijamin karena kedua pendekatan mengiterasi author dalam urutan yang sama. Hal ini penting untuk membuktikan bahwa optimasi hanya mengubah mekanisme fetching, bukan mengubah semantik hasil.",
+    narrative_en="Deep equality check using reflect.DeepEqual ensures that the eager loading result is structurally identical to the N+1 result. This assertion verifies that all fields on the Author struct and Posts slice have the same values. Order preservation is also guaranteed because both approaches iterate authors in the same order. This is important to prove that the optimization only changes the fetching mechanism, not the result semantics.",
+    mental_model="Deep equality = behavioral equivalence between naive and optimized approaches.",
+    source_path="internal/blog/repository_test.go:45-49",
+    slide_num="19 / 24",
+    layout="test-analysis"
+)
+
+# Slide 20: Checklist implementasi
+add_slide(
+    categories=["CHECKLIST", "IMPLEMENTASI"],
+    title="Checklist Implementasi Eager Loading",
+    subtitle="Daftar kontrol sebelum deploy ke production.",
+    content_items=[
+        {"title": "IMPLEMENTATION CHECKLIST", "items": [
+            "[ ] Profiling query count dilakukan sebelum deploy ke production",
+            "[ ] Lazy loading dalam loop diaudit dan diganti dengan batch/eager loading",
+            "[ ] Eager loading dilakukan per-query, bukan per-mapping (hindari FetchType.EAGER global)",
+            "[ ] Cartesian explosion dicek untuk relasi one-to-many/many-to-many",
+            "[ ] Column selection (SELECT col1, col2) digunakan ketika full entity tidak dibutuhkan",
+            "[ ] Pagination diterapkan untuk hasil yang besar",
+            "[ ] Query count diuji otomatis (unit/integration test)",
+            "[ ] Strict loading mode dipertimbangkan untuk ORM yang mendukungnya"
+        ], "type": "bullet"}
+    ],
+    narrative="Checklist implementasi eager loading ini mencakup delapan poin kontrol penting sebelum deployed ke production. Poin pertama menekankan profiling query count sebagai langkah preventif. Poin kedua mengaudit lazy loading dalam loop. Poin ketiga membedakan query-level eager loading dari mapping-level eager loading yang dapat menyebabkan memory bloat. Poin keempat memperingatkan tentang cartesian explosion. Poin kelima menyarankan column selection ketika full entity tidak diperlukan.",
+    narrative_en="This eager loading implementation checklist covers eight important control points before deploying to production. The first point emphasizes query count profiling as a preventive step. The second point audits lazy loading in loops. The third point distinguishes query-level eager loading from mapping-level eager loading that can cause memory bloat. The fourth point warns about cartesian explosion. The fifth point suggests column selection when full entities are not needed.",
+    mental_model="Checklist ensures systematic adoption of eager loading best practices.",
+    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
+    slide_num="20 / 24",
+    layout="checklist"
+)
+
+# Slide 21: Anti-pattern & cara reproduksi kegagalan
+add_slide(
+    categories=["ANTI-PATTERN", "REPRODUCIBILITY"],
+    title="Anti-Pattern: Mapping-Level Eager Loading",
+    subtitle="FetchType.EAGER global menyebabkan memory bloat, berbeda dengan query-level batching.",
+    content_items=[
+        {"title": "ANTI-PATTERN CODE", "items": [
+            "@Entity",
+            "public class Author {",
+            "    @Id",
+            "    private Long id;",
+            "",
+            "    @OneToMany(fetch = FetchType.EAGER)  // ANTI-PATTERN",
+            "    private List<Post> posts;",
+            "}"
+        ], "type": "code"},
+        {"title": "DAMPAK", "items": [
+            "Semua relasi dideklarasikan eager secara global.",
+            "Entitas tidak relevan ikut ter-load.",
+            "Memory bloat dan kemungkinan OOM pada dataset besar.",
+            "Berbeda dengan query-level eager loading yang selektif."
+        ], "type": "bullet"}
+    ],
+    narrative="Mapping-level eager loading seperti FetchType.EAGER pada JPA adalah anti-pattern yang sering disalahpahami sebagai solusi N+1. Meskipun memang mengurangi jumlah query, pendekatan ini memuat semua relasi yang dideklarasikan secara global tanpa seleksi. Akibatnya, entitas yang tidak relevan juga ikut ter-load ke memori, menyebabkan memory bloat dan potensi out-of-memory error pada dataset besar. Lab ini mendemonstrasikan query-level eager loading yang selektif dan dapat dikontrol per-request.",
+    narrative_en="Mapping-level eager loading such as FetchType.EAGER in JPA is an anti-pattern often misunderstood as an N+1 solution. Although it does reduce query count, this approach loads all declared relationships globally without selection. As a result, irrelevant entities are also loaded into memory, causing memory bloat and potential out-of-memory errors on large datasets. This lab demonstrates query-level eager loading which is selective and controllable per-request.",
+    mental_model="Global eager fetching causes memory bloat; prefer query-level selective batching.",
+    source_path="labs/22-n-plus-one-query-problem/content/02-master-draft.md",
+    slide_num="21 / 24",
+    layout="anti-pattern"
+)
+
+# Slide 22: Takeaway praktis & command block dominan
+add_slide(
+    categories=["TAKEAWAY", "COMMAND"],
+    title="Takeaway Praktis: Cara Mencegah N+1",
+    subtitle="Command block untuk menjalankan demo dan test validasi.",
+    content_items=[
+        {"title": "COMMAND BLOCK", "items": [
+            "# Jalankan demo N+1 vs Eager Loading",
+            "go run ./cmd/demo",
+            "",
+            "# Jalankan test dengan query counter",
+            "go test -v ./internal/blog",
+            "",
+            "# Race detection",
+            "go test -race ./...",
+            "",
+            "# Profile query count",
+            "go test -count=10 ./internal/blog"
+        ], "type": "terminal"}
+    ],
+    narrative="Takeaway praktis untuk mencegah N+1 query problem adalah menerapkan profiling query count sebagai bagian dari workflow development. Command demo menunjukkan perbandingan kuantitatif antara pendekatan naive dan eager loading. Command test dengan flag verbose menampilkan detail eksekusi setiap test case. Race detection memastikan thread-safety, sedangkan repeated test counting membantu mengidentifikasi flaky test. Integrasi query counter ke dalam CI/CD pipeline akan mencegah regressi N+1 secara otomatis.",
+    narrative_en="The practical takeaway for preventing N+1 query problem is implementing query count profiling as part of the development workflow. The demo command shows quantitative comparison between naive and eager loading approaches. The test command with verbose flag displays detailed execution of each test case. Race detection ensures thread-safety, while repeated test counting helps identify flaky tests. Integrating query counters into CI/CD pipelines will automatically prevent N+1 regressions.",
+    mental_model="Profile → Verify → Integrate: make query counting part of your CI.",
+    source_path="cmd/demo/main.go • internal/blog/repository_test.go",
+    slide_num="22 / 24",
+    layout="command-block"
+)
+
+# Slide 23: Prinsip arsitektural jangka panjang
+add_slide(
+    categories=["PRINSIP", "ARSITEKTUR"],
+    title="Prinsip Arsitektural Jangka Panjang",
+    subtitle="Eager loading batching sebagai pola fundamental dalam data access layer.",
+    content_items=[
+        {"title": "PRINSIP UTAMA", "items": [
+            "Minimize database round-trips: batching > sequential queries.",
+            "Measure before optimizing: query counter provides concrete evidence.",
+            "Trade memory for latency: accept higher memory usage for lower query count.",
+            "Prefer query-level over mapping-level: selective vs global eager loading.",
+            "Integrate into CI: automated query count tests prevent regressions."
+        ], "type": "bullet"}
+    ],
+    narrative="Prinsip arsitektural jangka panjang untuk mengatasi N+1 query problem adalah mengadopsi batching sebagai pola fundamental dalam data access layer. Minimalisasi database round-trip melalui batching memberikan dampak performa yang lebih besar dibandingkan optimasi query individual. Pengukuran sebelum optimasi menggunakan query counter memberikan bukti kuantitatif yang dapat dipercaya. Pertukaran memory untuk latency adalah trade-off yang umumnya menguntungkan dalam sistem web modern.",
+    narrative_en="The long-term architectural principle for overcoming N+1 query problem is adopting batching as a fundamental pattern in the data access layer. Minimizing database round-trips through batching provides greater performance impact than optimizing individual queries. Measurement before optimization using query counters provides credible quantitative evidence. Trading memory for latency is a trade-off that is generally beneficial in modern web systems.",
+    mental_model="Batching is fundamental; measure, trade memory for latency, integrate into CI.",
+    source_path="labs/22-n-plus-one-query-problem/content/05-key-takeaways.md",
+    slide_num="23 / 24",
+    layout="principles"
+)
+
+# Slide 24: Closing slide (Dark Navy, repo link pendek, commit SHA, credits)
+add_slide(
+    categories=["CLOSING"],
+    title="Terima Kasih",
+    subtitle="Lab 22: N+1 Query Problem — From lukman-ss",
+    content_items=[
+        {"title": "CLOSING INFO", "items": [
+            f"Repo: {REPO_URL}",
+            f"Commit: {COMMIT_SHA}",
+            f"Author: {AUTHOR}",
+            "",
+            "Lab seri Software Engineering Lab",
+            "Oleh: Lukman / lukman-ss"
+        ], "type": "bullet"}
+    ],
+    narrative="Demikian presentasi 24 slide tentang N+1 Query Problem dan solusi eager loading batching. Lab ini membuktikan secara kuantitatif bahwa pendekatan naive menghasilkan query count linear, sedangkan eager loading mengurangi menjadi konstan. Implementasi menggunakan mock store dengan query counter dan race detector memastikan correctness dan thread-safety. Gunakan prinsip profiling-first dan integrasi test otomatis untuk mencegah regressi di produksi.",
+    narrative_en="That concludes the 24-slide presentation on N+1 Query Problem and eager loading batching solution. This lab proves quantitatively that the naive approach generates linear query count, while eager loading reduces it to constant. The implementation uses mock store with query counter and race detector to ensure correctness and thread-safety. Use profiling-first principles and automated test integration to prevent regressions in production.",
+    mental_model="N+1 solved through measurement, batching, and automated verification.",
     source_path=REPO_URL,
-    slide_num="24 / 24"
+    slide_num="24 / 24",
+    layout="closing"
 )
 
 if __name__ == "__main__":
-    print(f"Loaded {len(SLIDES)} slides for Lab {LAB_NO}: {TITLE_ID}")
+    print(f"Generated {len(SLIDES)} slides for lab {LAB_NO}")
+    print(f"Output dir: {OUTPUT_DIR}")
+    # Save to file for downstream processing
+    import json
+    out_path = os.path.join(OUTPUT_DIR, "content_def.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "TITLE_ID": TITLE_ID,
+            "SUBTITLE_ID": SUBTITLE_ID,
+            "TITLE_EN": TITLE_EN,
+            "SUBTITLE_EN": SUBTITLE_EN,
+            "AUTHOR": AUTHOR,
+            "LAB_NO": LAB_NO,
+            "SLUG": SLUG,
+            "REPO_URL": REPO_URL,
+            "COMMIT_SHA": COMMIT_SHA,
+            "COVER_IMAGE_PATH": COVER_IMAGE_PATH,
+            "SLIDES": SLIDES,
+        }, f, ensure_ascii=False, indent=2)
+    print(f"Saved JSON to {out_path}")
