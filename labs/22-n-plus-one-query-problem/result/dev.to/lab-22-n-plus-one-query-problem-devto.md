@@ -1,34 +1,31 @@
 ---
 title: "N+1 Query Problem: Eliminating Hidden Latency with Eager Loading"
 published: false
-description: "Explore the N+1 query problem in Go: mechanics, eager loading batching, query counting verification, and production trade-offs."
-tags: go, database, performance, softwareengineering
+description: "Explore N+1 Query Problem in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
 # N+1 Query Problem: Eliminating Hidden Latency with Eager Loading
 
-A production database slows down under load. Application endpoints continue executing individual child queries inside parent loops. Lab 22 makes that behavior visible with a focused Go simulation and deterministic query counting assertions.
+A production system must remain resilient under load. Lab 22 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-> Nested query loops produce linear database round-trips; eager loading batching collapses them to a constant count.
+> Small dataset testing hides N+1; production scale exposes accumulated query overhead.
 
 ## Masalah Nyata: N+1 Query Menyembunyikan Latensi
 
-The N+1 query problem often escapes detection during local testing because test datasets are tiny. Each isolated SQL statement completes in sub-millisecond time. However, cumulative latency grows linearly with the record count. In production environments with thousands of parent rows, accumulated network round-trips can degrade endpoint latency from milliseconds to several seconds. Concurrently, repeated sequential round-trips deplete database connection pools.
+The N+1 query problem often escapes detection during development because test datasets are small. Each individual query runs quickly, so developers don't realize that a loop with queries inside will produce N times the database round-trips. In production with thousands of records, this accumulated latency can increase response time from hundreds of milliseconds to several seconds. Additionally, this pattern puts pressure on the database connection pool because each request requires many sequential connections.
 
 ## Mengapa Pendekatan Naif Gagal?
 
-The naive approach looks deceptively clean: retrieve parent authors, then fetch child posts per author within an application loop. However, this structure generates 1 initial parent query plus N child queries. Each individual round-trip incurs network serialization, TCP framing, SQL parsing, and context switching overhead. Under real traffic, connection slots saturate rapidly.
+The naive N+1 query implementation appears intuitive and easy to read: fetch all authors, then iterate each author to fetch their posts one by one. However, this approach generates a query count that is linear relative to the parent record count. On a system with 1000 authors, there will be 1001 individual queries. Each query requires TCP handshake, SQL parsing, execution, and result transfer. This accumulated overhead causes tolerable latency on small datasets but becomes serious bottlenecks at production scale.
 
 ```go
-func (r *Repository) GetAuthorsWithPostsNPlusOne() []AuthorWithPosts {
-    authors := r.store.GetAllAuthors()
+func GetAuthorsWithPosts() []AuthorWithPosts {
+    authors := db.GetAllAuthors()
     var result []AuthorWithPosts
     for _, author := range authors {
-        posts := r.store.GetPostsByAuthorID(author.ID)
-        result = append(result, AuthorWithPosts{
-            Author: author,
-            Posts:  posts,
-        })
+        posts := db.GetPostsByAuthorID(author.ID)
+        result = append(result, AuthorWithPosts{...})
     }
     return result
 }
@@ -36,20 +33,11 @@ func (r *Repository) GetAuthorsWithPostsNPlusOne() []AuthorWithPosts {
 
 ## Mental Model: Eager Loading via Batching
 
-The core mental model transforms sequential round-trips into a two-phase fetch. First, retrieve all parent records. Second, collect all parent identifiers into a slice and execute a single batch query matching child records with an SQL `IN` clause. Group child entities in memory via a hash map and assemble the response structs without additional round-trips.
+The core mental model for solving the N+1 query problem is eager loading through batching. Instead of making separate queries for each parent entity, we collect all required relationship identifiers into one slice. Then we run a single batch query with an IN clause that fetches all child records at once. After the results are returned, we group them in memory using a map, then assemble the final data structure without additional queries. This approach changes query complexity from O(N) to O(1).
 
 ```go
-type Author struct {
-    ID   int
-    Name string
-}
-
-type Post struct {
-    ID       int
-    AuthorID int
-    Title    string
-}
-
+type Author struct { ID int; Name string }
+type Post struct { ID int; AuthorID int; Title string }
 type AuthorWithPosts struct {
     Author Author
     Posts  []Post
@@ -58,26 +46,11 @@ type AuthorWithPosts struct {
 
 ## Alur Eksekusi: Dari Loop Naif ke Batch Eager
 
-The execution pipeline contrasts sequential round-trips against batched retrieval. In the naive pipeline, fetching 3 authors triggers 4 queries (1 parent + 3 individual child queries). In the eager pipeline, the service retrieves all authors, extracts identifier slices `[1, 2, 3]`, issues a single batched child query, groups posts by `AuthorID` in memory, and returns the assembled dataset in exactly 2 queries.
-
-```
-N+1 PIPELINE:
-App -> DB: GetAllAuthors() -> [Alice, Bob, Charlie]
-for each author:
-    App -> DB: GetPostsByAuthorID(id) -> posts
-Total: 4 queries (1 + 3)
-
-EAGER PIPELINE:
-App -> DB: GetAllAuthors() -> [Alice, Bob, Charlie]
-Extract IDs: [1, 2, 3]
-App -> DB: GetPostsByAuthorIDs([1, 2, 3]) -> all posts
-Group by AuthorID in map -> compose structs
-Total: 2 queries (1 + 1 batch)
-```
+The N+1 execution pipeline starts with one query to fetch all authors, then enters a loop to fetch posts for each author individually. Each loop iteration produces one additional database round-trip. Conversely, the eager loading pipeline also starts with the same authors query, but then extracts all author IDs and performs one batch query using an IN clause. The batch results are grouped in a memory map before finally being assembled into AuthorWithPosts structures. The fundamental difference lies in reducing round-trips from N to 1.
 
 ## Implementasi Eager Loading Batching
 
-The batched eager loading implementation resides in `GetAuthorsWithPostsEager` inside `internal/blog/repository.go`. It executes five sequential phases: load parent authors, extract parent primary keys, execute a single batch lookup via `GetPostsByAuthorIDs`, index child posts into a memory map keyed by author ID, and compose final domain aggregates.
+The eager loading batching implementation in the GetAuthorsWithPostsEager method consists of five main stages. First, it fetches all authors from the store. Second, it extracts all author IDs into an integer slice. Third, it runs a single batch query GetPostsByAuthorIDs with the ID slice. Fourth, it groups all returned posts into a map based on author_id. Fifth, it assembles the final AuthorWithPosts structure by iterating authors and fetching the post slice from the map. The total queries executed are only two: one for authors and one for all posts.
 
 ```go
 func (r *Repository) GetAuthorsWithPostsEager() []AuthorWithPosts {
@@ -111,7 +84,7 @@ func (r *Repository) GetAuthorsWithPostsEager() []AuthorWithPosts {
 
 ## Failure Path: N+1 Menghasilkan Query Count Tinggi
 
-The failure path demonstrates linear query escalation. In `TestGetAuthorsWithPostsNPlusOne`, loading 3 authors executes 4 queries against the mock datastore. For N parent records, query count strictly equals 1+N. As datasets scale, this unconstrained query multiplication exhausts database connection pools and degrades response times.
+The N+1 query problem failure path manifests as a query count that grows linearly with the increasing number of parent records. The GetAuthorsWithPostsNPlusOne test explicitly asserts that for 3 authors, the total queries executed are 4. This figure comes from one GetAllAuthors query plus three GetPostsByAuthorID queries in the loop. At production scale with thousands of authors, this pattern will generate thousands of additional queries that significantly burden the database and connection pool.
 
 ```go
 func TestGetAuthorsWithPostsNPlusOne(t *testing.T) {
@@ -119,9 +92,6 @@ func TestGetAuthorsWithPostsNPlusOne(t *testing.T) {
     repo := NewRepository(store)
     store.ResetQueryCount()
     result := repo.GetAuthorsWithPostsNPlusOne()
-    if len(result) != 3 {
-        t.Fatalf("expected 3 authors, got %d", len(result))
-    }
     queryCount := store.GetQueryCount()
     if queryCount != 4 {
         t.Errorf("expected 4 queries (N+1), got %d", queryCount)
@@ -131,55 +101,42 @@ func TestGetAuthorsWithPostsNPlusOne(t *testing.T) {
 
 ## Mekanisme vs Gejala: N+1 vs Eager Loading
 
-This comparison table summarizes quantitative and behavioral divergence between naive nested loops and eager loading batching. While eager loading trades heap memory for query reductions, it bounds database round-trips to O(1) relative to parent entity volume.
+This comparison table highlights the fundamental differences between the N+1 naive approach and eager loading batching. In terms of query quantity, N+1 produces 1+N queries while eager loading only produces 2 queries regardless of dataset size. Time complexity in terms of query count also differs: O(N) versus O(1). Database connection usage also differs significantly; N+1 requires N sequential connections while eager loading only needs 2 connections. However, eager loading has higher memory overhead because it loads all records at once into memory.
 
 Aspek | N+1 (Naive) | Eager Loading (Batch)
 |---|---|---|
-Query Count | 1 + N | 2 (constant)
+Query Count | 1 + N | 2
 Time Complexity | O(N) queries | O(1) queries
 Connection Usage | N sequential connections | 2 connections
-Memory Overhead | Lower (streaming) | Higher (batch in-memory)
-Detectability | Hard (each query fast) | Easy (query counter assertion)
+Memory Overhead | Lower (streaming) | Higher (batch load)
+Detectability | Hard (each query fast) | Easy (query counter)
 
 ## 3 Keputusan Desain Kritis untuk Optimasi Query
 
-Three engineering decisions determine query optimization success: First, implement query counter decorators in data access test doubles to assert query counts directly in test suites. Second, define batch limits using chunking to prevent parameter limit violations on `IN` clauses. Third, evaluate memory versus round-trip trade-offs, adopting pagination or column projection when dealing with large parent-child graphs.
+These three critical design decisions form the foundation of a robust N+1 query optimization implementation. The first decision establishes a quantitative measurement mechanism through query counters integrated with the test suite. The second decision selects an appropriate batching strategy based on dataset characteristics and memory constraints. The third decision evaluates the trade-off between query reduction and increased memory usage, which becomes an important consideration when handling large-scale one-to-many relationships.
 
 ## Bukti Eksekusi: Terminal Output Demo
 
-Terminal output from the demo binary verifies query reduction on identical datasets. The naive loop executes 4 queries to resolve 3 authors and their posts, whereas eager loading completes the identical retrieval in 2 queries.
-
-```sh
-$ go run ./cmd/demo
-=== 1. Simulating N+1 Query Problem ---
-Loaded 3 authors with their posts.
-Total queries executed: 4 (1 query for authors + 3 queries for posts)
-
---- 2. Simulating Eager Loading (Batching) ---
-Loaded 3 authors with their posts.
-Total queries executed: 2 (1 query for authors + 1 batched query for posts)
-```
+The terminal output from the CLI demo explicitly shows the quantitative difference between the N+1 and eager loading approaches. For 3 authors, the N+1 approach produces 4 total queries, while eager loading only produces 2 queries. This difference is clearly visible even on a small dataset; at production scale with hundreds or thousands of records, the gap between 1+N queries versus 2 queries will become very significant. This demo proves that batching can reduce database round-trips by half.
 
 ## Analisis Batasan: Yang Tidak Dibuktikan Lab Ini
 
-The lab validates query reduction, semantic deep equality, empty collection edge cases, and thread-safety under an in-memory test double.
-
-It has not yet proven Cartesian product explosion over large one-to-many relationships, memory bloat under massive production datasets, join-based eager loading trade-offs, or production RDBMS execution characteristics across physical network sockets.
+This laboratory has definitive limitations that must be understood to prevent overclaiming. What is proven includes query count reduction on small datasets, semantic result equality, thread-safety, and empty edge case handling. What is not proven includes cartesian explosion on large-scale one-to-many relationships, memory bloat from eagerly loading massive datasets, actual performance on real relational databases, trade-offs with join-based eager loading strategies, and column selection and aggregation optimizations.
 
 ## Trade-off Arsitektur: Memory vs Query Count
 
-Eager loading transforms database latency into application memory consumption. Consolidating child records into batched collections eliminates round-trip latency and relieves connection pool contention. However, loading broad graphs at once increases process heap footprint and risks Cartesian explosion if multi-level associations are fetched without pagination or projected column filtering.
+The architectural trade-off between N+1 naive and eager loading batching involves exchanging query usage for memory consumption. Eager loading significantly reduces database query count from linear to constant, resulting in network latency savings and reduced pressure on the connection pool. However, the sacrifice is increased memory usage because all records are loaded at once into application memory. On large-scale one-to-many relationships, this can cause cartesian product explosion if not handled with proper chunking or pagination.
 
 ## Concurrency Safety: Thread-Safe Query Counter
 
-The in-memory datastore encapsulates state with `sync.Mutex` across query counters and record slices. Go's race detector confirms zero data races under concurrent execution. Thread safety ensures query counters remain deterministic when repositories are invoked across concurrent worker goroutines.
+The store implementation uses sync.Mutex to ensure thread-safety when accessing and modifying queryCount and collection data. Each retrieval method like GetAllAuthors, GetPostsByAuthorID, and GetPostsByAuthorIDs locks the mutex before incrementing queryCount and returns the results. Go's race detector confirms no data races in this implementation. This thread-safe property is important because unit tests can run in parallel and demos can be accessed from multiple goroutines.
 
 ```go
 type Store struct {
-    mu         sync.Mutex
-    authors    []Author
-    posts      []Post
-    queryCount int
+    mu           sync.Mutex
+    authors      []Author
+    posts        []Post
+    queryCount   int
 }
 
 func (s *Store) GetQueryCount() int {
@@ -191,18 +148,11 @@ func (s *Store) GetQueryCount() int {
 
 ## Before vs After: N+1 vs Eager Loading
 
-The transition from naive iteration to batched eager loading stabilizes round-trips from linear O(N) to constant O(1). The architectural shift protects backend databases from connection pool depletion while keeping query execution predictable as dataset sizes grow.
-
-Metric | Before: N+1 (Naive) | After: Eager Loading
-|---|---|---|
-Query Count | 4 queries (for 3 authors) | 2 queries (constant)
-Complexity | O(N) round-trips | O(1) round-trips
-Scalability | Degrades linearly | Constant round-trip overhead
-Memory Footprint | Streaming / minimal | In-memory batch indexing
+The before and after comparison shows the transformation from N+1 naive approach to eager loading batching. Before optimization, query count is 4 with O(N) time complexity meaning poor scalability on large datasets. After optimization, query count drops to 2 with O(1) time complexity guaranteeing consistent performance regardless of dataset size. The main trade-off is increased memory usage and slight decrease in code simplicity due to the need for batching and grouping logic.
 
 ## Analisis Mendalam: TestGetAuthorsWithPostsEager
 
-`TestGetAuthorsWithPostsEager` provides automated verification across two critical invariants. First, it asserts that total datastore queries equal exactly 2. Second, it uses `reflect.DeepEqual` against the naive result to confirm that the batching optimization produces semantically identical domain structs.
+The TestGetAuthorsWithPostsEager performs three verifications simultaneously. First, it ensures the query count is exactly 2 after eager loading execution. Second, it compares the eager loading result with the N+1 result using reflect.DeepEqual to guarantee semantic equivalence. Third, it implicitly tests that the results remain unchanged despite different fetching mechanisms. This combination of quantitative and qualitative verification provides high confidence that the optimization does not alter business behavior.
 
 ```go
 func TestGetAuthorsWithPostsEager(t *testing.T) {
@@ -210,9 +160,6 @@ func TestGetAuthorsWithPostsEager(t *testing.T) {
     repo := NewRepository(store)
     store.ResetQueryCount()
     result := repo.GetAuthorsWithPostsEager()
-    if len(result) != 3 {
-        t.Fatalf("expected 3 authors, got %d", len(result))
-    }
     queryCount := store.GetQueryCount()
     if queryCount != 2 {
         t.Errorf("expected 2 queries (eager loading), got %d", queryCount)
@@ -226,7 +173,7 @@ func TestGetAuthorsWithPostsEager(t *testing.T) {
 
 ## Analisis Mendalam: TestEmptyStore
 
-`TestEmptyStore` verifies extreme edge cases where the parent and child datasets are completely empty. Both naive and eager methods must return empty slices without throwing nil pointer panics or map indexing errors, and both returned slices must remain identical under deep equality checks.
+The TestEmptyStore tests the edge case when the store has no authors or posts. Both approaches, N+1 and eager loading, must return empty slices with length zero. Additionally, deep equality between both results is verified. This test ensures that the batching optimization does not introduce bugs in the extreme case where the source collection is empty. The empty check at the beginning of method GetAuthorsWithPostsEager prevents panics from iterating an empty slice.
 
 ```go
 func TestEmptyStore(t *testing.T) {
@@ -235,35 +182,28 @@ func TestEmptyStore(t *testing.T) {
     n1 := repo.GetAuthorsWithPostsNPlusOne()
     eager := repo.GetAuthorsWithPostsEager()
     if len(n1) != 0 || len(eager) != 0 {
-        t.Fatalf("expected empty results, got n1=%d eager=%d", len(n1), len(eager))
+        t.Fatalf("expected empty results")
     }
     if !reflect.DeepEqual(n1, eager) {
-        t.Errorf("empty result mismatch: n1=%#v eager=%#v", n1, eager)
+        t.Errorf("empty result mismatch")
     }
 }
 ```
 
 ## Analisis Mendalam: Race Detector Verification
 
-Running the Go race detector verifies thread safety across the repository and mock datastore. With `sync.Mutex` guarding shared state and query counters, test execution completes cleanly without data races, verifying suitability for concurrent execution environments.
-
-```sh
-$ go test -race ./...
-=== RUN   TestGetAuthorsWithPostsNPlusOne
---- PASS: TestGetAuthorsWithPostsNPlusOne (0.00s)
-=== RUN   TestGetAuthorsWithPostsEager
---- PASS: TestGetAuthorsWithPostsEager (0.00s)
-=== RUN   TestEmptyStore
---- PASS: TestEmptyStore (0.00s)
-PASS
-ok      labs/22-n-plus-one-query-problem/internal/blog  1.024s
-```
+Go race detector is run to verify that no data races exist on concurrent access to the store. The results show all tests pass without any warnings. Thread-safety is guaranteed by the use of sync.Mutex on every store method that accesses or modifies queryCount and data slices. This property allows tests to run in parallel and repository methods to be called from multiple goroutines without risking concurrent map writes or slice corruption.
 
 ## Analisis Mendalam: Query Counter sebagai Test Double
 
-The datastore test double embeds a query counter directly inside data access methods. Calling `GetAllAuthors`, `GetPostsByAuthorID`, or `GetPostsByAuthorIDs` increments the counter under lock. This provides a deterministic query tracking mechanism inside automated tests without external database proxy overhead.
+The query counter pattern in Store.go serves as a test double that simulates a database with query tracking capability. Each retrieval method increments queryCount after acquiring the lock. The GetQueryCount method allows tests to access the actual query count without disturbing internal state. This pattern enables quantitative verification of query optimization without needing real database instrumentation. The implementation is also thread-safe thanks to mutex usage.
 
 ```go
+type Store struct {
+    mu         sync.Mutex
+    queryCount int
+}
+
 func (s *Store) GetAllAuthors() []Author {
     s.mu.Lock()
     defer s.mu.Unlock()
@@ -271,30 +211,18 @@ func (s *Store) GetAllAuthors() []Author {
     return s.authors
 }
 
-func (s *Store) GetPostsByAuthorIDs(authorIDs []int) []Post {
+func (s *Store) GetQueryCount() int {
     s.mu.Lock()
     defer s.mu.Unlock()
-    s.queryCount++
-    idMap := make(map[int]bool)
-    for _, id := range authorIDs {
-        idMap[id] = true
-    }
-    var result []Post
-    for _, p := range s.posts {
-        if idMap[p.AuthorID] {
-            result = append(result, p)
-        }
-    }
-    return result
+    return s.queryCount
 }
 ```
 
 ## Analisis Mendalam: Deep Equality Assurance
 
-Verification requires asserting functional correctness alongside query reduction. `reflect.DeepEqual` guarantees structural parity: field contents, child slice lengths, and ordering across authors and posts remain identical regardless of whether records were fetched sequentially or through batched hashing.
+Deep equality check using reflect.DeepEqual ensures that the eager loading result is structurally identical to the N+1 result. This assertion verifies that all fields on the Author struct and Posts slice have the same values. Order preservation is also guaranteed because both approaches iterate authors in the same order. This is important to prove that the optimization only changes the fetching mechanism, not the result semantics.
 
 ```go
-nPlusOneResult := repo.GetAuthorsWithPostsNPlusOne()
 if !reflect.DeepEqual(result, nPlusOneResult) {
     t.Errorf("eager result mismatch with N+1 result:\nEager: %+v\nN+1: %+v", result, nPlusOneResult)
 }
@@ -302,57 +230,31 @@ if !reflect.DeepEqual(result, nPlusOneResult) {
 
 ## Checklist Implementasi Eager Loading
 
-Before deploying query optimizations to production, verify the following baseline safeguards:
-
-- [ ] Measure baseline query counts using database profiling or APM tracing.
-- [ ] Eliminate child queries nested inside application loops.
-- [ ] Apply eager loading per query rather than via global ORM entity mapping.
-- [ ] Guard against Cartesian explosions on multi-level one-to-many joins.
-- [ ] Select only necessary columns rather than retrieving full entity graphs.
-- [ ] Enforce pagination limits on both parent and child query scopes.
-- [ ] Add automated query count assertions in regression test suites.
-- [ ] Enable ORM strict loading modes to catch unbatched associations in staging.
+This eager loading implementation checklist covers eight important control points before deploying to production. The first point emphasizes query count profiling as a preventive step. The second point audits lazy loading in loops. The third point distinguishes query-level eager loading from mapping-level eager loading that can cause memory bloat. The fourth point warns about cartesian explosion. The fifth point suggests column selection when full entities are not needed.
 
 ## Anti-Pattern: Mapping-Level Eager Loading
 
-A common misconception equates query-level eager loading with global ORM entity mapping annotations such as JPA's `FetchType.EAGER`. Global eager annotations force every repository call to load all child associations, causing widespread memory bloat and out-of-memory errors on unrelated read queries. Eager loading must remain query-specific.
+Mapping-level eager loading such as FetchType.EAGER in JPA is an anti-pattern often misunderstood as an N+1 solution. Although it does reduce query count, this approach loads all declared relationships globally without selection. As a result, irrelevant entities are also loaded into memory, causing memory bloat and potential out-of-memory errors on large datasets. This lab demonstrates query-level eager loading which is selective and controllable per-request.
 
-```java
+```go
 @Entity
 public class Author {
     @Id
     private Long id;
 
-    // ANTI-PATTERN: Forces eager loading on EVERY author fetch
-    @OneToMany(fetch = FetchType.EAGER)
+    @OneToMany(fetch = FetchType.EAGER)  // ANTI-PATTERN
     private List<Post> posts;
 }
 ```
 
 ## Takeaway Praktis: Cara Mencegah N+1
 
-Preventing N+1 query regressions requires continuous automated verification. Running unit tests with query counters and the race detector catches unbatched iteration before changes reach production environments.
-
-```sh
-# Run demo comparing naive vs eager loading
-go run ./cmd/demo
-
-# Run unit tests verifying query counts
-go test -v ./internal/blog
-
-# Run race detector for concurrent safety
-go test -race ./...
-
-# Run repeated iterations to ensure deterministic count
-go test -count=10 ./internal/blog
-```
+The practical takeaway for preventing N+1 query problem is implementing query count profiling as part of the development workflow. The demo command shows quantitative comparison between naive and eager loading approaches. The test command with verbose flag displays detailed execution of each test case. Race detection ensures thread-safety, while repeated test counting helps identify flaky tests. Integrating query counters into CI/CD pipelines will automatically prevent N+1 regressions.
 
 ## Prinsip Arsitektural Jangka Panjang
 
-Long-term query management rests on five engineering principles:
+The long-term architectural principle for overcoming N+1 query problem is adopting batching as a fundamental pattern in the data access layer. Minimizing database round-trips through batching provides greater performance impact than optimizing individual queries. Measurement before optimization using query counters provides credible quantitative evidence. Trading memory for latency is a trade-off that is generally beneficial in modern web systems.
 
-- Minimize database round-trips: batching multiple lookups outperforms sequential single-row fetches.
-- Measure before optimizing: use query counting test doubles to obtain concrete verification.
-- Trade memory for latency: accept moderate heap allocation to eliminate round-trip network delays.
-- Prefer query-level over mapping-level: optimize explicitly at query sites rather than globally.
-- Integrate into CI: automated query assertions prevent silent performance regressions.
+## Source
+
+[Software Engineering Lab 22 - N+1 Query Problem](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/22-n-plus-one-query-problem), snapshot commit `13224b48`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
