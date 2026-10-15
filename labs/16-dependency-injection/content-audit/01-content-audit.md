@@ -1,5 +1,5 @@
 # Technical Content & Slide Audit Report
-Target: `labs/16-dependency-injection/result/content_def.py`
+Target: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/16-dependency-injection/result/content_def.py`
 Verdict: **APPROVED**
 
 ## Summary Stats
