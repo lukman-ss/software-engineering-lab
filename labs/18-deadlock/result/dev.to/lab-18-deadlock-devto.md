@@ -1,15 +1,15 @@
 ---
 title: "Deadlock in Concurrent Systems: Circular Wait Mechanics, Database Engine Aborts, and Application Strategies in Go"
 published: false
-description: "Understand deadlock mechanics in concurrent systems: circular wait, wait-for graphs, lock ordering prevention, and retry recovery in Go."
-tags: go, concurrency, database, softwareengineering
+description: "Explore Deadlock in Concurrent Systems in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
 # Deadlock in Concurrent Systems: Circular Wait Mechanics, Database Engine Aborts, and Application Strategies in Go
 
-A production transactional system must handle concurrent access safely. Lab 18 makes deadlock behavior visible with a focused Go simulation and deterministic test assertions.
+A production system must remain resilient under load. Lab 18 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-> Deadlock is an inescapable circular wait resolved only by external engine aborts or strict lock ordering.
+> Uncoordinated concurrent resource locks inevitably produce circular dependencies under sustained traffic.
 
 ## Lonjakan Transaksi Konkuren Memicu Kemacetan Sistemik
 
@@ -53,7 +53,7 @@ When bidirectional transfers execute concurrently, each successfully secures its
 This matrix delineates the technical boundaries separating standard lock contention, lock timeouts, and genuine deadlocks. Deadlocks uniquely exhibit cyclic dependencies that cannot self-resolve, demanding proactive engine rollback intervention.
 
 Dimensi Masalah | Normal Lock Contention | Lock Timeout | Deadlock (Circular Wait)
-|---|---|---|
+|---|---|---|---|
 Kondisi Dependensi | Antrean linear satu arah | Tunggu melebihi ambang batas | Siklus tertutup saling sandera (A->B->A)
 Penyelesaian Mesin | Menunggu lock dilepas | Transaksi pemohon dibatalkan | Satu transaksi dikorbankan via rollback
 Kode Galat Umum | Tidak ada galat (hanya antre) | MySQL 1205 (wait timeout) | PG 40P01 / MySQL 1213 / SQLServer 1205

@@ -1,40 +1,4 @@
-<img src="lab-18-deadlock-cover-id.png" alt="Deadlock di Sistem Konkuren: Mekanisme Siklus Tunggu, Penanganan Database, dan Strategi Aplikasi di Go">
-
-<h1>Deadlock di Sistem Konkuren: Mekanisme Siklus Tunggu, Penanganan Database, dan Strategi Aplikasi di Go</h1>
-
-<p>Sistem transaksional produksi dituntut menangani mutasi data secara konkuren tanpa mengorbankan integritas data. Lab 18 membedah mekanika deadlock, visualisasi wait-for graph, teknik pencegahan deterministik lock ordering, serta strategi pemulihan berbasis retry pattern menggunakan Go standard library murni.</p>
-
-<blockquote>Deadlock bukan kegagalan basis data, melainkan alarm bahwa aplikasi Anda mengunci sumber daya secara acak.</blockquote>
-
-<h2>Lonjakan Transaksi Konkuren Memicu Kemacetan Sistemik</h2>
-
-<p>Ketika volume transaksi tinggi mengakses baris data secara bersamaan, urutan akses yang tidak teratur memicu kebuntuan fatal. Munculnya galat pembatalan transaksi bukan berarti database mengalami kerusakan internal, melainkan sinyal bahwa lapisan aplikasi membiarkan pola penguncian saling silang.</p>
-
-<p>Dampak langsung dari fenomena ini adalah peningkatan latensi akibat transaksi tertahan hingga mekanisme pendeteksi siklus terpicu, disusul pembatalan transaksi sepihak oleh database engine.</p>
-
-<h2>Review Kode Manual Gagal Menangkap Siklus Tunggu Konkuren</h2>
-
-<p>Review manual dan unit test sekuensial tidak mampu mereproduksi deadlock karena eksekusi konkuren bergantung pada timing thread scheduler CPU dan sistem operasi. Menjalankan query di dalam transaksi ACID tidak otomatis melindungi sistem dari deadlock jika dua alur bisnis mengunci entitas dalam urutan berlawanan.</p>
-
-<p>Pengujian fungsional satu thread selalu berhasil karena kompetisi sumber daya tidak pernah terpicu di lingkungan lokal.</p>
-
-<h2>Anatomi Siklus Tunggu: Deadly Embrace Dua Transaksi</h2>
-
-<p>Deadlock terjadi ketika empat syarat Coffman hadir bersamaan: mutual exclusion (eksklusivitas baris data), hold and wait (menahan kunci sambil menunggu kunci lain), no preemption (kunci tidak dapat direbut paksa), dan circular wait (rantai saling tunggu melingkar).</p>
-
-<p>Hanya pada jalur ini kondisi saling sandera terkunci permanen, menuntut adanya intervensi eksternal seperti pembatalan paksa oleh database engine.</p>
-
-<h2>Alur Deteksi Mesin Basis Data: Dari Wait-For Graph ke Abort</h2>
-
-<p>Basis data relasional tidak memeriksa deadlock terus-menerus demi menghemat siklus CPU, melainkan menunggu jeda parameter timeout (seperti <code>deadlock_timeout</code> di PostgreSQL) sebelum menelusuri Wait-For Graph dengan algoritma depth-first search.</p>
-
-<p>Ketika siklus tertutup terdeteksi, mesin memilih satu transaksi sebagai korban pembatalan (victim selection). Simulasi lab membatalkan transaksi via context timeout, namun belum membuktikan algoritma pemilihan korban berbasis biaya modifikasi terkecil seperti MySQL InnoDB di lingkungan produksi.</p>
-
-<h2>Pola Penguncian Naif yang Menimbulkan Deadlock</h2>
-
-<p>Fungsi <code>TransferNaive</code> mengunci akun pengirim lalu akun penerima murni berdasarkan urutan argumen fungsi. Pola penguncian dinamis ini membuka celah tabrakan bagi transaksi berlawanan arah.</p>
-
-<pre><code class="language-go">func TransferNaive(ctx context.Context, from, to *bank.Account, amount int, delay time.Duration) error {
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Deadlock di Sistem Konkuren: Mekanisme Siklus Tunggu, Penanganan Database, dan Strategi Aplikasi di Go</title><meta name="description" content="Pelajari Deadlock di Sistem Konkuren lewat simulasi Go, antrean, arsitektur, dan verifikasi metrik."><meta property="og:title" content="Deadlock di Sistem Konkuren: Mekanisme Siklus Tunggu, Penanganan Database, dan Strategi Aplikasi di Go"><meta property="og:description" content="Pelajari Deadlock di Sistem Konkuren lewat simulasi Go, antrean, arsitektur, dan verifikasi metrik."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>Deadlock di Sistem Konkuren: Mekanisme Siklus Tunggu, Penanganan Database, dan Strategi Aplikasi di Go</h1><p class="subtitle">Mekanisme Siklus Tunggu, Penanganan Database, dan Strategi Aplikasi di Go</p><p>Lukman / lukman-ss · Software Engineering Lab 18</p><img src="lab-18-deadlock-cover-id.png" alt="Cover Lab 18 Deadlock di Sistem Konkuren oleh Lukman / lukman-ss"><h2>Lonjakan Transaksi Konkuren Memicu Kemacetan Sistemik</h2><p>Ketika volume transaksi tinggi mengakses baris data secara bersamaan, urutan akses yang tidak teratur memicu kebuntuan fatal. Munculnya galat pembatalan transaksi bukan berarti database mengalami kerusakan internal, melainkan sinyal bahwa lapisan aplikasi membiarkan pola penguncian saling silang.</p><h2>Review Kode Manual Gagal Menangkap Siklus Tunggu Konkuren</h2><p>Review manual dan unit test sekuensial tidak mampu mereproduksi deadlock karena eksekusi konkuren bergantung pada timing scheduler CPU. Menjalankan query di dalam transaksi ACID tidak otomatis melindungi sistem dari deadlock jika dua alur bisnis mengunci entitas dalam urutan berlawanan.</p><h2>Anatomi Siklus Tunggu: Deadly Embrace Dua Transaksi</h2><p>Deadlock terjadi ketika empat syarat Coffman hadir bersamaan: eksklusivitas, menahan lock lama, tanpa perebutan paksa, dan siklus tunggu melingkar. Hanya pada jalur ini kondisi saling sandera terkunci permanen, menuntut adanya intervensi eksternal seperti pembatalan paksa oleh database engine.</p><h2>Alur Deteksi Mesin Basis Data: Dari Wait-For Graph ke Abort</h2><p>Basis data tidak memeriksa deadlock secara terus-menerus demi menghemat CPU, melainkan menunggu jeda timeout tertentu sebelum menelusuri Wait-For Graph. Simulasi lab membatalkan transaksi via context timeout, tetapi belum membuktikan algoritma pemilihan korban berbasis biaya modifikasi terkecil seperti MySQL InnoDB.</p><h2>Pola Penguncian Naif yang Menimbulkan Deadlock</h2><p>Fungsi TransferNaive mengunci akun pengirim lalu akun penerima sesuai urutan parameter pemanggilan. Menambahkan jeda waktu eksekusi bukan berarti memperlambat kode secara sengaja, melainkan memodelkan latensi query nyata yang membuka celah tabrakan bagi transaksi berlawanan arah.</p><pre><code>func TransferNaive(ctx context.Context, from, to *bank.Account, amount int, delay time.Duration) error {
     if err := from.Lock(ctx); err != nil { return err }
     defer from.Unlock()
     time.Sleep(delay) // simulasi durasi transaksi internal
@@ -43,74 +7,7 @@
     from.Balance -= amount
     to.Balance += amount
     return nil
-}</code></pre>
-
-<p>Menambahkan jeda waktu eksekusi bukan berarti memperlambat kode secara sengaja, melainkan memodelkan latensi query nyata yang membuka jendela kontensi kompetisi sumber daya.</p>
-
-<h2>Kronologi Tabrakan: Goroutine A vs Goroutine B</h2>
-
-<p>Ketika transfer A-ke-B dan B-ke-A berjalan simultan, Goroutine 1 mengunci Akun A sementara Goroutine 2 mengunci Akun B. Pada fase berikutnya, Goroutine 1 meminta Akun B dan Goroutine 2 meminta Akun A. Keduanya terblokir tanpa preemption.</p>
-
-<p>Hanya pada jalur ini kebuntuan absolut terjadi, memaksa timer pembatalan mengorbankan salah satu transaksi agar transaksi yang bertahan dapat dituntaskan.</p>
-
-<h2>Matriks Diagnostik: Fenomena Penguncian di Database</h2>
-
-<p>Memahami perbedaan mendasar antara antrean lock biasa, batas tunggu (lock timeout), dan kondisi deadlock murni sangat esensial untuk diagnosa operasional sistem:</p>
-
-<table>
-  <thead>
-    <tr>
-      <th>Dimensi Masalah</th>
-      <th>Normal Lock Contention</th>
-      <th>Lock Timeout</th>
-      <th>Deadlock (Circular Wait)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>Kondisi Dependensi</strong></td>
-      <td>Antrean linear satu arah</td>
-      <td>Tunggu melebihi ambang batas</td>
-      <td>Siklus tertutup saling sandera (A-&gt;B-&gt;A)</td>
-    </tr>
-    <tr>
-      <td><strong>Penyelesaian Mesin</strong></td>
-      <td>Menunggu lock dilepas</td>
-      <td>Transaksi pemohon dibatalkan</td>
-      <td>Satu transaksi dikorbankan via rollback</td>
-    </tr>
-    <tr>
-      <td><strong>Kode Galat Umum</strong></td>
-      <td>Tidak ada galat (hanya antre)</td>
-      <td>MySQL 1205 (wait timeout)</td>
-      <td>PG 40P01 / MySQL 1213 / SQLServer 1205</td>
-    </tr>
-    <tr>
-      <td><strong>Akar Masalah</strong></td>
-      <td>Beban transaksi tinggi</td>
-      <td>Transaksi lambat / long-running</td>
-      <td>Pola urutan akuisisi lock tidak konsisten</td>
-    </tr>
-    <tr>
-      <td><strong>Solusi Arsitektural</strong></td>
-      <td>Indexing &amp; isolasi lebih rendah</td>
-      <td>Perpendek durasi transaksi</td>
-      <td>Lock Ordering konsisten &amp; Retry Pattern</td>
-    </tr>
-  </tbody>
-</table>
-
-<h2>Tiga Lapisan Pertahanan Menghadapi Deadlock</h2>
-
-<p>Arsitektur penanganan konkurensi yang matang menggabungkan tiga tingkatan mitigasi: (1) Lock Ordering untuk mengeliminasi siklus secara matematis, (2) Memperpendek transaksi dengan mengeluarkan network call dan kalkulasi berat, serta (3) Application Retry dengan backoff terkendali.</p>
-
-<p>Menerapkan retry otomatis bukan berarti mengabaikan pencegahan struktural, melainkan jaring pengaman wajib untuk skenario lonjakan kontensi ekstrem.</p>
-
-<h2>Eksekusi Test Suite dan Demo cmd/demo Lolos Bersih</h2>
-
-<p>Seluruh skenario uji di Lab 18 lulus verifikasi di bawah pengawasan Go race detector tanpa adanya balapan data (data race clean). Demonstrasi CLI mengonfirmasi transisi dari kegagalan naif menuju kestabilan eksekusi.</p>
-
-<pre><code class="language-go">=== RUN   TestDeadlockOccurrence
+}</code></pre><h2>Kronologi Tabrakan: Goroutine A vs Goroutine B</h2><p>Ketika dua transfer berjalan simultan dengan arah berlawanan, masing-masing berhasil mendapatkan kunci pertama namun gagal memperoleh kunci kedua. Hanya pada jalur ini kebuntuan absolut terjadi, memaksa timer pembatalan mengorbankan salah satu transaksi agar yang lain dapat selesai.</p><h2>Matriks Diagnostik: Fenomena Penguncian di Database</h2><p>Tabel ini memetakan perbedaan fundamental antara antrean lock normal, lock timeout, dan kondisi deadlock murni. Deadlock memiliki ciri khas dependensi siklik yang tidak dapat selesai sendiri, sehingga selalu memerlukan intervensi rollback aktif dari engine basis data.</p><table><tr><th>Dimensi Masalah</th><th>Normal Lock Contention</th><th>Lock Timeout</th><th>Deadlock (Circular Wait)</th></tr><tr><td>Kondisi Dependensi</td><td>Antrean linear satu arah</td><td>Tunggu melebihi ambang batas</td><td>Siklus tertutup saling sandera (A->B->A)</td></tr><tr><td>Penyelesaian Mesin</td><td>Menunggu lock dilepas</td><td>Transaksi pemohon dibatalkan</td><td>Satu transaksi dikorbankan via rollback</td></tr><tr><td>Kode Galat Umum</td><td>Tidak ada galat (hanya antre)</td><td>MySQL 1205 (wait timeout)</td><td>PG 40P01 / MySQL 1213 / SQLServer 1205</td></tr><tr><td>Akar Masalah</td><td>Beban transaksi tinggi</td><td>Transaksi lambat / long-running</td><td>Pola urutan akuisisi lock tidak konsisten</td></tr><tr><td>Solusi Arsitektural</td><td>Indexing & isolasi lebih rendah</td><td>Perpendek durasi transaksi</td><td>Lock Ordering konsisten & Retry Pattern</td></tr></table><h2>Tiga Lapisan Pertahanan Menghadapi Deadlock</h2><p>Penanganan deadlock yang kokoh memadukan pencegahan dan ketahanan aplikasi. Mengimplementasikan retry otomatis bukan berarti mengabaikan pencegahan, melainkan jaring pengaman wajib untuk skenario konkurensi ekstrem yang tidak terduga oleh skema ordering.</p><h2>Eksekusi Test Suite dan Demo cmd/demo Lolos Bersih</h2><p>Verifikasi terminal membuktikan seluruh skenario uji lolos tanpa race condition di bawah pengawasan Go race detector. Demonstrasi CLI mengonfirmasi bahwa pendekatan naif menghasilkan deadlock victim, sedangkan pengurutan kunci dan mekanisme retry menyelesaikan mutasi dengan konsisten.</p><pre><code>=== RUN   TestDeadlockOccurrence
 --- PASS: TestDeadlockOccurrence (0.02s) [victim identified]
 === RUN   TestLockOrderingPreventsDeadlock
 --- PASS: TestLockOrderingPreventsDeadlock (0.01s) [balances consistent]
@@ -121,21 +18,7 @@
 PASS: ok  labs/18-deadlock/tests  1.715s (race detector: clean)
 1. Simulating Naive Concurrent Transfers -&gt; deadlock victim detected
 2. Simulating Lock Ordered Transfers    -&gt; ACC-1=1100, ACC-2=900 (success)
-3. Simulating Retry Mechanism           -&gt; Final Balances: ACC-1=1100, ACC-2=900</code></pre>
-
-<h2>Batasan Bukti Lab: Yang Dibuktikan vs Belum</h2>
-
-<p>Lab ini membuktikan mekanika dasar siklus tunggu melingkar, keampuhan pengurutan ID kunci, dan pemulihan saldo via retry loop pada level memori aplikasi. Pengujian ini belum membuktikan perilaku internal mesin database riil seperti gap locking pada indeks InnoDB atau ketahanan sistem pada skala 50.000 TPS.</p>
-
-<h2>Kompromi Rekayasa: Lock Ordering vs Application Retry</h2>
-
-<p>Penerapan lock ordering menjamin eliminasi siklus tunggu secara mutlak, namun menuntut kepatuhan konvensi query yang seragam di seluruh tim pengembang. Menambahkan retry logic tidak otomatis membuat throughput tinggi jika baris data yang sama terus mengalami kontensi saturasi pekat.</p>
-
-<h2>Model Sinkronisasi Akun Berbasis Channel dan Timeout</h2>
-
-<p>Struktur entitas rekening memanfaatkan buffered channel kapasitas 1 sebagai token mutex yang peka terhadap pembatalan context.</p>
-
-<pre><code class="language-go">type Account struct {
+3. Simulating Retry Mechanism           -&gt; Final Balances: ACC-1=1100, ACC-2=900</code></pre><h2>Batasan Bukti Lab: Yang Dibuktikan vs Belum</h2><p>Lab ini membuktikan mekanika dasar deadlock dan validitas teknik pengurutan kunci menggunakan channel in-memory. Pengujian ini belum membuktikan fenomena kompleks seperti gap locking pada indeks database riil atau perilaku sistem pada beban puluhan ribu TPS.</p><h2>Kompromi Rekayasa: Lock Ordering vs Application Retry</h2><p>Penerapan lock ordering memberikan kepastian absolut namun menuntut disiplin penulisan query yang seragam di seluruh repository. Menambahkan retry logic tidak otomatis membuat sistem berkinerja tinggi jika sumber daya yang diperebutkan mengalami saturasi ekstrem.</p><h2>Model Sinkronisasi Akun Berbasis Channel dan Timeout</h2><p>Model Account memanfaatkan buffered channel 1 slot untuk mengendalikan hak akses mutasi saldo. Simulasi ini tidak sama dengan locking row-level di PostgreSQL yang memiliki status lock modes bertingkat, namun secara elegan merefleksikan pembatalan transaksi akibat timeout eksternal.</p><pre><code>type Account struct {
     ID      string
     Balance int
     ch      chan struct{} // channel buffer 1 sebagai token lock
@@ -145,21 +28,7 @@ func (a *Account) Lock(ctx context.Context) error {
     case &lt;-a.ch: return nil
     case &lt;-ctx.Done(): return ErrDeadlock // representasi deadlock abort
     }
-}</code></pre>
-
-<p>Simulasi ini tidak sama dengan locking row-level di PostgreSQL yang mendukung hirarki lock mode bertingkat, namun secara presisi memodelkan pembatalan transaksi akibat deteksi timeout eksternal.</p>
-
-<h2>Transformasi: Dari Tabrakan Acak ke Eksekusi Teratur</h2>
-
-<p>Sebelum standarisasi urutan diterapkan, transaksi bolak-balik saling mengunci dan memicu pembatalan paksa. Setelah ID diurutkan secara leksikografis, kedua transaksi mengantre secara tertib pada entitas pertama yang sama.</p>
-
-<p>Mengantrekan transaksi pada kunci pertama bukan berarti memperlambat sistem secara keseluruhan; langkah ini justru menghindarkan runtime dari beban komputasi rollback dan retry berulang.</p>
-
-<h2>Pencegahan Deterministik: Pengurutan Kunci Berdasarkan ID</h2>
-
-<p>Dengan mengurutkan identifier sumber daya secara leksikografis sebelum melakukan penguncian, dependensi melingkar mustahil terbentuk.</p>
-
-<pre><code class="language-go">func TransferOrdered(ctx context.Context, acc1, acc2 *bank.Account, amount int, delay time.Duration) error {
+}</code></pre><h2>Transformasi: Dari Tabrakan Acak ke Eksekusi Teratur</h2><p>Sebelum standarisasi urutan, dua transaksi yang bersilangan akan saling menunggu dan berujung pada pembatalan sepihak. Mengantrekan transaksi pada kunci pertama bukan berarti memperlambat sistem, melainkan menyelamatkan CPU dari pemborosan rollback dan retry.</p><h2>Pencegahan Deterministik: Pengurutan Kunci Berdasarkan ID</h2><p>Dengan membandingkan identifier string secara leksikografis, entitas dengan ID lebih kecil selalu dikunci terlebih dahulu. Logika pencegahan ini cakupannya mengikuti test konkurensi lab, menjamin bahwa circular wait mustahil terbentuk karena seluruh goroutine mengantre pada kunci pertama yang sama.</p><pre><code>func TransferOrdered(ctx context.Context, acc1, acc2 *bank.Account, amount int, delay time.Duration) error {
     first, second := acc1, acc2
     if acc1.ID &gt; acc2.ID { first, second = acc2, acc1 }
     if err := first.Lock(ctx); err != nil { return err }
@@ -169,15 +38,7 @@ func (a *Account) Lock(ctx context.Context) error {
     defer second.Unlock()
     acc1.Balance -= amount; acc2.Balance += amount
     return nil
-}</code></pre>
-
-<p>Cakupan logika pencegahan ini mengikuti batasan test konkurensi lab, membuktikan bahwa keteraturan akses sumber daya menjamin kelancaran mutasi multi-entitas.</p>
-
-<h2>Verifikasi Test: Membuktikan Terjadinya Deadlock Victim</h2>
-
-<p>Unit test membuktikan bahwa dua goroutine yang mentransfer saldo secara berlawanan dengan pendekatan naif selalu menghasilkan minimal satu transaksi yang dibatalkan sebagai korban.</p>
-
-<pre><code class="language-go">func TestDeadlockOccurrence(t *testing.T) {
+}</code></pre><h2>Verifikasi Test: Membuktikan Terjadinya Deadlock Victim</h2><p>Unit test membuktikan secara deterministik bahwa transfer silang tanpa pengurutan selalu mengorbankan minimal satu transaksi. Menjalankan dua goroutine paralel tidak otomatis memicu deadlock tanpa delay internal yang memadai untuk membuka jendela kontensi.</p><pre><code>func TestDeadlockOccurrence(t *testing.T) {
     // Goroutine 1 mentransfer A -&gt; B (delay 10ms, timeout 20ms)
     go func() { errs[0] = transfer.TransferNaive(ctx1, accA, accB, 10, 10*time.Millisecond) }()
     // Goroutine 2 bersamaan mentransfer B -&gt; A (delay 10ms, timeout 20ms)
@@ -185,15 +46,7 @@ func (a *Account) Lock(ctx context.Context) error {
     wg.Wait()
     hasDeadlock := (errs[0] == bank.ErrDeadlock) || (errs[1] == bank.ErrDeadlock)
     if !hasDeadlock { t.Fatalf("expected at least one deadlock victim") }
-}</code></pre>
-
-<p>Menjalankan goroutine paralel tidak otomatis memicu deadlock tanpa jeda eksekusi yang cukup untuk membuka jendela kontensi waktu.</p>
-
-<h2>Verifikasi Test: Lock Ordering Menuntaskan Semua Transaksi</h2>
-
-<p>Pengujian <code>TestLockOrderingPreventsDeadlock</code> membuktikan kedua mutasi bolak-balik selesai tanpa error saat dialirkan melalui <code>TransferOrdered</code>.</p>
-
-<pre><code class="language-go">func TestLockOrderingPreventsDeadlock(t *testing.T) {
+}</code></pre><h2>Verifikasi Test: Lock Ordering Menuntaskan Semua Transaksi</h2><p>Pengujian membuktikan bahwa kedua transaksi bolak-balik berhasil dieksekusi tanpa error sama sekali saat menggunakan TransferOrdered. Hanya pada jalur ini konsistensi saldo terjaga utuh (100 dan 100) karena transaksi saling mengantre secara tertib alih-alih saling mematikan.</p><pre><code>func TestLockOrderingPreventsDeadlock(t *testing.T) {
     go func() { errs[0] = transfer.TransferOrdered(ctx1, accA, accB, 10, 5*time.Millisecond) }()
     go func() { errs[1] = transfer.TransferOrdered(ctx2, accB, accA, 10, 5*time.Millisecond) }()
     wg.Wait()
@@ -201,15 +54,7 @@ func (a *Account) Lock(ctx context.Context) error {
     if accA.Balance != 100 || accB.Balance != 100 {
         t.Fatalf("unexpected balance: A=%d, B=%d", accA.Balance, accB.Balance)
     }
-}</code></pre>
-
-<p>Hanya pada jalur ini integritas saldo akhir tetap terjaga konsisten (masing-masing 100) karena transaksi mengalami serialisasi anggun tanpa pembatalan paksa.</p>
-
-<h2>Pemulihan Transparan: Penanganan Abort dengan Retry</h2>
-
-<p>Fungsi <code>TransferWithRetry</code> mencegat sinyal abort dan mencoba kembali eksekusi secara transparan hingga batas maksimal tertentu.</p>
-
-<pre><code class="language-go">func TransferWithRetry(ctx context.Context, from, to *bank.Account, amount int, delay time.Duration, maxRetries int) error {
+}</code></pre><h2>Pemulihan Transparan: Penanganan Abort dengan Retry</h2><p>Fungsi TransferWithRetry menangkap galat pembatalan deadlock dan mencoba kembali transaksi secara transparan hingga batas maksimal. Menggunakan fixed backoff 2ms bukan berarti pola ini ideal untuk produksi; implementasi ini adalah penyederhanaan terencana yang membutuhkan jitter pada skala besar.</p><pre><code>func TransferWithRetry(ctx context.Context, from, to *bank.Account, amount int, delay time.Duration, maxRetries int) error {
     for i := 0; i &lt; maxRetries; i++ {
         attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
         err := TransferNaive(attemptCtx, from, to, amount, delay)
@@ -219,64 +64,14 @@ func (a *Account) Lock(ctx context.Context) error {
         time.Sleep(2 * time.Millisecond) // backoff sebelum mencoba kembali
     }
     return bank.ErrDeadlock
-}</code></pre>
-
-<p>Penerapan jeda waktu statis 2 milidetik bukan berarti pola ini direkomendasikan langsung untuk produksi berskala besar; implementasi ini adalah penyederhanaan terencana yang memerlukan randomized jitter di sistem produksi.</p>
-
-<h2>Dampak Durasi: Transaksi Panjang Memperbesar Risiko</h2>
-
-<p>Pengujian empiris memvalidasi prinsip dasar kontensi: transaksi yang menahan lock selama 5 milidetik memicu frekuensi deadlock yang secara statistik lebih besar atau sama dibandingkan transaksi instan.</p>
-
-<pre><code class="language-go">func TestTransactionDurationImpact(t *testing.T) {
+}</code></pre><h2>Dampak Durasi: Transaksi Panjang Memperbesar Risiko</h2><p>Pengujian empiris membuktikan bahwa transaksi yang menahan lock selama 5 milidetik menghasilkan frekuensi deadlock yang lebih tinggi atau sama dibandingkan transaksi tanpa delay. Pengamatan ini cakupannya mengikuti test lab, memvalidasi prinsip bahwa memperpanjang waktu penahanan lock memperbesar kemungkinan tabrakan.</p><pre><code>func TestTransactionDurationImpact(t *testing.T) {
     longDeadlocks := countDeadlocks(5*time.Millisecond, 10)
     shortDeadlocks := countDeadlocks(0, 10)
     if longDeadlocks &lt; shortDeadlocks {
         t.Fatalf("expected long duration to have &gt;= deadlocks: long=%d, short=%d",
                  longDeadlocks, shortDeadlocks)
     }
-}</code></pre>
-
-<p>Pengamatan ini cakupannya mengikuti pengujian lab, membuktikan korelasi langsung antara durasi penahanan kunci dan luas permukaan kontensi sistem.</p>
-
-<h2>Checklist Proteksi Deadlock di Lingkungan Produksi</h2>
-
-<p>Sebelum merilis transaksi multi-resource ke basis data produksi, pastikan seluruh parameter rekayasa terpenuhi:</p>
-
-<ul>
-  <li>Terapkan urutan akuisisi kunci (Lock Ordering) seragam di seluruh repositori kode.</li>
-  <li>Lakukan <code>ORDER BY primary_key ASC</code> sebelum query update massal atau <code>SELECT FOR UPDATE</code>.</li>
-  <li>Pindahkan pemanggilan HTTP API eksternal dan komputasi lambat ke luar blok transaksi database.</li>
-  <li>Tangkap kode galat pembatalan vendor spesifik (Postgres <code>40P01</code>, MySQL <code>1213</code>, SQL Server <code>1205</code>).</li>
-  <li>Pasang lapisan retry dengan exponential backoff dan randomized jitter untuk mencegah badai kontensi tersinkronisasi.</li>
-  <li>Pastikan mutasi yang diulang memiliki jaminan idempotensi mutlak untuk mencegah mutasi ganda.</li>
-</ul>
-
-<h2>Anti-Pattern Umum dalam Penanganan Transaksi</h2>
-
-<p>Anti-pattern yang paling sering dijumpai di produksi adalah menahan koneksi transaksi aktif sambil menunggu respons I/O jaringan pihak ketiga. Selain itu, melakukan batch update pada baris data secara acak dari array memori tanpa pengurutan awal kerap memicu tabrakan antrean.</p>
-
-<p>Memasang retry wrapper tanpa jaminan idempotensi bukan berarti sistem menjadi andal, melainkan berisiko mencatatkan perubahan saldo ganda yang merusak pembukuan.</p>
-
-<h2>Reproduksi Mandiri di Mesin Lokal Menggunakan Go</h2>
-
-<p>Seluruh modul simulasi dibangun tanpa modul eksternal pihak ketiga (zero dependencies) dan dapat dijalankan langsung melalui perintah terminal standar:</p>
-
-<pre><code class="language-sh">cd labs/18-deadlock
+}</code></pre><h2>Checklist Proteksi Deadlock di Lingkungan Produksi</h2><p>Checklist ini merangkum langkah mitigasi wajib: urutan penguncian global yang seragam, pengurutan kunci pada update massal, pembebasan transaksi dari panggilan eksternal, penangkapan kode galat vendor spesifik, retry berbasis jitter, serta jaminan idempotensi.</p><h2>Anti-Pattern Umum dalam Penanganan Transaksi</h2><p>Menahan koneksi transaksi database sambil menunggu respons API pihak ketiga adalah penyebab paling umum lonjakan deadlock di produksi. Memasang wrapper retry tanpa memastikan idempotensi mutasi bukan berarti sistem menjadi andal, melainkan berisiko mencatatkan perubahan saldo ganda.</p><h2>Reproduksi Mandiri di Mesin Lokal Menggunakan Go</h2><p>Seluruh simulasi dibangun murni menggunakan pustaka standar Go tanpa modul pihak ketiga. Eksperimen lokal ini memvalidasi mekanika deadlock di memori, namun production masih perlu mengonfigurasi parameter database nyata seperti deadlock_timeout dan log_lock_waits.</p><pre><code>cd labs/18-deadlock
 go test -v ./...    # verifikasi 4 pengujian deadlock, ordering, retry &amp; durasi
 go test -race ./... # pembuktian sinkronisasi konkuren bebas data race
-go run ./cmd/demo   # eksekusi demonstrasi CLI interaktif skenario 1, 2, dan 3</code></pre>
-
-<p>Meskipun simulasi lokal memvalidasi mekanika algoritma di memori, lingkungan production masih perlu mengonfigurasi parameter database nyata seperti <code>deadlock_timeout</code> dan <code>log_lock_waits</code>.</p>
-
-<h2>Prinsip Inti: Deadlock adalah Keniscayaan Konkurensi</h2>
-
-<p>Deadlock tidak boleh dipandang sebagai kecacatan sistem atau bug memalukan, melainkan mekanisme pertahanan aktif dari database engine untuk mencegah korupsi data. Merancang arsitektur transaksional tidak otomatis membebaskan kita dari kontensi; sistem yang tangguh mencegah siklus sedini mungkin dan memulihkan korban secara transparan.</p>
-
-<h2>Referensi &amp; Sumber Kode</h2>
-
-<p>Materi, visualisasi, dan implementasi kode pada artikel ini merujuk langsung pada repositori riset perangkat lunak publik:</p>
-
-<blockquote>
-  <p><strong>Sumber Modul:</strong> <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/18-deadlock">Software Engineering Lab 18 — Deadlock in Concurrent Systems</a>, snapshot commit <code>e76d13f</code>.<br>
-  Penulis: <strong>Lukman / lukman-ss</strong></p>
-</blockquote>
+go run ./cmd/demo   # eksekusi demonstrasi CLI interaktif skenario 1, 2, dan 3</code></pre><h2>Prinsip Inti: Deadlock adalah Keniscayaan Konkurensi</h2><p>Deadlock tidak boleh dipandang sebagai aib atau bug fatal, melainkan mekanisme perlindungan integritas data dari basis data. Merancang sistem transaksional tidak otomatis membebaskan kita dari kontensi; sistem yang tangguh mencegah siklus sedini mungkin dan memulihkan korban dengan anggun.</p><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/18-deadlock">Software Engineering Lab 18</a>, README.md, implementasi, dan pengujian. Snapshot commit e76d13f. Cuplikan kode digunakan dalam konteks package asal.</p></article></body></html>
