@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Limiting & Backpressure: Mengontrol Laju Masuk dan Mempropagasi Tekanan Beban di Sistem Terdistribusi</title>
+<style>
+  body {
+    font-family: Georgia, serif;
+    background-color: #f4f1e8;
+    color: #11283a;
+    line-height: 1.7;
+    margin: 0;
+    padding: 24px;
+  }
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    padding: 40px 48px;
+    border: 1px solid #d5cfc1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  h1, h2, h3, h4 {
+    font-family: Arial, sans-serif;
+    color: #0b1b2d;
+    line-height: 1.3;
+    margin-top: 1.8em;
+    margin-bottom: 0.6em;
+  }
+  h1 {
+    font-size: 2.1rem;
+    margin-top: 0.4em;
+    border-bottom: 2px solid #0b1b2d;
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 1.45rem;
+    border-bottom: 1px solid #d5cfc1;
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 1.15rem;
+  }
+  p, li {
+    font-size: 1.02rem;
+  }
+  img.cover-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px 0 32px 0;
+    border: 1px solid #d5cfc1;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 0.95rem;
+  }
+  table, th, td {
+    border: 1px solid #0b1b2d;
+  }
+  th {
+    background-color: #0b1b2d;
+    color: #ffffff;
+    padding: 10px 12px;
+    text-align: left;
+    font-family: Arial, sans-serif;
+  }
+  td {
+    padding: 10px 12px;
+    vertical-align: top;
+  }
+  tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+  pre {
+    background-color: #0b1b2d;
+    color: #e2e8f0;
+    padding: 16px 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  code {
+    font-family: "Courier New", Courier, monospace;
+    background-color: #e2e8f0;
+    color: #0b1b2d;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+  }
+  blockquote {
+    border-left: 4px solid #087f76;
+    margin: 24px 0;
+    padding: 12px 20px;
+    background-color: #f0fdf4;
+    color: #0b1b2d;
+    font-style: italic;
+  }
+  .author-box {
+    margin: 24px 0 32px 0;
+    color: #52606b;
+    font-style: italic;
+    font-size: 0.95rem;
+  }
+  a {
+    color: #087f76;
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Rate Limiting & Backpressure: Mengontrol Laju Masuk dan Mempropagasi Tekanan Beban di Sistem Terdistribusi</h1>
+
+<div class="author-box">
+  Penulis: <strong>Lukman / lukman-ss</strong> | Software Engineering Lab — Lab 25<br>
+  Target Lab: <code>labs/25-rate-limiting-and-backpressure</code> | Commit: <code>45cc429</code>
+</div>
+
+<img class="cover-img" src="../image-cover/lab-25-rate-limiting-and-backpressure-cover-id.png" alt="Cover Visual Lab 25 Rate Limiting & Backpressure">
+
+<blockquote>
+  "Sistem tanpa backpressure adalah sistem yang menunda kebangkrutan memorinya sendiri. Mengendalikan laju di gerbang masuk dan mempropagasi sinyal penolakan ke belakang adalah syarat mutlak stabilitas sistem terdistribusi."
+</blockquote>
+
+<h2>1. Pendahuluan & Dinamika Antrean Little's Law</h2>
+<p>Sistem terdistribusi modern menghadapi ketegangan konstan: request masuk dapat melompat seketika melampaui kemampuan proses komponen hilir (downstream). Tanpa mekanisme kendali, ketimpangan ini memicu akumulasi antrean tak berbatas di memori, latensi membengkak drastis, timeout berantai, dan akhirnya sistem lumpuh total karena <em>Out of Memory</em> (OOM).</p>
+
+<p>Hukum Little (<em>Little's Law</em>) merumuskan fenomena ini secara matematis: <code>L = λ × W</code>, di mana <code>L</code> adalah jumlah request in-flight di dalam sistem, <code>λ</code> adalah laju kedatangan (<em>arrival rate</em>), dan <code>W</code> adalah durasi rata-rata yang dihabiskan request dalam antrean dan eksekusi. Ketika laju kedatangan melebihi laju pemrosesan (<em>drain rate</em>), backlog bertumbuh mengikuti formula <code>(arrival_rate - processing_rate) × waktu</code>.</p>
+
+<p>Sebagai contoh riil dari kalkulasi Lab 25: jika sistem menerima 5.000.000 request dengan laju pemrosesan tetap 2.000 request per detik, waktu yang dibutuhkan untuk menguras antrean mencapai <code>5.000.000 / 2.000 = 2.500 detik</code>, atau setara dengan <strong>41 menit 40 detik</strong>. Selama durasi tersebut, proses menimbun memori dalam jumlah masif. Layanan mungkin berjalan lancar pada kondisi sepi, tetapi bukan berarti arsitekturnya aman tanpa rate limiter dan backpressure.</p>
+
+<h2>2. Tiga Pilar Resiliensi Overload</h2>
+<p>Arsitektur penanganan beban berlebih bertumpu pada tiga mekanisme komplementer:</p>
+<ol>
+  <li><strong>Rate Limiting (Token Bucket & Leaky Bucket):</strong> Beroperasi di batas gerbang masuk (<em>system boundary</em> seperti API Gateway). Mekanisme ini membatasi kuota request per tenant secara kontraktual, mengizinkan burst terukur atau menghaluskan trafik sebelum menyentuh resource internal.</li>
+  <li><strong>Backpressure (Bounded Queue):</strong> Beroperasi di dalam pipa pemrosesan internal. Antrean dibatasi dengan kapasitas tetap (<em>bounded buffer</em>). Ketika kapasitas penuh, pekerjaan baru ditolak seketika (<em>fast rejection</em> via <code>ErrQueueFull</code>) alih-alih ditumpuk di RAM.</li>
+  <li><strong>Full Jitter Exponential Backoff:</strong> Beroperasi di sisi klien. Ketika klien menerima respons penolakan, jeda waktu percobaan ulang diacak seragam dalam rentang eksponensial untuk membubarkan gelombang <em>thundering herd retry storm</em>.</li>
+</ol>
+
+<h2>3. Komparasi Algoritma: Token Bucket vs. Leaky Bucket</h2>
+<p>Meskipun secara matematis keduanya setara sebagai alat pengukur (<em>meter</em>), sudut pandang pengendalian keduanya berbeda secara praktis:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Dimensi Karakteristik</th>
+      <th>Token Bucket (Toleransi Burst)</th>
+      <th>Leaky Bucket (Traffic Smoothing)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Perilaku Utama</strong></td>
+      <td>Mengizinkan burst sesaat hingga kapasitas B, membatasi rata-rata jangka panjang ke R.</td>
+      <td>Menghaluskan output trafik ke laju konstan R; membuang kelebihan air.</td>
+    </tr>
+    <tr>
+      <td><strong>State yang Disimpan</strong></td>
+      <td>Jumlah token yang tersedia untuk dikonsumsi saat ini.</td>
+      <td>Volume air saat ini yang sedang mengantre untuk dibocorkan.</td>
+    </tr>
+    <tr>
+      <td><strong>Kondisi Penolakan</strong></td>
+      <td>Token yang tersedia lebih kecil daripada <code>n</code> yang diminta (<code>tokens &lt; n</code>).</td>
+      <td>Penambahan volume air melebihi kapasitas tangki (<code>water + 1 &gt; capacity</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Skenario Ideal</strong></td>
+      <td>API Gateway interaktif, user traffic dengan pola lonjakan wajar.</td>
+      <td>Egress rate limiting ke API pihak ketiga, modul NGINX <code>limit_req</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Kode Respons Standar</strong></td>
+      <td>HTTP 429 Too Many Requests (RFC 6585).</td>
+      <td>HTTP 429 atau HTTP 503 Service Unavailable.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. Implementasi Token Bucket: Pengisian Waktu Berjalan (Lazy Monotonic)</h2>
+<p>Alih-alih menggunakan goroutine background dan ticker periodik yang memboroskan CPU, implementasi Lab 25 menggunakan kalkulasi waktu berjalan pasif (<em>lazy monotonic refill</em>) pada setiap pemanggilan method:</p>
+
+<pre><code>func (tb *TokenBucket) AllowN(n float64) bool {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(tb.lastRefill).Seconds()
+	tb.tokens = tb.tokens + elapsed*tb.refillRate
+	if tb.tokens > tb.capacity {
+		tb.tokens = tb.capacity
+	}
+	tb.lastRefill = now
+
+	if tb.tokens >= n {
+		tb.tokens -= n
+		return true
+	}
+	return false
+}</code></pre>
+
+<p>Kalkulasi berbasis <code>time.Now()</code> membaca monotonic clock Go untuk melindungi perhitungan dari pergeseran jam sistem (NTP adjustment). Penambahan token dibatasi maksimum sebesar <code>capacity</code> sehingga waktu idle yang panjang tidak menghasilkan akumulasi burst tanpa batas.</p>
+
+<h2>5. Menghitung Header Retry-After Sesuai Standar RFC 6585</h2>
+<p>Ketika permintaan ditolak, server wajib memberi tahu klien kapan kuota akan tersedia kembali. Method <code>RetryAfterSeconds</code> membagi kekurangan token dengan laju pengisian dan membulatkannya ke atas:</p>
+
+<pre><code>func (tb *TokenBucket) RetryAfterSeconds(n float64) int {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(tb.lastRefill).Seconds()
+	tokens := tb.tokens + elapsed*tb.refillRate
+	if tokens > tb.capacity {
+		tokens = tb.capacity
+	}
+
+	if tokens >= n {
+		return 0
+	}
+	needed := n - tokens
+	secs := needed / tb.refillRate
+	if secs <= 0 {
+		return 1
+	}
+	rounded := int(secs)
+	if float64(rounded) < secs {
+		rounded++
+	}
+	return rounded
+}</code></pre>
+
+<p>Hanya pada jalur ini klien menerima durasi tunggu yang akurat. Jika kebutuhan token tersisa 0.3 detik, pembulatan menghasilkan 1 detik, memastikan saat klien kembali mencoba, token sudah benar-benar terisi.</p>
+
+<h2>6. Isolasi Kunci Per-Tenant & Bahaya Carrier-Grade NAT (CGNAT)</h2>
+<p>Banyak sistem naif menerapkan rate limiting berdasarkan alamat IP klien (<code>RemoteAddr</code>). Namun, di bawah Carrier-Grade NAT (RFC 6598), ribuan pengguna perangkat seluler atau ISP perumahan berbagi satu alamat IP publik yang sama. Pembatasan berbasis IP mengakibatkan <em>collateral damage</em> di mana satu pengguna bising melumpuhkan akses seluruh pengguna lain di IP tersebut.</p>
+
+<p>Solusi yang diterapkan pada <code>internal/ratelimit/registry.go</code> adalah isolasi bucket per tenant key (API key atau Tenant ID) menggunakan pola <em>double-checked locking</em>:</p>
+
+<pre><code>func (r *Registry) Get(tenantKey string) *TokenBucket {
+	r.mu.RLock()
+	tb, exists := r.buckets[tenantKey]
+	r.mu.RUnlock()
+	if exists {
+		return tb
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if tb, exists = r.buckets[tenantKey]; exists {
+		return tb
+	}
+	tb = NewTokenBucket(r.capacity, r.refillRate)
+	r.buckets[tenantKey] = tb
+	return tb
+}</code></pre>
+
+<h2>7. Bounded Queue: Fast Rejection via Select-Default</h2>
+<p>Backpressure pada Go diimplementasikan melalui channel berkapasitas tetap dengan idiom <code>select-default</code>:</p>
+
+<pre><code>func (bq *BoundedQueue) TrySubmit(job Job) error {
+	bq.stopMu.RLock()
+	defer bq.stopMu.RUnlock()
+
+	if bq.stopped {
+		return ErrQueueStopped
+	}
+
+	select {
+	case <-bq.ctx.Done():
+		return ErrQueueStopped
+	case bq.queue <- job:
+		bq.accepted.Add(1)
+		return nil
+	default:
+		bq.rejected.Add(1)
+		return ErrQueueFull
+	}
+}</code></pre>
+
+<p>Ketika kanal penuh, blok <code>default</code> dieksekusi tanpa alokasi memori tambahan dan tanpa menahan goroutine pemanggil. Penolakan seketika ini membebaskan thread server untuk melayani request lain atau mengembalikan status 503/429 ke edge.</p>
+
+<h2>8. Matematika AWS Full Jitter: Eliminasi Thundering Herd</h2>
+<p>Klien yang mengalami kegagalan sering kali melakukan retry dengan interval eksponensial kaku (misal 100ms, 200ms, 400ms). Ketika 1.000 klien gagal serempak akibat gangguan sesaat, seluruh klien akan mengirimkan retry tepat pada detik yang sama, menciptakan gelombang beban sinkron yang menghancurkan server hilir yang baru mulai pulih.</p>
+
+<p>Algoritma Full Jitter dari Marc Brooker (AWS Architecture) memecahkan masalah ini dengan merandomisasi jeda tidur secara seragam dalam rentang eksponensial:</p>
+
+<pre><code>// Formula Full Jitter AWS:
+// sleep = random_between(0, min(cap, base * 2^attempt))
+expBackoff := baseFloat * math.Pow(2, float64(attempt))
+temp := math.Min(capFloat, expBackoff)
+sleep := rand.Float64() * temp</code></pre>
+
+<p>AWS membuktikan bahwa Full Jitter menghasilkan waktu penyelesaian total terendah dan memotong beban persaingan server lebih dari 50% dibanding pendekatan deterministik tanpa jitter.</p>
+
+<h2>9. Middleware HTTP RFC 6585</h2>
+<p>Komponen <code>internal/httputil/middleware.go</code> mengintegrasikan rate limiting ke pipeline HTTP Go standard library. Middleware mengekstrak header <code>X-API-Key</code>, menguji token bucket, dan mengembalikan status <code>429 Too Many Requests</code> lengkap dengan header <code>Retry-After</code> dan payload JSON saat kuota habis.</p>
+
+<pre><code>w.Header().Set("Content-Type", "application/json")
+w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+w.WriteHeader(http.StatusTooManyRequests) // 429
+_ = json.NewEncoder(w).Encode(RateLimitResponse{
+    Error:      "rate_limit_exceeded",
+    RetryAfter: retryAfter,
+})</code></pre>
+
+<h2>10. Studi Kasus Industri: Stripe & Google SRE</h2>
+<p>Di lingkungan produksi nyata, pertahanan dibangun berlapis:</p>
+<ul>
+  <li><strong>Stripe 4-Tier Limiter:</strong> Stripe menerapkan empat limiter berurutan: <em>Request Rate Limiter</em> (kuota per user), <em>Concurrent Requests Limiter</em> (batas in-flight request), <em>Fleet Usage Load Shedder</em> (membuang trafik prioritas rendah saat utilisasi CPU tinggi), dan <em>Worker Utilization Load Shedder</em> (membuang uji coba test-mode, lalu GET, dan memprioritaskan mutasi POST kritis).</li>
+  <li><strong>Google SRE Criticality & Retry Budget:</strong> Google membagi trafik RPC ke dalam 4 level kritikalitas (<code>CRITICAL_PLUS</code>, <code>CRITICAL</code>, <code>SHEDDABLE_PLUS</code>, <code>SHEDDABLE</code>) dan menerapkan <em>Retry Budget</em> ketat: maksimal 3 attempt per request dan rasio retry klien dibatasi di bawah 10% dari total trafik.</li>
+</ul>
+
+<h2>11. Verifikasi Eksekusi & Bukti Pengujian</h2>
+<p>Seluruh modul telah diverifikasi secara deterministik menggunakan pengujian otomatis Go:</p>
+
+<pre><code>=== RUN   TestTokenBucket_BurstAndRefill
+--- PASS: TestTokenBucket_BurstAndRefill (0.05s)
+=== RUN   TestTokenBucket_ConcurrencyRace
+--- PASS: TestTokenBucket_ConcurrencyRace (0.01s)
+=== RUN   TestLeakyBucket_LeakRate
+--- PASS: TestLeakyBucket_LeakRate (0.02s)
+=== RUN   TestRegistry_TenantIsolation
+--- PASS: TestRegistry_TenantIsolation (0.00s)
+=== RUN   TestBoundedQueue_RejectionUnderLoad
+--- PASS: TestBoundedQueue_RejectionUnderLoad (0.08s)
+=== RUN   TestComputeBackoff_Bounds
+--- PASS: TestComputeBackoff_Bounds (0.00s)
+=== RUN   TestRateLimitMiddleware_RFC6585
+--- PASS: TestRateLimitMiddleware_RFC6585 (0.00s)
+PASS: ok labs/25-rate-limiting-and-backpressure (15/15 tests PASS, race detector: clean)</code></pre>
+
+<p>Eksekusi demo pada <code>cmd/demo/main.go</code> membuktikan 3 request pertama diizinkan burst lalu ditolak, buffer antrean menolak job ke-4 dan ke-6 saat penuh, serta jeda Full Jitter tersebar secara statistik.</p>
+
+<h2>12. Batasan Bukti Lab & Langkah Produksi</h2>
+<p>Sebagai simulator rekayasa perangkat lunak, terdapat batasan yang harus dipahami secara transparan:</p>
+<ol>
+  <li><strong>Single-Process In-Memory:</strong> State token bucket disimpan dalam memori RAM lokal satu proses. Di lingkungan multi-pod Kubernetes, state harus didelegasikan ke Redis cluster menggunakan script Lua atau atomic hashes untuk koordinasi terdistribusi.</li>
+  <li><strong>Konstanta AWS SDK:</strong> Nilai default base delay 100ms dan cap 1000ms adalah angka referensi AWS yang wajib dikalibrasikan ulang terhadap profil latensi dan SLA downstream spesifik Anda.</li>
+  <li><strong>Observabilitas:</strong> Pantau <em>Queue Age</em> (lama waktu request mengantre di buffer), bukan hanya <em>Queue Length</em>, untuk mendeteksi pembengkakan latensi sebelum terjadi degradasi parah.</li>
+</ol>
+
+<h2>13. Kesimpulan</h2>
+<p>Rate limiting dan backpressure adalah dua sisi mata uang yang sama dalam rekayasa sistem terdistribusi. Polisikan pintu masuk dengan token bucket berbasis per-tenant key, potong penumpukan internal dengan bounded queue fast rejection, dan jinakkan percobaan ulang klien menggunakan Full Jitter. Dengan arsitektur berlapis ini, sistem bertransformasi dari rentan tumbang menjadi mampu bertahan dengan degradasi terukur.</p>
+
+<hr>
+<p>Kode sumber lengkap, test suite, dan demo mandiri tersedia di repositori: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/25-rate-limiting-and-backpressure">github.com/lukman-ss/software-engineering-lab/tree/main/labs/25-rate-limiting-and-backpressure</a>.</p>
+
+</div>
+</body>
+</html>
