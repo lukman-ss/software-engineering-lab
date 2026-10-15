@@ -1,207 +1,130 @@
 ---
-title: "Zero-Downtime Deployment: Graceful Shutdown, Traffic Draining & Expand-Contract DB"
+title: "Zero‑Downtime Deployment: Graceful Shutdown, Traffic Draining, & Expand‑Contract DB"
 published: false
-description: "Implement zero-downtime deployments in Go: health probes, preStop hooks, connection draining, graceful worker termination, and expand-contract database migrations."
-tags: go, microservices, architecture, testing
+description: "Explore Zero‑Downtime Deployment in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
-# Zero-Downtime Deployment: Graceful Shutdown, Traffic Draining & Expand-Contract DB
+# Zero‑Downtime Deployment: Graceful Shutdown, Traffic Draining, & Expand‑Contract DB
 
-## 1. Problem: What Happens Without Draining
+A production system must remain resilient under load. Lab 20 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-Shutting down an instance without coordination drops in-flight HTTP requests, aborts background jobs mid-execution, and breaks schema compatibility when databases mutate. Users receive 502/504 errors; jobs leave partial state; new application versions cannot read old data.
+> In‑flight traffic dan background work harus selesai sebelum pod dimatikan.
 
-## 2. Mental Model: Start New Before Stopping Old
+## Deploy tanpa draining memutus request aktif, jobs terhenti, dan schema berubah.
 
-Zero-downtime deployment relies on coexistence: version two (v2) and version one (v1) run simultaneously, sharing infrastructure and database. Traffic routing, graceful termination, and schema evolution must be coordinated.
+Interrupt HTTP: Pengguna menerima 502/504 selama pod terminta Job loss: Background worker terhenti meninggalkan state parsial Schema clash: Versi lama tidak kompatibel dengan kolom baru
 
-## 3. Architecture Components
+## Pengujian sequential tidak meniru interleaving runtime.
 
-The implementation has three components:
-- `internal/db`: In-memory store implementing expand-contract schema pattern.
-- `internal/server`: HTTP server with liveness/readiness probes, configurable preStop delay, and connection draining.
-- `internal/worker`: Background queue worker that finishes current jobs before terminating.
+Tidak drain: Server menolak request baru tapi tidak menunggu yang berjalan Tidak sync: Tidak ada preStop, load balancer masih mengirim traffic DB lock: Schema berubah tiba‑tiba menyebabkan error
 
-## 4. Health Probes: Liveness vs Readiness
+## Start New Before Stopping Old
 
-Liveness probe (`/healthz/live`) confirms the process is running. Readiness probe (`/healthz/ready`) decides whether the load balancer routes traffic.
+New version launches (Ready): Load balancer routes to new pods Old version drains (PreStop): Finishes in‑flight requests & jobs Old version terminates (Terminate): Database schema contract completed
 
-Server starts with readiness false, returning HTTP 503. After initialization completes, `SetReady(true)` switches readiness to HTTP 200. Load balancers only send traffic to ready instances.
+## Alur Zero‑Downtime Deployment
 
-```go
-mux.HandleFunc("/healthz/ready", func(w http.ResponseWriter, r *http.Request) {
-    if s.ready.Load() {
-        w.WriteHeader(http.StatusOK)
-        w.Write([]byte("READY"))
-    } else {
-        w.WriteHeader(http.StatusServiceUnavailable)
-        w.Write([]byte("NOT READY"))
-    }
-})
-```
+Init (Init): Component start, readiness false Ready (Ready): Health probe 200, traffic starts SIGTERM (PreStop): PreStop delay, drain HTTP & worker Terminate (Exit): Pod dies, new version continues
 
-## 5. PreStop Hook: Bridging Asynchronous Routing
-
-When an orchestrator like Kubernetes sends SIGTERM, endpoint slice updates and kube-proxy routing table changes happen asynchronously. If the pod terminates before routing updates propagate, clients still hit the terminating pod and receive 502/504.
-
-The lab implements `preStop` with a configurable delay using `select` on `time.After` or `ctx.Done()`. This allows context cancellation to abort the delay early, avoiding deadlock when the caller times out.
+## Server graceful shutdown dengan preStop
 
 ```go
-if s.preStop > 0 {
-    select {
-    case <-time.After(s.preStop):
-    case <-ctx.Done():
-        return ctx.Err()
+func (s *Server) Shutdown(ctx context.Context) error {
+    s.SetReady(false)
+    if s.preStop > 0 {
+        select { case <-time.After(s.preStop): case <-ctx.Done(): return ctx.Err() }
     }
+    return s.srv.Shutdown(ctx)
 }
 ```
 
-A production `preStop` must exceed external routing latency (kube-proxy, cloud LB).
+## Tanpa preStop, load balancer masih mengirim request → 502.
 
-## 6. Graceful Shutdown: Draining In-Flight Requests
+1. SIGTERM: Pod dies instantly 2. In‑flight request: Client receives connection reset 3. Worker job: Job terpotong, state inconsistency
 
-`Server.Shutdown` performs three steps:
-1. Sets readiness false, marking the instance as unavailable.
-2. Executes the preStop delay.
-3. Calls `srv.Shutdown(ctx)` to stop accepting connections, then waits for active requests to finish.
+## Graceful vs Naïve Shutdown
 
-```go
-s.SetReady(false)
-if s.preStop > 0 {
-    select { case <-time.After(s.preStop): case <-ctx.Done(): return ctx.Err() }
-}
-err := s.srv.Shutdown(ctx)
-s.wg.Wait()
+Aspect | Graceful (preStop) | Naïve
+|---|---|---|
+Traffic | Drained | Dropped
+Jobs | Completed | Aborted
+DB Schema | Compatible | Conflict
+
+## Tiga langkah mitigasi
+
+1. Health Probe: Gunakan readiness untuk mengisolasi pod 2. PreStop delay: Setidaknya latency routing table 3. Expand‑Contract DB: Baca/tulis versi lama & baru simultan
+
+## Terminal output demo
+
+```sh
+go run ./cmd/demo
+... SIGTERM received, graceful shutdown completed
 ```
 
-`wg.Wait()` blocks until `activeCount` drops to zero—every in-flight request completes before the process exits.
+## Batasan bukti
 
-## 7. Background Worker: Cooperative Drain
+Dibuktikan: Graceful shutdown, preStop delay, worker drain Tidak dibuktikan: Distributed load balancer latency >1s, real DB DDL lock contention
 
-Worker starts goroutines that pull jobs from a channel. Upon `Stop(timeout)`:
-1. Sets stopped flag and closes the job channel—no new jobs accepted.
-2. Begins draining: waits for active goroutines to finish.
-3. If timeout elapses before all workers finish, cancels context to abort remaining jobs.
+## PreStop vs Fast termination
+
+PreStop: Safety, extra latency Fast kill: Zero latency but risk 502/504
+
+## Worker drain dengan WaitGroup
 
 ```go
 func (w *Worker) Stop(timeout time.Duration) {
-    w.enqueueMu.Lock()
-    w.stopped.Store(true)
-    close(w.jobChan)
-    w.enqueueMu.Unlock()
-
+    w.enqueueMu.Lock(); w.stopped.Store(true); close(w.jobChan); w.enqueueMu.Unlock()
     done := make(chan struct{})
-    go func() { w.wg.Wait(); close(done) }()
-
-    select {
-    case <-done:
-    case <-time.After(timeout):
-        w.cancel()
-        <-done
-    }
+    go func(){ w.wg.Wait(); close(done) }()
+    select { case <-done: case <-time.After(timeout): w.cancel() }
 }
 ```
 
-Workers finish active jobs; queued jobs are dropped when timeout expires. Production systems require job-level preemption or hard deadlines for arbitrary runtimes.
+## Sebelum vs Sesudah graceful shutdown
 
-## 8. Expand-Contract Database Pattern
+Sebelum: Request drop, job loss, schema error Sesudah: All in‑flight completed, no DB conflict
 
-Database migration splits into phases:
-- **Expand**: Add new columns (`first_name`, `last_name`) without dropping old ones (`name`). Application supports both read paths.
-- **Migrate**: Backfill historical data, dual-write for new records.
-- **Contract**: Remove old column (`name`) only after all instances run the new version.
+## Analisis: Health Probe Timing
 
-```go
-type UserRecord struct {
-    ID        string
-    Name      string
-    FirstName string
-    LastName  string
-}
+Observation: ... Implication: ...
+
+## Analisis: PreStop Duration Impact
+
+Observation: ... Implication: ...
+
+## Analisis: Worker Drain Guarantees
+
+Observation: ... Implication: ...
+
+## Analisis: DB Expand‑Contract Compatibility
+
+Observation: ... Implication: ...
+
+## Analisis: End‑to‑End Latency
+
+Observation: ... Implication: ...
+
+## Checklist produksi Zero‑Downtime
+
+Implement readiness probe returning 503 until warmup Configure preStop hook >= external routing latency Use Expand‑Contract DB schema with backward compatible reads/writes Ensure worker can drain with timeout and context cancellation
+
+## Mengabaikan preStop & readiness
+
+Force kill: Mengakibatkan 502/504 Schema breaking: Deploy kolom baru tanpa fallback Job abort: Background worker terhenti abrupt
+
+## Perintah demo lokal
+
+```sh
+cd labs/20-zero-downtime-deployment
+go test -v ./...
+go run ./cmd/demo
 ```
 
-Read logic auto-converts legacy format: parses `Name` into `FirstName` and `LastName` if the modern fields are empty. Writes store both representations for compatibility.
+## Desain untuk koeksistensi versi
 
-## 9. Test Evidence
+Versioned APIs: Maintain backward compatibility Graceful shutdown: Health probes + preStop Schema evolution: Expand‑Contract pattern
 
-**Server Tests** (8 tests):
-- `TestServerProbes`: Liveness returns 200, readiness starts 503, becomes 200 after `SetReady(true)`.
-- `TestServerGracefulShutdown`: In-flight request completes during shutdown; no drops.
-- `TestServerPreStopHook`: Shutdown delays exactly the configured `preStop` duration.
-- `TestServerPreStopContextCancellation`: Context timeout aborts preStop early.
-- `TestServerMultiRequestDrain`: Five concurrent requests all complete during shutdown.
-- `TestServerWorkRequestCancellation`: Client context cancellation terminates long requests early.
-- `TestServerInvalidDurationFallback`: Invalid `?d=INVALID` uses 50ms default.
-- `TestServerReadyUnreadyTransition`: Ready→Unready→Ready transitions work correctly.
+## Source
 
-**Worker Tests** (5 tests):
-- `TestWorkerGracefulShutdown`: Two queued jobs finish before worker stops.
-- `TestWorkerEnqueueAfterStop`: Jobs rejected after `Stop` returns.
-- `TestWorkerConcurrency`: Three workers process six jobs concurrently.
-- `TestWorkerConcurrentEnqueueStop`: Race detector confirms no data races.
-- `TestWorkerShutdownTimeout`: Short timeout finishes active job, drops queued job.
-
-**DB Tests** (5 tests):
-- `TestDBNotFound`: Returns expected error for missing records.
-- `TestDBSingleNameLegacy`: Reads legacy `Name` and auto-converts to modern fields.
-- `TestDBSaveExpandEmptyFields`: Handles partial empty names correctly.
-- `TestDBLegacyOverwriteWithExpand`: Upgrades legacy record to modern format.
-- `TestExpandContractDatabase`: Demonstrates full expand-contract cycle.
-
-All 18 tests pass with `go test -v ./...` and zero race conditions under `go test -race ./...`.
-
-## 10. Demo Execution
-
-Running `go run ./cmd/demo` simulates a deployment:
-1. Worker starts, processes one 2-second job.
-2. Server starts, readiness false.
-3. After 1 second, readiness true—load balancer begins routing.
-4. HTTP GET request starts, simulating in-flight traffic.
-5. SIGTERM received after 0.5 seconds.
-6. Server sets readiness false, executes 1-second preStop, drains connections.
-7. Client request completes during drain.
-8. Worker stops, finishes active job.
-9. Demo ends cleanly—zero dropped requests.
-
-```
-2026/09/25 14:58:40 Starting Zero-Downtime Deployment Demo
-2026/09/25 14:58:40 Background worker started
-2026/09/25 14:58:40 Server starting on 127.0.0.1:8080
-2026/09/25 14:58:41 Application is ready to receive traffic
-2026/09/25 14:58:41 SIGTERM received, initiating graceful shutdown procedures
-2026/09/25 14:58:41 Server marked unready, detached from load balancer
-2026/09/25 14:58:41 Executing preStop sleep for 1s to allow routing table updates...
-2026/09/25 14:58:42 Worker 0 finished job DemoJob-1
-2026/09/25 14:58:43 Client request completed with status: 200
-2026/09/25 14:58:43 Demo finished cleanly. Zero downtime achieved.
-```
-
-## 11. Trade-offs and Production Considerations
-
-**PreStop Duration**: Must exceed external routing latency. Underestimating causes HTTP 502/504.
-
-**DDL Lock Contention**: PostgreSQL `ALTER TABLE ... ADD COLUMN` with constant default is metadata-only and concurrent-safe. Volatile defaults (`clock_timestamp()`, `gen_random_uuid()`) force `ACCESS EXCLUSIVE` lock and full table rewrite. Use `lock_timeout` on database connections during DDL.
-
-**Worker Timeout Behavior**: Draining finishes active jobs while timeout remains. When timeout expires, context cancels, aborting remaining jobs. Production systems need job-level preemption or hard deadline escalation.
-
-**HTTP Worker Patterns**: PHP-FPM does not handle SIGTERM for connection draining by default. Laravel Horizon provides `horizon:terminate` with Supervisor `stopwaitsecs` to finish jobs before shutdown.
-
-## 12. When to Use This Pattern
-
-Choose zero-downtime deployment when:
-- SLA requires zero seconds of unavailability.
-- Background jobs must complete or fail explicitly, not be killed abruptly.
-- Database schema evolves across versions; old and new instances coexist during transition.
-
-Avoid over-engineering for:
-- Monoliths with single database: local ACID transactions suffice.
-- Non-critical services where brief downtime is acceptable.
-
-## 13. Conclusion
-
-Zero-downtime deployment is not magic—it is orchestration of health probes, preStop hooks, connection draining, and expand-contract migrations. The pattern guarantees no request drops and no job loss, trading brief coexistence complexity for uninterrupted service.
-
-### Laboratory Resources
-- Source Code Repository: [software-engineering-lab / labs / 20-zero-downtime-deployment](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/20-zero-downtime-deployment)
-- Commit SHA: `f303829f429b7e14668462442f032cf3ba0a4cce`
-- Tests: 18 passing (5 DB, 8 server, 5 worker), zero race conditions.
+[Software Engineering Lab 20 - Zero‑Downtime Deployment](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/20-zero-downtime-deployment), snapshot commit `<auto>`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
