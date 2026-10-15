@@ -1,68 +1,37 @@
 ---
 title: "Dependency Injection & Inversion of Control: Separating Configuration from Use in Go"
 published: false
-description: "Explore Dependency Injection & Inversion of Control in Go: constructor injection, service locator anti-pattern, manual wiring, mocking, and test isolation."
-tags: go, dependency-injection, testing, softwareengineering
+description: "Explore Dependency Injection & Inversion of Control in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
 # Dependency Injection & Inversion of Control: Separating Configuration from Use in Go
 
-A payment processor embeds its gateway directly, making every test spin up real network connections. Lab 16 extracts that dependency so the business logic stays free of infrastructure assumptions.
+A production system must remain resilient under load. Lab 16 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-> Constructor injection makes dependencies explicit; service locator hides them behind a container.
+> Hard-coded dependencies couple business logic to infrastructure, breaking testability and evolvability.
 
-The lab uses a single `PaymentGateway` interface and a `Processor` that delegates to it. It does not implement real payments, connection pooling, or production-grade composition roots.
+## Hard-Coded Dependencies Mengunci Logika Bisnis pada Infrastruktur
 
-## Hard-Coded Dependencies Lock Business Logic to Infrastructure
+When a class builds its own dependencies, business logic becomes locked to external infrastructure. Unit testing becomes difficult because it must rely on non-deterministic live network states.
 
-When a class builds its own gateway, unit tests must reach outside the process. Changing providers forces edits across multiple modules instead of swapping one implementation.
+## Code Review Manual Tidak Menangkap Dependensi Tersembunyi
 
-```go
-// Before: tight coupling
-type Processor struct{}
+Manual code review relies on human attention to catch coupling patterns. This approach does not automatically guarantee that every external dependency has been injected through constructors.
 
-func (p *Processor) ProcessPayment(amount int) error {
-    gw := &RealGateway{}           // internal instantiation
-    return gw.Charge(Money{...})
-}
-```
+## Separation of Configuration from Use
 
-This couples validation, business rules, and network calls into one method. Mocking becomes impossible without refactoring production code.
+The core principle of Dependency Injection is separating object construction from its use. The composition root assembles the object graph, while business modules only consume dependencies that are provided.
 
-## Why Manual Code Review Fails to Catch Hidden Dependencies
+## Alur Kerja Dependency Injection Manual
 
-Reviewers focus on control flow and may miss an internal `new()` call buried in a helper. Manual review cannot verify that every external dependency was extracted to a constructor parameter.
+Manual DI pipeline starts at the composition root instantiating concrete implementations. The constructor stores dependencies as fields, business methods validate input then delegate to the gateway.
 
-On larger codebases, dependency chains spread across dozens of files. Relying on human attention alone leaves implicit coupling behind.
+## Constructor Injection: NewProcessor Menerima Interface
 
-## Core Mental Model: Separate Configuration from Use
-
-DI splits object creation into two phases. The composition root assembles concrete implementations; business modules consume interfaces without knowing their origins.
-
-- **Configuration phase** (`main.go`): instantiate `RealGateway`, pass to `NewProcessor`.
-- **Usage phase** (`Processor`): validate input, delegate to `gateway.Charge`, return errors.
-
-Only along this path does the business module remain decoupled from provider selection.
-
-## Manual DI Execution Pipeline
-
-The pipeline starts at the composition root, flows through constructor injection, validates input, delegates to the gateway, and propagates errors upward.
+Constructor injection ensures Processor only knows the PaymentGateway interface, not the concrete RealGateway implementation. Dependencies are made explicit in the constructor signature.
 
 ```go
-// main.go — composition root
-realGateway := &di.RealGateway{}
-processor := di.NewProcessor(realGateway)
-err := processor.ProcessPayment(100)
-```
-
-Each step is explicit. No runtime container lookup occurs inside `ProcessPayment`.
-
-## Constructor Injection: NewProcessor Accepts an Interface
-
-The `Processor` struct stores a `PaymentGateway` interface. The constructor takes that interface; the struct never references `RealGateway` directly.
-
-```go
-// internal/di/processor.go
 type Processor struct {
     gateway PaymentGateway
 }
@@ -80,53 +49,31 @@ func (p *Processor) ProcessPayment(amount int) error {
 }
 ```
 
-Injected dependencies are immutable after construction. Swapping implementations requires only changing the composition root.
+## Service Locator Menyembunyikan Dependensi Sesungguhnya
 
-## Service Locator Hides Real Dependencies
+Service Locator hides actual dependencies behind a container interface. This reduces readability and makes mocking harder because tests must prepare a container instead of the dependency directly.
 
-`BadProcessor` receives a `Container` instead of `PaymentGateway`. The actual dependency becomes a runtime lookup rather than a compile-time contract.
+## Kontras Constructor Injection vs Service Locator
+
+This table maps the fundamental differences between two approaches. Constructor injection yields explicit, testable dependencies; service locator introduces an extra indirection layer that complicates isolation.
+
+Aspek | Constructor Injection | Service Locator
+|---|---|---|
+Dependensi | Eksplisit di constructor | Tersembunyi di container
+Mocking | Langsung inject mock | Harus mock container + get()
+Kekekalan | Field immutable setelah konstruksi | Bisa berubah jika container berubah
+Kompleksitas | Mudah dipahami | Menambah indirection layer
+Standar Industri | Diproleh sebagai best practice | Disebabkan sebagai anti-pattern
+
+## Keputusan Desain DI pada Lab Ini
+
+This lab chooses constructor injection as the default pattern because it provides immutability and dependency clarity. Service Locator is used only to demonstrate the anti-pattern, not as a solution.
+
+## 6 Test Case Lolos dengan Race Detector
+
+Terminal output proves all six test cases pass including race detector. Tests successfully isolate Processor from real gateway, verifying happy path, error propagation, and input validation.
 
 ```go
-// internal/di/locator.go
-type BadProcessor struct {
-    container Container
-}
-
-func (p *BadProcessor) ProcessPayment(amount int) error {
-    gw := p.container.GetPaymentGateway()  // hidden dependency
-    // ...
-}
-```
-
-Tests must configure the container, not inject the mock directly. This adds indirection and reduces readability.
-
-## Constructor Injection vs Service Locator Comparison
-
-| Aspect | Constructor Injection | Service Locator |
-|--------|----------------------|-----------------|
-| Dependencies | Explicit in constructor | Hidden in container |
-| Mocking | Inject mock directly | Mock container + get() |
-| Immutability | Field set once at construction | Can change if container changes |
-| Complexity | Easy to understand | Extra indirection layer |
-| Industry standard | Best practice | Anti-pattern |
-
-The contrast is visible in test code: one passes a `MockGateway`, the other wires a `MockContainer`.
-
-## Three Architectural Decisions in This Lab
-
-The lab makes focused choices to keep the example tractable. These decisions define the structure without over-engineering.
-
-1. **Choose constructor injection** as the default pattern for explicit, testable dependencies.
-2. **Avoid service locator in domain code**; use it only to demonstrate the anti-pattern.
-3. **Instantiate value objects directly** (`Money`) because they carry no infrastructure dependencies.
-
-These choices preserve clarity while still showing the cost of the alternative.
-
-## Six Test Cases Pass with Race Detector
-
-The test suite isolates the processor from real gateways and verifies happy paths, error propagation, and invalid input.
-
-```
 === RUN   TestProcessor_Success
 --- PASS: TestProcessor_Success (0.00s)
 === RUN   TestProcessor_GatewayError
@@ -143,23 +90,17 @@ PASS
 ok      lab16/tests   (cached)
 ```
 
-All six cases pass with `go test -race`. No shared mutable state exists between tests.
+## Batasan Bukti Lab: Yang Dibuktikan vs Belum
 
-## Evidence Boundary: What This Lab Proves and What It Does Not
+This lab proves isolation and error propagation in simple scenarios. It does not prove lifecycle management, performance overhead, or empirical impact on software engineering metrics.
 
-Lab 16 demonstrates isolation, error propagation, and input validation on six controlled scenarios. It does not prove production lifecycle management, performance overhead of manual wiring at scale, or empirical defect-rate reductions.
+## Trade-off Penerapan DI Manual vs Framework
 
-No quantitative measurements of test speed or system stability are included. Claims about DI benefits beyond the test suite require separate empirical validation.
+Manual DI implementation requires a clear composition root. At large scale, boilerplate overhead can become significant, but this trade-off is often accepted for clarity and testability.
 
-## Trade-offs: Manual Wiring vs Framework DI
+## Race Safety pada Implementasi DI
 
-Manual wiring adds boilerplate in `main.go` but guarantees compile-time type safety with zero external dependencies. Framework-based DI reduces repetition but introduces reflection, configuration files, and opaque object graphs.
-
-At small scales, manual wiring is often clearer. At very large object graphs, boilerplate can become burdensome. This lab accepts the boilerplate to keep the example self-contained.
-
-## Race Safety in DI Implementation
-
-Go's race detector checks concurrent memory accesses. This DI implementation uses no goroutines or shared state inside `Processor`. Tests construct instances sequentially, so no races exist to detect.
+Go's race detector checks concurrent memory accesses. This DI implementation uses no goroutines or shared state, so tests run cleanly without race condition warnings.
 
 ```go
 func TestProcessor_Success(t *testing.T) {
@@ -169,29 +110,19 @@ func TestProcessor_Success(t *testing.T) {
     if err != nil {
         t.Fatalf("expected nil error, got %v", err)
     }
+    // Race detector passes; no shared mutable state
 }
 ```
 
-Stateless components with injected dependencies naturally avoid race conditions.
+## Transformasi: Dari Hard-Coded ke Constructor Injection
 
-## Before vs After: Hard-Coded to Constructor Injection
+Before DI, business classes directly instantiate concrete dependencies, locking to one implementation. After DI, dependencies come from outside, enabling substitution and isolated testing.
 
-Before DI, the processor instantiated `RealGateway` internally. After DI, the processor receives `PaymentGateway` through its constructor. The test swaps the real gateway for a mock without touching production code.
+## Interface PaymentGateway: Kontrak Tunggal
 
-| Before (Tight Coupling) | After (Manual DI) |
-|-------------------------|-------------------|
-| `Processor` creates `RealGateway` internally | `NewProcessor` accepts `PaymentGateway` |
-| Tests cannot mock gateway | Tests inject `MockGateway` directly |
-| Changing provider requires code edits | Changing provider requires one line in `main.go` |
-
-DI does not eliminate all coupling; it moves the coupling point to the composition root.
-
-## Interface PaymentGateway: Single Contract
-
-The interface defines one method. All implementations share this contract.
+The PaymentGateway interface defines a single contract for all gateway implementations. Money is a value object representing currency with amount and currency fields.
 
 ```go
-// internal/di/gateway.go
 type Money struct {
     Amount   int
     Currency string
@@ -202,25 +133,25 @@ type PaymentGateway interface {
 }
 ```
 
-Consumers depend on the interface. Producers implement it. This separation enables substitution without modifying consumers.
+## Money: Value Object yang Diinstansiasi Langsung
 
-## Money: Direct Instantiation of a Value Object
-
-`Money` contains only data. It has no infrastructure dependencies, so it is created directly inside `ProcessPayment`.
+Money is created directly inside the method because it is a pure data structure without infrastructure dependencies. Using DI for value objects would add abstraction without benefit.
 
 ```go
-m := Money{Amount: amount, Currency: "USD"}
-return p.gateway.Charge(m)
+func (p *Processor) ProcessPayment(amount int) error {
+    if amount <= 0 {
+        return errors.New("invalid amount")
+    }
+    m := Money{Amount: amount, Currency: "USD"}
+    return p.gateway.Charge(m)
+}
 ```
 
-Injecting a value object through DI would add abstraction without benefit. Value objects belong in the domain layer, not the composition root.
+## MockGateway: Test Double untuk Isolasi Pengujian
 
-## MockGateway: Test Double for Isolation
-
-`MockGateway` records calls and can be configured to succeed or fail. Tests verify behavior without network access.
+MockGateway records Charge calls and can be configured to fail. This enables testing error propagation without real network connections.
 
 ```go
-// tests/processor_test.go
 type MockGateway struct {
     ChargedMoney di.Money
     ShouldFail   bool
@@ -235,14 +166,11 @@ func (m *MockGateway) Charge(money di.Money) error {
 }
 ```
 
-Mocks are structured types that satisfy interfaces. They replace infrastructure without changing production code.
+## Composition Root: main.go sebagai Titik Penyambungan
 
-## Composition Root: main.go as Wiring Point
-
-`main.go` is the only file that knows about `RealGateway`. It assembles the object graph and passes dependencies inward.
+The composition root is the main function responsible for assembling the object graph. It is the only place that imports the concrete RealGateway implementation.
 
 ```go
-// cmd/demo/main.go
 func main() {
     realGateway := &di.RealGateway{}
     processor := di.NewProcessor(realGateway)
@@ -254,77 +182,42 @@ func main() {
 }
 ```
 
-Business modules never import concrete implementations. This keeps the composition root centralized and the domain pure.
+## Validasi Input Sebelum Delegasi ke Gateway
 
-## Input Validation Before Gateway Delegation
-
-`ProcessPayment` rejects invalid amounts before calling the gateway. This prevents unnecessary external calls and fails fast.
+Input validation occurs before delegating to external dependencies. This prevents unnecessary network calls and ensures only valid amounts are processed.
 
 ```go
-if amount <= 0 {
-    return errors.New("invalid amount")
+func (p *Processor) ProcessPayment(amount int) error {
+    if amount <= 0 {
+        return errors.New("invalid amount")
+    }
+    // ... create Money and call gateway
 }
 ```
 
-Validation belongs to the domain layer. Gateways should not enforce business invariants; they execute them.
+## Checklist Penerapan Dependency Injection
 
-## Dependency Injection Implementation Checklist
+This checklist summarizes the DI principles that must be met to keep code testable, decoupled, and easily evolving.
 
-- [ ] Dependencies declared as interfaces, not concrete types
-- [ ] Constructor injection used as default for all services
-- [ ] Composition root is the only place creating concrete implementations
-- [ ] No `container.Get(...)` calls inside domain logic
-- [ ] Value objects instantiated directly
-- [ ] Each service testable with mocks, no infrastructure setup required
-- [ ] Input validation performed before delegating to external dependencies
-- [ ] Tests cover happy path, error propagation, and invalid input
-- [ ] `go test -race ./...` passes without warnings
+## Anti-Pattern Umum dalam Dependency Injection
 
-These criteria ensure dependencies remain explicit and testable.
+Service Locator is an anti-pattern because it hides dependencies. Value objects should not be injected. Constructor bloat indicates a violation of the Single Responsibility Principle.
 
-## Common Anti-Patterns in Dependency Injection
+## Reproduksi Mandiri di Mesin Lokal Menggunakan Go
 
-| Anti-Pattern | Problem |
-|--------------|---------|
-| Service Locator in domain code | Hides dependencies, complicates testing |
-| Abstracting value objects | Adds unnecessary DI indirection |
-| Constructor bloat | Indicates too many responsibilities |
-| DI overuse | Using DI for pure functions with no state |
+All code uses the Go standard library with zero external dependencies. The test suite covers isolation, error propagation, and input validation.
 
-Avoiding these pitfalls preserves the benefits of explicit dependency management.
-
-## Independent Reproduction Using Go Commands
-
-The implementation uses only the Go standard library. Run the following commands to verify behavior locally.
-
-```bash
+```sh
 cd labs/16-dependency-injection
-go test -v ./...       # run all test cases
-go test -race ./...    # verify race safety
-go run ./cmd/demo      # execute constructor injection demo
+go test -v ./...    # jalankan semua test case
+go test -race ./... # verifikasi race safety
+go run ./cmd/demo   # eksekusi demo constructor injection & service locator
 ```
 
-Zero external dependencies are required. The test suite validates isolation, error propagation, and input handling.
+## Prinsip Inti: Dependency Harus Eksplisit
 
-## Core Principle: Dependencies Must Be Explicit
+DI principles emphasize dependency clarity. By separating configuration from use, systems become easier to test, understand, and evolve.
 
-DI architecture rests on three pillars:
+## Source
 
-1. **Separation of concerns** — configuration (composition root) is separate from use (business logic).
-2. **Program to interfaces** — consumers depend on contracts, not implementations.
-3. **Explicit over implicit** — all dependencies are declared in constructors; no magic lookups.
-
-These principles make systems testable, understandable, and evolvable.
-
-## Implementation Modules and Verification Status
-
-Source files: `internal/di/gateway.go`, `internal/di/processor.go`, `internal/di/locator.go`, `cmd/demo/main.go`, `tests/processor_test.go`.
-
-Commit `3d936ba` · Status: APPROVED  
-Tests passing: 6 scenarios (success, error propagation, invalid amount)  
-Race detector: Clean (`go test -race ./... PASS`)  
-Dependencies: 100% Go standard library, zero external modules.
-
----
-
-Source: [Software Engineering Lab 16](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection), README.md, implementation, and tests. Commit snapshot `3d936ba`. Code snippets used within their original package context.
+[Software Engineering Lab 16 - Dependency Injection & Inversion of Control](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection), snapshot commit `3d936ba`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
