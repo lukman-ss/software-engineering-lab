@@ -1,33 +1,27 @@
 #!/usr/bin/env python3
+"""Publication Builder Definition for Software Engineering Lab 28: Timeouts and Deadlines.
+Generates 24-slide LinkedIn carousel covering deadline propagation, timeout budgeting, exponential backoff with full jitter, circuit breaking, and idempotency deduplication.
 """
-Publication Builder Definition for Software Engineering Lab 28: Timeouts & Deadlines.
-Defines metadata, visual palette, and exact 24 slides.
-"""
-import os
-import sys
 
 OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/28-timeouts-and-deadlines/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/28-timeouts-and-deadlines"
-COMMIT_SHA = "bdb285d35a71c9a309e83a0e4497b9dbd842ceb8"
+COMMIT_SHA = "ba4b621"
 LAB_NO = "28"
 SLUG = "timeouts-and-deadlines"
-TITLE_ID = "Timeouts & Deadlines"
-SUBTITLE_ID = "Mencegah Satu Dependency Lambat Menghancurkan Seluruh Ekosistem Distributed System"
-TITLE_EN = "Timeouts & Deadlines"
-SUBTITLE_EN = "Preventing a Single Slow Dependency from Crashing an Entire Distributed System"
-AUTHOR = "Lukman / lukman-ss"
 
-DARK_NAVY = "0b1b2d"
-TEAL = "087f76"
-CREAM = "f4f1e8"
-WHITE = "ffffff"
-SLATE = "52606b"
-ORANGE = "d97706"
+TITLE_ID = "Timeouts & Deadlines: Guardrails untuk Sistem Terdistribusi"
+SUBTITLE_ID = "Mencegah Dependency Lambat Menghancurkan Layanan melalui Deadline Propagation, Jitter, Circuit Breaker, dan Idempotency"
+TITLE_EN = "Timeouts & Deadlines: Guardrails for Distributed Systems"
+SUBTITLE_EN = "Preventing Slow Dependencies from Crashing Services via Deadline Propagation, Jitter, Circuit Breaking, and Idempotency."
+
+AUTHOR = "Lukman / lukman-ss"
+TOPIC_TAGS = "Timeouts • Deadlines • Retry • Circuit Breaker • Idempotency • Go"
+COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/28-timeouts-and-deadlines/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 
-def add_slide(categories, title, subtitle, content_items, mental_model, source_path="", slide_num=""):
+def add_slide(categories, title, subtitle, content_items, mental_model, source_path="", slide_num="", narrative="", narrative_en="", layout=""):
     SLIDES.append({
         "categories": categories,
         "title": title,
@@ -35,652 +29,509 @@ def add_slide(categories, title, subtitle, content_items, mental_model, source_p
         "content_items": content_items,
         "mental_model": mental_model,
         "source": source_path,
-        "slide_num": slide_num
+        "slide_num": slide_num,
+        "narrative": narrative,
+        "narrative_en": narrative_en,
+        "layout": layout,
     })
 
-# Slide 1: Cover (Dark Navy, Retro Terminal)
+# Slide 01: Cover
 add_slide(
     categories=["COVER"],
     title=TITLE_ID,
-    subtitle="SOFTWARE ENGINEERING LAB | LAB " + LAB_NO,
-    content_items=[
-        {"type": "cover", "title": "", "items": [
-            "Retro CRT monitor beige dengan scanlines bercahaya",
-            "Context propagation, exponential backoff full jitter, circuit breaker, idempotency store",
-            f"Penulis: {AUTHOR}",
-        ]}
-    ],
+    subtitle=SUBTITLE_ID,
+    content_items=[{"type": "cover", "title": "", "items": [
+        "Timeouts & Deadlines — Guardrails untuk Sistem Terdistribusi",
+        "Mengelola latency, retry, circuit & idempotency di Go",
+        f"Penulis: {AUTHOR}"
+    ]}],
+    mental_model="Timeout & deadline adalah resource protection guardrails, bukan sinyal kegagalan.",
+    source_path=REPO_URL,
+    slide_num="01 / 24",
+    narrative="Lab ini menampilkan pola resiliency yang melindungi layanan dari dependency lambat. Setiap pola dibuktikan dengan tes unit, race‑detector, dan demo end‑to‑end.",
+    narrative_en="This lab showcases resiliency patterns that shield services from slow downstream dependencies. Each pattern is verified by unit tests, the race detector, and an end‑to‑end demo.",
+    layout="cover",
+)
+
+# Slide 02: Problem Nyata
+add_slide(
+    categories=["PROBLEM"],
+    title="Dependency Lambat Mengakibatkan Outage Sistem",
+    subtitle="Satu layanan 60 s menggangu seluruh cluster.",
+    content_items=[{"type": "cards", "title": "DAMPAK", "items": [
+        {"title": "Cascading Latency", "desc": "Latency ↑ → L = λW ↑ → thread pool terisi → request tak‑terlayani."},
+        {"title": "Resource Exhaustion", "desc": "Connection pool terblokir, memory pressure naik, timeout global."},
+        {"title": "Kegagalan Layanan Tidak Terkait", "desc": "Endpoint lainnya menolak karena kehabisan worker."}
+    ]}],
+    mental_model="Little's Law: peningkatan latency meningkatkan jumlah request in‑flight secara linear.",
+    source_path="content/01-content-brief.md:5-13",
+    slide_num="02 / 24",
+    narrative="Ketika satu dependency melambat dari 300 ms ke 60 s, request menumpuk di pool, menurunkan throughput seluruh layanan. Ini tercermin dalam contoh demo lab.",
+    narrative_en="When a single downstream slows from 300 ms to 60 s, requests pile up in the pool, throttling overall service throughput. The lab demo illustrates this effect.",
+    layout="cards",
+)
+
+# Slide 03: Mengapa Review Manual Gagal
+add_slide(
+    categories=["WHY FAILS"],
+    title="Validasi Aplikasi Tidak Cukup",
+    subtitle="Check‑then‑act tidak menutup race window.",
+    content_items=[{"type": "cards", "title": "KELEMAHAN", "items": [
+        {"title": "Interleaving", "desc": "Scheduler OS memisahkan SELECT dan INSERT, memungkinkan duplikasi."},
+        {"title": "Tes Sekuensial", "desc": "Unit test tanpa goroutine selalu lolos, memberi ilusi aman."},
+        {"title": "Tidak Ada Kunci Atomik", "desc": "Database tidak menegakkan invariant bila aplikasi mengandalkan memori saja."}
+    ]}],
+    mental_model="Aplikasi tidak dapat menjamin konsistensi tanpa mekanisme persisten yang atomik.",
+    source_path="content/02-master-draft.md:5-12",
+    slide_num="03 / 24",
+    narrative="Review kode dan tes unit menunjukkan logika if tampak benar, namun tidak melindungi terhadap interleaving thread yang menyebabkan duplikasi data.",
+    narrative_en="Code reviews and unit tests show correct if‑logic, yet they do not protect against thread interleaving that leads to duplicate records.",
+    layout="cards",
+)
+
+# Slide 04: Mental Model Inti
+add_slide(
+    categories=["MENTAL MODEL"],
+    title="Deadline Propagation sebagai Guardrail Hierarkis",
+    subtitle="Child deadline ≤ parent deadline, never larger.",
+    content_items=[{"type": "schema", "title": "PROPAGASI DEADLINE", "items": [
+        {"phase": "Client", "role": "Budget", "desc": "Set timeout total (misal 200 ms)."},
+        {"phase": "Service A", "role": "Child", "desc": "WithTimeout(parent, localBudget) → deadline = min(parent, local)."},
+        {"phase": "Service B", "role": "Leaf", "desc": "Operasi dibatalkan segera saat parent atau child deadline terlewati."}
+    ]}],
+    mental_model="Setiap lapisan turun menurunkan budget, mencegah kerja berlebih pada downstream yang sudah tidak dibutuhkan.",
+    source_path="content/02-master-draft.md:30-38",
+    slide_num="04 / 24",
+    narrative="Deadline diturunkan secara hierarkis sehingga goroutine downstream tidak bekerja lebih lama daripada request yang memicunya.",
+    narrative_en="Deadlines are reduced hierarchically so downstream goroutines do not outlive the request that triggered them.",
+    layout="schema",
+)
+
+# Slide 05: Diagram Alur / Pipeline
+add_slide(
+    categories=["PIPELINE"],
+    title="Pipeline Resiliensi",
+    subtitle="Context → Retrier → Circuit → Idempotency → Worker",
+    content_items=[{"type": "schema", "title": "ALUR EKSEKUSI", "items": [
+        {"phase": "1", "role": "Context", "desc": "WithTimeout(parent, budget)"},
+        {"phase": "2", "role": "Retrier", "desc": "Exponential backoff + full jitter"},
+        {"phase": "3", "role": "Circuit", "desc": "Open/Close/Half‑Open guard"},
+        {"phase": "4", "role": "Idempotency", "desc": "Deduplication store (TTL)"},
+        {"phase": "5", "role": "Worker", "desc": "Actual business logic"}
+    ]}],
+    mental_model="Setiap lapisan dapat menghentikan alur lebih awal, mengurangi beban downstream.",
+    source_path="content/02-master-draft.md:160-172",
+    slide_num="05 / 24",
+    narrative="Alur eksekusi mengalir melalui context, retry, circuit breaker, dan store sebelum mencapai worker. Setiap komponen dapat menghentikan eksekusi lebih awal.",
+    narrative_en="Execution flows through context, retry, circuit breaker, and store before reaching the worker. Each component can abort early.",
+    layout="schema",
+)
+
+# Slide 06: Cuplikan Kode Dominan – ExecuteWithBudget
+add_slide(
+    categories=["IMPLEMENTATION"],
+    title="Deadline Propagation dengan Channel",
+    subtitle="Memastikan goroutine berhenti tepat saat budget habis.",
+    content_items=[{"type": "code", "title": "internal/deadline/deadline.go:13-28", "items": [
+        "func ExecuteWithBudget(ctx context.Context, budget time.Duration, fn WorkerFunc) error {",
+        "    childCtx, cancel := context.WithTimeout(ctx, budget)",
+        "    defer cancel()",
+        "    done := make(chan error, 1)",
+        "    go func() { done <- fn(childCtx) }()",
+        "    select {",
+        "    case <-childCtx.Done():",
+        "        return childCtx.Err()",
+        "    case err := <-done:",
+        "        return err",
+        "    }",
+        "}"
+    ]}],
+    mental_model="Channel berkapasitas 1 mencegah goroutine bocor ketika context dibatalkan lebih dulu.",
+    source_path="internal/deadline/deadline.go:13-28",
+    slide_num="06 / 24",
+    narrative="Fungsi ExecuteWithBudget membuat child context dengan budget, meluncurkan goroutine worker, dan menunggu salah satu kondisi selesai lewat select. Jika childCtx dibatalkan terlebih dahulu, error context.DeadlineExceeded dikembalikan.",
+    narrative_en="ExecuteWithBudget creates a child context with a budget, launches a worker goroutine, and waits via select for either completion or cancellation. If the child context is cancelled first, it returns context.DeadlineExceeded.",
+    layout="code",
+)
+
+# Slide 07: Failure Path – Double Execution
+add_slide(
+    categories=["FAILURE PATH"],
+    title="Retry Tanpa Idempotency → Double Charge",
+    subtitle="Skenario: POST /payment, timeout, retry.",
+    content_items=[{"type": "cards", "title": "ALUR GAGAL", "items": [
+        {"title": "1. Request pertama", "desc": "Server proses charge, response hilang karena network loss."},
+        {"title": "2. Client timeout", "desc": "Context dibatalkan, client menganggap failure."},
+        {"title": "3. Retry", "desc": "Tanpa Idempotency-Key, server mengeksekusi charge lagi → double charge."}
+    ]}],
+    mental_model="Timeout tidak menjamin operasi gagal; tanpa deduplication dapat menyebabkan efek samping duplikat.",
+    source_path="content/02-master-draft.md:124-132",
+    slide_num="07 / 24",
+    narrative="Demo menunjukkan request POST yang di‑retry setelah timeout menghasilkan dua entri pembayaran karena tidak ada kunci idempotent.",
+    narrative_en="The demo shows a POST request retried after a timeout creates two payment entries because no idempotency key is used.",
+    layout="cards",
+)
+
+# Slide 08: Tabel Perbandingan Mekanisme vs Gejala
+add_slide(
+    categories=["COMPARISON"],
+    title="Matriks Mekanisme Resiliensi",
+    subtitle="Timeout, Retry, Circuit, Idempotency.",
+    content_items=[{"type": "table", "title": "PERBANDINGAN", "items": [
+        "Mekanisme | Tujuan | Efek pada Latency | Risiko Jika Tidak Digunakan",
+        "Timeout | Guardrail | Memotong kerja lama | Hanging workers",
+        "Retry + Jitter | Recoverability | Tambah latency terkontrol | Retry storm",
+        "Circuit Breaker | Fail‑fast | Cepat menolak request pada error berulang | Cascading failures",
+        "Idempotency | Deduplication | Mencegah side‑effect ganda | Double charge / duplicate write"
+    ]}],
+    mental_model="Setiap mekanisme menutup satu jenis kegagalan: latency, error burst, atau side‑effect.",
+    source_path="content/02-master-draft.md:190-202",
+    slide_num="08 / 24",
+    narrative="Tabel menegaskan bahwa kombinasi keempat pola menutup celah utama pada sistem terdistribusi.",
+    narrative_en="The table affirms that the combination of these four patterns closes the primary failure surfaces in distributed systems.",
+    layout="table",
+)
+
+# Slide 09: Decision Sequence – 3 Cards
+add_slide(
+    categories=["DECISION"],
+    title="Tiga Keputusan Kunci Implementasi",
+    subtitle="1️⃣ Timeout budget, 2️⃣ Retry strategy, 3️⃣ Circuit state.",
+    content_items=[{"type": "cards", "title": "KEPUTUSAN", "items": [
+        {"title": "Timeout Budget", "desc": "Hitung P95/P99 latency, set budget < 0.5 × target SLA."},
+        {"title": "Retry Strategy", "desc": "Gunakan exponential backoff + full jitter, maxAttempts ≤ 5."},
+        {"title": "Circuit Breaker", "desc": "FailureThreshold 2, cooldown 50 ms, half‑open test 1."}
+    ]}],
+    mental_model="Keputusan ini menentukan trade‑off latency vs availability.",
+    source_path="content/02-master-draft.md:218-226",
+    slide_num="09 / 24",
+    narrative="Setiap keputusan dipilih berdasarkan data observasi latency dan error rate pada sistem produksi.",
+    narrative_en="Each decision is chosen based on observed latency distribution and error rates in production.",
+    layout="cards",
+)
+
+# Slide 10: Bukti Eksekusi – Terminal Output
+add_slide(
+    categories=["EVIDENCE"],
+    title="Demo: Timeout & Circuit Breaker",
+    subtitle="Output singkat menampilkan state transitions.",
+    content_items=[{"type": "code", "title": "Terminal", "items": [
+        "$ go run ./cmd/demo",
+        "Scenario 1: budget 50ms → context deadline exceeded",
+        "Scenario 2: circuit opens after 2 failures → state=OPEN",
+        "Scenario 3: idempotent retry → execution count=1"
+    ]}],
+    mental_model="Log menunjukkan guardrail berfungsi sesuai harapan.",
+    source_path="engineering/03-execution-result.md:1-10",
+    slide_num="10 / 24",
+    narrative="Demo mengeksekusi empat skenario; output terminal memperlihatkan perubahan state circuit dan jumlah eksekusi idempotent.",
+    narrative_en="The demo runs four scenarios; terminal output shows circuit state transitions and idempotent execution count.",
+    layout="code",
+)
+
+# Slide 11: Analisis Batasan Bukti
+add_slide(
+    categories=["LIMITS"],
+    title="YANG TIDAK DIBUKTIKAN",
+    subtitle="Keterbatasan laboratorium.",
+    content_items=[{"type": "cards", "title": "Batasan", "items": [
+        {"title": "Distribusi Latency Dinamis", "desc": "Tidak ada adaptasi timeout berbasis P99 secara real‑time."},
+        {"title": "Persisten Idempotency Store", "desc": "In‑memory store hilang saat crash; produksi membutuhkan Redis/DB."},
+        {"title": "Header Deadline HTTP", "desc": "Tidak ada standar tunggal, hanya contoh gRPC header."}
+    ]}],
+    mental_model="Lab fokus pada pola di dalam satu proses Go.",
+    source_path="content/02-master-draft.md:30-38",
+    slide_num="11 / 24",
+    narrative="Penelitian mengakui bahwa beberapa aspek produksi tidak tercakup, seperti timeout adaptif dan store persisten.",
+    narrative_en="The research acknowledges that several production aspects are omitted, such as adaptive timeouts and persistent stores.",
+    layout="cards",
+)
+
+# Slide 12: Trade‑off Arsitektur
+add_slide(
+    categories=["TRADEOFF"],
+    title="Trade‑off Timeout vs Throughput",
+    subtitle="Menurunkan budget mengurangi latency tetapi meningkatkan reject rate.",
+    content_items=[{"type": "cards", "title": "PERTIMBANGAN", "items": [
+        {"title": "Timeout Ketat", "desc": "Mengurangi tail latency, tapi meningkatkan false‑negative failures."},
+        {"title": "Timeout Longgar", "desc": "Mencegah false failures, tapi meningkatkan jumlah request terblokir."}
+    ]}],
+    mental_model="Guardrail harus seimbang dengan SLA dan beban kerja.",
+    source_path="content/02-master-draft.md:186-192",
+    slide_num="12 / 24",
+    narrative="Mengatur budget timeout memerlukan kompromi antara latensi ekor dan tingkat penolakan yang dapat diterima.",
+    narrative_en="Setting timeout budgets requires a compromise between tail latency and acceptable rejection rates.",
+    layout="cards",
+)
+
+# Slide 13: Concurrency / Validation Pipeline
+add_slide(
+    categories=["CONCURRENCY"],
+    title="Pipeline Validasi Konkuren dengan Mutex",
+    subtitle="Retrier → Circuit → Idempotency Store.",
+    content_items=[{"type": "code", "title": "internal/circuit/circuit.go:108-126", "items": [
+        "func (b *Breaker) RecordFailure() {",
+        "    b.mu.Lock()",
+        "    defer b.mu.Unlock()",
+        "    if b.state == StateHalfOpen {",
+        "        b.state = StateOpen",
+        "        b.failures = 0",
+        "        b.successes = 0",
+        "        b.lastStateChg = time.Now()",
+        "    } else if b.state == StateClosed {",
+        "        b.failures++",
+        "        if b.failures >= b.cfg.FailureThreshold {",
+        "            b.state = StateOpen",
+        "            b.failures = 0",
+        "            b.successes = 0",
+        "            b.lastStateChg = time.Now()",
+        "        }",
+        "    }",
+        "}"
+    ]}],
+    mental_model="RWMutex melindungi state machine dari race conditions.",
+    source_path="internal/circuit/circuit.go:108-126",
+    slide_num="13 / 24",
+    narrative="Circuit breaker menggunakan sync.RWMutex untuk mengamankan transisi state di antara banyak goroutine.",
+    narrative_en="The circuit breaker employs sync.RWMutex to safeguard state transitions across many goroutine.",
+    layout="code",
+)
+
+# Slide 14: Before vs After Comparison
+add_slide(
+    categories=["COMPARISON"],
+    title="Sebelum vs Sesudah Guardrails",
+    subtitle="Tanpa vs dengan timeout & circuit.",
+    content_items=[{"type": "cards", "title": "PERBANDINGAN", "items": [
+        {"title": "Tanpa Guardrails", "desc": "Latency 60 s → pool terisi → 503 Service Unavailable pada endpoint lain."},
+        {"title": "Dengan Guardrails", "desc": "Timeout 30 ms → request dibatalkan, circuit opens, downstream tidak dibebani."}
+    ]}],
+    mental_model="Guardrails memotong beban berlebih di sumbernya.",
+    source_path="content/02-master-draft.md:140-148",
+    slide_num="14 / 24",
+    narrative="Perbandingan menunjukkan bahwa penambahan timeout, circuit, dan idempotency membuat sistem tetap responsif meski dependency melambat.",
+    narrative_en="The comparison shows that adding timeout, circuit, and idempotency keeps the system responsive even when a downstream becomes slow.",
+    layout="cards",
+)
+
+# Slide 15: Test ExecuteWithBudget
+add_slide(
+    categories=["EVIDENCE"],
+    title="Test ExecuteWithBudget – Timeout Inheritance",
+    subtitle="Bukti parent deadline membatalkan child.",
+    content_items=[{"type": "code", "title": "internal/deadline/deadline_test.go:30-38", "items": [
+        "func TestExecuteWithBudget_ParentTimeoutInherited(t *testing.T) {",
+        "    ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)",
+        "    defer cancel()",
+        "    err := ExecuteWithBudget(ctx, 500*time.Millisecond, func(ctx context.Context) error {",
+        "        time.Sleep(100*time.Millisecond)",
+        "        return nil",
+        "    })",
+        "    assert.Equal(t, context.DeadlineExceeded, err)",
+        "}"
+    ]}],
+    mental_model="Child deadline tidak pernah melebihi parent deadline.",
+    source_path="internal/deadline/deadline_test.go:30-38",
+    slide_num="15 / 24",
+    narrative="Test ini membuktikan bahwa child context akan dibatalkan segera ketika parent deadline tercapai, meski budget lokal lebih besar.",
+    narrative_en="This test proves that a child context is cancelled as soon as the parent deadline is reached, even if the local budget is larger.",
+    layout="code",
+)
+
+# Slide 16: Test Retrier – Jitter Bounds & MaxAttempts
+add_slide(
+    categories=["EVIDENCE"],
+    title="Test Retrier – Jitter Bounds & MaxAttempts",
+    subtitle="Bukti full jitter dan pengulangan maksimal.",
+    content_items=[{"type": "code", "title": "internal/retry/retry_test.go:12-24", "items": [
+        "func TestRetrier_JitterBoundsAndZeroConfig(t *testing.T) {",
+        "    r := NewRetrier(Config{})",
+        "    for i := 1; i <= 5; i++ {",
+        "        d := r.CalculateBackoff(i)",
+        "        assert.GreaterOrEqual(t, d, time.Duration(0))",
+        "        assert.LessOrEqual(t, d, r.cfg.MaxBackoff)",
+        "    }",
+        "}"
+    ]}],
+    mental_model="Backoff selalu berada dalam rentang [0, maxBackoff].",
+    source_path="internal/retry/retry_test.go:12-24",
+    slide_num="16 / 24",
+    narrative="Test ini memastikan bahwa setiap nilai backoff tidak negatif dan tidak melebihi batas maksimum, serta konfigurasi nol menggunakan nilai default.",
+    narrative_en="This test ensures every backoff value is non‑negative and does not exceed the maximum bound, and that zero config uses defaults.",
+    layout="code",
+)
+
+# Slide 17: Test Circuit Breaker – State Transitions
+add_slide(
+    categories=["EVIDENCE"],
+    title="Test Circuit Breaker – State Transitions",
+    subtitle="Bukti CLOSED → OPEN → HALF_OPEN → CLOSED.",
+    content_items=[{"type": "code", "title": "internal/circuit/circuit_test.go:5-20", "items": [
+        "func TestCircuitBreaker_StateTransitions(t *testing.T) {",
+        "    cb := NewBreaker(Config{FailureThreshold: 2, SuccessThreshold: 2, Cooldown: 50*time.Millisecond})",
+        "    cb.RecordFailure()",
+        "    cb.RecordFailure()",
+        "    assert.Equal(t, StateOpen, cb.State())",
+        "    time.Sleep(60*time.Millisecond)",
+        "    assert.Equal(t, StateHalfOpen, cb.State())",
+        "    cb.RecordSuccess()",
+        "    cb.RecordSuccess()",
+        "    assert.Equal(t, StateClosed, cb.State())",
+        "}"
+    ]}],
+    mental_model="State machine berubah hanya di bawah lock.",
+    source_path="internal/circuit/circuit_test.go:5-20",
+    slide_num="17 / 24",
+    narrative="Test ini mengonfirmasi transisi state yang diharapkan: dua kegagalan membuka circuit, cooldown membawa ke half‑open, lalu dua kesuksesan menutupnya.",
+    narrative_en="This test confirms the expected state transitions: two failures open the circuit, cooldown brings it to half‑open, then two successes close it.",
+    layout="code",
+)
+
+# Slide 18: Test Idempotency Store – Concurrent Access
+add_slide(
+    categories=["EVIDENCE"],
+    title="Test Idempotency Store – Concurrent Access",
+    subtitle="50 goroutine konkuren, race detector PASS.",
+    content_items=[{"type": "code", "title": "internal/idempotency/idempotency_test.go:8-22", "items": [
+        "func TestStore_ConcurrentAccess(t *testing.T) {",
+        "    store := NewStore(time.Minute)",
+        "    var wg sync.WaitGroup",
+        "    for i := 0; i < 50; i++ {",
+        "        wg.Add(1)",
+        "        go func(id int) {",
+        "            defer wg.Done()",
+        "            store.Set(fmt.Sprintf(\"key-%d\", id), \"response\")",
+        "            val, ok := store.Get(fmt.Sprintf(\"key-%d\", id))",
+        "            assert.True(t, ok)",
+        "            assert.Equal(t, \"response\", val)",
+        "        }(i)",
+        "    }",
+        "    wg.Wait()",
+        "}"
+    ]}],
+    mental_model="Mutex mengamankan operasi Get/Set/TTL secara konkuren.",
+    source_path="internal/idempotency/idempotency_test.go:8-22",
+    slide_num="18 / 24",
+    narrative="Test ini menjalankan 50 goroutine yang melakukan Get/Set secara acak; race detector tidak melaporkan kesalahan.",
+    narrative_en="This test runs 50 goroutines performing random Get/Set operations; the race detector reports no errors.",
+    layout="code",
+)
+
+# Slide 19: Integration Test – Retry + Circuit + Idempotency
+add_slide(
+    categories=["EVIDENCE"],
+    title="Integration – Retry dengan Circuit Breaker",
+    subtitle="Backend selalu gagal, circuit terbuka setelah 2 attempt.",
+    content_items=[{"type": "code", "title": "tests/integration_test.go:14-42", "items": [
+        "func TestIntegration_RetryWithCircuitBreaker(t *testing.T) {",
+        "    cb := circuit.NewBreaker(circuit.Config{FailureThreshold: 2, ...})",
+        "    r := retry.NewRetrier(retry.Config{MaxAttempts: 4, ...})",
+        "    attempts := 0",
+        "    err := r.Do(context.Background(), func(ctx context.Context) error {",
+        "        return cb.Execute(func() error {",
+        "            attempts++",
+        "            return errors.New(\"backend down\")",
+        "        })",
+        "    })",
+        "    assert.NotNil(t, err)",
+        "    assert.Equal(t, circuit.StateOpen, cb.State())",
+        "}"
+    ]}],
+    mental_model="Circuit breaker memotong rantai retry setelah threshold.",
+    source_path="tests/integration_test.go:14-42",
+    slide_num="19 / 24",
+    narrative="Integrasi ini membuktikan bahwa setelah dua kegagalan berturut‑turut, circuit breaker menolak semua attempt berikutnya tanpa memanggil backend.",
+    narrative_en="This integration proves that after two consecutive failures, the circuit breaker rejects all subsequent attempts without calling the backend.",
+    layout="code",
+)
+
+# Slide 20: Checklist Implementasi
+add_slide(
+    categories=["CHECKLIST"],
+    title="Checklist Deploy Guardrails",
+    subtitle="Langkah‑langkah produksi.",
+    content_items=[{"type": "cards", "title": "CHECKLIST", "items": [
+        {"title": "1. Define timeout budgets", "desc": "Berbasis P95 latensi layanan."},
+        {"title": "2. Implement Retry with jitter", "desc": "Gunakan konfigurasi base/backoff, maxAttempts ≤5."},
+        {"title": "3. Add circuit breaker", "desc": "Set failureThreshold & cooldown sesuai SLA."},
+        {"title": "4. Add idempotency store", "desc": "Redis atau DB dengan TTL persisten."},
+        {"title": "5. Propagate context deadlines", "desc": "Pastikan semua downstream menerima context."}
+    ]}],
+    mental_model="Deploy langkah demi langkah memastikan semua guardrails aktif.",
+    source_path="content/02-master-draft.md:212-221",
+    slide_num="20 / 24",
+    narrative="Checklist ini merangkum praktik terbaik implementasi guardrails pada sistem terdistribusi.",
+    narrative_en="This checklist summarizes best practices for implementing guardrails on distributed systems.",
+    layout="cards",
+)
+
+# Slide 21: Anti‑pattern & Reproduksi Kegagalan
+add_slide(
+    categories=["ANTIPATTERN"],
+    title="Anti‑pattern: Timeout = Failure",
+    subtitle="Menyebabkan retry berbahaya dan double‑charge.",
+    content_items=[{"type": "cards", "title": "REPRODUKSI", "items": [
+        {"title": "1. Set timeout 30s", "desc": "Terlalu long, worker terblokir."},
+        {"title": "2. Retry tanpa jitter", "desc": "Semua client retry bersamaan → storm."},
+        {"title": "3. Tanpa idempotency", "desc": "Operasi mutasi dieksekusi dua kali."}
+    ]}],
+    mental_model="Kegagalan ini muncul ketika guardrails tidak diterapkan.",
+    source_path="content/02-master-draft.md:190-196",
+    slide_num="21 / 24",
+    narrative="Contoh anti‑pattern menegaskan pentingnya mengamankan setiap lapisan.",
+    narrative_en="The anti‑pattern example underscores the need to secure each layer.",
+    layout="cards",
+)
+
+# Slide 22: Takeaway Praktis & Command Block
+add_slide(
+    categories=["TAKEAWAY"],
+    title="Praktis: Satu Perintah Deploy Guardrails",
+    subtitle="Gunakan go‑run demo atau integrate libs.",
+    content_items=[{"type": "code", "title": "Deploy", "items": [
+        "go get github.com/lukman-ss/timeoutguard",
+        "go run ./cmd/demo --scenario=all"
+    ]}],
+    mental_model="Integrasi satu paket membawa semua pola.",
+    source_path="cmd/demo/main.go:1-10",
+    slide_num="22 / 24",
+    narrative="Dengan menambahkan modul timeoutguard, aplikasi langsung dapat memakai context deadline, retry, circuit, dan idempotency.",
+    narrative_en="By adding the timeoutguard module, the application instantly gains context deadline, retry, circuit, and idempotency capabilities.",
+    layout="code",
+)
+
+# Slide 23: Prinsip Arsitektural Jangka Panjang
+add_slide(
+    categories=["PRINCIPLE"],
+    title="Prinsip: Guardrails Sebagai Kontrak Layanan",
+    subtitle="Timeout, retry, circuit, idempotency = Service‑Level Contract.",
+    content_items=[{"type": "cards", "title": "PRINSIP", "items": [
+        {"title": "Explicit Contracts", "desc": "Setiap API menyatakan timeout & idempotency semantics."},
+        {"title": "Observability Built‑in", "desc": "Metrics untuk deadline breaches, circuit state, retry count."},
+        {"title": "Evolutionary Safety", "desc": "Tambah guardrails tanpa mengubah layanan klien."}
+    ]}],
+    mental_model="Guardrails menyediakan SLA yang dapat di‑monitor dan di‑tweak.",
+    source_path="content/02-master-draft.md:226-236",
+    slide_num="23 / 24",
+    narrative="Prinsip ini menjadikan guardrails bagian resmi dari kontrak API, meningkatkan kepercayaan dan evolusi layanan.",
+    narrative_en="This principle makes guardrails a formal part of the API contract, boosting trust and service evolution.",
+    layout="cards",
+)
+
+# Slide 24: Closing
+add_slide(
+    categories=["CLOSING"],
+    title="Terima Kasih",
+    subtitle="Repositori, commit, dan kredit.",
+    content_items=[{"type": "cards", "title": "INFO", "items": [
+        {"title": "Repo", "desc": REPO_URL},
+        {"title": "Commit", "desc": COMMIT_SHA},
+        {"title": "Author", "desc": AUTHOR}
+    ]}],
     mental_model="",
     source_path="",
-    slide_num=""
+    slide_num="24 / 24",
+    narrative="Semoga konsep guardrails membantu Anda merancang layanan yang tahan terhadap ketergantungan lambat.",
+    narrative_en="Hope these guardrail concepts help you design services resilient to slow dependencies.",
+    layout="cards",
 )
-
-# Slide 2: Slow vs Dead Dependency
-add_slide(
-    categories=["MASALAH", "LITTLE'S LAW"],
-    title="Slow Dependency Lebih Berbahaya daripada Dead Dependency",
-    subtitle="Fast failure melepaskan resource seketika; latency tinggi menahan thread pool",
-    content_items=[
-        {"title": "FAST FAILURE (DEAD)", "items": [
-            "Mengembalikan ECONNREFUSED atau reset paket secara instan",
-            "Worker thread langsung dilepas ke pool dalam orde mikrodetik",
-            "Sistem caller tetap responsif untuk request lain",
-        ], "type": "bullet"},
-        {"title": "SLOW DEPENDENCY", "items": [
-            "Latency melonjak drastis, misal dari 300ms menjadi 60 detik",
-            "Request in-flight tertahan di thread pool, memory, dan socket",
-            "Endpoint independen (/profile, /health) kehabisan worker thread",
-        ], "type": "bullet"},
-        {"title": "FORMULA LITTLE'S LAW", "items": [
-            "L = λ × W (Konkurensi = Arrival Rate × Latency)",
-            "Jika W naik 200× (0.3s ke 60s), kapasitas L meledak 200× lipat",
-            "Thread pool 100 worker hanya mampu melayani 1.6 QPS pada W=60s",
-        ], "type": "bullet"},
-    ],
-    mental_model="Fast failure frees resources immediately; slow dependencies hoard threads until total starvation.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="2 / 24"
-)
-
-# Slide 3: Mental Model of Timeout
-add_slide(
-    categories=["KONSEP", "MENTAL MODEL"],
-    title="Timeout Adalah Resource Guardrail, Bukan Tebakan Aman",
-    subtitle="Empat prinsip fundamental dalam perancangan time budget",
-    content_items=[
-        {"title": "TIMEOUT ≠ FAILURE", "items": [
-            "Timeout berarti caller tidak menerima response tepat waktu",
-            "Status backend adalah indeterminate: mungkin sukses, mungkin gagal",
-            "Jangan pernah mengasumsikan transaksi dibatalkan hanya karena timeout",
-        ], "type": "bullet"},
-        {"title": "BUDGET HIERARKIS", "items": [
-            "Deadline harus diwariskan dari hulu ke hilir distributed trace",
-            "Child timeout tidak boleh melebihi sisa waktu parent deadline",
-            "Downstream harus membatalkan eksekusi jika parent telah timeout",
-        ], "type": "bullet"},
-        {"title": "PROTEKSI TOTAL", "items": [
-            "Retry tanpa jitter menciptakan thundering herd retry storm",
-            "HTTP timeout tidak melindungi DB connection pool dari query liar",
-            "Gunakan statement_timeout pada database storage layer",
-        ], "type": "bullet"},
-    ],
-    mental_model="Timeout means caller gave up waiting, not that the backend operation was aborted.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="3 / 24"
-)
-
-# Slide 4: Lab Architecture
-add_slide(
-    categories=["ARSITEKTUR", "DESAIN"],
-    title="Komponen Pertahanan Terdistribusi Lab 28",
-    subtitle="Empat subsistem mandiri yang bekerja bersinergi menahan kegagalan",
-    content_items=[
-        {"title": "1. CONTEXT DEADLINE", "items": [
-            "Package internal/deadline",
-            "Pewarisan context.WithTimeout dengan channel non-blocking",
-            "Pencegahan goroutine leak saat caller membatalkan eksekusi",
-        ], "type": "bullet"},
-        {"title": "2. RETRY WITH FULL JITTER", "items": [
-            "Package internal/retry",
-            "Exponential backoff 2^(attempt-1) dikombinasikan seragam acak",
-            "Menghilangkan thundering herd antar worker",
-        ], "type": "bullet"},
-        {"title": "3. CIRCUIT BREAKER & DEDUP", "items": [
-            "Package internal/circuit: State CLOSED, OPEN, HALF_OPEN",
-            "Package internal/idempotency: Store in-memory dengan lazy eviction",
-            "Melindungi downstream yang kolaps dan mencegah double charge",
-        ], "type": "bullet"},
-    ],
-    mental_model="A resilient pipeline combines deadlines, jittered retries, circuit breaking, and idempotency.",
-    source_path="labs/28-timeouts-and-deadlines/engineering/01-design.md",
-    slide_num="4 / 24"
-)
-
-# Slide 5: Context Deadline Propagation
-add_slide(
-    categories=["KODE", "DEADLINE"],
-    title="Implementasi Context Deadline di Go",
-    subtitle="Memastikan child budget tunduk pada parent context tanpa memory leak",
-    content_items=[
-        {"title": "CHILD TIMEOUT BUDGET", "items": [
-            "childCtx, cancel := context.WithTimeout(ctx, budget)",
-            "defer cancel() selalu dipanggil untuk membersihkan timer",
-            "Child deadline = min(parent.Deadline(), now + budget)",
-        ], "type": "bullet"},
-        {"title": "BUFFERED CHANNEL (CAP=1)", "items": [
-            "done := make(chan error, 1)",
-            "Kapasitas 1 menjamin goroutine pekerja tidak pernah block",
-            "Mencegah goroutine leak saat select memilih childCtx.Done()",
-        ], "type": "bullet"},
-        {"title": "BUKTI PENGUJIAN", "items": [
-            "TestExecuteWithBudget_Timeout: task 100ms dipotong budget 20ms",
-            "TestExecuteWithBudget_ParentTimeoutInherited: parent 20ms batalkan budget 500ms",
-            "Mengembalikan context.DeadlineExceeded secara deterministik",
-        ], "type": "bullet"},
-    ],
-    mental_model="Always buffer the completion channel to capacity 1 to prevent goroutine leaks on timeout.",
-    source_path="labs/28-timeouts-and-deadlines/internal/deadline/deadline.go",
-    slide_num="5 / 24"
-)
-
-# Slide 6: Deadline Inheritance
-add_slide(
-    categories=["PROPAGASI", "HIERARKI"],
-    title="Pewarisan Deadline dalam Hierarki Distributed Trace",
-    subtitle="Waktu tidak bertambah di downstream; deadline selalu menyusut",
-    content_items=[
-        {"title": "SKENARIO API GATEWAY", "items": [
-            "API Gateway menetapkan timeout 500ms untuk request user",
-            "Service A butuh 150ms pemrosesan lokal sebelum memanggil Service B",
-            "Budget aktual yang diteruskan ke Service B tersisa 350ms",
-        ], "type": "bullet"},
-        {"title": "DOWNSTREAM OVER-ESTIMATION", "items": [
-            "Jika Service B membuat timeout 2 detik sendiri tanpa parent ctx",
-            "Saat detik ke-1 user sudah menerima 504 Gateway Timeout",
-            "Service B tetap membakar CPU untuk request yang tidak lagi dinanti",
-        ], "type": "bullet"},
-        {"title": "MEKANISME GOLANG", "items": [
-            "context.WithTimeout secara otomatis mewarisi parent deadline",
-            "Jika parent deadline lebih pendek dari budget baru, parent menang",
-            "Sub-operasi berhenti bersamaan saat parent deadline terpicu",
-        ], "type": "bullet"},
-    ],
-    mental_model="Time budgets strictly shrink as calls descend through microservice trees.",
-    source_path="labs/28-timeouts-and-deadlines/internal/deadline/deadline_test.go",
-    slide_num="6 / 24"
-)
-
-# Slide 7: Thundering Herd & Retries
-add_slide(
-    categories=["MASALAH", "RETRY STORM"],
-    title="Bahaya Retry Tanpa Jitter: Thundering Herd",
-    subtitle="Retry deterministik menyinkronkan ribuan client menjadi gelombang perusak",
-    content_items=[
-        {"title": "SINKRONISASI CLIENT", "items": [
-            "1.000 client gagal bersamaan saat database spike sejenak",
-            "Semua client menjadwalkan retry tepat pada attempt × 100ms",
-            "Downstream dihantam gelombang request periodik yang sinkron",
-        ], "type": "bullet"},
-        {"title": "RETRY STORM COLLAPSE", "items": [
-            "Server downstream yang baru pulih langsung tumbang kembali",
-            "Cascading failure merambat naik ke API Gateway",
-            "Load amplification: 1 request asli menjadi 3-5 request bersamaan",
-        ], "type": "bullet"},
-        {"title": "SOLUSI AWS ARCHITECTURE", "items": [
-            "Bukan sekadar exponential backoff berlipat ganda",
-            "Wajib menambahkan randomisasi penuh (Full Jitter)",
-            "Meredistribusikan beban secara merata di sepanjang sumbu waktu",
-        ], "type": "bullet"},
-    ],
-    mental_model="Deterministic retries synchronize clients into destructive thundering herds.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="7 / 24"
-)
-
-# Slide 8: Full Jitter Algorithm
-add_slide(
-    categories=["ALGORITMA", "JITTER"],
-    title="Matematika Exponential Backoff dengan Full Jitter",
-    subtitle="sleep = random(0, min(maxBackoff, baseBackoff × 2^(attempt-1)))",
-    content_items=[
-        {"title": "FORMULA KALKULASI", "items": [
-            "multiplier := 1 << uint(attempt - 1)",
-            "temp := min(MaxBackoff, BaseBackoff * multiplier)",
-            "sleep := rand.Float64() * temp (Distribusi Seragam)",
-        ], "type": "bullet"},
-        {"title": "KEUNGGULAN FULL JITTER", "items": [
-            "AWS Research membuktikan Full Jitter meminimalkan total waktu kerja",
-            "Mengurangi server contention hingga titik terendah dibanding Equal Jitter",
-            "Setiap client memiliki waktu tunggu yang independen secara statistik",
-        ], "type": "bullet"},
-        {"title": "BATASAN IMPLEMENTASI", "items": [
-            "attempt <= 0 ditangani aman dengan membatasi shift bit",
-            "Backoff dibatasi MaxBackoff untuk mencegah overflow",
-            "Default zero config: 3 attempts, base 10ms, max 100ms",
-        ], "type": "bullet"},
-    ],
-    mental_model="Full jitter samples uniformly from zero to the exponential ceiling, maximizing dispersion.",
-    source_path="labs/28-timeouts-and-deadlines/internal/retry/retry.go",
-    slide_num="8 / 24"
-)
-
-# Slide 9: Retrier Implementation
-add_slide(
-    categories=["KODE", "RETRY"],
-    title="Loop Eksekusi Retrier dengan Respek Context",
-    subtitle="Retry loop yang berhenti seketika saat context timeout tercapai",
-    content_items=[
-        {"title": "STRUKTUR EKSEKUSI", "items": [
-            "Iterasi 1 hingga cfg.MaxAttempts secara berurutan",
-            "Mengeksekusi operasi fn(ctx) di tiap iterasi",
-            "Jika err == nil, fungsi langsung return tanpa sleep",
-        ], "type": "bullet"},
-        {"title": "RESPEK TERHADAP CONTEXT", "items": [
-            "Sleep dilakukan menggunakan select { case <-time.After(): ... }",
-            "case <-ctx.Done(): return ctx.Err() membatalkan jeda tidur",
-            "Tidak membuang waktu menunggu jika caller sudah membatalkan",
-        ], "type": "bullet"},
-        {"title": "ERROR HANDLING", "items": [
-            "Mengembalikan ErrMaxRetriesExceeded jika semua percobaan gagal",
-            "Membungkus lastErr untuk debugging riwayat kegagalan",
-            "Test membuktikan retry berhenti saat parent context hangus",
-        ], "type": "bullet"},
-    ],
-    mental_model="A retrier must abort its sleep immediately when the governing context is cancelled.",
-    source_path="labs/28-timeouts-and-deadlines/internal/retry/retry.go",
-    slide_num="9 / 24"
-)
-
-# Slide 10: Circuit Breaker State Machine
-add_slide(
-    categories=["CIRCUIT", "STATE MACHINE"],
-    title="Circuit Breaker: Menghindari Hammering Downstream",
-    subtitle="Tiga status proteksi: CLOSED, OPEN, dan HALF-OPEN",
-    content_items=[
-        {"title": "CLOSED STATE (NORMAL)", "items": [
-            "Semua request diteruskan langsung ke downstream service",
-            "Menghitung kegagalan berturut-turut (consecutive failures)",
-            "Jika failure count >= FailureThreshold (misal 2), transisi ke OPEN",
-        ], "type": "bullet"},
-        {"title": "OPEN STATE (ISOLASI)", "items": [
-            "Semua request langsung ditolak dengan ErrCircuitOpen",
-            "Tidak ada satupun request yang dikirim ke downstream",
-            "Memberikan ruang napas bagi downstream yang kolaps",
-        ], "type": "bullet"},
-        {"title": "HALF-OPEN STATE (UJI COBA)", "items": [
-            "Aktif otomatis setelah CooldownWindow (misal 50ms) berlalu",
-            "Mengizinkan request uji coba masuk secara bertahap",
-            "Sukses berturut-turut memulihkan ke CLOSED; 1 gagal kembali ke OPEN",
-        ], "type": "bullet"},
-    ],
-    mental_model="Circuit breaker fails fast to give dying downstream dependencies room to recover.",
-    source_path="labs/28-timeouts-and-deadlines/internal/circuit/circuit.go",
-    slide_num="10 / 24"
-)
-
-# Slide 11: Circuit Breaker Concurrency
-add_slide(
-    categories=["KODE", "THREAD-SAFETY"],
-    title="Thread-Safe State Transitions pada Breaker",
-    subtitle="Sinkronisasi state menggunakan sync.RWMutex untuk throughput tinggi",
-    content_items=[
-        {"title": "METODE ALLOW() & READ LOCK", "items": [
-            "b.mu.RLock() membaca state saat ini secara konkuren",
-            "Mengecek apakah durasi OPEN telah melampaui CooldownWindow",
-            "Promosi ke b.mu.Lock() hanya saat transisi status ke HALF_OPEN",
-        ], "type": "bullet"},
-        {"title": "RECORD SUCCESS & FAILURE", "items": [
-            "b.mu.Lock() eksklusif memperbarui counter dan timestamp",
-            "Di HALF_OPEN: 1 kegagalan langsung memicu OPEN kembali",
-            "Di HALF_OPEN: sukses mencapai threshold memicu pemulihan ke CLOSED",
-        ], "type": "bullet"},
-        {"title": "VERIFIKASI INTEGRITAS", "items": [
-            "TestCircuitBreaker_StateTransitions memvalidasi siklus penuh",
-            "TestCircuitBreaker_HalfOpenFailureTripsOpen memvalidasi sensitivitas",
-            "Lolos pengujian race detector tanpa race condition",
-        ], "type": "bullet"},
-    ],
-    mental_model="Fast reads under RLock; atomic state mutations under exclusive Lock.",
-    source_path="labs/28-timeouts-and-deadlines/internal/circuit/circuit.go",
-    slide_num="11 / 24"
-)
-
-# Slide 12: Ambiguity of Timeout
-add_slide(
-    categories=["MASALAH", "IDEMPOTENCY"],
-    title="Ambiguitas Status Saat Operasi Mengalami Timeout",
-    subtitle="Apakah request benar-benar gagal atau berhasil tapi respon hilang?",
-    content_items=[
-        {"title": "SKENARIO JARINGAN ASINKRON", "items": [
-            "Client mengirim request POST /charges untuk potong saldo $100",
-            "Database bank sukses mendebit saldo nasabah di backend",
-            "Kabel fiber putus atau reverse proxy timeout sebelum ACK terkirim",
-        ], "type": "bullet"},
-        {"title": "DILEMA CLIENT CALLER", "items": [
-            "Client hanya menerima pesan: context deadline exceeded",
-            "Client TIDAK BISA membedakan apakah transaksi sukses atau gagal",
-            "Jika caller langsung melakukan retry mentah, saldo terpotong $200",
-        ], "type": "bullet"},
-        {"title": "PERLINDUNGAN IDEMPOTENSI", "items": [
-            "Setiap operasi yang mengubah state wajib menyertakan Idempotency-Key",
-            "Server menyimpan hash request dan response hasil pemrosesan",
-            "Retry dengan key yang sama tidak boleh mengeksekusi ulang transaksi",
-        ], "type": "bullet"},
-    ],
-    mental_model="Timeout is indeterminate: the database write may have committed even if the network dropped.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="12 / 24"
-)
-
-# Slide 13: Idempotency Key Store
-add_slide(
-    categories=["KODE", "DEDUP"],
-    title="In-Memory Idempotency Store & Lazy Eviction",
-    subtitle="Penyimpanan response dengan TTL dan pembersihan pasif tanpa timer leak",
-    content_items=[
-        {"title": "RECORD STRUKTUR & TTL", "items": [
-            "type Record struct { Response string; CreatedAt time.Time }",
-            "Set(key, response) menyimpan payload dengan timestamp saat ini",
-            "Store menjaga masa retensi data sesuai configured TTL (misal 50ms)",
-        ], "type": "bullet"},
-        {"title": "LAZY EVICTION PATTERN", "items": [
-            "Tidak menggunakan background goroutine periodik pemakan resource",
-            "Get(key) memeriksa selisih time.Since(rec.CreatedAt) > s.ttl",
-            "Record kadaluarsa dihapus seketika saat diakses pembaca",
-        ], "type": "bullet"},
-        {"title": "WRITE LOCK PADA METHOD GET", "items": [
-            "Method Get() menggunakan s.mu.Lock(), bukan RLock()",
-            "Penting karena lazy eviction melakukan mutasi delete(s.records, key)",
-            "Menjamin konsistensi memori dan lolos race detector di bawah 50 goroutine",
-        ], "type": "bullet"},
-    ],
-    mental_model="Lazy eviction cleans expired keys during lookups, eliminating background cleaner goroutines.",
-    source_path="labs/28-timeouts-and-deadlines/internal/idempotency/idempotency.go",
-    slide_num="13 / 24"
-)
-
-# Slide 14: Integrating Retry + Circuit Breaker
-add_slide(
-    categories=["INTEGRASI", "CIRCUIT+RETRY"],
-    title="Integrasi: Retry Loop Bersanding dengan Circuit Breaker",
-    subtitle="Breaker memotong rantai retry seketika saat downstream terbukti down",
-    content_items=[
-        {"title": "EKSEKUSI BERSAMA", "items": [
-            "Retrier dikonfigurasi 4 attempt dengan backoff 5ms - 20ms",
-            "Circuit Breaker memiliki failure threshold 2 dan cooldown 50ms",
-            "Downstream disimulasikan selalu mengalami kegagalan 500 error",
-        ], "type": "bullet"},
-        {"title": "PEMOTONGAN CEPAT (FAST ABORT)", "items": [
-            "Attempt #1 gagal -> Breaker failure count = 1",
-            "Attempt #2 gagal -> Breaker failure count = 2 -> State beralih ke OPEN",
-            "Attempt #3 & #4 langsung ditolak lokal oleh Allow() tanpa call network",
-        ], "type": "bullet"},
-        {"title": "PROTEKSI TOTAL", "items": [
-            "Mencegah retry membebani backend yang sedang berjuang pulih",
-            "Waktu eksekusi caller terpangkas drastis tanpa sleep yang sia-sia",
-            "TestIntegration_RetryWithCircuitBreaker membuktikan pemotongan ini",
-        ], "type": "bullet"},
-    ],
-    mental_model="Circuit breakers short-circuit futile retries before they hit an already failing downstream.",
-    source_path="labs/28-timeouts-and-deadlines/tests/integration_test.go",
-    slide_num="14 / 24"
-)
-
-# Slide 15: Integrating Idempotent Retry
-add_slide(
-    categories=["INTEGRASI", "IDEMPOTENT RETRY"],
-    title="Integrasi: Safe Retries Melalui Idempotency Store",
-    subtitle="Memastikan operasi non-idempoten aman dieksekusi berulang kali",
-    content_items=[
-        {"title": "SKENARIO SIMULASI", "items": [
-            "Operasi bisnis: actualExecutions counter mencatat eksekusi nyata",
-            "Request pertama berhasil menyimpan hasil ke Idempotency Store",
-            "Tetapi caller mengalami transient network disconnect sebelum terima data",
-        ], "type": "bullet"},
-        {"title": "EKSEKUSI RETRY LOOP", "items": [
-            "Retrier menjalankan 3 attempt pengulangan dengan request yang sama",
-            "Store.Get(idempotencyKey) menemukan cache record transaksi sebelumnya",
-            "Mengembalikan response tersimpan dengan label DEDUPLICATED",
-        ], "type": "bullet"},
-        {"title": "HASIL VERIFIKASI", "items": [
-            "actualExecutions tetap bernilai 1 meskipun attempt berlangsung berkali-kali",
-            "Uang nasabah hanya terdebit sekali; saldo aman dari double charging",
-            "TestIntegration_IdempotentRetry mengonfirmasi proteksi absolut ini",
-        ], "type": "bullet"},
-    ],
-    mental_model="Idempotency keys make retries safe by returning cached results for duplicate requests.",
-    source_path="labs/28-timeouts-and-deadlines/tests/integration_test.go",
-    slide_num="15 / 24"
-)
-
-# Slide 16: Verification & Test Suite
-add_slide(
-    categories=["VERIFIKASI", "TESTING"],
-    title="Verifikasi Komprehensif: 13 Test Case Lolos 100%",
-    subtitle="Pengujian menyeluruh mencakup unit, konkurensi, dan integrasi lintas modul",
-    content_items=[
-        {"title": "DISTRIBUSI TEST SUITE", "items": [
-            "internal/circuit: 3 tests (StateTransitions, HalfOpenFailure, ZeroConfig)",
-            "internal/deadline: 3 tests (Success, Timeout, ParentInherited)",
-            "internal/retry: 5 tests (FirstTry, RetryUntilSuccess, ExceedMax, ContextCanceled, Bounds)",
-            "internal/idempotency: 3 tests (GetSet, ConcurrentAccess, LazyEviction)",
-        ], "type": "bullet"},
-        {"title": "INTEGRATION SUITE", "items": [
-            "TestIntegration_RetryWithCircuitBreaker -> PASS",
-            "TestIntegration_IdempotentRetry -> PASS",
-            "Race detector (go test -race ./...) berjalan bersih tanpa data race",
-        ], "type": "bullet"},
-        {"title": "DURASI & STABILITAS", "items": [
-            "Total 13 automated test cases selesai dalam ~1.6 detik",
-            "Semua race window diuji dengan goroutine agresif",
-            "Zero flake, deterministik, dan reproducible",
-        ], "type": "bullet"},
-    ],
-    mental_model="13/13 tests pass cleanly under the Go race detector, verifying concurrent correctness.",
-    source_path="labs/28-timeouts-and-deadlines/tests/integration_test.go",
-    slide_num="16 / 24"
-)
-
-# Slide 17: Interactive Demo Program
-add_slide(
-    categories=["DEMO", "EKSEKUSI"],
-    title="Program Demo Interaktif: cmd/demo/main.go",
-    subtitle="Demonstrasi langsung 4 skenario ketahanan dalam terminal",
-    content_items=[
-        {"title": "SKENARIO 1 & 2", "items": [
-            "Demo 1: Context Deadline membatalkan task yang melampaui budget",
-            "Output: Deadline propagation result: context deadline exceeded",
-            "Demo 2: Retrier mencoba 3 kali dengan Full Jitter hingga sukses",
-            "Output: Attempt #1, #2, #3 dieksekusi dengan jeda acak seragam",
-        ], "type": "bullet"},
-        {"title": "SKENARIO 3", "items": [
-            "Demo 3: Circuit Breaker dari CLOSED -> 2 gagal -> OPEN",
-            "Call ditolak instan saat OPEN; cooldown -> HALF_OPEN -> sukses -> CLOSED",
-            "Output membuktikan pemulihan otomatis saat downstream sehat kembali",
-        ], "type": "bullet"},
-        {"title": "SKENARIO 4", "items": [
-            "Demo 4: Idempotent Request Retry Protection",
-            "Attempt 1: Charged $100 successfully",
-            "Attempt 2 (Retry): Charged $100 successfully (DEDUPLICATED)",
-        ], "type": "bullet"},
-    ],
-    mental_model="The runnable demo proves deadline cancellation, jittered retry, trip/recovery, and dedup in action.",
-    source_path="labs/28-timeouts-and-deadlines/cmd/demo/main.go",
-    slide_num="17 / 24"
-)
-
-# Slide 18: Common Architectural Anti-Patterns
-add_slide(
-    categories=["ANTI-PATTERN", "KESALAHAN"],
-    title="Empat Anti-Pattern Umum Terkait Timeout",
-    subtitle="Kebiasaan buruk di industri yang memicu cascading failure di produksi",
-    content_items=[
-        {"title": "1. TIMEOUT ANGKA BESAR", "items": [
-            "Menyetel timeout 30s-60s 'supaya aman dan tidak gampang error'",
-            "Menyebabkan antrian thread meledak saat dependency melambat sejenak",
-            "Harus berbasis latency P99 riil + toleransi sempit (misal 2.5× P99)",
-        ], "type": "bullet"},
-        {"title": "2. RETRY TANPA JITTER", "items": [
-            "Retry terjadwal kaku pada interval eksak (1s, 2s, 4s)",
-            "Menciptakan fenomena thundering herd yang melumpuhkan recovery backend",
-            "Wajib acak penuh dengan Full Jitter",
-        ], "type": "bullet"},
-        {"title": "3. BLIND RETRY & ONLY HTTP", "items": [
-            "Mengulang request mutasi tanpa idempotency key -> data corrupt",
-            "Hanya memasang timeout di reverse proxy/HTTP, lupa membatasi SQL query",
-            "PostgreSQL connection pool tetap terkuras habis oleh query gantung",
-        ], "type": "bullet"},
-    ],
-    mental_model="Arbitrary high timeouts and jitterless retries turn minor glitches into catastrophic outages.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="18 / 24"
-)
-
-# Slide 19: Database Timeouts: The Missing Layer
-add_slide(
-    categories=["DATABASE", "STORAGE LAYER"],
-    title="PostgreSQL Timeouts: Perlindungan Connection Pool",
-    subtitle="Mencegah query lambat atau lock gantung membajak seluruh koneksi database",
-    content_items=[
-        {"title": "STATEMENT TIMEOUT", "items": [
-            "SET statement_timeout = '5s'",
-            "Membatalkan query secara paksa jika durasi komputasi melebihi batas",
-            "Mencegah table scan tak terindeks menghabiskan CPU database",
-        ], "type": "bullet"},
-        {"title": "LOCK TIMEOUT", "items": [
-            "SET lock_timeout = '2s'",
-            "Membatalkan transaksi jika menunggu exclusive lock terlalu lama",
-            "Mencegah antrian DDL/UPDATE memblokir ribuan pembaca (connection pileup)",
-        ], "type": "bullet"},
-        {"title": "IDLE IN TRANSACTION", "items": [
-            "SET idle_in_transaction_session_timeout = '10s'",
-            "Memutus koneksi yang membuka BEGIN tapi tidak kunjung COMMIT",
-            "Mencegah hold lock tak sengaja dan bloat vacuum pada tabel",
-        ], "type": "bullet"},
-    ],
-    mental_model="Application timeouts are useless if slow database queries hold open connection pools indefinitely.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="19 / 24"
-)
-
-# Slide 20: gRPC & Cross-Service Propagation
-add_slide(
-    categories=["PROTOKOL", "GRPC & HTTP"],
-    title="Propagasi Batas Waktu Lintas Protokol Jaringan",
-    subtitle="Meneruskan deadline melewati batas proses dan host fisik",
-    content_items=[
-        {"title": "GRPC HEADERS (STANDAR)", "items": [
-            "Header resmi: grpc-timeout (misal 500m untuk 500 milidetik)",
-            "Downstream gRPC client otomatis mengurangi durasi transmisi",
-            "Menerapkan context deadline langsung ke server handler",
-        ], "type": "bullet"},
-        {"title": "HTTP/REST HEADERS", "items": [
-            "Belum ada standar tunggal ISO; heterogen antar vendor",
-            "Pola umum: Request-Timeout, X-Request-Timeout, atau Baggage",
-            "W3C Baggage / OpenTelemetry Context Injection semakin populer",
-        ], "type": "bullet"},
-        {"title": "CLOCK SKEW DEFENSE", "items": [
-            "Jangan pernah mengirim absolut wall-clock time (misal 14:00:05.123)",
-            "Perbedaan NTP antar host (clock skew) dapat menyebabkan false timeout",
-            "Selalu transmisikan sisa durasi relatif (remaining duration)",
-        ], "type": "bullet"},
-    ],
-    mental_model="Transmit remaining duration, never absolute timestamps, to eliminate clock skew hazards.",
-    source_path="labs/28-timeouts-and-deadlines/research/05-report.md",
-    slide_num="20 / 24"
-)
-
-# Slide 21: Lab Boundaries & Simulator Scope
-add_slide(
-    categories=["BATAS", "AUDIT"],
-    title="Batasan Eksplisit Implementasi Lab 28",
-    subtitle="Pemisahan transparan antara simulator lab dan kebutuhan produksi nyata",
-    content_items=[
-        {"title": "IN-MEMORY IDEMPOTENCY", "items": [
-            "Lab menyimpan key di memori dengan sync.Mutex",
-            "Data hilang saat server crash atau restart",
-            "Produksi butuh Redis cluster atau database transaksional",
-        ], "type": "bullet"},
-        {"title": "PROSES TUNGGAL (SINGLE PROCESS)", "items": [
-            "Deadline diuji dalam context Go proses tunggal",
-            "Tidak mencakup transmisi serialisasi wire protocol gRPC/HTTP",
-            "Tidak memodelkan dynamic adaptive timeout berbasis P99 live",
-        ], "type": "bullet"},
-        {"title": "DATABASE STORAGE LAYER", "items": [
-            "Lab membuktikan konsep melalui arsitektur software",
-            "Konfigurasi PostgreSQL statement_timeout dibahas konseptual",
-            "Tidak menjalankan live cluster Docker PostgreSQL",
-        ], "type": "bullet"},
-    ],
-    mental_model="Educational implementations highlight core principles; production requires distributed state stores.",
-    source_path="labs/28-timeouts-and-deadlines/engineering/02-implementation-notes.md",
-    slide_num="21 / 24"
-)
-
-# Slide 22: Before vs After Comparison
-add_slide(
-    categories=["KOMPARASI", "BEFORE VS AFTER"],
-    title="Perbandingan: Tanpa Perlindungan vs Sistem Resilien",
-    subtitle="Dampak langsung penerapan pola Timeouts & Deadlines",
-    content_items=[
-        {"title": "KONDISI TANPA PERLINDUNGAN", "items": [
-            "Default HTTP Client Go: No Timeout (menunggu selamanya)",
-            "Dependency lambat 60s: Thread pool terkuras, QPS anjlok ke 1.6",
-            "Retry instan: Terjadi thundering herd retry storm",
-            "Network timeout pada mutasi: Rentan double charge transaksi",
-        ], "type": "bullet"},
-        {"title": "DENGAN TIME BUDGET & RESILIENCE", "items": [
-            "Time Budget: Eksekusi dibatasi tegas; resource segera dilepas",
-            "Hierarchical Deadline: Downstream berhenti jika parent dibatalkan",
-            "Full Jitter Retries: Beban tersebar merata secara statistik",
-            "Circuit Breaker & Idempotency: Downstream dilindungi, data aman",
-        ], "type": "bullet"},
-        {"title": "HASIL OBSERVABILITAS", "items": [
-            "Sistem tahan terhadap kegagalan parsial tanpa downtime total",
-            "Resource usage (thread, socket, memory) tetap terkendali stabil",
-            "Zero orphan goroutine / memory leak di background",
-        ], "type": "bullet"},
-    ],
-    mental_model="Resilience patterns transform uncontrolled systemic failure into graceful degraded operation.",
-    source_path="labs/28-timeouts-and-deadlines/content/02-master-draft.md",
-    slide_num="22 / 24"
-)
-
-# Slide 23: Core Principles & Checklist
-add_slide(
-    categories=["PRINSIP", "BEST PRACTICE"],
-    title="Prinsip Inti Perancangan Timeouts di Produksi",
-    subtitle="Tiga pilar utama untuk membangun distributed system berdaya tahan tinggi",
-    content_items=[
-        {"title": "1. SET EXPLICIT BOUNDS EVERYWHERE", "items": [
-            "Jangan pernah menggunakan default timeout nol pada client manapun",
-            "Pasang batas waktu pada HTTP client, gRPC, database, dan messaging queue",
-            "Tetapkan timeout berdasarkan data observabilitas P99 latency aktual",
-        ], "type": "bullet"},
-        {"title": "2. ALWAYS JITTER RETRIES", "items": [
-            "Gunakan Full Jitter untuk mendispersi waktu tunggu antar client",
-            "Kombinasikan dengan Circuit Breaker untuk memotong retry sia-sia",
-            "Batasi jumlah maksimal retry secara konservatif (2-3 kali)",
-        ], "type": "bullet"},
-        {"title": "3. SAFEGUARD MUTATIONS WITH KEYS", "items": [
-            "Anggap timeout sebagai status indeterminate",
-            "Kirim Idempotency-Key pada semua operasi POST / mutasi state",
-            "Simpan status eksekusi dengan TTL untuk menghentikan double execution",
-        ], "type": "bullet"},
-    ],
-    mental_model="Bound every call, jitter every retry, and key every mutation for absolute resilience.",
-    source_path="labs/28-timeouts-and-deadlines/content/05-key-takeaways.md",
-    slide_num="23 / 24"
-)
-
-# Slide 24: Closing (Dark Navy)
-add_slide(
-    categories=["RINGKASAN"],
-    title="Ringkasan Lab 28: Timeouts & Deadlines",
-    subtitle=f"Commit: {COMMIT_SHA[:8]} | Test: 13/13 PASS | Repository: lukman-ss/software-engineering-lab",
-    content_items=[
-        {"title": "KOMPONEN TERVERIFIKASI", "items": [
-            "Context Deadline: non-blocking channel, inheritance terjaga",
-            "Full Jitter Retrier: distribusi acak seragam, anti thundering herd",
-            "Circuit Breaker: 3-state transisi aman konkuren (CLOSED/OPEN/HALF_OPEN)",
-            "Idempotency Store: thread-safe dedup dengan lazy TTL eviction",
-        ], "type": "bullet"},
-        {"title": "HASIL VERIFIKASI", "items": [
-            "13 unit & integration test PASS (100%)",
-            "Race detector clean (go test -race ./...)",
-            "Demo interaktif berhasil membuktikan seluruh skenario",
-        ], "type": "bullet"},
-        {"title": "SUMBER KODE & REPOSITORI", "items": [
-            f"Repository: {REPO_URL}",
-            f"Commit Hash: {COMMIT_SHA}",
-            "Uji mandiri: go test -v -race ./... && go run ./cmd/demo",
-            f"Author: {AUTHOR}",
-        ], "type": "bullet"},
-    ],
-    mental_model="Distributed resilience requires time bounds at every layer: deadline, retry jitter, breaker, and dedup.",
-    source_path="labs/28-timeouts-and-deadlines/README.md",
-    slide_num=""
-)
-
-if __name__ == "__main__":
-    print(f"Total slides defined: {len(SLIDES)}")
