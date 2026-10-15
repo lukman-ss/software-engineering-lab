@@ -18,7 +18,7 @@ Verdict: **APPROVED**
 ## Deliverables Status
 - **PDF Carousel**: 2376303 B (min 200000 B) ✅
 - **PPTX Presentation**: 106779 B (min 100000 B) ✅
-- **Cover ID**: 1716958 B (min 50000 B) ✅
+- **Cover ID**: 1707199 B (min 50000 B) ✅
 - **Cover EN**: 1707832 B (min 50000 B) ✅
 - **Dev.to Article**: 8582 B (min 1000 B) ✅
 - **Medium Article HTML**: 10418 B (min 5000 B) ✅
