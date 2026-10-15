@@ -1,44 +1,44 @@
 ---
-title: "Saga Pattern in Go: Distributed Transactions Without Two-Phase Commit"
+title: "Saga Pattern: Distributed Transaction Management Without Two-Phase Commit in Microservices"
 published: false
-description: "Explore Saga Pattern in Go: orchestration vs choreography, LIFO compensating transactions, semantic locks, and verifiable test invariants."
-tags: go, microservices, architecture, testing
+description: "Explore Saga Pattern in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
-# Saga Pattern in Go: Distributed Transactions Without Two-Phase Commit
+# Saga Pattern: Distributed Transaction Management Without Two-Phase Commit in Microservices
 
-Modern microservices isolate relational databases, breaking traditional multi-table transactions. Lab 29 explores distributed coordination using independent local transactions, LIFO compensating rollbacks, and concurrency controls in Go.
+A production system must remain resilient under load. Lab 29 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-> Saga pattern replaces 2PC with independent local transactions and compensating rollbacks.
+> When services own their data, distributed transactions need local independence plus compensation.
 
-## When Separate Databases Cannot Commit Together
+## Ketika Database Terpisah Tidak Bisa Berkomitmen Bersama
 
-Microservice architectures give each service its own autonomous datastore. Sequential business workflows spanning orders, payments, and inventory break single-database ACID boundaries. Two-phase commit (2PC) offers theoretical coordination, but locks remote resources synchronously. This blocking behavior degrades system throughput and increases vulnerability to network partitions.
+In modern microservice architectures, each service manages its own database. When a business flow involves order creation, payment processing, and inventory reservation sequentially, classical ACID transactions relying on a single database boundary break down. Two-phase commit emerges as a theoretical solution, but it locks all resources synchronously until every participant votes commit — causing high latency and vulnerability to network partitions.
 
-## Why Naive Approaches Fail Cross-Service Transactions
+## Mengapa Pendekatan Naif Gagal Menangani Transaksi Multi-Layanan
 
-Executing sequential cross-service calls without automated rollback mechanisms creates silent data inconsistencies. Calling services sequentially does not mean workflows recover automatically when downstream steps fail. If inventory reservation fails after payment succeeds, orders remain pending while funds stay deducted, forcing manual reconciliation.
+The naive implementation attempts sequential service calls without cross-domain rollback mechanisms. If payment fails after the order is created, the order database records a PENDING status while payment records failure. The system enters an inconsistent state with no automatic recovery path. This manual approach also hinders observability since there is no centralized execution log recording each step's status.
 
 ```go
 func (o *OrderService) CreateFullOrder(orderID string) error {
     o.CreateOrder(orderID)     // DB-commit #1
-    p.ProcessPayment(orderID)  // DB-commit #2 — if this fails?
-    i.ReserveInventory(...)    // DB-commit #3 — if this fails?
+    p.ProcessPayment(orderID)  // DB-commit #2 — jika gagal?
+    i.ReserveInventory(...)    // DB-commit #3 — jika gagal?
     o.ApproveOrder(orderID)    // DB-commit #4
 }
 ```
 
-## Mental Model: Transaction Relay with Backward Compensation
+## Mental Model: Estafet Transaksi dengan Kompensasi Mundur
 
-The Saga pattern models distributed execution as an estafet relay of local transactions. Each step executes against its local datastore and commits immediately. If step *n* fails, the orchestrator triggers compensations backward across completed steps, unwinding actions in reverse to achieve eventual consistency.
+Imagine a relay race where each runner completes their leg and immediately records results to a local database. If the third runner stumbles, the first and second runners run backward to restore their original positions. Each step stands alone as a local transaction with immediate commit — no cross-service locking exists. When failure occurs, the orchestrator triggers a Last-In-First-Out chain of compensations to restore consistency.
 
-## Orchestration Pipeline: From Step Execution to Compensation
+## Pipeline Orkestrasi: Dari Langkah Eksekusi Hingga Kompensasi
 
-A centralized orchestrator coordinates forward steps and backward rollbacks. Recording execution logs does not automatically eliminate distributed state corruption if compensations stall, but when any step returns an error, forward execution halts and the orchestrator invokes compensating actions on completed steps in reverse order.
+The orchestration pipeline begins when a client submits a request to the orchestrator. The orchestrator iterates through steps sequentially, executing each into the respective local service database. On each success, the step is recorded to the executed stack. If any step fails, the loop breaks and the orchestrator calls compensate(), which unwinds backward from the stack — ensuring refund happens before cancel order. Each step's status log is recorded atomically under mutex for concurrency consistency.
 
-## Core Implementation: Orchestrator Step and LIFO Compensate
+## Implementasi Inti: Orchestrator Step & LIFO Compensate
 
-The `Step` struct binds an `Execute` and `Compensate` function pair. The orchestrator records completed steps and unwinds them in Last-In-First-Out (LIFO) order during failures, aggregating compensation errors to avoid masking partial recovery issues.
+The Step data structure defines an Execute-Compensate function pair for each local transaction. The orchestrator stores this Step slice and executes them sequentially. The compensate() function iterates backward from the last index to zero — this is the core of LIFO rollback. If compensate() itself fails on a step, the error is aggregated into a compErrors slice and reported alongside the primary step error.
 
 ```go
 type Step struct {
@@ -51,36 +51,40 @@ func (o *Orchestrator) compensate(ctx context.Context, executed []Step) error {
     for i := len(executed) - 1; i >= 0; i-- {
         step := executed[i]
         if step.Compensate != nil {
-            _ = step.Compensate(ctx)
+            err := step.Compensate(ctx)  // LIFO unwind
+            ...
         }
     }
-    return nil
 }
 ```
 
-## Failure Path: ReserveInventory Fails and Triggers LIFO Compensation
+## Failure Path: ReserveInventory Gagal — Urutan Kompensasi LIFO
 
-When inventory reservation fails due to exhausted stock, forward progress halts. Reversing execution order functions cleanly only on this verified path: `RefundPayment` runs first to return customer funds, followed by `CancelOrder` to mark the order `CANCELLED`, restoring the system state.
+This scenario demonstrates a realistic failure path where inventory reservation fails due to insufficient stock. The order has been created and payment processed before the failure is detected. The orchestrator then triggers LIFO compensation: first processing payment refund, then cancelling the order. Through this order, the system returns to its pre-saga state — payment refund occurs before order cancellation, maintaining financial sequence consistency.
 
-## Mechanism vs Manifestation: Saga Transaction Types
+## Tabel Perbandingan: Mekanisme Kompensasi vs Gejala Sistem
 
-Saga steps classify into compensable, pivot, and retryable transactions. Designating a step as compensable does not mean the underlying database write is reversible without side effects. In this lab, `ApproveOrder` serves as the terminal pivot step without compensation.
+This table maps the three saga transaction types from Azure Architecture Center to specific lab implementations. The compensable transaction is most common — every step except ApproveOrder has a Compensate function. Pivot transactions represent irreversible turning points, while retryable transactions guarantee success post-pivot. In this lab, ApproveOrder serves as the final terminal state step without compensation.
 
-| Transaction Type | Forward Execution | Failure Behavior | Compensation Strategy |
+Tipe Langkah | Eksekusi Sukses | Eksekusi Gagal | Kompensasi
 |---|---|---|---|
-| Compensable | Local DB commit | Triggers rollback chain | Explicit undo (Refund, Cancel) |
-| Pivot | Irreversible boundary | Aims for terminal state | None (point of no return) |
-| Retryable | Post-pivot operation | Idempotent automated retry | Unneeded (expected to succeed) |
+Compensable Transaction | Local DB commit persisten | Rollback via Compensate() | Refund, Cancel, Release
+Pivot Transaction | Titik balik tidak bisa dibatalkan | Saga dijamin mencapai final state | Tidak ada kompensasi
+Retryable Transaction | Post-pivot, dijamin sukses | Idempotent retry | Tidak diperlukan
+CreateOrder Step | Status PENDING + semantic lock | Rollback: delete lock + CANCELLED | ✓
+ProcessPayment Step | Payment recorded + idempotency key | Rollback: delete payment entry | ✓ Refund
+ReserveInventory Step | Stock decremented | Rollback: stock restored via Release() | ✓
+ApproveOrder Step | Status APPROVED + lock released | Tanpa kompensasi (final step) | —
 
-## Architectural Decisions: Orchestration vs Choreography
+## Keputusan Arsitektur: Orkestrasi vs Koreografi
 
-Choosing coordination patterns depends on workflow complexity. Adopting choreography does not automatically decouple business domains; it exchanges a coordinator for complex event wiring. Orchestration provides centralized control for linear flows, whereas choreography fits event-driven services that react independently.
+The choice between orchestration and choreography is not binary. Orchestration excels when step ordering has tight dependencies and centralized logging is needed, such as in e-commerce checkout flows. Choreography suits event-driven systems where services react independently to events without knowing about a central orchestrator. This lab implements both patterns to demonstrate each trade-off.
 
-## Execution Evidence: Deterministic Test Suite Passing
+## Bukti Eksekusi: Semua Test Suite Lolos Bersih
 
-The Go test suite validates both orchestration and choreography across nine automated scenarios. Passing the test suite demonstrates logical correctness, but the scope is bounded by the tests: tests verify happy paths, LIFO rollbacks, payment idempotency, and semantic locks in 0.003s.
+All nine test cases run cleanly without a single failure. The happy path proves four steps succeed, changing order status to APPROVED with stock reduced by 2 units. The failure test proves LIFO rollback: order returns to CANCELLED, payment refunded, stock restored to 1. The concurrency test with 10 simultaneous goroutines ensures mutex atomicity remains intact.
 
-```sh
+```go
 === RUN   TestOrchestrator_HappyPath
     --- PASS: TestOrchestrator_HappyPath (0.00s)
 === RUN   TestOrchestrator_FailureCompensatesLIFO
@@ -89,54 +93,81 @@ The Go test suite validates both orchestration and choreography across nine auto
     --- PASS: TestPayment_Idempotency (0.00s)
 === RUN   TestSemanticLock
     --- PASS: TestSemanticLock (0.00s)
+=== RUN   TestOrchestrator_Concurrency
+    --- PASS: TestOrchestrator_Concurrency (0.00s)
+=== RUN   TestChoreography_Flow
+    --- PASS: TestChoreography_Flow (0.00s)
+=== RUN   TestChoreography_FailureCompensates
+    --- PASS: TestChoreography_FailureCompensates (0.00s)
+=== RUN   TestOrchestrator_CompensationErrorPropagated
+    --- PASS: TestOrchestrator_CompensationErrorPropagated (0.00s)
+=== RUN   TestOrchestrator_ContextCancellation
+    --- PASS: TestOrchestrator_ContextCancellation (0.00s)
 PASS: ok  labs/29-saga-pattern/tests  0.003s
 ```
 
-## Evidence Boundaries: What Was Proved vs Unverified
+## Batasan Bukti Lab: Yang Dibuktikan vs Belum
 
-This lab proves computational rollback logic and in-memory thread safety within a single Go process. However, this simulation is not equivalent to production distributed systems. The test suite does not yet prove behavior under physical network partitions, broker outages, or database crashes. Production still requires persistent outbox tables and dead-letter queues.
+This lab proves computational correctness and concurrency safety in an in-memory environment. However, strict limitations must be acknowledged: there is no network partition simulation, no real database crash, and no persistence layer. In production, compensation failure can occur due to service unavailability — scenarios not covered by the current test suite. Dead-letter queues and manual reconciliation are countermeasures needed beyond this lab's scope.
 
-## Architectural Trade-offs: Availability vs Isolation
+## Trade-off Arsitektur: Availability vs Isolation
 
-Sagas deliberately trade ACID isolation for high service availability. Accepting eventual consistency requires additional evidence from integration testing: because local steps commit immediately without holding distributed locks, intermediate states remain temporarily visible to concurrent transactions across services.
+Saga trades high isolation for high availability. Each step commits immediately without cross-service locking, so there is no blocking between services. However, a consistency window exists between step execution and compensation — an order may appear APPROVED while payment remains unprocessed. Developers must write compensation logic explicitly, adding application complexity compared to monolithic solutions.
 
-| Dimension | Monolithic ACID | Saga Pattern | Production Impact |
+Dimensi | ACID (Monolitik) | Saga Pattern | Dampak Produksi
 |---|---|---|---|
-| Isolation | Full serializable | None cross-service | Dirty reads and race risks possible |
-| Availability | Low (blocking 2PC) | High (local commits) | Services remain available during outages |
-| Consistency | Strong immediate | Eventual consistency | Temporary inconsistencies during rollback |
+Isolasi (I dalam ACID) | serializable penuh | tidak ada isolasi lintas service | dirty reads, lost updates mungkin terjadi
+Ketersediaan | blocking 2PC | non-blocking, each step commit segera | saga jauh lebih available di bawah load tinggi
+Latensi | satu round-trip ke semua peserta | N round-trips sekuensial + kompensasi | total latency lebih tinggi per transaksi
+Konsistensi | strong consistency | eventual consistency | window inconsistency antar step execute sampai kompensasi
+Complexity | database engine handles it | application-level orchestration | developer wrote compensation logic manually
+Observability | transaction logs | step-level logs + compensation trace | lebih transparan, lebih mudah debug
 
-## Concurrency Pipeline: Mutex Snapshot Pattern and Thread Safety
+## Pipeline Konkurensi: Goroutine → Validate → Mutex → Append Error
 
-The orchestrator guards internal collections using `sync.Mutex`. Using mutex snapshots protects local struct fields but does not automatically guard against external service concurrency conflicts. `Execute` copies registered steps to a local slice before releasing the lock, avoiding contention during external RPC calls.
+Concurrency safety is achieved through a snapshot-and-release strategy. When Execute is called, the orchestrator copies the steps slice to a local variable while releasing the mutex, avoiding blocking during step execution. Log append and read operations are protected by individual mutexes to ensure read consistency. The concurrency test runs 10 simultaneous goroutines with the Go race detector reporting a clean result with no data races.
 
 ```go
+func (o *Orchestrator) AddStep(step Step) {
+    o.mu.Lock()
+    defer o.mu.Unlock()
+    o.steps = append(o.steps, step)
+}
+
 func (o *Orchestrator) Execute(ctx context.Context) error {
     o.mu.Lock()
     steps := make([]Step, len(o.steps))
-    copy(steps, o.steps)
+    copy(steps, o.steps)  // snapshot tanpa lock holder
     o.mu.Unlock()
-    // Steps execute without holding the orchestrator lock
-    return nil
+    // ...execute steps without holding mu during step calls
+    o.mu.Lock()
+    o.logs = append(o.logs, StepLog{Name: step.Name, Status: ...})
+    o.mu.Unlock()
 }
 ```
 
-## Before vs After: From Manual Chaining to Saga Orchestration
+## Before vs After: Dari Manual Calls ke Saga Orkestrasi
 
-Refactoring from naive manual chaining to structured sagas replaces uncoordinated writes with traceable state transitions. Without sagas, partial failures leave orphaned orders and deducted payments. With sagas, the orchestrator logs transitions and executes LIFO compensations automatically.
+The before-after comparison shows a fundamental transformation from manual state management to structured orchestration. Before saga, a failure in one service leaves persistent state inconsistency requiring manual intervention. After saga, the orchestrator automatically logs status and triggers sequential compensation. Each step has an audit trail enabling fast debugging without combining logs from multiple services.
 
-## Service Layer Defenses: Semantic Locks, Idempotency Keys, and Atomic Mutations
+## Service Layer: Semantic Lock, Idempotency, dan Atomic Stock Mutation
 
-Saga reliability relies heavily on defensive primitives within participating services. These service guards protect data integrity only on this verified path: `OrderService` uses semantic locks to reject duplicate orders, `PaymentService` checks idempotency keys, and `InventoryService` mutates stock atomically under local mutex guards.
+The service layer is not merely a storage abstraction — each service contains its own protection mechanisms. OrderService uses semantic locking to prevent double order creation within a single saga instance. PaymentService relies on idempotency keys to handle repeated retry on the payment step. InventoryService guarantees atomic stock mutation through a single mutex. Without these protections, saga compensation itself could introduce race conditions.
 
-## Choreography Pattern: EventBus Decoupling via Pub/Sub
+## Choreography Pattern: Event Bus Decoupled via Pub/Sub
 
-The choreography pattern removes centralized coordinators in favor of asynchronous event pub/sub. Pub/sub event decoupling does not mean transactional boundaries disappear; it shifts coordination into subscriber handlers. In-memory `EventBus` pub/sub coordinates payment and inventory responses without central coordinators.
+The choreography pattern eliminates the central coordinator entirely. Each service listens to events from other services and reacts according to registered handlers. The event bus uses RWMutex for concurrency safety: Subscribe holds write locks, Publish holds read locks while copying the handler slice. This pattern yields loose coupling but reduces observability since there is no centralized execution log.
 
 ```go
 type EventBus struct {
     mu       sync.RWMutex
     handlers map[EventType][]EventHandler
+}
+
+func (b *EventBus) Subscribe(t EventType, h EventHandler) {
+    b.mu.Lock()
+    b.handlers[t] = append(b.handlers[t], h)
+    b.mu.Unlock()
 }
 
 func (b *EventBus) Publish(ctx context.Context, e Event) {
@@ -147,88 +178,123 @@ func (b *EventBus) Publish(ctx context.Context, e Event) {
 }
 ```
 
-## Invariant Proofs: Payment Idempotency and Order Semantic Locks
+## Bukti Invarian: Idempotency Payment dan Semantic Lock Order
 
-Automated unit tests verify service-level defenses under edge-case conditions. Passing unit assertions has not proven resilience against network timeouts, but it validates core invariants: `TestPayment_Idempotency` verifies duplicate charges are rejected, and `TestSemanticLock` confirms active order creation collisions fail cleanly.
+The idempotency test proves that the payment service accepts repeated calls with the same ID without double-charging. The semantic lock test proves that the order service rejects duplicate order creation while the saga instance is still active — preventing race conditions between concurrent saga instances using the same orderID.
 
 ```go
 func TestPayment_Idempotency(t *testing.T) {
-    svc := services.NewPaymentService()
-    _ = svc.ProcessPayment("tx-1", 100, false)
-    if err := svc.ProcessPayment("tx-1", 100, false); err != nil {
-        t.Fatalf("duplicate charge must succeed idempotently: %v", err)
+    paymentSvc := services.NewPaymentService()
+    id := "tx-1"
+    // First call: records payment
+    paymentSvc.ProcessPayment(id, 100, false)
+    // Second call with same ID: idempotent no-op
+    err := paymentSvc.ProcessPayment(id, 100, false)
+    // Must succeed (nil error) — double charge prevented
+    if err != nil { t.Fatalf(...) }
+}
+
+func TestSemanticLock(t *testing.T) {
+    orderSvc := services.NewOrderService()
+    id := "ord-lock"
+    orderSvc.CreateOrder(id)  // sets locks[id] = true
+    err := orderSvc.CreateOrder(id)  // should FAIL
+    if err == nil { t.Fatal("second create should fail due to semantic lock") }
+}
+```
+
+## Bukti LIFO Log: Verifikasi Urutan Status Step pada Kompensasi
+
+This test verifies three things simultaneously: state recovery (order CANCELLED, payment refunded), stock integrity (stock remains 1), and correct log sequence. Six log entries — two EXECUTED, one FAILED, two COMPENSATED — form a sequence proving LIFO rollback works as designed. This order is critical for debugging: engineers can reconstruct the exact failure chronology.
+
+```go
+func TestOrchestrator_FailureCompensatesLIFO(t *testing.T) {
+    // ...setup: CreateOrder, ProcessPayment, ReserveInventory(fail)...
+    err := orch.Execute(ctx)
+    // Verify state recovery
+    if orderSvc.GetOrder(orderID) != services.OrderCancelled {
+        t.Fatalf("expected order cancelled, got %v", orderSvc.GetOrder(orderID))
+    }
+    if paymentSvc.HasPayment(orderID) {
+        t.Fatal("expected payment refunded")
+    }
+    // Verify log order (5 entries exactly)
+    logs := orch.Logs()
+    expectedOrder := []saga.StepStatus{
+        saga.StatusExecuted, saga.StatusExecuted, saga.StatusFailed,
+        saga.StatusCompensated, saga.StatusCompensated,
+    }
+    for i, l := range logs {
+        if l.Status != expectedOrder[i] { ... }
     }
 }
 ```
 
-## LIFO Log Verification: Exact Sequence of Step Statuses
+## Bukti Context Cancellation: Kompensasi Saat Saga Dibatalkan
 
-In failure scenarios, step logging must record the exact chronological order of execution and rollback. `TestOrchestrator_FailureCompensatesLIFO` confirms that inventory failure produces five ordered statuses: `EXECUTED`, `EXECUTED`, `FAILED`, followed by `COMPENSATED` for refund and `COMPENSATED` for cancellation.
+This test validates saga behavior when context is cancelled mid-execution. Context cancellation is detected via the select case in the Execute loop, halting iteration before the next step runs. Despite context cancellation, compensate() is still called with context.Background() — ensuring compensation is not aborted by cancellation propagation. Every executed step is guaranteed compensation, maintaining the atomicity invariant.
 
 ```go
-expectedOrder := []saga.StepStatus{
-    saga.StatusExecuted,    // CreateOrder
-    saga.StatusExecuted,    // ProcessPayment
-    saga.StatusFailed,      // ReserveInventory
-    saga.StatusCompensated, // ProcessPayment (Refund)
-    saga.StatusCompensated, // CreateOrder (Cancel)
+func TestOrchestrator_ContextCancellation(t *testing.T) {
+    ctx, cancel := context.WithCancel(context.Background())
+    orch := saga.NewOrchestrator()
+    step1Compensated := false
+    orch.AddStep(saga.Step{
+        Name: "Step1",
+        Execute: func(ctx context.Context) error {
+            cancel() // cancel context before step 2
+            return nil
+        },
+        Compensate: func(ctx context.Context) error {
+            step1Compensated = true
+            return nil
+        },
+    })
+    orch.AddStep(saga.Step{
+        Name: "Step2",
+        Execute: func(ctx context.Context) error {
+            t.Fatal("step 2 should not execute when context cancelled")
+            return nil
+        },
+    })
+    err := orch.Execute(ctx)
+    if !step1Compensated { t.Fatal("expected step 1 compensated") }
 }
 ```
 
-## Context Cancellation Safety: Detached Context Rollback
+## Checklist Implementasi Saga Pattern yang Benar
 
-Distributed workflows must handle timeouts gracefully without abandoning state. Detaching context allows local compensation to complete, but production still requires distributed trace propagation: when context cancels, the orchestrator detects `ctx.Done()` and invokes `compensate()` with `context.Background()` to complete rollbacks.
+This checklist summarizes eight critical requirements for production-ready saga pattern implementation. The most commonly overlooked point is compensation idempotency — if compensate() is called twice, the system must remain stable. The sixth point about dead-letter queues is also crucial: permanent compensation failures require manual intervention mechanisms that must be planned before deployment.
 
-```go
-func (o *Orchestrator) Execute(ctx context.Context) error {
-    select {
-    case <-ctx.Done():
-        _ = o.compensate(context.Background(), executed)
-        return fmt.Errorf("saga cancelled: %w", ctx.Err())
-    default:
-    }
-    return nil
-}
-```
+## Anti-Pattern Saga: Yang Harus Dihindari di Production
 
-## Implementation Checklist for Production Saga Patterns
+These four anti-patterns are most commonly found in production saga implementations. Non-idempotent compensate is the primary cause of double-refund that harms financial reconciliation. Circular compensation dependency creates infinite loops that paralyze the orchestrator. Missing compensate on the final step means approval state persists permanently even when other steps are compensated. Blocking long-running compensate locks the orchestrator goroutine and prevents subsequent steps from executing.
 
-Deploying saga patterns into production requires strict operational rigor across participating services:
+## Takeaway Praktis: Command & Runbook untuk Saga Pattern
 
-- Every compensable step provides a deterministic, tested `Compensate` function.
-- Forward executions and backward compensations implement idempotency keys.
-- Semantic locks or version checks protect against concurrent dirty writes.
-- Coordinators snapshot step definitions before execution for thread safety.
-- Compensating rollbacks execute with detached, non-cancelled contexts.
-- Step logs record `PENDING`, `EXECUTED`, `FAILED`, and `COMPENSATED` statuses.
-- Automated race tests run cleanly under multi-goroutine workloads.
-- Dead-letter queues (DLQ) handle unrecoverable compensation failures.
-
-## Saga Anti-Patterns to Avoid in Production
-
-Common architectural mistakes can cause data corruption in production sagas. Avoiding circular dependencies does not automatically resolve stalled worker threads; systems must enforce timeouts. Designing non-idempotent compensating functions causes duplicate refunds upon network retries, while omitting compensations leaves orphaned state.
-
-## Practical Takeaways: Commands and Production Runbooks
-
-Running local commands provides a baseline, but applying them to production requires additional evidence from chaos testing. Operating sagas in production requires monitoring failed steps, alerting on compensation errors, and maintaining operational runbooks for manual reconciliation.
+The practical takeaway for engineers adopting saga pattern in production: the commands above are the starting point for independent reproduction. The three operational principles at the bottom are monitoring guidelines that must be implemented before go-live. Compensation failures entering the DLQ must be processed manually by on-call engineers through the admin console — there is no fully automatic resolution for all cases.
 
 ```sh
-# Run full automated test suite
+# Jalankan seluruh test suite
 go test -v ./...
 
-# Verify multi-threaded execution safety
+# Verifikasi race condition
 go test -race -v ./...
 
-# Run interactive demonstration CLI
+# Demo interaktif (happy path + rollback)
 go run ./cmd/demo
+
+# Production runbook:
+# 1. Monitor orch.Logs() untuk STATUS_FAILED / STATUS_COMPENSATE_FAILED
+# 2. Alert on COMPENSATE_FAILED → trigger DLQ processing
+# 3. Manual reconciliation via admin console for stuck compensations
+# 4. Regular healthcheck: verify all in-flight sagas reached terminal state
 ```
 
-## Long-Term Architectural Principles: Eventual Consistency as a Contract
+## Prinsip Arsitektural Jangka Panjang: Eventual Consistency sebagai Kontrak
 
-The Saga pattern establishes that eventual consistency is a deliberate design contract, not an accidental compromise. Embracing local database autonomy and explicit compensation replaces fragile distributed locks with observable recovery paths across distributed boundaries.
+These architectural principles extend far beyond the lab implementation. Sagas are not merely a technical pattern — they represent a distributed systems design philosophy that accepts eventual consistency as a fundamental contract. Each principle above guides architectural decisions: from per-service database selection to monitoring and alerting system design. Engineers who understand this will avoid the temptation to revert to monolithic ACID.
 
 ## Source
 
-- Repository: [software-engineering-lab/labs/29-saga-pattern](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern)
-- Commit SHA: `ba4b6216`
-- Source files inspected: `internal/saga/orchestrator.go`, `internal/saga/choreography.go`, `internal/services/services.go`, `tests/saga_test.go`, `cmd/demo/main.go`
+[Software Engineering Lab 29 - Saga Pattern](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern), snapshot commit `ba4b6216`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.

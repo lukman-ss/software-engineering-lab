@@ -1,35 +1,23 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices</title><meta name="description" content="Pelajari Saga Pattern di Go: orkestrasi vs koreografi, compensating transactions LIFO, semantic lock, dan batasan konsistensi eventual."><meta property="og:title" content="Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices"><meta property="og:description" content="Koordinasi orkestrasi vs koreografi, kompensasi LIFO, dan semantic lock di Go."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices</h1><p class="subtitle">Koordinasi orkestrasi vs koreografi, kompensasi LIFO, dan semantic lock di Go</p><p>Lukman / lukman-ss · Software Engineering Lab 29</p><img src="lab-29-saga-pattern-cover-id.png" alt="Cover Lab 29 Saga Pattern oleh Lukman / lukman-ss"><blockquote>Saga pattern replaces 2PC with independent local transactions and compensating rollbacks.</blockquote><h2>Ketika Database Terpisah Tidak Bisa Berkomitmen Bersama</h2><p>Arsitektur microservices modern memberi setiap layanan basis data mandiri. Ketika alur bisnis memerlukan pembuatan order, pemrosesan pembayaran, dan reservasi inventaris secara berurutan, jaminan transaksi ACID klasik yang mengandalkan satu database tunggal langsung runtuh. Protokol Two-Phase Commit (2PC) sering diajukan sebagai solusi, tetapi protokol ini mengunci seluruh resource secara sinkron hingga semua peserta menyetujui commit — mengurangi throughput dan membuat sistem rapuh terhadap partisi jaringan.</p><h2>Mengapa Pendekatan Naif Gagal Menangani Transaksi Multi-Layanan</h2><p>Panggilan RPC berurutan tanpa mekanisme rollback otomatis meninggalkan state tidak konsisten. Memanggil service secara berurutan bukan berarti sistem dapat pulih secara otomatis ketika downstream gagal. Jika reservasi inventaris gagal setelah pembayaran berhasil, order tetap tersisa dalam status <code>PENDING</code> sementara saldo pelanggan sudah terpotong. Rekonsiliasi manual yang rumit akhirnya tak terhindarkan untuk menambal state yang terfragmentasi.</p><pre><code class="language-go">func (o *OrderService) CreateFullOrder(orderID string) error {
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices</title><meta name="description" content="Pelajari Saga Pattern lewat simulasi Go, antrean, arsitektur, dan verifikasi metrik."><meta property="og:title" content="Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices"><meta property="og:description" content="Pelajari Saga Pattern lewat simulasi Go, antrean, arsitektur, dan verifikasi metrik."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>Saga Pattern: Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices</h1><p class="subtitle">Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Microservices</p><p>Lukman / lukman-ss · Software Engineering Lab 29</p><img src="lab-29-saga-pattern-cover-id.png" alt="Cover Lab 29 Saga Pattern oleh Lukman / lukman-ss"><h2>Ketika Database Terpisah Tidak Bisa Berkomitmen Bersama</h2><p>Di arsitektur microservices modern, setiap service mengelola database sendiri. Saat flow bisnis melibatkan order-creation, payment-processing, dan inventory-reservation secara berurutan, transaksi ACID klasik yang mengandalkan single database transaction langsung runtuh. Dua-phase commit (2PC) muncul sebagai solusi teoretis, namun protokol ini mengunci semua resource secara sinkron hingga seluruh peserta memberikan suara commit — menyebabkan latency tinggi dan vulnerabilitas terhadap network partition.</p><h2>Mengapa Pendekatan Naif Gagal Menangani Transaksi Multi-Layanan</h2><p>Implementasi naif mencoba memanggil setiap service berurutan tanpa mekanisme rollback lintas domain. Jika payment service gagal setelah order berhasil dibuat, database order mencatat status PENDING namun payment mencatat gagal. State sistem menjadi inkonsisten dan tidak ada jalan mundur otomatis. Pendekatan manual ini juga menyulitkan observabilitas karena tidak ada log eksekusi terpusat yang merekam status setiap langkah.</p><pre><code>func (o *OrderService) CreateFullOrder(orderID string) error {
     o.CreateOrder(orderID)     // DB-commit #1
     p.ProcessPayment(orderID)  // DB-commit #2 — jika gagal?
     i.ReserveInventory(...)    // DB-commit #3 — jika gagal?
     o.ApproveOrder(orderID)    // DB-commit #4
-}</code></pre><h2>Mental Model: Estafet Transaksi dengan Kompensasi Mundur</h2><p>Pola Saga memodelkan transaksi terdistribusi seperti perlombaan lari estafet. Setiap pelari menyelesaikan etape lokalnya lalu melakukan commit langsung ke database-nya sendiri. Apabila pelari ketiga terjatuh, pelari pertama dan kedua bergerak mundur untuk memulihkan posisi awal mereka. Setiap langkah berdiri sebagai transaksi lokal independen tanpa distributed lock lintas layanan. Kompensasi dijalankan secara terbalik agar refund pembayaran terjadi sebelum order dibatalkan.</p><h2>Pipeline Orkestrasi: Dari Langkah Eksekusi Hingga Kompensasi</h2><p>Pipeline eksekusi berpusat pada sebuah koordinator terpusat. Mencatat log transisi tidak otomatis menghapus risiko anomali state jika kompensasi terhenti, namun saat request diterima, orchestrator mengeksekusi setiap langkah ke database lokal masing-masing service. Jika salah satu langkah mengembalikan error, iterasi maju dihentikan dan orchestrator memanggil fungsi kompensasi untuk memutar balik langkah-langkah yang telah berhasil dalam urutan terbalik.</p><h2>Implementasi Inti: Orchestrator Step &amp; LIFO Compensate</h2><p>Struktur data <code>Step</code> mengikat pasangan fungsi <code>Execute</code> dan <code>Compensate</code>. Keberadaan fungsi rollback tidak otomatis menyelesaikan seluruh anomali data jika terjadi kegagalan sekunder. Orchestrator menyimpan daftar langkah dan mengeksekusinya secara berurutan. Method <code>compensate()</code> melakukan iterasi mundur dari indeks langkah terakhir yang berhasil dieksekusi hingga nol sambil mengumpulkan error rollback yang terjadi.</p><pre><code class="language-go">type Step struct {
+}</code></pre><h2>Mental Model: Estafet Transaksi dengan Kompensasi Mundur</h2><p>Bayangkan proses estafet di mana setiap pelari menyelesaikan bagiannya dan langsung mencatat hasil ke database lokal. Jika pelari ketiga terjatuh, pelari satu dan dua berlari mundur untuk mengembalikan posisi awal mereka. Setiap langkah berdiri sendiri sebagai transaksi lokal yang commit-segera; tidak ada locking lintas layanan. Ketika kegagalan terjadi, orchestrator memicu chain of compensations secara Last-In-First-Out untuk memulihkan konsistensi.</p><h2>Pipeline Orkestrasi: Dari Langkah Eksekusi Hingga Kompensasi</h2><p>Pipeline orkestrasi dimulai ketika client mengirimkan request ke orchestrator. Orchestrator mengiterasi daftar langkah secara sekuensial, mengeksekusi setiap langkah ke database lokal masing-masing service. Pada setiap keberhasilan, langkah dicatat ke dalam stack executed. Jika langkah manapun gagal, loop berhenti dan orchestrator memanggil fungsi compensate() yang berjalan mundur dari stack — memastikan refund terjadi sebelum cancel order. Log Status setiap langkah direkam secara atomik di mutex untuk konsistensi konkuren.</p><h2>Implementasi Inti: Orchestrator Step & LIFO Compensate</h2><p>Struktur data Step mendefinisikan sepasang fungsi Execute dan Compensate untuk setiap transaksi lokal. Orchestrator menyimpan slice Step ini dan mengeksekusinya secara berurutan. Fungsi compensate() melakukan iterasi mundur dari index terakhir ke nol — inilah inti LIFO rollback. Jika compensate() sendiri gagal pada suatu langkah, error di agregasi ke dalam slice compErrors dan dilaporkan bersama error langkah utama.</p><pre><code>type Step struct {
     Name       string
     Execute    func(ctx context.Context) error
     Compensate func(ctx context.Context) error
 }
 
 func (o *Orchestrator) compensate(ctx context.Context, executed []Step) error {
-    var compErrors []error
-    for i := len(executed) - 1; i >= 0; i-- {
+    for i := len(executed) - 1; i &gt;= 0; i-- {
         step := executed[i]
         if step.Compensate != nil {
-            err := step.Compensate(ctx)
-            o.mu.Lock()
-            if err != nil {
-                o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusCompensateFailed})
-                compErrors = append(compErrors, fmt.Errorf("compensation %s: %w", step.Name, err))
-            } else {
-                o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusCompensated})
-            }
-            o.mu.Unlock()
+            err := step.Compensate(ctx)  // LIFO unwind
+            ...
         }
     }
-    if len(compErrors) > 0 {
-        return fmt.Errorf("%v", compErrors)
-    }
-    return nil
-}</code></pre><h2>Failure Path: ReserveInventory Gagal — Urutan Kompensasi LIFO</h2><p>Ketika stok produk tidak mencukupi, orchestration berhenti setelah order dibuat dan pembayaran diproses. Urutan kompensasi terbalik beroperasi rapi hanya pada jalur ini: <code>RefundPayment</code> dipanggil lebih dulu untuk mengembalikan dana pelanggan, baru kemudian <code>CancelOrder</code> dijalankan untuk mengubah status pesanan menjadi <code>CANCELLED</code>, memulihkan sistem kembali ke state awal.</p><h2>Tabel Perbandingan: Mekanisme Kompensasi vs Gejala Sistem</h2><p>Arsitektur Saga mengelompokkan jenis transaksi ke dalam tiga taksonomi: compensable, pivot, dan retryable. Menandai langkah sebagai kompensabel bukan berarti mutasi basis data dapat dibatalkan tanpa efek samping; desain kompensasi harus dirancang secara cermat. Transaksi pivot merupakan batas pemisah yang tidak dapat dibatalkan; setelah pivot tercapai, langkah berikutnya harus bersifat retryable hingga sukses.</p><table><tr><th>Tipe Langkah</th><th>Eksekusi Sukses</th><th>Eksekusi Gagal</th><th>Kompensasi</th></tr><tr><td>Compensable Transaction</td><td>Local DB commit persisten</td><td>Rollback via Compensate()</td><td>Refund, Cancel, Release</td></tr><tr><td>Pivot Transaction</td><td>Titik balik tidak bisa dibatalkan</td><td>Transaksi diarahkan ke final state</td><td>Tidak ada kompensasi</td></tr><tr><td>Retryable Transaction</td><td>Post-pivot, diharapkan sukses</td><td>Idempotent retry otomatis</td><td>Tidak diperlukan</td></tr><tr><td>CreateOrder Step</td><td>Status PENDING + semantic lock</td><td>Rollback: delete lock + CANCELLED</td><td>Hapus lock dan tandai CANCELLED</td></tr><tr><td>ProcessPayment Step</td><td>Payment recorded + idempotency key</td><td>Rollback: delete payment entry</td><td>Refund payment recorded</td></tr><tr><td>ReserveInventory Step</td><td>Stock decremented under mutex</td><td>Rollback: stock restored via Release()</td><td>Pulihkan unit reservasi stok</td></tr><tr><td>ApproveOrder Step</td><td>Status APPROVED + lock released</td><td>Terminal state</td><td>None</td></tr></table><h2>Keputusan Arsitektur: Orkestrasi vs Koreografi</h2><p>Memilih koreografi bukan berarti bebas dari koordinasi; pola ini hanya memindahkan logika koordinasi ke handler masing-masing service. Orkestrasi cocok untuk alur bisnis linear yang membutuhkan audit log terpusat, sedangkan koreografi cocok untuk sistem event-driven yang mengutamakan otonomi service. Trade-off utamanya terletak pada kompleksitas penelusuran end-to-end.</p><h2>Bukti Eksekusi: Semua Test Suite Lolos Bersih</h2><p>Pengujian suite Go test memvalidasi alur orkestrasi dan koreografi melalui sembilan skenario otomatis. Lulusnya seluruh test suite menunjukkan kebenaran logika, tetapi cakupannya mengikuti test yang diuji: pengujian mencakup happy path, rollback LIFO, idempotensi pembayaran, semantic lock, dan isolasi konkurensi goroutine dalam durasi 0.003 detik.</p><pre><code class="language-sh">=== RUN   TestOrchestrator_HappyPath
+}</code></pre><h2>Failure Path: ReserveInventory Gagal — Urutan Kompensasi LIFO</h2><p>Skenario ini menunjukkan failure path realistis di mana reservasi inventaris gagal karena stok tidak mencukupi. Order sudah dibuat dan payment sudah diproses sebelum kegagalan terdeteksi. Orchestrator kemudian memicu kompensasi LIFO: pertama-tama memproses refund payment, kemudian membatalkan order. Dengan urutan ini, sistem kembali ke keadaan sebelum saga dimulai — payment refund terjadi sebelum order cancel, menjaga konsistensi urutan finansial.</p><h2>Tabel Perbandingan: Mekanisme Kompensasi vs Gejala Sistem</h2><p>Tabel ini memetakan taksonomi tiga tipe transaksi saga menurut Azure Architecture Center ke implementasi spesifik lab. Compensation step adalah yang paling umum — setiap langkah kecuali ApproveOrder memiliki fungsi Compensate. Pivot transaction merepresentasikan titik balik yang tidak dapat digagalkan, sedangkan retryable transaction menjamin kesuksesan setelah pivot. Dalam lab ini, ApproveOrder berperan sebagai final step tanpa kompensasi karena ia sudah merupakan state terminal.</p><table><tr><th>Tipe Langkah</th><th>Eksekusi Sukses</th><th>Eksekusi Gagal</th><th>Kompensasi</th></tr><tr><td>Compensable Transaction</td><td>Local DB commit persisten</td><td>Rollback via Compensate()</td><td>Refund, Cancel, Release</td></tr><tr><td>Pivot Transaction</td><td>Titik balik tidak bisa dibatalkan</td><td>Saga dijamin mencapai final state</td><td>Tidak ada kompensasi</td></tr><tr><td>Retryable Transaction</td><td>Post-pivot, dijamin sukses</td><td>Idempotent retry</td><td>Tidak diperlukan</td></tr><tr><td>CreateOrder Step</td><td>Status PENDING + semantic lock</td><td>Rollback: delete lock + CANCELLED</td><td>✓</td></tr><tr><td>ProcessPayment Step</td><td>Payment recorded + idempotency key</td><td>Rollback: delete payment entry</td><td>✓ Refund</td></tr><tr><td>ReserveInventory Step</td><td>Stock decremented</td><td>Rollback: stock restored via Release()</td><td>✓</td></tr><tr><td>ApproveOrder Step</td><td>Status APPROVED + lock released</td><td>Tanpa kompensasi (final step)</td><td>—</td></tr></table><h2>Keputusan Arsitektur: Orkestrasi vs Koreografi</h2><p>Pemilihan antara orkestrasi dan koreografi bukanlah keputusan hitam-putih. Orkestrasi unggul ketika urutan langkah memiliki dependensi ketat dan perlu logging terpusat, seperti pada flow checkout e-commerce. Koreografi lebih cocok untuk sistem event-driven di mana layanan perlu bereaksi mandiri terhadap event tanpa mengetahui orchestrator. Lab ini mengimplementasikan kedua pola untuk menunjukkan trade-off masing-masing.</p><h2>Bukti Eksekusi: Semua Test Suite Lolos Bersih</h2><p>Kesembilan test case berjalan mulus tanpa kegagalan satupun. Happy path membuktikan empat langkah sukses mengubah order status menjadi APPROVED dengan stock berkurang 2 unit. Failure test membuktikan LIFO rollback: order kembali CANCELLED, payment di-refund, stock kembali 1. Concurrency test dengan 10 goroutine simultan memastikan atomicity mutex tetap terjaga.</p><pre><code>=== RUN   TestOrchestrator_HappyPath
     --- PASS: TestOrchestrator_HappyPath (0.00s)
 === RUN   TestOrchestrator_FailureCompensatesLIFO
     --- PASS: TestOrchestrator_FailureCompensatesLIFO (0.00s)
@@ -47,29 +35,30 @@ func (o *Orchestrator) compensate(ctx context.Context, executed []Step) error {
     --- PASS: TestOrchestrator_CompensationErrorPropagated (0.00s)
 === RUN   TestOrchestrator_ContextCancellation
     --- PASS: TestOrchestrator_ContextCancellation (0.00s)
-PASS: ok  labs/29-saga-pattern/tests  0.003s</code></pre><h2>Batasan Bukti Lab: Yang Dibuktikan vs Belum</h2><p>Lab ini mengonfirmasi kebenaran logika komputasi dalam memori lokal Go. Namun, simulasi ini tidak sama dengan lingkungan sistem terdistribusi produksi. Pengujian belum membuktikan ketahanan sistem saat terjadi partisi jaringan fisik antar node atau saat crash database terjadi di tengah mutasi data. Production masih perlu outbox table persisten, distributed tracing, dan dead-letter queue untuk menangani kegagalan kompensasi permanen.</p><h2>Trade-off Arsitektur: Availability vs Isolation</h2><p>Pola Saga menukar isolasi ACID demi ketersediaan sistem yang tinggi. Menerima eventual consistency perlu bukti tambahan melalui pengujian integrasi beban tinggi: setiap langkah commit lokal langsung tanpa holding lock lintas layanan, sehingga throughput tetap tinggi. Konsekuensinya, status antara terlihat inkonsisten sementara hingga proses kompensasi tuntas.</p><table><tr><th>Dimensi</th><th>ACID (Monolitik)</th><th>Saga Pattern</th><th>Dampak Produksi</th></tr><tr><td>Isolasi</td><td>Serializable / Repeatable Read</td><td>Tidak ada isolasi lintas service</td><td>Risiko dirty reads dan pembacaan state parsial</td></tr><tr><td>Ketersediaan</td><td>Rendah (blocking 2PC)</td><td>Tinggi (commit lokal mandiri)</td><td>Layanan tetap menerima traffic saat peer terganggu</td></tr><tr><td>Latensi</td><td>Satu commit terdistribusi</td><td>N network hop sekuensial</td><td>Latensi transaksi kumulatif menjadi lebih panjang</td></tr><tr><td>Konsistensi</td><td>Strong consistency seketika</td><td>Eventual consistency</td><td>Jendela inkonsistensi sementara selama rollback</td></tr><tr><td>Kompleksitas</td><td>Ditangani engine database</td><td>Orkestrasi pada layer aplikasi</td><td>Developer wajib menulis fungsi kompensasi manual</td></tr><tr><td>Observabilitas</td><td>Log transaksi database</td><td>Step log dan event terdistribusi</td><td>Memerlukan correlation ID dan distributed trace</td></tr></table><h2>Pipeline Konkurensi: Goroutine → Validate → Mutex → Append Error</h2><p>Keamanan konkurensi di dalam orchestrator dikelola menggunakan strategi snapshot-and-release dengan <code>sync.Mutex</code>. Menggunakan mutex snapshot melindungi field internal struktur, tetapi tidak otomatis menangkal konflik konkurensi eksternal pada basis data downstream. Orchestrator menyalin slice langkah sebelum melepaskan kunci mutex, menghindari pemblokiran selama panggilan RPC berlangsung.</p><pre><code class="language-go">func (o *Orchestrator) Execute(ctx context.Context) error {
+PASS: ok  labs/29-saga-pattern/tests  0.003s</code></pre><h2>Batasan Bukti Lab: Yang Dibuktikan vs Belum</h2><p>Lab ini membuktikan kebenaran logika komputasional dan concurrency safety dalam lingkungan in-memory. Namun, batasan tegas harus diakui: tidak ada simulasi network partition, database crash, atau persistence layer riil. Dalam produksi, kegagalan kompensasi bisa terjadi karena service unavailable — scenario yang tidak tercakup oleh test suite saat ini. Dead-letter queue dan manual reconciliation adalah countermeasures yang diperlukan di luar cakupan lab.</p><h2>Trade-off Arsitektur: Availability vs Isolation</h2><p>Saga menukar isolation level tinggi menjadi availability tinggi. Setiap langkah committed segera tanpa lock lintas service, sehingga tidak ada blocking antar layanan. Namun, window inconsistency muncul antara step execute dan kompensasi — order bisa tercatat APPROVED sementara payment belum diproses. Developer harus menulis compensation logic secara eksplisit, menambah complexity aplikasi dibanding solusi monolitik.</p><table><tr><th>Dimensi</th><th>ACID (Monolitik)</th><th>Saga Pattern</th><th>Dampak Produksi</th></tr><tr><td>Isolasi (I dalam ACID)</td><td>serializable penuh</td><td>tidak ada isolasi lintas service</td><td>dirty reads, lost updates mungkin terjadi</td></tr><tr><td>Ketersediaan</td><td>blocking 2PC</td><td>non-blocking, each step commit segera</td><td>saga jauh lebih available di bawah load tinggi</td></tr><tr><td>Latensi</td><td>satu round-trip ke semua peserta</td><td>N round-trips sekuensial + kompensasi</td><td>total latency lebih tinggi per transaksi</td></tr><tr><td>Konsistensi</td><td>strong consistency</td><td>eventual consistency</td><td>window inconsistency antar step execute sampai kompensasi</td></tr><tr><td>Complexity</td><td>database engine handles it</td><td>application-level orchestration</td><td>developer wrote compensation logic manually</td></tr><tr><td>Observability</td><td>transaction logs</td><td>step-level logs + compensation trace</td><td>lebih transparan, lebih mudah debug</td></tr></table><h2>Pipeline Konkurensi: Goroutine → Validate → Mutex → Append Error</h2><p>Keamanan konkuren dicapai melalui strategi snapshot-and-release. Saat Execute dipanggil, orchestrator menyalin slice steps ke variabel lokal sementara mutex dilepaskan, menghindari blocking selama step execution berlangsung. Log append dan read dilindungi mutex individual untuk memastikan konsistensi pembacaan. Test concurrency menjalankan 10 goroutine simultan dengan mutex dan race detector Go melaporkan status bersih tanpa data race.</p><pre><code>func (o *Orchestrator) AddStep(step Step) {
+    o.mu.Lock()
+    defer o.mu.Unlock()
+    o.steps = append(o.steps, step)
+}
+
+func (o *Orchestrator) Execute(ctx context.Context) error {
     o.mu.Lock()
     steps := make([]Step, len(o.steps))
-    copy(steps, o.steps)  // snapshot tanpa menahan lock selama pemanggilan step
+    copy(steps, o.steps)  // snapshot tanpa lock holder
     o.mu.Unlock()
-
-    executed := make([]Step, 0)
-    for _, step := range steps {
-        err := step.Execute(ctx)
-        o.mu.Lock()
-        if err != nil {
-            o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusFailed})
-            o.mu.Unlock()
-            return err
-        }
-        o.logs = append(o.logs, StepLog{Name: step.Name, Status: StatusExecuted})
-        o.mu.Unlock()
-        executed = append(executed, step)
-    }
-    return nil
-}</code></pre><h2>Before vs After: Dari Manual Calls ke Saga Orkestrasi</h2><p>Transformasi dari panggilan manual tanpa kompensasi ke orkestrasi saga mengubah penanganan kegagalan secara fundamental. Sebelum menerapkan saga, kegagalan parsial meninggalkan order berstatus PENDING dan saldo terpotong tanpa jalan pemulihan otomatis. Setelah saga diterapkan, koordinator melacak status langkah dan memicu kompensasi LIFO secara terstruktur dengan jejak audit yang transparan.</p><h2>Service Layer: Semantic Lock, Idempotency, dan Atomic Stock Mutation</h2><p>Keandalan transaksi bertumpu pada pertahanan mandiri pada masing-masing service. Service guards ini membatasi risiko state korup hanya pada jalur ini: <code>OrderService</code> menerapkan semantic lock untuk menolak pembuatan order duplikat, <code>PaymentService</code> memeriksa idempotency key agar tidak mendebit dana ganda saat retry, dan <code>InventoryService</code> memutasi stok barang secara atomik di bawah proteksi mutex.</p><h2>Choreography Pattern: Event Bus Decoupled via Pub/Sub</h2><p>Pola koreografi meniadakan koordinator terpusat dengan memanfaatkan komunikasi event pub/sub. Menerapkan event decoupling bukan berarti boundary transaksi hilang sepenuhnya; ia memindahkan koordinasi ke subscriber masing-masing layanan. Struktur <code>EventBus</code> menggunakan <code>sync.RWMutex</code> untuk thread safety saat pendaftaran handler dan penerbitan event.</p><pre><code class="language-go">type EventBus struct {
+    // ...execute steps without holding mu during step calls
+    o.mu.Lock()
+    o.logs = append(o.logs, StepLog{Name: step.Name, Status: ...})
+    o.mu.Unlock()
+}</code></pre><h2>Before vs After: Dari Manual Calls ke Saga Orkestrasi</h2><p>Perbandingan sebelum dan sesudah menunjukkan transformasi fundamental dari state management manual ke orchestration terstruktur. Sebelum saga, kegagalan di satu service meninggalkan state inconsistency yang memerlukan intervensi manual. Setelah saga, orchestrator secara otomatis mencatut log status dan memicu kompensasi berurutan. Setiap langkah memiliki jejak audit trail yang memungkinkan debugging cepat tanpa perlu menggabungkan log dari multiple service.</p><h2>Service Layer: Semantic Lock, Idempotency, dan Atomic Stock Mutation</h2><p>Service layer bukan sekadar storage abstraction — setiap service mengandung mekanisme proteksi mandiri. OrderService menggunakan semantic lock untuk mencegah double-creation order dalam satu saga instance. PaymentService mengandalkan idempotency key untuk menangani retry berulang pada payment step. InventoryService menjamin atomicity stock mutation melalui mutex tunggal. Tanpa proteksi ini, saga kompensasi sendiri bisa menimbulkan race condition.</p><h2>Choreography Pattern: Event Bus Decoupled via Pub/Sub</h2><p>Choreography pattern menghilangkan koordinator terpusat sepenuhnya. Setiap layanan mendengarkan event dari layanan lain dan bereaksi sesuai handler yang terdaftar. Event bus menggunakan RWMutex untuk keamanan konkuren: Subscribe memegang write lock, Publish memegang read lock sementara menyalin handler slice. Pola ini menghasilkan loose coupling tetapi mengurangi observabilitas karena tidak ada central log eksekusi.</p><pre><code>type EventBus struct {
     mu       sync.RWMutex
     handlers map[EventType][]EventHandler
+}
+
+func (b *EventBus) Subscribe(t EventType, h EventHandler) {
+    b.mu.Lock()
+    b.handlers[t] = append(b.handlers[t], h)
+    b.mu.Unlock()
 }
 
 func (b *EventBus) Publish(ctx context.Context, e Event) {
@@ -77,45 +66,50 @@ func (b *EventBus) Publish(ctx context.Context, e Event) {
     handlers := append([]EventHandler(nil), b.handlers[e.Type]...)
     b.mu.RUnlock()
     for _, h := range handlers { h(ctx, e) }
-}</code></pre><h2>Bukti Invarian: Idempotency Payment dan Semantic Lock Order</h2><p>Pengujian unit memvalidasi pertahanan tingkat layanan terhadap skenario anomali. Lolosnya assertion unit belum membuktikan ketahanan terhadap timeout jaringan riil, tetapi menunjukkan bahwa <code>TestPayment_Idempotency</code> memproses pemanggilan ganda tanpa menduplikasi potongan saldo, dan <code>TestSemanticLock</code> menolak kreasi order dengan ID yang sama saat transaksi masih aktif.</p><pre><code class="language-go">func TestPayment_Idempotency(t *testing.T) {
+}</code></pre><h2>Bukti Invarian: Idempotency Payment dan Semantic Lock Order</h2><p>Test idempotency membuktikan bahwa payment service menerima panggilan berulang dengan ID yang sama tanpa melakukan double charge. Test semantic lock membuktikan bahwa order service menolak kreasi order duplikat selama saga instance masih berjalan — mencegah race condition antara concurrent saga instances yang menggunakan orderID sama.</p><pre><code>func TestPayment_Idempotency(t *testing.T) {
     paymentSvc := services.NewPaymentService()
     id := "tx-1"
-    _ = paymentSvc.ProcessPayment(id, 100, false)
+    // First call: records payment
+    paymentSvc.ProcessPayment(id, 100, false)
+    // Second call with same ID: idempotent no-op
     err := paymentSvc.ProcessPayment(id, 100, false)
-    if err != nil {
-        t.Fatalf("duplicate call must succeed idempotently: %v", err)
-    }
+    // Must succeed (nil error) — double charge prevented
+    if err != nil { t.Fatalf(...) }
 }
 
 func TestSemanticLock(t *testing.T) {
     orderSvc := services.NewOrderService()
     id := "ord-lock"
-    _ = orderSvc.CreateOrder(id)
-    if err := orderSvc.CreateOrder(id); err == nil {
-        t.Fatal("second create should fail due to active semantic lock")
+    orderSvc.CreateOrder(id)  // sets locks[id] = true
+    err := orderSvc.CreateOrder(id)  // should FAIL
+    if err == nil { t.Fatal("second create should fail due to semantic lock") }
+}</code></pre><h2>Bukti LIFO Log: Verifikasi Urutan Status Step pada Kompensasi</h2><p>Test ini memverifikasi tiga hal sekaligus: state recovery (order CANCELLED, payment refunded), stock integrity (stock tetap 1), dan urutan log yang tepat. Enam entri log — dua EXECUTED, satu FAILED, dua COMPENSATED — membentuk sequence yang membuktikan LIFO rollback bekerja sesuai desain. Urutan ini penting untuk debugging: engineer bisa merekonstruksi kronologi exact failure.</p><pre><code>func TestOrchestrator_FailureCompensatesLIFO(t *testing.T) {
+    // ...setup: CreateOrder, ProcessPayment, ReserveInventory(fail)...
+    err := orch.Execute(ctx)
+    // Verify state recovery
+    if orderSvc.GetOrder(orderID) != services.OrderCancelled {
+        t.Fatalf("expected order cancelled, got %v", orderSvc.GetOrder(orderID))
     }
-}</code></pre><h2>Bukti LIFO Log: Verifikasi Urutan Status Step pada Kompensasi</h2><p>Ketepatan kronologi eksekusi dibuktikan lewat rekaman audit log pada test <code>TestOrchestrator_FailureCompensatesLIFO</code>. Ketika reservasi stok gagal, orchestrator mencatat tepat lima entri status berurutan: <code>EXECUTED</code> untuk CreateOrder, <code>EXECUTED</code> untuk ProcessPayment, <code>FAILED</code> untuk ReserveInventory, disusul <code>COMPENSATED</code> untuk refund dan cancel. Bukti ini menegaskan urutan rollback LIFO berjalan sesuai ekspektasi.</p><pre><code class="language-go">func TestOrchestrator_FailureCompensatesLIFO(t *testing.T) {
+    if paymentSvc.HasPayment(orderID) {
+        t.Fatal("expected payment refunded")
+    }
+    // Verify log order (5 entries exactly)
     logs := orch.Logs()
     expectedOrder := []saga.StepStatus{
-        saga.StatusExecuted,    // CreateOrder
-        saga.StatusExecuted,    // ProcessPayment
-        saga.StatusFailed,      // ReserveInventory
-        saga.StatusCompensated, // ProcessPayment (Refund)
-        saga.StatusCompensated, // CreateOrder (Cancel)
+        saga.StatusExecuted, saga.StatusExecuted, saga.StatusFailed,
+        saga.StatusCompensated, saga.StatusCompensated,
     }
     for i, l := range logs {
-        if l.Status != expectedOrder[i] {
-            t.Errorf("log[%d] status mismatch: got %v, want %v", i, l.Status, expectedOrder[i])
-        }
+        if l.Status != expectedOrder[i] { ... }
     }
-}</code></pre><h2>Bukti Context Cancellation: Kompensasi Saat Saga Dibatalkan</h2><p>Saat request dibatalkan oleh klien, eksekusi saga tidak boleh meninggalkan state yang menggantung. Detached context memungkinkan kompensasi lokal selesai, tetapi production masih perlu propagasi tracing terdistribusi: test <code>TestOrchestrator_ContextCancellation</code> membuktikan bahwa pembatalan context menghentikan langkah berikutnya dan memicu <code>compensate()</code> menggunakan <code>context.Background()</code> independen.</p><pre><code class="language-go">func TestOrchestrator_ContextCancellation(t *testing.T) {
+}</code></pre><h2>Bukti Context Cancellation: Kompensasi Saat Saga Dibatalkan</h2><p>Test ini memvalidasi perilaku saga ketika context dibatalkan di tengah eksekusi. Context cancellation dideteksi pada select case di loop Execute, menghentikan iterasi sebelum step berikutnya dijalankan. Meskipun context dibatalkan, compensate() tetap dipanggil dengan context.Background() — memastikan kompensasi tidak terhenti oleh cancellation propagation. Step yang sudah dieksekusi pasti dikompensasi, mempertahankan invarian atomicity.</p><pre><code>func TestOrchestrator_ContextCancellation(t *testing.T) {
     ctx, cancel := context.WithCancel(context.Background())
     orch := saga.NewOrchestrator()
     step1Compensated := false
     orch.AddStep(saga.Step{
         Name: "Step1",
         Execute: func(ctx context.Context) error {
-            cancel() // Batalkan context sebelum langkah 2
+            cancel() // cancel context before step 2
             return nil
         },
         Compensate: func(ctx context.Context) error {
@@ -123,21 +117,26 @@ func TestSemanticLock(t *testing.T) {
             return nil
         },
     })
-    _ = orch.Execute(ctx)
-    if !step1Compensated {
-        t.Fatal("expected step 1 to be compensated upon cancellation")
-    }
-}</code></pre><h2>Checklist Implementasi Saga Pattern yang Benar</h2><p>Menerapkan pola Saga di production menuntut kepatuhan terhadap checklist berikut:</p><ul><li>Setiap langkah transaksi compensable memiliki fungsi rollback teruji.</li><li>Aksi eksekusi forward dan kompensasi rollback bersifat idempoten terhadap retry.</li><li>Semantic lock atau version checking diterapkan pada entitas yang diakses secara bersamaan.</li><li>Koordinator mengambil snapshot slice langkah sebelum eksekusi untuk menjaga keamanan thread.</li><li>Kompensasi rollback dieksekusi dengan detached context agar tidak terinterupsi saat request dibatalkan.</li><li>Audit log merekam status transisi secara terstruktur: PENDING, EXECUTED, FAILED, COMPENSATED, dan COMPENSATE_FAILED.</li><li>Pengujian <code>go test -race</code> melaporkan hasil bersih tanpa peringatan data race.</li><li>Dead-letter queue dipersiapkan untuk menampung transaksi yang gagal dikompensasi secara otomatis.</li></ul><h2>Anti-Pattern Saga: Yang Harus Dihindari di Production</h2><p>Menghindari circular dependency tidak otomatis menuntaskan thread worker yang hang jika pemanggilan downstream tidak dibatasi timeout. Selain itu, fungsi kompensasi non-idempoten dapat memicu refund ganda saat retry jaringan terjadi. Mengabaikan kompensasi pada langkah non-pivot meninggalkan entitas menggantung, sementara panggilan HTTP sinkron yang lambat di dalam kompensasi dapat memblokir worker pool.</p><h2>Takeaway Praktis: Command &amp; Runbook untuk Saga Pattern</h2><p>Perintah di bawah ini merupakan titik awal reproduksi mandiri. Perintah pengujian lokal memberikan baseline verifikasi, tetapi perlu bukti tambahan dari chaos testing sebelum rilis ke production. Runbook operasional wajib memantau status kompensasi yang gagal agar engineer on-call dapat melakukan rekonsiliasi manual.</p><pre><code class="language-sh"># Jalankan seluruh test suite otomatis
+    orch.AddStep(saga.Step{
+        Name: "Step2",
+        Execute: func(ctx context.Context) error {
+            t.Fatal("step 2 should not execute when context cancelled")
+            return nil
+        },
+    })
+    err := orch.Execute(ctx)
+    if !step1Compensated { t.Fatal("expected step 1 compensated") }
+}</code></pre><h2>Checklist Implementasi Saga Pattern yang Benar</h2><p>Checklist ini merangkum delapan persyaratan kritis untuk implementasi saga pattern yang production-ready. Poin paling sering terlewat adalah idempotensi kompensasi — jika compensate() dipanggil dua kali, sistem harus tetap stabil. Poin keenam tentang dead-letter queue juga krusial: compensation failure permanen memerlukan mekanisme manual intervention yang harus direncanakan sebelum deployment.</p><h2>Anti-Pattern Saga: Yang Harus Dihindari di Production</h2><p>Empat anti-pattern ini paling umum ditemukan di implementasi saga production. Non-idempotent compensate adalah penyebab utama double-refund yang merugikan financial reconciliation. Circular dependency antara kompensasi step menciptakan infinite loop yang melumpuhkan orchestrator. Missing compensate pada final step berarti approval state permanen meskipun step lain dikompensasi. Blocking long-running compensate mengunci goroutine orchestrator dan mencegah step selanjutnya dieksekusi.</p><h2>Takeaway Praktis: Command & Runbook untuk Saga Pattern</h2><p>Takeaway praktis untuk engineer yang mengadopsi saga pattern di production: command di atas adalah titik awal reproduksi mandiri. Prinsip operasional ketiga poin terakhir merupakan panduan monitoring yang harus diimplementasikan sebelum go-live. Compensation failure yang masuk ke DLQ harus diproses secara manual oleh on-call engineer dengan konsol admin — tidak ada fully-automatic resolution untuk semua kasus.</p><pre><code># Jalankan seluruh test suite
 go test -v ./...
 
-# Verifikasi ketiadaan data race pada goroutine
+# Verifikasi race condition
 go test -race -v ./...
 
-# Eksekusi simulasi interaktif CLI
+# Demo interaktif (happy path + rollback)
 go run ./cmd/demo
 
 # Production runbook:
 # 1. Monitor orch.Logs() untuk STATUS_FAILED / STATUS_COMPENSATE_FAILED
 # 2. Alert on COMPENSATE_FAILED → trigger DLQ processing
 # 3. Manual reconciliation via admin console for stuck compensations
-# 4. Regular healthcheck: verify all in-flight sagas reached terminal state</code></pre><h2>Prinsip Arsitektural Jangka Panjang: Eventual Consistency sebagai Kontrak</h2><p>Pola Saga menegaskan bahwa konsistensi eventual adalah kontrak desain yang sah untuk ketersediaan tinggi di sistem terdistribusi. Dengan mengizinkan setiap service memegang kendali penuh atas databasenya sendiri dan menyediakan alur kompensasi yang auditable, sistem terdistribusi mampu bertahan menghadapi kegagalan parsial tanpa harus mengorbankan ketersediaan layanan secara menyeluruh.</p><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern">Software Engineering Lab 29</a>, README.md, implementasi, dan pengujian. Snapshot commit ba4b6216. Cuplikan kode digunakan dalam konteks package asal.</p></article></body></html>
+# 4. Regular healthcheck: verify all in-flight sagas reached terminal state</code></pre><h2>Prinsip Arsitektural Jangka Panjang: Eventual Consistency sebagai Kontrak</h2><p>Prinsip arsitektur ini berlaku jauh melampaui implementasi lab. Sagas bukan sekadar pola teknis — mereka mewakili filosofi desain sistem terdistribusi yang menerima eventual consistency sebagai kontrak fundamental. Setiap prinsip di atas mengarahkan keputusan arsitektural: dari pemilihan database per service hingga desain monitoring dan alerting system. Engineer yang memahami ini akan menghindari godaan untuk kembali ke ACID monolitik.</p><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern">Software Engineering Lab 29</a>, README.md, implementasi, dan pengujian. Snapshot commit ba4b6216. Cuplikan kode digunakan dalam konteks package asal.</p></article></body></html>
