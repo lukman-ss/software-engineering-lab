@@ -1,0 +1,105 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OAuth 2.0 & OIDC: Melindungi Sesi dengan PKCE & Rotasi Token Keluarga di Go</title><meta name="description" content="Bedah implementasi OAuth 2.0 & OIDC dalam Go: autentikasi vs otorisasi, proteksi kode otorisasi, dan deteksi replay refresh token dengan family revocation."><meta property="og:title" content="OAuth 2.0 & OIDC: Melindungi Sesi dengan PKCE & Rotasi Token Keluarga di Go"><meta property="og:description" content="Bedah implementasi OAuth 2.0 & OIDC dalam Go: autentikasi vs otorisasi, proteksi kode otorisasi, dan deteksi replay refresh token dengan family revocation."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>OAuth 2.0 & OpenID Connect: Proteksi Sesi, PKCE, & Rotasi Token Keluarga</h1><p class="subtitle">Memisahkan Otorisasi dari Autentikasi, Proteksi Kode Otorisasi, dan Deteksi Replay Token di Go</p><p>Lukman / lukman-ss · Software Engineering Lab 31</p><img src="cover_art.jpg" alt="Cover Lab 31 OAuth 2.0 & OIDC: Proteksi Sesi dan Rotasi Token oleh Lukman / lukman-ss"><blockquote>OAuth memberikan wewenang delegasi; OIDC menegaskan identitas terverifikasi; PKCE mengikat pertukaran; rotasi keluarga menetralkan replay.</blockquote><h2>Masalah Nyata: Rapuhnya Identitas dan Sesi Web</h2><p>Dalam arsitektur terdistribusi nyata, kebocoran sesi sering kali bukan diakibatkan oleh kelemahan algoritma enkripsi, melainkan kekeliruan desain alur otorisasi. Banyak tim menganggap access token OAuth 2.0 dapat digunakan langsung untuk mengenali identitas user, padahal token tersebut dirancang khusus untuk resource server. Selain itu, authorization code yang melintasi browser redirect pada aplikasi mobile atau SPA sangat rentan disadap jika tidak diproteksi oleh bukti kepemilikan kriptografis seperti PKCE.</p><h2>Mengapa Pendekatan Naif & Implicit Flow Gagal?</h2><p>Pendekatan naif kerap melakukan decode base64 pada payload JWT tanpa memverifikasi tanda tangan kriptografis dan claims wajibnya. Kode semacam ini memungkinkan penyerang membuat token palsu berisi identitas sembarang dan langsung diterima oleh sistem. Penggunaan Implicit Flow yang dahulu populer kini telah resmi didepresiasi oleh RFC 9700 karena mengekspos token secara telanjang pada URL fragment.</p><div class="code"><pre><code>func HandleAuthNaive(rawJWT string) (*User, error) {
+    // BAHAYA FATAL: Decode payload tanpa verifikasi signature!
+    parts := strings.Split(rawJWT, ".")
+    claimsBytes, _ := base64.RawURLEncoding.DecodeString(parts[1])
+    var claims NaiveClaims
+    json.Unmarshal(claimsBytes, &claims)
+    // Tidak memeriksa iss, aud, exp, maupun nonce anti-replay!
+    return &User{ID: claims.Subject}, nil
+}</code></pre></div><h2>Mental Model: Arsitektur Dual-Token & Family Lineage</h2><p>Mental model sistem ini bertumpu pada pemisahan tanggung jawab secara tegas antara otorisasi dan autentikasi. ID Token claims mendefinisikan identitas terverifikasi pengguna dengan enam perimeter verifikasi wajib: penerbit (iss), subjek (sub), penerima sah (aud), masa berlaku (exp), jendela waktu terbit (iat), dan tiket anti-replay (nonce). Di sisi backend sesi, struktur RefreshTokenMeta melacak lineage silsilah token melalui FamilyID.</p><div class="code"><pre><code>type IDTokenClaims struct {
+    Issuer     string `json:"iss"`  // OIDC Provider sah
+    Subject    string `json:"sub"`  // Identitas unik user
+    Audience   string `json:"aud"`  // Client ID target
+    Expiration int64  `json:"exp"`  // Waktu kedaluwarsa
+    IssuedAt   int64  `json:"iat"`  // Waktu terbit (±5m)
+    Nonce      string `json:"nonce"`// Anti-replay challenge
+}
+type RefreshTokenMeta struct {
+    FamilyID  string    // Silsilah sesi tunggal
+    Revoked   bool      // Status single-use consumption
+    ExpiresAt time.Time // Kedaluwarsa absolut (30 hari)
+}</code></pre></div><h2>Pipeline End-to-End: PKCE, Token Minting, & Rotation</h2><p>Pipeline otorisasi dan identitas ini memperlihatkan interaksi end-to-end antara Client, Authorization Server, dan Resource Server. Pada tahap 1 hingga 3, client menyiapkan proteksi PKCE S256 dan nonce sebelum meminta authorization code yang berumur pendek. Pada tahap 4 hingga 6, client menukar authorization code dengan menyertakan bukti kepemilikan code_verifier asli.</p><div class="code"><pre><code>1. Client.BuildAuthorizationRequest() -> Hitung S256(verifier) = challenge & generate nonce.
+2. Client -> AS: GET /authorize?response_type=code&code_challenge=...&nonce=...&scope=openid profile
+3. AS.Authorize() -> Verifikasi client & redirect URI, simpan challenge, terbitkan AuthCode (TTL 5m).
+4. Client -> AS: POST /token grant_type=authorization_code&code=...&code_verifier=...
+5. AS.ExchangeCode() -> Validasi SHA256(code_verifier) == challenge. Tandai code used = true.
+6. AS Menerbitkan: AccessToken (opaque), IDToken (JWT HS256), & RefreshToken (FamilyID).
+7. Client.ParseAndVerifyIDToken() -> Verifikasi HMAC, iss, aud, exp, nonce match.
+8. Client.RefreshTokens() -> AS rotasi: tandai RT lama Revoked=true, terbitkan pasangan baru.</code></pre></div><h2>Implementasi Inti: Refresh Token Rotation & Family Revocation</h2><p>Potongan kode ini merupakan benteng pertahanan utama terhadap serangan replay refresh token pada server.go. Setiap kali klien meminta pembaruan token, server memeriksa apakah token tersebut sudah pernah digunakan sebelumnya melalui flag meta.Revoked. Jika token yang sudah berstatus revoked dipresentasikan kembali, sistem menyimpulkan bahwa token tersebut telah dicuri.</p><div class="code"><pre><code>if s.revokedFams[meta.FamilyID] {
+    return nil, ErrTokenReplayDetected // Keluarga sudah terkompromi
+}
+if meta.Revoked {
+    // REPLAY TERDETEKSI: Penyerang menggunakan token yang sudah dirotasi!
+    s.revokedFams[meta.FamilyID] = true // Cabut seluruh sesi aktif
+    return nil, ErrTokenReplayDetected
+}
+meta.Revoked = true // Tandai token saat ini sebagai terpakai
+// Terbitkan refresh token baru dengan FamilyID yang sama...</code></pre></div><h2>Failure Path: Penolakan Intersepsi & Replay</h2><p>Failure path konkret ini diambil langsung dari hasil eksekusi program demo lab. Pada Langkah 6, penyerang yang berhasil menyadap authorization code mencoba menukarnya menggunakan verifier palsu, namun server menolak transaksi secara mutlak dengan error ketidakcocokan PKCE. Pada Langkah 8, penyerang mencoba menggunakan refresh token usang yang telah dirotasi.</p><div class="code"><pre><code>[Step 6] Test Interception Attack (Attempt code exchange with wrong verifier)...
+Interception Attack Blocked! Error: pkce verification failed: code_verifier does not match code_challenge
+[Step 7] Test Refresh Token Rotation...
+Rotated New Access Token : at_8c8facd2a7dce0b35b74243d16172970a30c4e94f05853bd
+Rotated New Refresh Token: rt_a0aafd72efbf3ffb2f3cfafeacf71cf4d4e6503170fee590
+[Step 8] Test Refresh Token Replay Detection (Attacker reuses stolen Refresh Token)...
+Refresh Token Replay Detected! Error: refresh token reuse detected: entire token family revoked
+Re-testing active refresh token after family revocation...
+Active session revoked due to family revocation! Error: refresh token reuse detected: entire token family revoked</code></pre></div><h2>Mekanisme vs. Gejala: Evaluasi Solusi Autentikasi</h2><p>Tabel ini mengevaluasi berbagai mekanisme otorisasi dan autentikasi dalam menghadapi berbagai vektor ancaman dunia nyata. Menggunakan OAuth 2.0 murni tanpa OIDC untuk login pengguna menimbulkan kerentanan fatal karena access token tidak dirancang untuk memverifikasi audiens pemanggil. Implicit flow kini resmi dilarang oleh standar IETF RFC 9700.</p><table><tr><th>Mekanisme</th><th>Peran Primer</th><th>Celah Kegagalan / Vektor</th><th>Ketahanan Produksi</th></tr><tr><td>OAuth 2.0 Murni</td><td>Otorisasi API</td><td>Token ditukar sebagai identitas</td><td>Rentan (Confused Deputy)</td></tr><tr><td>Implicit Flow</td><td>Otorisasi SPA</td><td>Token bocor via URL history</td><td>Tidak Aman (Deprecated)</td></tr><tr><td>OIDC ID Token</td><td>Autentikasi</td><td>Skipping aud/iss/nonce verification</td><td>Aman jika divalidasi ketat</td></tr><tr><td>PKCE (RFC 7636)</td><td>Code Binding</td><td>Metode 'plain' alih-alih S256</td><td>Aman Mutlak (S256 Mandatory)</td></tr><tr><td>Refresh Rotation</td><td>Sesi Berkelanjutan</td><td>Static token replay tanpa tracking</td><td>Aman Mutlak (Family Revocation)</td></tr></table><h2>3 Keputusan Desain Kritis Arsitektur Identitas</h2><p>Pertama, PKCE metode S256 diwajibkan tanpa kompromi untuk seluruh jenis client guna memastikan authorization code tidak dapat dieksploitasi meski berhasil disadap di jaringan publik. Kedua, verifikasi ID Token tidak boleh hanya membaca JSON, melainkan wajib mengevaluasi tanda tangan digital dan parameter nonce anti-replay. Ketiga, rotasi refresh token wajib didukung oleh pelacakan FamilyID.</p><h2>Bukti Eksekusi: Siklus Lengkap OIDC, PKCE, & Replay Defense</h2><p>Bukti eksekusi terminal membuktikan bahwa seluruh siklus autentikasi dan otorisasi berjalan mulus tanpa celah keamanan. Langkah 1 hingga 5 menunjukkan pembuatan tantangan PKCE S256, penerbitan authorization code, penukaran token yang sah, verifikasi klaim ID Token, hingga akses ke resource server dengan scope yang sesuai. Langkah 6 hingga 8 memperlihatkan simulasi serangan nyata.</p><div class="code"><pre><code>=== LAB 31: OAuth 2.0 & OpenID Connect (OIDC) Demo ===
+[Step 1] Initiate Authorization Request with PKCE & OIDC scope...
+ Generated PKCE code_challenge (S256): dbNVgXttw5HU018kaBwk3JusvwqMVanN4c4ghBsH88w
+ Generated OIDC nonce: 2152fa0c9254b322d11b27dba96b99de
+[Step 2] Authorization Server issues Authorization Code...
+ Issued Code: 5fabbdcdb6bbd582c3811481395a5161 (expires: 15:31:47)
+[Step 3] Client exchanges Code + code_verifier for Tokens...
+ Access Token : at_4e8dd945eaf2aed814aaf9717a7ee6bab364db0914917bb2
+ Refresh Token: rt_c624781adb52c6effa11d85bbe24fccf7f73eb20feeaf928
+ ID Token     : eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+[Step 4] Validate OIDC ID Token claims... Subject: user_alice_99 | Nonce Match: SUCCESS
+[Step 5] Access Resource Server using Access Token... Resource verified. Subject: user_alice_99
+[Step 6] Test Interception Attack... Interception Attack Blocked! Error: pkce verification failed
+[Step 7] Test Refresh Token Rotation... Rotated New RT: rt_a0aafd72efbf3ffb2f3cfafeacf71cf4...
+[Step 8] Test Refresh Token Replay Detection... Replay Detected! Error: entire token family revoked
+=== Demo Completed Successfully ===</code></pre></div><h2>YANG TIDAK DIBUKTIKAN</h2><p>Klaim teknis dalam laboratorium ini dibatasi secara tegas oleh parameter lingkungan pengujian yang dirancang mandiri. Authorization server menyimpan state di dalam memori proses tunggal tanpa integrasi database terdistribusi seperti Redis kluster. Penandatanganan ID Token menggunakan skema simetris HMAC-SHA256 untuk kesederhanaan komputasi lokal, bukan infrastruktur kunci publik asimetris dengan endpoint JWKS dinamis. Pengembang tidak boleh mengabaikan kebutuhan constant-time comparison.</p><h2>Trade-off Arsitektur: Keamanan Sesi vs Kompleksitas Server</h2><p>Penerapan arsitektur OAuth 2.0 dan OIDC modern menuntut kompromi yang cermat antara tingkat keamanan dan kompleksitas operasional. Menghapus token statis dan memberlakukan Refresh Token Rotation memberikan perlindungan maksimal dari pembajakan sesi jangka panjang, namun mewajibkan server mengelola state silsilah FamilyID secara konsisten di penyimpanan terdistribusi. Selain itu, ada risiko kegagalan jaringan sementara.</p><h2>Validasi Konkurensi: 10 Goroutine Berebut Refresh Token</h2><p>Uji konkurensi pada TestOAuth2_ConcurrentRefreshReplay membuktikan ketangguhan sistem saat satu refresh token yang sama ditembak secara simultan oleh 10 goroutine. Karena method Refresh di Authorization Server dilindungi oleh sync.Mutex eksklusif, evaluasi status token berlangsung secara linearizable. Tepat satu permintaan berhasil merotasi token, sementara sembilan lainnya seketika memicu error.</p><div class="code"><pre><code>func TestOAuth2_ConcurrentRefreshReplay(t *testing.T) {
+    stolenRT := resp.RefreshToken
+    var wg sync.WaitGroup; errCount := 0; var mu sync.Mutex
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            _, err := as.Refresh(stolenRT, "client_conc_ref")
+            if err != nil { mu.Lock(); errCount++; mu.Unlock() }
+        }()
+    }
+    wg.Wait()
+    // Assert: errCount >= 9 akibat rotasi dan family revocation
+}</code></pre></div><h2>Before vs After: Evolusi Keamanan Sesi Web</h2><p>Perbandingan before-after ini mengilustrasikan lompatan besar standar keamanan web selama satu dekade terakhir. Pada arsitektur lama, pengembang mengandalkan Implicit Flow dan menyimpan refresh token statis di browser localStorage, menciptakan kerentanan masif terhadap pencurian sesi melalui skrip jahat. Pada arsitektur modern berbasis RFC 9700, authorization code diikat secara kriptografis oleh PKCE.</p><h2>Test 1: Validasi Kriptografis Tantangan PKCE S256</h2><p>Unit test pertama memverifikasi pemenuhan standar RFC 7636 pada modul pkg/pkce/pkce.go. Fungsi GeneratePKCEPair terbukti menghasilkan code_verifier berkekuatan 256-bit entropy dengan panjang tepat 43 karakter base64url. Pengujian memvalidasi bahwa perhitungan BASE64URL(SHA256(verifier)) cocok secara sempurna dengan challenge yang dikirimkan. Test verifier bounds memastikan string yang lebih pendek atau lebih panjang ditolak.</p><div class="code"><pre><code>func TestPKCE_S256_Valid(t *testing.T) {
+    pair, err := pkce.GeneratePKCEPair("S256")
+    // Assert: len(pair.CodeVerifier) >= 43 && len(pair.CodeVerifier) <= 128
+    err = pkce.Verify(pair.CodeVerifier, pair.CodeChallenge, "S256")
+    // Assert: err == nil (SHA-256 base64url matching)
+}
+func TestPKCE_VerifierLength_Bounds(t *testing.T) {
+    // Verifier < 43 karakter -> Tolak ErrInvalidVerifierLength
+    // Verifier > 128 karakter -> Tolak ErrInvalidVerifierLength
+}</code></pre></div><h2>Test 2: Verifikasi Kriptografis & Claims ID Token</h2><p>Pengujian modul OIDC membuktikan bahwa ID Token tidak dapat dimanipulasi oleh pihak ketiga. Pada TestOIDC_IDToken_TamperedSignature, setiap pengubahan satu karakter pun pada tanda tangan JWT langsung digagalkan oleh pemeriksaan hmac.Equal. Sementara itu, rangkaian pengujian klaim memverifikasi bahwa token yang memiliki penerbit tidak cocok akan ditolak secara mutlak.</p><div class="code"><pre><code>// TestOIDC_IDToken_TamperedSignature: Modifikasi signature
+tampered := parts[0] + "." + parts[1] + ".invalidSig=="
+_, err = oidc.ParseAndVerifyIDToken(tampered, secret, iss, aud, "", now)
+// Assert: err == ErrSignatureInvalid
+
+// TestOIDC_IDToken_MismatchClaims: Evaluasi claims
+// 1. Wrong issuer -> Tolak ErrIssuerMismatch
+// 2. Wrong audience -> Tolak ErrAudienceMismatch
+// 3. Wrong nonce -> Tolak ErrNonceMismatch
+// 4. Expiration lampau -> Tolak ErrTokenExpired</code></pre></div><h2>Test 3: Pencegahan Serangan Intersepsi Authorization Code</h2><p>Test ketiga mendemonstrasikan bagaimana proteksi PKCE menggagalkan skenario penyerangan nyata pada client publik. Saat penyerang berhasil menyadap authorization code dan mencoba menukarnya ke server menggunakan verifier palsu, server mendeteksi ketidakcocokan SHA-256 dan membatalkan pertukaran. Klien sah kemudian berhasil menukar kode tersebut dengan verifier aslinya.</p><div class="code"><pre><code>// 1. Client sah menginisiasi flow dan meminta authorization code
+ch, _ := cli.BuildAuthorizationRequest("openid profile")
+ac, _ := as.Authorize("client_1", "https://app.com/cb", "openid profile", "user_sub_1", ch, "S256", cli.Nonce)
+
+// 2. Attacker menyadap ac.Code, mencoba exchange dengan verifier tebakan
+_, err = as.ExchangeCode(ac.Code, "client_1", "https://app.com/cb", "attacker_wrong_verifier_12345678901234567890123")
+// Assert: err != nil (PKCE verification failed: challenge mismatch)
+
+// 3. Client sah menukar code dengan verifier asli -> SUKSES
+resp, err := cli.Exchange(ac.Code)
+
+// 4. Percobaan penggunaan ulang ac.Code yang sama -> DITOLAK (Used = true)</code></pre></div><h2>Studi Kasus Industri: Konsensus Keamanan RFC 9700</h2><p>Riset standar IETF menunjukkan pergeseran paradigma fundamental dalam keamanan web terdistribusi. Implicit Flow yang dahulu menjadi standar bagi Single Page Application resmi dihapus dalam OAuth 2.1 dan RFC 9700 karena token akses rentan bocor melalui riwayat peramban. Standar industri terkini mewajibkan Authorization Code Flow yang dilindungi PKCE S256 untuk seluruh aplikasi.</p><h2>Analisis Teknis: Anatomi Token Family Revocation</h2><p>Mekanisme Token Family Revocation per RFC 9700 Section 4.14 mengubah sifat pasif refresh token menjadi jebakan aktif bagi penyusup. Ketika token yang dicuri oleh penyerang digunakan setelah klien sah melakukan rotasi, server mengenali bahwa token tersebut sudah berstatus terpakai. Alih-alih hanya menolak satu permintaan, server secara cerdas mengidentifikasi bahwa seluruh keluarga sesi telah terkompromi.</p><h2>Checklist Implementasi Produksi OAuth 2.0 & OIDC</h2><p>Daftar periksa ini merangkum sembilan prinsip krusial yang wajib dipenuhi sebelum menggelar infrastruktur OAuth 2.0 dan OIDC ke sistem produksi. Seluruh alur harus mewajibkan PKCE S256 tanpa toleransi metode plain, dan masa berlaku authorization code dibatasi maksimal lima menit. Verifikasi ID Token di sisi client wajib mencakup seluruh aspek kriptografi dan claims.</p><h2>Anti-Pattern: Kesalahan Desain yang Kerap Terjadi</h2><p>Mengabaikan prinsip dasar keamanan identitas web dapat berakibat fatal bagi perlindungan data pengguna. Anti-pattern yang paling sering dijumpai adalah menggunakan access token untuk autentikasi dan menyimpan token berumur panjang di localStorage. Hal ini memberikan jalan bebas bagi serangan XSS untuk membajak akun secara permanen. Pengembang dapat mereproduksi kerentanan ini secara langsung di lab.</p><h2>Verifikasi Mandiri: Uji & Jalankan Lab</h2><p>Lab ini dirancang agar dapat diverifikasi secara mandiri dalam hitungan detik oleh siapapun tanpa memerlukan instalasi database eksternal. Seluruh logika kriptografi JWT HS256 dan PKCE dibangun murni menggunakan pustaka standar Go. Perintah go test -v mengeksekusi 17 pengujian komprehensif mulai dari bounds verifier hingga rotasi refresh token.</p><div class="code"><pre><code>cd labs/31-oauth2-and-oidc
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo</code></pre></div><h2>Prinsip Arsitektur: Desain Identitas Terdistribusi</h2><p>Tiga prinsip arsitektural ini melampaui bahasa pemrograman dan framework apapun dalam rekayasa perangkat lunak modern. Pertama, tegakkan batas tegas antara otorisasi dan autentikasi agar sistem tidak terjebak dalam confused deputy attacks. Kedua, jangan pernah mempercayai data yang melintasi browser tanpa pembuktian kepemilikan kriptografis. Ketiga, terapkan paradigma Zero Trust pada sesi pengguna.</p><h2>Sumber</h2><p><a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/31-oauth2-and-oidc">Software Engineering Lab 31 - OAuth 2.0 & OpenID Connect (OIDC)</a>, snapshot commit <code>dec7514f</code>. Implementasi murni Go mencakup pkg/pkce, pkg/oidc, pkg/server, pkg/client, dan tests/oauth_test.go.</p></article></body></html>
