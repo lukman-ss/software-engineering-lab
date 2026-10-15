@@ -10,7 +10,7 @@ Follows:
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/25-rate-limiting-and-backpressure/result"
+OUTPUT_DIR = "labs/25-rate-limiting-and-backpressure/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/25-rate-limiting-and-backpressure"
 COMMIT_SHA = "45cc429"
@@ -24,7 +24,7 @@ SUBTITLE_EN = "Controlling Inflow Rate and Propagating Overload Pressure in Dist
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Rate Limiting • Backpressure • Go • Distributed Systems • System Design"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/25-rate-limiting-and-backpressure/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/25-rate-limiting-and-backpressure/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

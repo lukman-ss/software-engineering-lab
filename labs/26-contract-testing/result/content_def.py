@@ -10,7 +10,7 @@ Follows:
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/26-contract-testing/result"
+OUTPUT_DIR = "labs/26-contract-testing/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/26-contract-testing"
 COMMIT_SHA = "4a5cf38"
@@ -24,7 +24,7 @@ SUBTITLE_EN = "Consumer-Driven Contracts, CI Deployment Gate, and Safe API Evolu
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Contract Testing • Consumer-Driven Contracts • Go • API Versioning • CI/CD"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/26-contract-testing/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/26-contract-testing/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

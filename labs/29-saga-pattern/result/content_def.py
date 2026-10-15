@@ -7,7 +7,7 @@ and concurrency safety in distributed transaction management.
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/29-saga-pattern/result"
+OUTPUT_DIR = "labs/29-saga-pattern/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/29-saga-pattern"
 COMMIT_SHA = "ba4b6216da6a06dee61959231d124cd44085bbf5"
@@ -18,7 +18,7 @@ SUBTITLE_ID = "Mengelola Transaksi Terdistribusi Tanpa Two-Phase Commit di Micro
 TITLE_EN = "Saga Pattern"
 SUBTITLE_EN = "Distributed Transaction Management Without Two-Phase Commit in Microservices"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/29-saga-pattern/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/29-saga-pattern/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

@@ -1,5 +1,5 @@
 # Technical Content & Slide Audit Report
-Target: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/23-optimistic-vs-pessimistic-locking/result/content_def.py`
+Target: `labs/23-optimistic-vs-pessimistic-locking/result/content_def.py`
 Verdict: **APPROVED**
 
 ## Summary Stats

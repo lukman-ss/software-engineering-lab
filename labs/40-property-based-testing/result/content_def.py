@@ -6,7 +6,7 @@ Defines 24 slides, metadata, colors, and full narratives for builder scripts.
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/40-property-based-testing/result"
+OUTPUT_DIR = "labs/40-property-based-testing/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/40-property-based-testing"
 COMMIT_SHA = "7d244968e91a2222291a27f346512976a26017e2"

@@ -83,7 +83,7 @@ Based on `content-audit/09-verdict.md` findings:
 All changes verified with:
 
 ```bash
-cd /Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/21-outbox-pattern
+cd labs/21-outbox-pattern
 go test -v -count=1 ./...
 go test -race -count=1 ./...
 go run ./cmd/demo

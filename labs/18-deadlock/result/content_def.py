@@ -8,7 +8,7 @@ Adheres strictly to:
 - Concrete 24-slide LinkedIn Carousel structure
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/18-deadlock/result"
+OUTPUT_DIR = "labs/18-deadlock/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/18-deadlock"
 COMMIT_SHA = "e76d13f"
@@ -22,7 +22,7 @@ SUBTITLE_EN = "Circular Wait Mechanics, Database Engine Aborts, and Application 
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Deadlock • Concurrency • Database Locks • Lock Ordering • Retry Pattern • Go"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/18-deadlock/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/18-deadlock/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

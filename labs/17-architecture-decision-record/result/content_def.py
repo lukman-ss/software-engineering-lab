@@ -8,7 +8,7 @@ Follows:
 - Concrete 24-slide LinkedIn Carousel structure
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/17-architecture-decision-record/result"
+OUTPUT_DIR = "labs/17-architecture-decision-record/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/17-architecture-decision-record"
 COMMIT_SHA = "36ff6c8"
@@ -22,7 +22,7 @@ SUBTITLE_EN = "Preventing Cyclical Debates and Decision Lineage Rot in Go"
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Architecture Decision Record • ADR • Software Architecture • Go • Linting • Immutability"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/17-architecture-decision-record/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/17-architecture-decision-record/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

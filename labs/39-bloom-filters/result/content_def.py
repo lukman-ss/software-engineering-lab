@@ -7,7 +7,7 @@ Adheres strictly to the Lab 13-15 editorial 2-column layout and in-depth technic
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/39-bloom-filters/result"
+OUTPUT_DIR = "labs/39-bloom-filters/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/39-bloom-filters"
 COMMIT_SHA = "c977525a4a31ba811006df2bbc04fd031ee11765"

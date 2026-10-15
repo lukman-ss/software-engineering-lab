@@ -6,7 +6,7 @@ eager loading batching, query counting verification, and production trade-offs.
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/22-n-plus-one-query-problem/result"
+OUTPUT_DIR = "labs/22-n-plus-one-query-problem/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/22-n-plus-one-query-problem"
 COMMIT_SHA = "13224b48a35ba08f4a350b7d160ae4826f9e1f55"
@@ -17,7 +17,7 @@ SUBTITLE_ID = "Membunuh Latensi Tersembunyi dengan Eager Loading"
 TITLE_EN = "N+1 Query Problem"
 SUBTITLE_EN = "Eliminating Hidden Latency with Eager Loading"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/22-n-plus-one-query-problem/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/22-n-plus-one-query-problem/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

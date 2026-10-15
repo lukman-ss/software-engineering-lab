@@ -6,7 +6,7 @@ race condition prevention under concurrency, SQLSTATE error taxonomy, partial un
 and production data integrity trade-offs.
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/27-database-constraints/result"
+OUTPUT_DIR = "labs/27-database-constraints/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/27-database-constraints"
 COMMIT_SHA = "c317c1d"
@@ -20,7 +20,7 @@ SUBTITLE_EN = "Preventing Race Conditions, Enforcing Schema Invariants, and Reje
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Database Constraints • Data Integrity • Concurrency • SQLSTATE • Partial Index • Go"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/27-database-constraints/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/27-database-constraints/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

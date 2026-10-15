@@ -6,7 +6,7 @@ Defines metadata, colors, and 24 slides following Lab 14 & 15 standards.
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/36-cors-and-csrf/result"
+OUTPUT_DIR = "labs/36-cors-and-csrf/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/36-cors-and-csrf"
 COMMIT_SHA = "7ced81edaaa9ca043063d77e19a19b9438264382"

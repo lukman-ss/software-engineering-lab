@@ -6,7 +6,7 @@ causal LSN tokens, lag-aware filtering, and synchronous remote_apply strategies.
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/33-read-replicas-and-replication-lag/result"
+OUTPUT_DIR = "labs/33-read-replicas-and-replication-lag/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/33-read-replicas-and-replication-lag"
 COMMIT_SHA = "b41fffb"
@@ -17,7 +17,7 @@ SUBTITLE_ID = "Menjaga Read-Your-Own-Writes Tanpa Mengorbankan Skalabilitas Baca
 TITLE_EN = "Read Replicas and Replication Lag"
 SUBTITLE_EN = "Guaranteeing Read-Your-Own-Writes Without Sacrificing Read Scalability"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/33-read-replicas-and-replication-lag/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/33-read-replicas-and-replication-lag/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

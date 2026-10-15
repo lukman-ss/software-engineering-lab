@@ -5,7 +5,7 @@ Publication Builder for Software Engineering Lab 24: SLO, SLI & Error Budget.
 import os
 import sys
 
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/24-slo-sli-error-budget/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/24-slo-sli-error-budget/result/image-cover/cover_art.jpg"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/24-slo-sli-error-budget"
 COMMIT_SHA = "13224b48a35ba08f4a350b7d160ae4826f9e1f55"
 LAB_NO = "24"

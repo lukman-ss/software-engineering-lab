@@ -1,5 +1,5 @@
 # Technical Content & Slide Audit Report
-Target: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/29-saga-pattern/result/content_def.py`
+Target: `labs/29-saga-pattern/result/content_def.py`
 Verdict: **APPROVED**
 
 ## Summary Stats

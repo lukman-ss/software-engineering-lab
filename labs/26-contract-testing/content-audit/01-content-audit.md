@@ -1,5 +1,5 @@
 # Technical Content & Slide Audit Report
-Target: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/26-contract-testing/result/content_def.py`
+Target: `labs/26-contract-testing/result/content_def.py`
 Verdict: **NEEDS_REVISION**
 
 ## Summary Stats

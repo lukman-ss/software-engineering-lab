@@ -3,7 +3,7 @@
 Publication Builder Definition for Software Engineering Lab 16: Dependency Injection.
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/16-dependency-injection/result"
+OUTPUT_DIR = "labs/16-dependency-injection/result"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection"
 COMMIT_SHA = "3d936ba"
 LAB_NO = "16"
@@ -16,7 +16,7 @@ SUBTITLE_EN = "Separating Configuration from Use in Go"
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Dependency Injection • IoC • Constructor Injection • Service Locator Anti-Pattern • Go • Mocking"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/16-dependency-injection/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/16-dependency-injection/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

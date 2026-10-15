@@ -7,7 +7,7 @@ Scatter-Gather vs Global Secondary Index (Lookup Vindex), and Distributed Unique
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/32-database-sharding-and-partitioning/result"
+OUTPUT_DIR = "labs/32-database-sharding-and-partitioning/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/32-database-sharding-and-partitioning"
 COMMIT_SHA = "04c8c8a4a7923bcdf081f946284fca58c5a38bea"
@@ -18,7 +18,7 @@ SUBTITLE_ID = "Logical Pruning vs Physical Sharding, Consistent Hashing, dan Eli
 TITLE_EN = "Database Sharding & Table Partitioning"
 SUBTITLE_EN = "Logical Pruning vs Physical Sharding, Consistent Hashing, and Scatter-Gather Elimination"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/32-database-sharding-and-partitioning/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/32-database-sharding-and-partitioning/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

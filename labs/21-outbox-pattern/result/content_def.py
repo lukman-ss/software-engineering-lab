@@ -6,7 +6,7 @@ asynchronous relay polling, idempotent consumers, concurrency safety, and operat
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/21-outbox-pattern/result"
+OUTPUT_DIR = "labs/21-outbox-pattern/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/21-outbox-pattern"
 COMMIT_SHA = "b2d32740bf482b67be48a216c69e5f8e6b83fe8b"
@@ -17,7 +17,7 @@ SUBTITLE_ID = "Atomic Database Writes Meet Eventual Message Delivery"
 TITLE_EN = "Transactional Outbox Pattern"
 SUBTITLE_EN = "Atomic Database Writes Meet Eventual Message Delivery"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/21-outbox-pattern/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/21-outbox-pattern/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

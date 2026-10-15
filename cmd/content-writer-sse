@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-exec node "/Users/tthi/Documents/LUKMAN/software-engineering-lab/scripts/orchestrator/run/index.js" "$@"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec node "$DIR/scripts/orchestrator/run/index.js" "$@"

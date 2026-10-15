@@ -8,7 +8,7 @@ Adheres strictly to:
 - Concrete 24-slide LinkedIn Carousel structure
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/19-database-connection-pooling/result"
+OUTPUT_DIR = "labs/19-database-connection-pooling/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/19-database-connection-pooling"
 COMMIT_SHA = "b2d3274"
@@ -22,7 +22,7 @@ SUBTITLE_EN = "Handshake Overhead, Server Slot Limits, and Connection Leak Hazar
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Database • Connection Pooling • Concurrency • Resource Starvation • Go • PostgreSQL"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/19-database-connection-pooling/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/19-database-connection-pooling/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

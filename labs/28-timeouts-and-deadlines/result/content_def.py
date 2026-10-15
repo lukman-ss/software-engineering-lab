@@ -3,7 +3,7 @@
 Generates 24-slide LinkedIn carousel covering deadline propagation, timeout budgeting, exponential backoff with full jitter, circuit breaking, and idempotency deduplication.
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/28-timeouts-and-deadlines/result"
+OUTPUT_DIR = "labs/28-timeouts-and-deadlines/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/28-timeouts-and-deadlines"
 COMMIT_SHA = "ba4b621"
@@ -17,7 +17,7 @@ SUBTITLE_EN = "Preventing Slow Dependencies from Crashing Services via Deadline 
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Timeouts • Deadlines • Retry • Circuit Breaker • Idempotency • Go"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/28-timeouts-and-deadlines/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/28-timeouts-and-deadlines/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

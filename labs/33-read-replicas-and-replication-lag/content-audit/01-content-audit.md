@@ -1,5 +1,5 @@
 # Technical Content & Slide Audit Report
-Target: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/33-read-replicas-and-replication-lag/result/content_def.py`
+Target: `labs/33-read-replicas-and-replication-lag/result/content_def.py`
 Verdict: **NEEDS_REVISION**
 
 ## Summary Stats

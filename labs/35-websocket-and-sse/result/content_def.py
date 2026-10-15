@@ -6,7 +6,7 @@ Defines metadata, colors, and 24 slides following Lab 14 & 15 standards.
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/35-websocket-and-sse/result"
+OUTPUT_DIR = "labs/35-websocket-and-sse/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/35-websocket-and-sse"
 COMMIT_SHA = "b48fe6c30d0b3635f36b8549c5621bbf5ce7c5f8"

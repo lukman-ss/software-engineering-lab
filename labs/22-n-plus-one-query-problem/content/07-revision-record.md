@@ -88,7 +88,7 @@ Approved Inputs:
 All changes verified with:
 
 ```bash
-cd /Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/22-n-plus-one-query-problem
+cd labs/22-n-plus-one-query-problem
 go test -v -count=1 ./...
 go test -race -count=1 ./...
 go run ./cmd/demo

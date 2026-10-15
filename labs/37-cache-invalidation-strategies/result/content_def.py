@@ -7,7 +7,7 @@ Adheres strictly to the Lab 13-15 editorial 2-column layout and in-depth technic
 import os
 import sys
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/37-cache-invalidation-strategies/result"
+OUTPUT_DIR = "labs/37-cache-invalidation-strategies/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/37-cache-invalidation-strategies"
 COMMIT_SHA = "eac3d80ae5344055dc773e5e798bf50f3675a2cc"

@@ -9,8 +9,8 @@ import sys
 import zipfile
 from pathlib import Path
 
-RESULT_DIR = Path("/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/37-cache-invalidation-strategies/result")
-LAB_DIR = Path("/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/37-cache-invalidation-strategies")
+RESULT_DIR = Path("labs/37-cache-invalidation-strategies/result")
+LAB_DIR = Path("labs/37-cache-invalidation-strategies")
 
 
 def generate_medium_metadata():

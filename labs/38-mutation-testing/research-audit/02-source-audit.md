@@ -1,6 +1,6 @@
 # Source Audit
 
-Target Lab: `/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/38-mutation-testing`
+Target Lab: `labs/38-mutation-testing`
 Audit Date: 2026-09-29
 
 ---

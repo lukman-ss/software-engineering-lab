@@ -6,7 +6,7 @@ OIDC ID Token multi-step cryptographic verification, Refresh Token Rotation, and
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/31-oauth2-and-oidc/result"
+OUTPUT_DIR = "labs/31-oauth2-and-oidc/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/31-oauth2-and-oidc"
 COMMIT_SHA = "dec7514f81d0f9a0c26c95cd892d8c2cc51e0f5f"
@@ -17,7 +17,7 @@ SUBTITLE_ID = "Autentikasi vs Otorisasi, Proteksi PKCE, dan Deteksi Replay Rotas
 TITLE_EN = "OAuth 2.0 & OpenID Connect (OIDC)"
 SUBTITLE_EN = "Authentication vs Authorization, PKCE Protection, and Token Rotation Replay Detection"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/31-oauth2-and-oidc/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/31-oauth2-and-oidc/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

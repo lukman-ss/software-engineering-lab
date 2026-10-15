@@ -6,7 +6,7 @@ circuit breaker state transitions, graceful degradation via fallback, and automa
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/34-chaos-engineering/result"
+OUTPUT_DIR = "labs/34-chaos-engineering/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/34-chaos-engineering"
 COMMIT_SHA = "200fe73bb5e43da154526620201573c7af03cf8e"
@@ -17,7 +17,7 @@ SUBTITLE_ID = "Memverifikasi Ketahanan Layanan Terdistribusi Menggunakan Steady-
 TITLE_EN = "Chaos Engineering & Fault Injection"
 SUBTITLE_EN = "Verifying Distributed System Resilience via Steady-State Metrics, Circuit Breakers, and Auto-Abort"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/34-chaos-engineering/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/34-chaos-engineering/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"

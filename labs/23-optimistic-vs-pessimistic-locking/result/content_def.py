@@ -8,7 +8,7 @@ Adheres strictly to:
 - Concrete 24-slide LinkedIn Carousel structure
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/23-optimistic-vs-pessimistic-locking/result"
+OUTPUT_DIR = "labs/23-optimistic-vs-pessimistic-locking/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/23-optimistic-vs-pessimistic-locking"
 COMMIT_SHA = "aad5d78"
@@ -22,7 +22,7 @@ SUBTITLE_EN = "Lost Update Anomaly Mitigation, Version Guards, and Statement Ato
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Concurrency • Database Locks • Lost Update • Optimistic Locking • Row Locks • Go"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/23-optimistic-vs-pessimistic-locking/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/23-optimistic-vs-pessimistic-locking/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

@@ -4,7 +4,7 @@ Publication Builder Definition for Software Engineering Lab 20: Zero‑Downtime 
 Adheres to slide composition rules, quality bar, and 24‑slide LinkedIn carousel structure.
 """
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/20-zero-downtime-deployment/result"
+OUTPUT_DIR = "labs/20-zero-downtime-deployment/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/20-zero-downtime-deployment"
 COMMIT_SHA = "<auto>"
@@ -18,7 +18,7 @@ SUBTITLE_EN = "Graceful Shutdown, Traffic Draining, & Expand‑Contract DB"
 
 AUTHOR = "Lukman / lukman-ss"
 TOPIC_TAGS = "Zero‑Downtime • Graceful Shutdown • Health Probes • PreStop Hook • Expand‑Contract"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/20-zero-downtime-deployment/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/20-zero-downtime-deployment/result/image-cover/cover_art.jpg"
 
 SLIDES = []
 

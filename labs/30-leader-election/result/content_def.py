@@ -6,7 +6,7 @@ transient dual-leader states, monotonic fencing tokens, and split-brain defense 
 """
 import os
 
-OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/30-leader-election/result"
+OUTPUT_DIR = "labs/30-leader-election/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/30-leader-election"
 COMMIT_SHA = "ba4b6216da6a06dee61959231d124cd44085bbf5"
@@ -17,7 +17,7 @@ SUBTITLE_ID = "Mencegah Split-Brain dan State Corruption Menggunakan Lease TTL d
 TITLE_EN = "Leader Election with Fencing Tokens"
 SUBTITLE_EN = "Preventing Split-Brain and State Corruption via Lease TTL and Monotonic Revision"
 AUTHOR = "Lukman / lukman-ss"
-COVER_IMAGE_PATH = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/30-leader-election/result/image-cover/cover_art.jpg"
+COVER_IMAGE_PATH = "labs/30-leader-election/result/image-cover/cover_art.jpg"
 
 DARK_NAVY = "0b1b2d"
 TEAL = "087f76"
