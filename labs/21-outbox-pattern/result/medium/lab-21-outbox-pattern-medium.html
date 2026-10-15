@@ -1,0 +1,114 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Transactional Outbox Pattern: Atomic Database Writes Meet Eventual Message Delivery</title><meta name="description" content="Pelajari Transactional Outbox Pattern lewat simulasi Go: mengatasi dual-write problem dengan penulisan atomik, asynchronous relay, dan konsumen idempoten."><meta property="og:title" content="Transactional Outbox Pattern: Atomic Database Writes Meet Eventual Message Delivery"><meta property="og:description" content="Pelajari Transactional Outbox Pattern lewat simulasi Go: mengatasi dual-write problem dengan penulisan atomik, asynchronous relay, dan konsumen idempoten."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>Transactional Outbox Pattern: Atomic Database Writes Meet Eventual Message Delivery</h1><p class="subtitle">Atomic Database Writes Meet Eventual Message Delivery</p><p>Lukman / lukman-ss · Software Engineering Lab 21</p><img src="lab-21-outbox-pattern-cover-id.png" alt="Cover Lab 21 Transactional Outbox Pattern oleh Lukman / lukman-ss"><h2>Dual-Write Problem: Ketidakonsistenan Senyap</h2><p>Dual-write problem muncul saat aplikasi menyimpan data ke database lalu menerbitkan event ke broker secara terpisah. Transaksi database tidak bisa me-rollback sistem eksternal seperti Kafka atau RabbitMQ. Jika commit database sukses tetapi publish gagal akibat timeout atau jaringan putus, order tersimpan namun event tidak pernah terkirim ke downstream.</p><h2>Mengapa Pendekatan Naif Gagal?</h2><p>Implementasi naif tampak intuitif namun kehilangan jaminan atomisitas lintas sistem. Kegagalan publish ke broker terjadi di luar batas transaksi commit, meninggalkan order persisten tanpa jejak event yang dapat di-retry secara otomatis.</p><pre><code>func CreateOrderDualWriteNaive(broker, orderID, amount) error {
+    tx := db.BeginTx()
+    tx.SaveOrder(order)
+    tx.Commit()          // DB berhasil
+    broker.Publish(msg)  // Broker gagal → inkonsisten
+}</code></pre><h2>Mental Model: Transactional Outbox</h2><p>Pola Transactional Outbox memindahkan penulisan event ke dalam transaksi database yang sama dengan entitas bisnis. Layanan menyimpan order dan outbox message secara atomik. Proses terpisah berupa polling relay kemudian membaca record berstatus PENDING secara asinkron dan mengirimkannya ke broker.</p><pre><code>type OutboxMessage struct {
+    ID        string
+    EventType string
+    Payload   string
+    Status    MessageStatus  // PENDING, PROCESSED
+    CreatedAt time.Time
+}</code></pre><h2>Alur Eksekusi: Dari Transaksi Hingga Consumer</h2><p>Alur pipeline end-to-end menghubungkan komponen sistem:</p><pre><code>Client → OrderService.CreateOrderWithOutbox
+Service → DB.BeginTx() → SaveOrder + SaveOutbox (staged)
+Service → DB.Commit() → flushed atomically
+Relay (ticker) → GetPendingOutbox() → [PENDING]
+Relay → Broker.Publish(msg) → success?
+Relay → MarkOutboxProcessed(msg.ID) → PROCESSED
+Consumer.Handle(msg) → idempotent check → accepted</code></pre><h2>Implementasi Atomic Outbox Write</h2><p>Metode CreateOrderWithOutbox menampung mutasi order dan outbox message secara staged dalam satu transaksi, lalu melakukan commit secara atomik.</p><pre><code>func (s *OrderService) CreateOrderWithOutbox(orderID string, customerID string, amount float64) error {
+    tx := s.db.BeginTx()
+    order := Order{ID: orderID, CustomerID: customerID, Amount: amount, Status: OrderStatusCreated}
+    payload, _ := json.Marshal(order)
+    msg := OutboxMessage{ID: fmt.Sprintf("evt-%s", orderID), EventType: "OrderCreated", Payload: string(payload), Status: MessageStatusPending, CreatedAt: time.Now()}
+    tx.SaveOrder(order)
+    tx.SaveOutbox(msg)
+    return tx.Commit()
+}</code></pre><h2>Failure Path: Dual-Write Naive Menghasilkan Dangling Order</h2><p>Ketika broker publish gagal setelah commit, pesanan tetap tersimpan di database tanpa ada pesan yang terkirim ke broker. TestDualWriteProblem_Failure mengonfirmasi status inkonsisten ini secara deterministik.</p><pre><code>=== Lab 21: Transactional Outbox Pattern Demo ===
+[Scenario 1: The Dual-Write Problem]
+Direct write failed: failed to publish to broker after DB commit: broker unavailable
+State Inconsistency: Order in DB = true, Broker Message Count = 0</code></pre><h2>Mekanisme vs Gejala: Dual-Write vs Outbox</h2><table><tr><th>Aspek</th><th>Dual-Write Naive</th><th>Transactional Outbox</th></tr><tr><td>Write Boundary</td><td>Terpisah (DB commit dulu, lalu broker)</td><td>Sama (order + outbox dalam satu Tx)</td></tr><tr><td>Atomicity</td><td>Tidak atomik lintas sistem</td><td>Atomik untuk write pertama</td></tr><tr><td>Broker Failure Impact</td><td>Order persisten, event hilang</td><td>Order + event persisten, relay retry</td></tr><tr><td>Idempotency Requirement</td><td>Tidak diperlukan (karena konsisten)</td><td>Diperlukan (at-least-once delivery)</td></tr><tr><td>Operational Complexity</td><td>Rendah, tetapi risiko tinggi</td><td>Sedang, dengan relay dan cleanup</td></tr></table><h2>3 Keputusan Desain Kritis</h2><p><strong>1. Atomic Boundary</strong>: Satukan penulisan entitas bisnis dan pesan outbox dalam satu transaksi database lokal menggunakan pola staging.<br><strong>2. Reliable Relay</strong>: Terapkan mekanisme retry pada relay dan hanya tandai record sebagai PROCESSED setelah menerima ACK broker.<br><strong>3. Idempotent Consumer</strong>: Pasang verifikasi deduplikasi berbasis event ID di sisi consumer untuk menangani at-least-once delivery.</p><h2>Bukti Eksekusi: Terminal Output Demo</h2><pre><code>=== Lab 21: Transactional Outbox Pattern Demo ===
+
+[Scenario 1: The Dual-Write Problem]
+Direct write failed: failed to publish to broker after DB commit: broker unavailable
+State Inconsistency: Order in DB = true, Broker Message Count = 0
+
+[Scenario 2: Transactional Outbox Solution]
+Broker received messages: 1
+ - Event ID: evt-order-outbox-success, Type: OrderCreated, Payload: {...}
+
+[Scenario 3: At-Least-Once Delivery &amp; Idempotent Consumer]
+Consumer processing duplicate delivery: accepted=false</code></pre><h2>YANG TIDAK DIBUKTIKAN</h2><p>Lab ini menggunakan database in-memory, bukan mesin RDBMS produksi seperti PostgreSQL atau MySQL. Hanya strategi Polling Publisher yang diuji; log-tailing berbasis CDC seperti Debezium tidak diimplementasikan. Belum ada antrean dead-letter queue untuk poison payload non-retryable. Nilai ambang SLA bersifat ilustratif untuk kebutuhan lab.</p><h2>Trade-off Arsitektur: Outbox Pattern</h2><p><strong>Keuntungan</strong>: Menghilangkan risiko kehilangan event secara senyap, menjamin at-least-once delivery, dan mendekopel layanan bisnis dari ketersediaan broker.<br><strong>Konsekuensi</strong>: Menambah latensi pengiriman pesan akibat interval polling, menambah beban kueri database berkala, serta menuntut mekanisme deduplikasi idempoten di sisi penerima.</p><h2>Concurrency Safety: 10 Workers × 10 Orders = 100 Messages</h2><p>Pengujian beban konkuren mengeksekusi 10 goroutine worker yang masing-masing membuat 10 order simultan. Seluruh 100 pesan berhasil dipublikasikan ke broker tanpa data race, dan tabel outbox bersih dari status PENDING.</p><pre><code>func TestTransactionalOutbox_ConcurrentWrites(t *testing.T) {
+    workers := 10
+    ordersPerWorker := 10
+    totalExpected := workers * ordersPerWorker  // 100
+    // Goroutines menulis order + outbox secara konkuren
+    // Relay polling dan publish
+    // Assert: len(broker.GetPublished()) == 100
+    // Assert: len(db.GetPendingOutbox()) == 0
+}</code></pre><h2>Before vs After: Transformasi Arsitektur</h2><p><strong>Before (Dual-Write Naive)</strong>: Service memanggil DB.Commit lalu Broker.Publish. Saat broker mati, order tersimpan tetapi event hilang permanen tanpa jejak recovery.<br><strong>After (Transactional Outbox)</strong>: Service menulis order dan outbox dalam satu transaksi atomik. Relay worker secara berkala mencoba ulang pengiriman hingga broker kembali pulih.</p><h2>Test 1: Happy Path - Atomic Write + Relay Dispatch</h2><p>TestTransactionalOutbox_HappyPath memvalidasi siklus penuh: pembuatan order atomik, polling relay pada interval 10ms, keberhasilan publish ke broker, dan perubahan status record menjadi PROCESSED.</p><pre><code>func TestTransactionalOutbox_HappyPath(t *testing.T) {
+    db := outbox.NewDB()
+    broker := outbox.NewMockBroker()
+    relay := outbox.NewRelay(db, broker, 10*time.Millisecond)
+    service := outbox.NewOrderService(db)
+    consumer := outbox.NewConsumer()
+    relay.Start()
+    err := service.CreateOrderWithOutbox("o-1", "c-1", 100.50)
+    assert.NoError(t, err)
+    time.Sleep(50 * time.Millisecond)
+    published := broker.GetPublished()
+    assert.Len(t, published, 1)
+    assert.Equal(t, "OrderCreated", published[0].EventType)
+    msg, _ := db.GetOutbox("evt-o-1")
+    assert.Equal(t, outbox.MessageStatusProcessed, msg.Status)
+}</code></pre><h2>Test 2: Rollback - Nothing Persists</h2><p>TestTransactionalOutbox_Rollback membuktikan bahwa pemanggilan Rollback membuang mutasi staged pada order maupun outbox. Tidak ada rekaman yang tersisa di database dan broker tidak menerima pesan sama sekali.</p><pre><code>func TestTransactionalOutbox_Rollback(t *testing.T) {
+    db := outbox.NewDB()
+    tx := db.BeginTx()
+    tx.SaveOrder(outbox.Order{ID: "o-2", Amount: 50})
+    tx.SaveOutbox(outbox.OutboxMessage{ID: "evt-o-2", Status: outbox.MessageStatusPending})
+    tx.Rollback()
+    _, ok := db.GetOrder("o-2")
+    assert.False(t, ok, "order should not exist")
+    _, ok = db.GetOutbox("evt-o-2")
+    assert.False(t, ok, "outbox should not exist")
+    time.Sleep(30 * time.Millisecond)
+    assert.Len(t, broker.GetPublished(), 0, "no messages to broker")
+}</code></pre><h2>Test 3: Idempotency - Duplicate Delivery Rejected</h2><p>TestTransactionalOutbox_Idempotency_DuplicateDelivery menguji penolakan duplikasi pengiriman pesan pada consumer. Pengiriman pertama diterima (accepted=true), sedangkan pengiriman ulang ditolak (accepted=false) sehingga received count tetap bernilai 1.</p><pre><code>func TestTransactionalOutbox_Idempotency_DuplicateDelivery(t *testing.T) {
+    consumer := outbox.NewConsumer()
+    msg := outbox.OutboxMessage{ID: "evt-duplicate", EventType: "OrderCreated", Payload: "data"}
+    p1 := consumer.Handle(msg)
+    assert.True(t, p1, "first delivery should be accepted")
+    p2 := consumer.Handle(msg)
+    assert.False(t, p2, "duplicate delivery should be rejected")
+    assert.Equal(t, 1, consumer.GetReceivedCount(), "count stays 1")
+}</code></pre><h2>Test 4: Relay Retry - Broker Failure Tolerated</h2><p>TestTransactionalOutbox_RelayRetryAfterBrokerFailure membuktikan ketahanan relay saat broker gagal sementara. Pesan tetap berstatus PENDING pada poll pertama, lalu berhasil dipublish dan ditandai PROCESSED pada siklus berikutnya setelah broker pulih.</p><pre><code>func TestTransactionalOutbox_RelayRetryAfterBrokerFailure(t *testing.T) {
+    db := outbox.NewDB()
+    broker := outbox.NewMockBroker()
+    relay := outbox.NewRelay(db, broker, 10*time.Millisecond)
+    service := outbox.NewOrderService(db)
+    broker.SetFailNext(true)  // first publish fails
+    service.CreateOrderWithOutbox("o-retry", "c-retry", 55.0)
+    relay.Start()
+    time.Sleep(25 * time.Millisecond)  // first poll fails
+    msg, _ := db.GetOutbox("evt-o-retry")
+    assert.Equal(t, outbox.MessageStatusPending, msg.Status)
+    time.Sleep(50 * time.Millisecond)  // second poll succeeds
+    published := broker.GetPublished()
+    assert.Len(t, published, 1)
+    msg, _ = db.GetOutbox("evt-o-retry")
+    assert.Equal(t, outbox.MessageStatusProcessed, msg.Status)
+}</code></pre><h2>Test 5: Purge Processed - Memory Leak Prevention</h2><p>TestTransactionalOutbox_PurgeProcessed memastikan mekanisme pembersihan tabel outbox bekerja efektif. Record berstatus PROCESSED dihapus untuk mencegah ledakan ukuran tabel, sementara record PENDING tetap dipertahankan.</p><pre><code>func TestTransactionalOutbox_PurgeProcessed(t *testing.T) {
+    db := outbox.NewDB()
+    tx := db.BeginTx()
+    tx.SaveOutbox(outbox.OutboxMessage{ID: "m1", Status: outbox.MessageStatusPending})
+    tx.SaveOutbox(outbox.OutboxMessage{ID: "m2", Status: outbox.MessageStatusProcessed})
+    tx.Commit()
+    purged := db.PurgeProcessedOutbox()
+    assert.Equal(t, 1, purged)
+    _, ok := db.GetOutbox("m1")
+    assert.True(t, ok, "pending should remain")
+    _, ok = db.GetOutbox("m2")
+    assert.False(t, ok, "processed should be purged")
+}</code></pre><h2>Checklist Implementasi Outbox Pattern</h2><p>Daftar periksa implementasi produksi: siapkan skema tabel outbox_events dengan agregat terindeks, sertakan penulisan event dalam transaksi bisnis lokal, konfigurasi interval relay polling secara seimbang, tandai status processed hanya setelah ACK diterima, implementasikan consumer idempoten, jalankan cron job pembersihan record lawas, serta pantau metrik oldest-event age dan pending count.</p><h2>Anti-Pattern: Apa yang Harus Dihindari</h2><p>Hindari memanggil broker sebelum commit database, menggunakan event ID yang tidak deterministik atau non-unik, membiarkan consumer tanpa perlindungan deduplikasi, menonaktifkan proses penghapusan berkala tabel outbox, serta menyetel interval polling yang terlalu lama sehingga memicu penumpukan antrean.</p><h2>Takeaway Praktis &amp; Command Block</h2><p>Reproduksi verifikasi laboratorium secara lokal menggunakan perintah pengujian Go:</p><pre><code>cd labs/21-outbox-pattern
+go test -v ./...
+go test -race ./...
+go run ./cmd/demo</code></pre><h2>Prinsip Arsitektural Jangka Panjang</h2><p>Kembangkan sistem dengan mengasumsikan kegagalan jaringan adalah hal pasti. Pisahkan boundary penulisan data transaksional dari boundary pengiriman pesan jaringan. Konsistensi eventual yang ditopang oleh jaminan at-least-once dan konsumen idempoten memberikan ketahanan operasional yang jauh lebih realistis daripada koordinasi transaksi terdistribusi dua-fase.</p><p>Sumber: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/21-outbox-pattern">Software Engineering Lab 21</a>, README.md, implementasi, dan pengujian. Snapshot commit b2d32740. Cuplikan kode digunakan dalam konteks package asal.</p></article></body></html>
