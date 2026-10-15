@@ -1,15 +1,15 @@
 ---
 title: "Database Sharding & Table Partitioning: Logical Pruning vs Physical Sharding, Consistent Hashing, and Scatter-Gather Elimination"
 published: false
-description: "Explore database sharding and table partitioning in Go: logical pruning, consistent hashing rings with virtual nodes, GSI lookup vindexes, and RFC 9562 UUIDv7."
-tags: go, database, scalability, softwareengineering, distributed-systems
+description: "Explore Database Sharding & Table Partitioning in Go: mechanics, architecture, caveats, and testable invariants."
+tags: go, testing, performance, softwareengineering
 ---
 
 # Database Sharding & Table Partitioning: Logical Pruning vs Physical Sharding, Consistent Hashing, and Scatter-Gather Elimination
 
-A production system must remain resilient under load. Lab 32 makes that behavior visible with a focused Go simulation covering single-node logical table partitioning, physical distributed sharding, consistent hashing rings, Global Secondary Indexes, and RFC 9562 UUIDv7 generation.
+A production system must remain resilient under load. Lab 32 makes that behavior visible with a focused Go simulation and deterministic test assertions.
 
-> Logical partitioning divides tables within one instance; physical sharding distributes data across independent network nodes.
+> Vertical scaling hits hardware walls; naive horizontal sharding without key topology introduces devastating write hotspots and broadcast storms.
 
 ## Masalah Nyata: Batasan Skala Database Monolitik
 
@@ -27,6 +27,7 @@ func (m *ModuloRouter) GetShard(key string) (string, error) {
     return m.shards[idx], nil
 }
 // Scale-out 4 -> 5 nodes: 79.84% data berpindah shard!
+// Akibat: Network saturasi, cache invalidation masif, outage produksi.
 ```
 
 ## Mental Model: Logical Partitioning vs Physical Sharding
@@ -42,7 +43,7 @@ type Table struct { // Single Engine Logical Partitioning
 }
 type Cluster struct { // Multi-Node Physical Sharding
     shards map[string]*Shard // Server fisik independen
-    router Router            // Consistent Hash Ring dengan Virtual Nodes
+    router Router           // Consistent Hash Ring dengan Virtual Nodes
     gsi    *GlobalSecondaryIndex // Lookup Vindex mapping non-shard keys
 }
 ```
@@ -73,26 +74,15 @@ func (ch *ConsistentHashRouter) GetShard(key string) (string, error) {
 
 This concrete failure trace is captured directly from the execution of cmd/demo/main.go. In Scenario A, employing a monotonic date-based sharding key channels 1,000 out of 1,000 inserts into a single physical instance (shard-2), visually proving how improper key selection creates a 100% write bottleneck that nullifies horizontal capacity. In Scenario C, expanding the cluster from 4 to 5 shards under modulo routing relocates 7,984 of 10,000 keys (79.84%). In contrast, consistent hashing moves merely 1,200 keys (12.00%), preserving stability.
 
-```
-[Scenario A] Monotonic Key (date-string '2026-09-28') Sharding:
-  Node shard-0: 0 records    [                              ]
-  Node shard-1: 0 records    [                              ]
-  Node shard-2: 1000 records [##############################] (100% HOTSPOT!)
-  Node shard-3: 0 records    [                              ]
-[Scenario C] Resharding Scale-Out (4 Shards -> 5 Shards, 10,000 Keys):
-  Hash Modulo (N % M) Keys Remapped : 7,984 / 10,000 (79.84% moved! BENCANA NETWORK)
-  Consistent Hashing Keys Remapped  : 1,200 / 10,000 (12.00% moved! MINIMAL SHUFFLE)
-```
-
 ## Mekanisme vs Gejala: Evaluasi Strategi Partisi & Sharding
 
 This comparative matrix evaluates the entire spectrum of database partitioning and sharding architectures. Logical partitioning excels at managing single-node data lifecycles—enabling instant partition drops without locking tables—yet cannot bypass single-server CPU and memory ceilings. Across distributed multi-node clusters, simple modulo hashing is brittle due to catastrophic resharding churn. Consistent hashing with virtual nodes provides the industry-standard scale-out foundation, paired with Global Secondary Indexes to eliminate latency-destroying scatter-gather broadcasts.
 
 Mekanisme | Arsitektur Target | Keunggulan Utama | Limitasi / Kerentanan Kritis | Ketahanan Produksi
 |---|---|---|---|---|
-Logical Partitioning | Single Engine (1 Node) | Query pruning, fast DROP PARTITION | Shared CPU/RAM; tidak menyelesaikan limit I/O fisik | Sangat Baik (Lifecycle Data)
-Hash Modulo (K % N) | Multi-Node Cluster | Algoritma O(1) sangat sederhana | Relokasi data masif ≈ N/(N+1) saat resharding | Buruk (Dilarang saat Resizing Dinamis)
-Consistent Hashing | Multi-Node Cluster | Relokasi minimal ≈ 1/(N+1) saat scale-out | Membutuhkan virtual nodes untuk mencegah data skew | Unggul (Standar Industri)
+Logical Partitioning | Single Engine (1 Node) | Query pruning, fast `DROP PARTITION` | Shared CPU/RAM; tidak menyelesaikan limit I/O fisik | Sangat Baik (Lifecycle Data)
+Hash Modulo ($K \% N$) | Multi-Node Cluster | Algoritma $O(1)$ sangat sederhana | Relokasi data masif $\approx \frac{N}{N+1}$ saat resharding | Buruk (Dilarang saat Resizing Dinamis)
+Consistent Hashing | Multi-Node Cluster | Relokasi minimal $\approx \frac{1}{N+1}$ saat scale-out | Membutuhkan virtual nodes untuk mencegah data skew | Unggul (Standar Industri)
 Scatter-Gather Broadcast | Multi-Node Cluster | Mendukung query atribut non-shard key | Latensi P99 dibatasi node terlambat (straggler) | Rawan (Bottleneck pada Skala Besar)
 Global Secondary Index | Multi-Node Cluster | Point-lookup terarah 1-node via lookup key | Double-write overhead saat Insert/Update | Unggul (Untuk Query Frekuensi Tinggi)
 
@@ -103,24 +93,6 @@ These three architectural decisions determine the operational viability of any d
 ## Bukti Eksekusi: Verifikasi Pruning, Hashing, GSI, & UUIDv7
 
 This terminal trace provides empirical verification for all architectural claims established in the lab. In the logical partitioning benchmark, a quarterly range query scans exactly 1 partition while pruning the remaining 3 instantly. In the scale-out resharding trial, consistent hashing restricts key migration to 12.00% compared to 79.84% churn under modulo hashing. Finally, secondary key evaluation proves Global Secondary Indexes execute targeted 1-shard point lookups in 1 microsecond, outperforming 4-shard scatter-gather broadcasts running at 92 microseconds.
-
-```
-=== LAB 32: DATABASE SHARDING AND PARTITIONING DEMONSTRATION ===
-[1. Single-Node Partitioning] Query Range: 2026-04-01 to 2026-06-30
-  Records Found: 1 | Partitions Scanned: 1 / 4 (Pruned 3 partitions)
-[2. Sharding Key Selection: Monotonic vs High-Cardinality]
-  Scenario A (date-string): Node shard-2 got 1000 records (100% Hotspot)
-  Scenario B (user_id)    : Node shard-0: 400 | shard-2: 200 | shard-3: 400 (Distributed)
-[3. Resharding Scale-out: 4 Shards -> 5 Shards (10,000 Keys)]
-  Hash Modulo (N % M) Keys Remapped : 7,984 / 10,000 (79.84% moved)
-  Consistent Hashing Keys Remapped  : 1,200 / 10,000 (12.00% moved)
-[4. Non-Sharded Attributes: Scatter-Gather vs GSI]
-  Scatter-Gather Query : Nodes Broadcasted: 4 / 4 | Execution Time: 92µs
-  Global Secondary Index: Nodes Broadcasted: 1 / 4 | Execution Time: 1µs (92x Faster!)
-[5. Distributed Unique ID Generation]
-  UUIDv7 (Time-Ordered 128-bit) : 01a0eb21-fc8c-7aba-abc5-bcb4361a5e7b
-  Sequence Block Allocator IDs  : 1 2 3 4 5 6 7 8 (Block Size=5)
-```
 
 ## YANG TIDAK DIBUKTIKAN
 
@@ -172,11 +144,11 @@ func TestPartitionPruning(t *testing.T) {
         {Name: "p2026_03", Start: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), End: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
     }
     tbl := partitioning.NewTable("orders", ranges)
+    // Insert data Jan dan Feb...
     res := tbl.QueryRange(febStart, febEnd)
     // Assert: res.PartitionsScanned == 1 && res.TotalPartitions == 3 (Pruning Sukses!)
-    tbl.DropPartition("p2026_01")
-    // Assert: tbl.PartitionCount() == 2 (Hapus instan tanpa scan tabel)
-}
+    // Drop partition Jan p2026_01...
+    // Assert: tbl.PartitionCount() == 2 (Hapus instan tanpa scan tabel)}
 ```
 
 ## Test 2: Evaluasi Relokasi Data Scale-Out (5.000 Keys)
@@ -186,10 +158,14 @@ The second test directly contrasts cluster scale-out behavior when expanding fro
 ```go
 func TestRoutingAndConsistentHashRelocation(t *testing.T) {
     numKeys := 5000
+    // 1. Modulo router test: 3 nodes -> 4 nodes
     modRouter := sharding.NewModuloRouter([]string{"shard-1", "shard-2", "shard-3"})
+    // Catat penempatan awal...
     modRouter.AddShard("shard-4") // Scale-out 3 -> 4
     // Hash Modulo memindahkan 3756 / 5000 keys (75.12%)
+    // 2. Consistent Hash router test (150 vnodes): 3 nodes -> 4 nodes
     chRouter := sharding.NewConsistentHashRouter(150, []string{"shard-1", "shard-2", "shard-3"})
+    // Catat penempatan awal...
     chRouter.AddShard("shard-4") // Scale-out 3 -> 4
     // Consistent Hash memindahkan 800 / 5000 keys (16.00%)
 }
@@ -208,6 +184,10 @@ recGSI, err := cluster.GetByEmailUsingGSI("bob@example.com", "rec-2")
 // 3. Fallback Scatter-Gather Broadcast
 sgRes := cluster.ScatterGatherBroadcast(func(r sharding.Record) bool { return r.Email == "carol@example.com" })
 // Assert: sgRes.ShardsQueried == 3 (Broadcast menembus seluruh 3 shard)
+// 4. Scatter-Gather dengan Context Timeout / Cancellation
+ctx, cancel := context.WithCancel(context.Background()); cancel()
+canceledRes := cluster.ScatterGatherBroadcastWithContext(ctx, predicate)
+// Assert: canceledRes.ShardResponded == 0 (Goroutine dibatalkan seketika)
 ```
 
 ## Studi Kasus Industri: Vitess (YouTube) & Citus (Postgres)
@@ -230,7 +210,7 @@ Violating fundamental distributed data principles introduces catastrophic perfor
 
 This laboratory is engineered for immediate, deterministic peer verification without running external database containers or daemons. All consistent hashing algorithms, virtual node rings, partition pruning evaluators, and UUIDv7 generators are built strictly with Go standard library primitives. Running go test -v executes rigorous test suites verifying pruning bounds and scale-out relocation ratios. Executing go test -race confirms thread safety under high concurrency, while go run demo renders the full interactive benchmark.
 
-```
+```sh
 cd labs/32-database-sharding-and-partitioning
 go test -v -count=1 ./...
 go test -race -v -count=1 ./...
@@ -241,19 +221,6 @@ go run ./cmd/demo
 
 These three timeless architectural principles govern high-scale data layer design. First, resist premature distributed sharding; exhaust single-node logical partitioning, indexing, and vertical headroom before introducing network boundaries. Second, recognize that shard key selection defines the topology of your system: co-locate related records to preserve local transactional boundaries and avoid distributed commits. Third, build routing infrastructures that minimize data relocation during scale-outs and systematically eliminate scatter-gather broadcast dependencies.
 
-## Partisi Cerdas, Sharding Terukur, Skalabilitas Tanpa Batas.
+## Source
 
-This Database Sharding and Partitioning laboratory provides empirical proof that distributed data scalability is cleanly attainable through disciplined architectural boundaries. By combining logical table partitioning for local query pruning, consistent hashing rings with virtual nodes for minimal resharding shuffle, and Global Secondary Indexes to eliminate scatter-gather broadcast storms, backend systems scale beyond single-node ceilings with deterministic performance. Complete source code and verification harnesses are available in the repository.
-
-**Laboratory Components:**
-- `internal/partitioning/table.go` — Single-node range-based logical partitioning with query pruning & fast drop
-- `internal/sharding/sharding.go` — ModuloRouter vs ConsistentHashRouter (with vnodes), Cluster, & Scatter-Gather
-- `internal/idgen/idgen.go` — RFC 9562 UUIDv7 (128-bit time-ordered) & Vitess-style Sequence Block Allocator
-- `tests/sharding_test.go` — 5 comprehensive test suites covering pruning, resharding, GSI, IDs, & concurrency
-- `cmd/demo/main.go` — Interactive benchmarks demonstrating hotspots, resharding churn, and 92x GSI speedup
-
-**Verification Results:**
-- Commit SHA: `04c8c8a4`
-- Unit Tests: 5/5 PASS (100% clean, 0.446s)
-- Race Detector: PASS (zero data race, 1.405s)
-- Repository: [github.com/lukman-ss/software-engineering-lab/tree/main/labs/32-database-sharding-and-partitioning](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/32-database-sharding-and-partitioning)
+[Software Engineering Lab 32 - Database Sharding & Table Partitioning](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/32-database-sharding-and-partitioning), snapshot commit `04c8c8a4`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
