@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Publication Builder Definition for Software Engineering Lab 16: Dependency Injection.
+Publication Builder for Software Engineering Lab 16: Dependency Injection.
 Generates: PPTX, PDF, PNG covers, Dev.to MD, Medium HTML, Metadata, Caption, DELIVERABLES.md
-Adheres strictly to the SLIDE CLEANUP OVERRIDE & VISUAL ANCHOR POLISH standards.
+Adheres strictly to the SLIDE CLEANUP OVERRIDE standard: concise, high readability, professional.
 """
 import os
 import sys
@@ -10,85 +10,15 @@ import sys
 OUTPUT_DIR = "/Users/tthi/Documents/LUKMAN/software-engineering-lab/labs/16-dependency-injection/result"
 CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 REPO_URL = "https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection"
-COMMIT_SHA = "76f0059"
+COMMIT_SHA = "d7fb619"
 LAB_NO = "16"
 SLUG = "dependency-injection"
-TITLE_ID = "Dependency Injection & IoC"
-SUBTITLE_ID = "Constructor Injection vs Service Locator dalam Arsitektur Go"
-TITLE_EN = "Dependency Injection & IoC"
-SUBTITLE_EN = "Constructor Injection vs Service Locator in Go Architecture"
+TITLE_ID = "Dependency Injection di Go"
+SUBTITLE_ID = "Constructor Injection vs Service Locator: Trade-off Konkret untuk Testability"
+TITLE_EN = "Dependency Injection in Go"
+SUBTITLE_EN = "Constructor Injection vs Service Locator: A Concrete Trade-off for Testability"
 AUTHOR = "Lukman / lukman-ss"
-TOPIC_TAGS = "Dependency Injection • Inversion of Control • Go • Software Architecture • Clean Code"
-
-# Custom Cover SVG: Component Containers & Inversion of Control Visualization
-COVER_SVG = """<svg viewBox="0 0 850 780" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- Outer Container -->
-    <rect x="30" y="40" width="790" height="310" rx="14" fill="#0f172a" stroke="#087f76" stroke-width="2"/>
-    <rect x="30" y="40" width="790" height="48" rx="14" fill="#0d2838"/>
-    <circle cx="58" cy="64" r="6" fill="#f43f5e"/>
-    <circle cx="78" cy="64" r="6" fill="#f59e0b"/>
-    <circle cx="98" cy="64" r="6" fill="#10b981"/>
-    <text x="125" y="70" fill="#5eead4" font-family="monospace" font-size="16" font-weight="bold">COMPOSITION ROOT: MAIN() DECOUPLING</text>
-    
-    <!-- Real Gateway Node -->
-    <rect x="60" y="115" width="220" height="190" rx="10" fill="#0b1b2d" stroke="#38bdf8" stroke-width="2"/>
-    <rect x="60" y="115" width="220" height="38" rx="10" fill="#0c253b"/>
-    <text x="80" y="140" fill="#38bdf8" font-family="monospace" font-size="14" font-weight="bold">CONCRETE GATEWAY</text>
-    <text x="80" y="180" fill="#e2e8f0" font-family="monospace" font-size="13">type RealGateway</text>
-    <text x="80" y="210" fill="#94a3b8" font-family="monospace" font-size="12">Network Call: HTTP</text>
-    <rect x="75" y="240" width="190" height="45" rx="6" fill="#071322"/>
-    <text x="88" y="268" fill="#20c997" font-family="monospace" font-size="12">Charge(m Money) error</text>
-
-    <!-- Arrow / Injection Flow -->
-    <path d="M295 210 L355 210" stroke="#20c997" stroke-width="3" stroke-dasharray="6 4"/>
-    <polygon points="365,210 350,203 350,217" fill="#20c997"/>
-    <text x="290" y="195" fill="#5eead4" font-family="monospace" font-size="11" font-weight="bold">INJECTS</text>
-
-    <!-- Interface Boundary -->
-    <rect x="375" y="115" width="190" height="190" rx="10" fill="#062327" stroke="#20c997" stroke-width="2"/>
-    <rect x="375" y="115" width="190" height="38" rx="10" fill="#0a373b"/>
-    <text x="395" y="140" fill="#20c997" font-family="monospace" font-size="14" font-weight="bold">&lt;&lt;INTERFACE&gt;&gt;</text>
-    <text x="395" y="185" fill="#ffffff" font-family="monospace" font-size="13">PaymentGateway</text>
-    <text x="395" y="220" fill="#5eead4" font-family="monospace" font-size="12">Contract Boundary</text>
-    <text x="395" y="260" fill="#94a3b8" font-family="monospace" font-size="11">Decoupled from infra</text>
-
-    <!-- Arrow to Processor -->
-    <path d="M575 210 L615 210" stroke="#38bdf8" stroke-width="3"/>
-    <polygon points="625,210 610,203 610,217" fill="#38bdf8"/>
-
-    <!-- Consumer Node -->
-    <rect x="635" y="115" width="160" height="190" rx="10" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
-    <rect x="635" y="115" width="160" height="38" rx="10" fill="#2d2010"/>
-    <text x="650" y="140" fill="#fcd34d" font-family="monospace" font-size="14" font-weight="bold">PROCESSOR</text>
-    <text x="650" y="185" fill="#cbd5e1" font-family="monospace" font-size="12">Domain Logic</text>
-    <text x="650" y="220" fill="#f59e0b" font-family="monospace" font-size="12">Requires Gateway</text>
-    <text x="650" y="260" fill="#94a3b8" font-family="monospace" font-size="11">Zero direct 'new'</text>
-
-    <!-- Bottom Comparison -->
-    <rect x="30" y="380" width="790" height="360" rx="16" fill="#0b1320" stroke="#38bdf8" stroke-width="2"/>
-    <rect x="30" y="380" width="790" height="52" rx="16" fill="#0c253b"/>
-    <text x="60" y="414" fill="#7dd3fc" font-family="monospace" font-size="18" font-weight="bold">STRUCTURAL CONTRACT: CONSTRUCTOR INJECTION VS LOCATOR</text>
-
-    <!-- Card 1: Constructor Injection -->
-    <rect x="60" y="455" width="345" height="245" rx="12" fill="#062327" stroke="#10b981" stroke-width="2"/>
-    <text x="85" y="495" fill="#10b981" font-family="monospace" font-size="18" font-weight="bold">CONSTRUCTOR INJECTION</text>
-    <text x="85" y="530" fill="#ffffff" font-family="monospace" font-size="14">NewProcessor(g PaymentGateway)</text>
-    <path d="M85 548 L375 548" stroke="#087f76" stroke-width="1"/>
-    <text x="85" y="580" fill="#5eead4" font-family="monospace" font-size="13">✓ Explicit dependencies in signature</text>
-    <text x="85" y="615" fill="#5eead4" font-family="monospace" font-size="13">✓ Fast unit testing with MockGateway</text>
-    <text x="85" y="650" fill="#5eead4" font-family="monospace" font-size="13">✓ Immutable references at birth</text>
-    <text x="85" y="680" fill="#94a3b8" font-family="monospace" font-size="11">Compile-time signature validation</text>
-
-    <!-- Card 2: Service Locator -->
-    <rect x="435" y="455" width="355" height="245" rx="12" fill="#1c101c" stroke="#f43f5e" stroke-width="2"/>
-    <text x="460" y="495" fill="#f43f5e" font-family="monospace" font-size="18" font-weight="bold">SERVICE LOCATOR (ANTI-PATTERN)</text>
-    <text x="460" y="530" fill="#ffffff" font-family="monospace" font-size="14">NewBadProcessor(c Container)</text>
-    <path d="M460 548 L760 548" stroke="#831843" stroke-width="1"/>
-    <text x="460" y="580" fill="#fda4af" font-family="monospace" font-size="13">❌ Hidden dependencies behind container</text>
-    <text x="460" y="615" fill="#fda4af" font-family="monospace" font-size="13">❌ Couples domain to container API</text>
-    <text x="460" y="650" fill="#fda4af" font-family="monospace" font-size="13">❌ Missing dependencies fail at runtime</text>
-    <text x="460" y="680" fill="#94a3b8" font-family="monospace" font-size="11">PSR-11: Container injection discouraged</text>
-</svg>"""
+TOPIC_TAGS = "DI • IoC • Go • Constructor Injection • Service Locator • Testing"
 
 SLIDES = []
 
@@ -106,16 +36,16 @@ def add_slide(categories, title, subtitle, content_items, mental_model, source_p
         "layout": layout
     })
 
-# Slide 1: Cover (Dark Navy)
+# Slide 1: Cover Slide (Dark Navy)
 add_slide(
     categories=["COVER"],
     title=TITLE_ID,
     subtitle=SUBTITLE_ID,
     content_items=[
         {"type": "cover", "title": "", "items": [
-            "Component containers and inversion of control visualization",
-            "Decoupling construction from execution in Go services",
-            f"Penulis: {AUTHOR}"
+            "Three module cards labeled 'Gateway', 'Payment', 'Notification' plugged into a central socket shape",
+            "Asymmetric connection lines from modules into the socket, implying injection",
+            f"Penulis: {AUTHOR}",
         ]}
     ],
     mental_model="",
@@ -123,469 +53,572 @@ add_slide(
     slide_num="01 / 24"
 )
 
-# Slide 2: Engineering Problem
+# Slide 2: Engineering Problem — Tight Coupling
+# Pre-render spec:
+# - Runtime behavior: Processor constructs RealGateway internally via &RealGateway{}, no way to substitute without editing source.
+# - Evidence: none (demo code uses &RealGateway{} directly; problem is structural)
+# - Correct interpretation: Tight coupling means swap requires touching domain code; test requires network.
+# - Do not overclaim: Lab does not measure defect rate reduction or production coupling metrics. Only demonstrates the structural contrast.
+# Final headline: 8 kata, insight tajam
+# Final body: maks 70 kata (body rule: maks 45 kata untuk non-code/table)
+# Final footer: prinsip spesifik
 add_slide(
     categories=["PROBLEM", "ENGINEERING CONFLICT"],
-    title="Hardcoded Dependency Merusak Uji Sistem",
-    subtitle="Instansiasi langsung provider eksternal di dalam domain logic membuat unit test mustahil.",
+    title="Coupling Mengunci Gateway di Domain",
+    subtitle="Processor yang membuat RealGateway sendiri tidak bisa diuji tanpa jaringan.",
     content_items=[
-        {"title": "MASALAH ARSITEKTUR NYATA", "items": [
-            "Processor memanggil RealGateway secara langsung di dalam method.",
-            "Unit test terpaksa membuat panggilan jaringan ke gateway eksternal.",
-            "Kegagalan koneksi pihak ketiga membuat build CI merah seketika."
-        ], "type": "bullet"}
+        {"title": "MASALAH STRUKTURAL", "items": [
+            "Processor meng-instantiate &RealGateway{} secara internal.",
+            "Swap provider gateway memaksa edit domain code.",
+            "Test menjadi integration test lambat dan flaky."
+        ], "type": "cards"}
     ],
-    narrative="Instansiasi langsung RealGateway di dalam Processor mengunci dependensi konkret ke domain. Test tidak bisa mengisolasi kegagalan gateway dari bug logika bisnis.",
-    mental_model="Hardcoded dependencies force integration tests where unit tests belong.",
-    source_path="internal/di/processor.go",
-    slide_num="02 / 24"
+    narrative="Dalam kode tradisional, domain langsung membangun dependensi konkret. Lab ini menunjukkan bahwa pola tersebut mengunci pengujian pada infrastruktur nyata — bukan berarti setiap sistem tanpa DI gagal production, melainkan trade-off antara kemudahan写 dan kemampuan uji.",
+    mental_model="When a component builds its own dependencies, replacing them requires editing the component itself.",
+    source_path="internal/di/processor.go • README.md",
+    slide_num="02 / 24",
+    layout="cards"
 )
 
-# Slide 3: Why Naive Approach Fails
+# Slide 3: Why Naive Approach Fails — The Lock-In Cost
+# - Runtime: NewProcessor needs Concrete type, not interface. Swapping = grep+replace.
+# - Evidence: main.go shows manual wiring; test shows only mock substitution possible with interface.
+# - Correct: Interface parameter enables mock substitution without touching Processor source.
+# - Do not overclaim: Lab does not prove reduced production bug count or faster TTM.
 add_slide(
-    categories=["WHY FAILS", "SERVICE LOCATOR"],
-    title="Service Locator Menyembunyikan Kebutuhan Komponen",
-    subtitle="Menyuntikkan container ke seluruh struct hanya memindahkan kopling ke runtime.",
+    categories=["WHY FAILS", "TRADE-OFF"],
+    title="Konstruktor Tanpa Interface Menyulitkan Swap",
+    subtitle="Menambahkan parameter interface hanya mengubah signature, bukan domain logic.",
     content_items=[
-        {"title": "KELEMAHAN SERVICE LOCATOR", "items": [
-            "Signature fungsi menyembunyikan dependensi asli di balik interface Container.",
-            "Compiler tidak tahu apakah service yang dicari benar-benar ada di registry.",
-            "Missing dependency baru memicu error saat transaksi dieksekusi di runtime."
+        {"title": "BEFORE (Tight Coupling)", "items": [
+            "NewProcessor() — tidak ada parameter dependency.",
+            "Setiap test harus menggunakan RealGateway asli.",
+            "Ganti provider = ubah seluruh call site."
+        ], "type": "bullet"},
+        {"title": "AFTER (Constructor Injection)", "items": [
+            "NewProcessor(g PaymentGateway) — menerima interface.",
+            "Test cukup berikan MockGateway.",
+            "Ganti provider = ubah satu baris di composition root."
         ], "type": "bullet"}
     ],
-    narrative="Service Locator tampak fleksibel tetapi menyembunyikan kontrak dependensi. Signature NewBadProcessor(c Container) menutupi kebutuhan asli terhadap PaymentGateway.",
-    mental_model="Service Locator trades compile-time visibility for hidden runtime lookups.",
-    source_path="internal/di/locator.go",
-    slide_num="03 / 24"
+    narrative="Perubahan dari konstruktor tanpa parameter ke konstruktor dengan interface PaymentGateway tidak mengubah satu baris pun logika bisnis di dalam ProcessPayment. Ia hanya memindahkan titik pemilihan implementasi dari dalam domain ke composition root. Ini bukan jaminan test lebih cepat, tetapi ia membuat mock substitution mungkin tanpa refaktor lebih jauh.",
+    mental_model="Injecting an interface moves the selection point from domain to the composition root.",
+    source_path="internal/di/processor.go • tests/processor_test.go",
+    slide_num="03 / 24",
+    layout="comparison"
 )
 
-# Slide 4: Mental Model
+# Slide 4: Mental Model — Separation of Configuration from Use
+# - Runtime: main.go builds RealGateway, passes it. Processor never sees construction.
+# - Evidence: cmd/demo/main.go lines 17-21
+# - Correct: Configuration phase (main) is separate from use phase (ProcessPayment).
+# - Do not overclaim: Lab does not address lifecycle management or scope.
 add_slide(
     categories=["MENTAL MODEL", "CORE CONCEPT"],
     title="IoC Bukan Fitur, Tapi Arah Kendali",
-    subtitle="Hollywood Principle: modul bisnis menerima dependensi, bukan mencarinya sendiri.",
+    subtitle="Domain menerima dependensi, bukan memilih atau membuatnya sendiri.",
     content_items=[
         {"title": "PRINSIP INTI", "items": [
-            "Pisahkan fase konfigurasi (wiring) dari fase penggunaan (execution).",
-            "Modul domain tidak boleh mengimpor paket infrastruktur konkret.",
-            "Composition root bertindak sebagai perakit tunggal object graph."
+            "Constructor injection memindahkan instantiation ke caller.",
+            "Processor bergantung pada PaymentGateway interface, bukan implementasi.",
+            "Komposisi terjadi sekali di composition root (main.go)."
         ], "type": "bullet"}
     ],
-    narrative="Prinsip utama IoC adalah membalik inisiatif pemanggilan. Modul domain cukup menyatakan apa yang dibutuhkannya, sementara assembler luar yang menyediakannya.",
-    mental_model="Separate configuration from use: assemble components before running logic.",
-    source_path="content/02-master-draft.md",
-    slide_num="04 / 24"
+    narrative="Inversion of Control adalah prinsip umum; DI adalah bentuk spesifiknya untuk dependensi. Dalam lab ini, arahnya sederhana: main.go memegang kendali atas concrete type, Processor hanya menerima interface yang sudah jadi. Domain validation dan gateway error tetap berjalan di processor, tetapi pemilihan gateway bukan urusan domain lagi.",
+    mental_model="IoC is a principle of control direction; DI is one specific mechanism to realize it for dependencies.",
+    source_path="content/02-master-draft.md • cmd/demo/main.go",
+    slide_num="04 / 24",
+    layout="bullet"
 )
 
-# Slide 5: System / Request Flow
+# Slide 5: System / Data Flow — Request Lifecycle
+# - Visual: flow diagram (boxes & arrows)
+# - No code, no table; pure flow
+# - Body maks 45 kata
+# - Do not overclaim: Flow is simplified; no concurrency, no retries shown.
 add_slide(
-    categories=["FLOW", "ARCHITECTURE"],
-    title="Alur Request Melalui Boundary Abstraksi",
-    subtitle="Panggilan proses pembayaran didelegasikan melalui interface PaymentGateway.",
+    categories=["FLOW DIAGRAM", "ARCHITECTURE"],
+    title="Alur Request dari Composition Root ke Gateway",
+    subtitle="Empat langkah: konfigurasi → injeksi → validasi → charge.",
     content_items=[
-        {"type": "flow", "items": [
-            "Client Request | Memanggil ProcessPayment(amount)",
-            "Processor Domain | Validasi amount > 0 & buat Money",
-            "PaymentGateway | Abstraksi kontrak Charge(Money)",
-            "Real/Mock Gateway | Eksekusi jaringan atau verifikasi test"
-        ]}
+        {"title": "REQUEST FLOW", "items": [
+            "main.go membuat RealGateway & menyuntikkannya ke NewProcessor.",
+            "Call site memanggil ProcessPayment(100).",
+            "Processor validasi amount > 0, lalu buat Money{100, USD}.",
+            "Gateway.Charge(m) dipanggil; error dikembalikan ke caller."
+        ], "type": "flow"}
     ],
-    narrative="Request masuk ke domain Processor, melewati guard validasi, lalu diteruskan ke PaymentGateway. Implementasi konkret tidak diketahui oleh domain.",
-    mental_model="Interfaces establish clear boundaries between domain rules and external side effects.",
-    source_path="internal/di/gateway.go • internal/di/processor.go",
+    narrative="Flow ini menggambarkan eksekusi konkrit dari composition root hingga gateway dipanggil. Validasi invalid amount terjadi sebelum gateway terlibat, sehingga MockGateway.ChargedMoney tetap 0 — terbukti oleh TestProcessor_InvalidAmount. Simulasi ini tidak sama dengan flow production yang memiliki retry, timeout, dan circuit breaker.",
+    mental_model="A clean request flow separates configuration, validation, and external call concerns.",
+    source_path="internal/di/processor.go • cmd/demo/main.go",
     slide_num="05 / 24",
     layout="flow"
 )
 
-# Slide 6: Key Code Path
+# Slide 6: Key Code Path — Constructor Injection
+# - Code block: 8 lines max, visually dominant
+# - Body maks 30 kata
+# - Do not overclaim: nil check absent; nil would panic at runtime if used.
 add_slide(
-    categories=["CODE", "CONSTRUCTOR"],
+    categories=["CODE", "IMPLEMENTATION"],
     title="Constructor Membuat Dependency Terlihat",
-    subtitle="Signature NewProcessor menyatakan kontrak dependensi wajib secara eksplisit.",
+    subtitle="Signature NewProcessor(g PaymentGateway) memindahkan keputusan ke caller.",
     content_items=[
-        {"title": "PROCESSOR.GO", "items": [
-            "type Processor struct {",
-            "    gateway PaymentGateway",
-            "}",
+        {"title": "KODE KRITIS", "items": [
             "func NewProcessor(g PaymentGateway) *Processor {",
             "    return &Processor{gateway: g}",
-            "}"
-        ], "type": "code"}
-    ],
-    narrative="NewProcessor memindahkan pemilihan gateway ke caller. Domain tidak lagi membuat RealGateway sendiri, sehingga test dapat menyuntikkan mock.",
-    mental_model="Explicit constructor parameters make missing dependencies impossible at compile time.",
-    source_path="internal/di/processor.go:6-13",
-    slide_num="06 / 24"
-)
-
-# Slide 7: Failure Mode
-add_slide(
-    categories=["FAILURE", "FAILURE PATH"],
-    title="Jalur Kegagalan: Nil Interface Panics",
-    subtitle="Go mengizinkan passing nil ke interface; runtime panics jika constructor tidak dijaga.",
-    content_items=[
-        {"type": "failure_path", "items": [
-            "Caller Passes Nil | NewProcessor(nil) lolos kompilasi",
-            "Constructor Unchecked | Struct menyimpan pointer gateway nil",
-            "ProcessPayment Invoked | Logika bisnis lolos validasi amount",
-            "Runtime Nil Panic | p.gateway.Charge(m) memicu panic nil pointer"
-        ]}
-    ],
-    narrative="Constructor injection di Go tidak otomatis menolak nil tanpa pengecekan manual. Jika caller mengoper nil, panic baru meledak saat method dipanggil.",
-    mental_model="Interface types permit nil values: constructors still require explicit nil guards.",
-    source_path="internal/di/processor.go:11-13",
-    slide_num="07 / 24",
-    layout="failure_path"
-)
-
-# Slide 8: Hidden Cost
-add_slide(
-    categories=["COST", "HIDDEN COST"],
-    title="Biaya Tersembunyi: Wiring Boilerplate",
-    subtitle="Manual injection menjaga kejernihan arsitektur namun menambah kode perakitan.",
-    content_items=[
-        {"title": "PERBANDINGAN BIAYA", "items": [
-            "Aspek | Manual Wiring (Lab Ini) | DI Framework (Wire/Dig)",
-            "Dependency Graph | Terbaca di main.go | Tersembunyi di reflection / gen",
-            "Compile Overhead | Zero overhead | Code-gen build step tambahan",
-            "Refactoring Safety | Compiler menangkap perubahan | Bergantung pada framework container"
-        ], "type": "table"}
-    ],
-    narrative="Manual wiring menambah boilerplate pada composition root. Ini bukan berarti framework selalu lebih baik; framework membawa kompleksitas debugging tersendiri.",
-    mental_model="Boilerplate in the composition root is the explicit cost of architectural transparency.",
-    source_path="cmd/demo/main.go",
-    slide_num="08 / 24"
-)
-
-# Slide 9: Experiment Setup
-add_slide(
-    categories=["EXPERIMENT", "TEST SETUP"],
-    title="Setup Uji: Isolasi Dua Jalur Arsitektur",
-    subtitle="Menguji perilaku validasi dan propagasi error pada Processor dan BadProcessor.",
-    content_items=[
-        {"type": "metric_cards", "items": [
-            {"val": "6 Test Cases", "label": "Unit Suite", "sub": "3 Processor • 3 BadProcessor", "highlight": True},
-            {"val": "MockGateway", "label": "Test Double", "sub": "In-memory state inspection"},
-            {"val": "Go 1.22", "label": "Race Detector", "sub": "go test -race ./..."}
-        ]}
-    ],
-    narrative="Eksperimen membandingkan 6 skenario uji: transaksi valid, gateway error, dan input negatif pada kedua varian processor.",
-    mental_model="Symmetric test coverage isolates architectural trade-offs under identical conditions.",
-    source_path="tests/processor_test.go",
-    slide_num="09 / 24",
-    layout="metric_cards"
-)
-
-# Slide 10: Result Snapshot
-add_slide(
-    categories=["RESULT", "EVIDENCE"],
-    title="Output Demo: Verifikasi Eksekusi Terpisah",
-    subtitle="Kedua pola memproses pembayaran dengan implementasi RealGateway yang sama.",
-    content_items=[
-        {"title": "TERMINAL DEMO OUTPUT", "items": [
-            "$ go run ./cmd/demo",
-            "--- Running Constructor Injection ---",
-            "RealGateway charging 100 USD",
-            "--- Running Service Locator ---",
-            "RealGateway charging 200 USD"
-        ], "type": "code"}
-    ],
-    narrative="Demo membuktikan kedua pola menghasilkan output fungsional yang sama. Perbedaannya bukan pada runtime behavior, melainkan pada kemudahan pengujian.",
-    mental_model="Identical runtime output does not imply identical architectural maintainability.",
-    source_path="cmd/demo/main.go",
-    slide_num="10 / 24"
-)
-
-# Slide 11: Result Interpretation
-add_slide(
-    categories=["INTERPRETATION", "EVIDENCE"],
-    title="Test Memvalidasi Alur, Bukan Kesiapan Skala",
-    subtitle="Keberhasilan mock membuktikan isolasi logika, bukan keandalan jaringan riil.",
-    content_items=[
-        {"title": "YANG DIBUKTIKAN TEST", "items": [
-            "Processor mendelegasikan pembayaran ke MockGateway tanpa jaringan.",
-            "Validasi amount <= 0 menolak eksekusi sebelum memanggil gateway.",
-            "Race detector bersih pada seluruh skenario pengujian unit."
-        ], "type": "bullet"},
-        {"title": "YANG TIDAK DIBUKTIKAN", "items": [
-            "Ketahanan koneksi HTTP saat gateway riil mengalami timeout.",
-            "Manajemen connection pool dan lifecycle pada beban production.",
-            "Keamanan race condition pada shared state antar-goroutine."
-        ], "type": "bullet"}
-    ],
-    narrative="",
-    mental_model="Passing mock tests prove logic isolation; production still requires resilience tests.",
-    source_path="tests/processor_test.go",
-    slide_num="11 / 24"
-)
-
-# Slide 12: Trade-off
-add_slide(
-    categories=["TRADE-OFF", "DECISION"],
-    title="Trade-off: Fleksibilitas vs Kejelasan Kontrak",
-    subtitle="Service locator memudahkan penambahan service baru tetapi menutupi kontrak.",
-    content_items=[
-        {"title": "CONSTRUCTOR INJECTION", "items": [
-            "Kontrak terlihat jelas pada signature konstruktor.",
-            "Compiler menolak caller jika argumen kurang.",
-            "Constructor berisiko panjang jika kelas terlalu sibuk."
-        ], "type": "bullet"},
-        {"title": "SERVICE LOCATOR", "items": [
-            "Signature konstruktor tetap ringkas menerima Container tunggal.",
-            "Kebutuhan dependensi tersembunyi di dalam implementasi method.",
-            "Kompilasi lolos meski service belum terdaftar di container."
-        ], "type": "bullet"}
-    ],
-    narrative="",
-    mental_model="Explicit constructor parameters protect architectural clarity at the cost of signature length.",
-    source_path="content/02-master-draft.md",
-    slide_num="12 / 24"
-)
-
-# Slide 13: Improved Approach
-add_slide(
-    categories=["IMPROVED", "VALUE OBJECT"],
-    title="Value Object Tidak Memerlukan Injeksi",
-    subtitle="Struktur data tanpa dependensi infrastruktur cukup diinstansiasi langsung.",
-    content_items=[
-        {"title": "DIRECT INSTANTIATION", "items": [
+            "}",
+            "",
             "func (p *Processor) ProcessPayment(amount int) error {",
-            "    if amount <= 0 {",
-            "        return errors.New(\"invalid amount\")",
-            "    }",
+            "    if amount <= 0 { return errors.New(\"invalid amount\") }",
             "    m := Money{Amount: amount, Currency: \"USD\"}",
             "    return p.gateway.Charge(m)",
             "}"
         ], "type": "code"}
     ],
-    narrative="Money adalah value object murni tanpa efek samping. Menyuntikkan factory untuk struct sederhana seperti Money adalah over-engineering yang tidak perlu.",
-    mental_model="Reserve dependency injection for behavioral services, not pure value objects.",
-    source_path="internal/di/processor.go:15-21",
-    slide_num="13 / 24"
+    narrative="Parameter constructor g PaymentGateway membuat dependency terlihat di signature publik. Domain tidak lagi perlu import RealGateway. Ini membuat test bisa memberi mock, tetapi constructor masih perlu guard jika nil dependency ingin ditolak eksplisit — saat ini tidak ada nil check.",
+    mental_model="Constructor parameters are the public contract for dependencies; missing nil guard means runtime risk remains.",
+    source_path="internal/di/processor.go",
+    slide_num="06 / 24",
+    layout="code"
 )
 
-# Slide 14: Before vs After
+# Slide 7: Failure Mode — Service Locator Anti-Pattern
+# - Visual: failure path showing hidden dependency through container
+# - Body maks 45 kata
+# - Do not overclaim: BadProcessor works functionally; the cost is testability/maintainability.
 add_slide(
-    categories=["COMPARISON", "BEFORE AFTER"],
-    title="Sebelum vs Sesudah Constructor Injection",
-    subtitle="Mengubah instansiasi internal menjadi penyuntikan kontrak eksternal.",
+    categories=["FAILURE MODE", "ANTI-PATTERN"],
+    title="Service Locator Menyembunyikan Dependency",
+    subtitle="BadProcessor menerima Container, bukan PaymentGateway langsung.",
     content_items=[
-        {"title": "HARDCODED REAL GATEWAY", "items": [
-            "Processor membuat new RealGateway() di method.",
-            "Test terpaksa memanggil network eksternal.",
-            "Gagal ganti provider tanpa mengubah domain code."
-        ], "type": "before_after"},
-        {"title": "CONSTRUCTOR INJECTION", "items": [
-            "Processor menerima interface PaymentGateway.",
-            "Test menyuntikkan MockGateway in-memory seketika.",
-            "Caller bebas menukar provider di composition root."
-        ], "type": "before_after"}
-    ],
-    narrative="",
-    mental_model="Externalizing construction decouples business logic from concrete infrastructure.",
-    source_path="internal/di/processor.go • cmd/demo/main.go",
-    slide_num="14 / 24",
-    layout="before_after"
-)
-
-# Slide 15: Boundary of the Lab
-add_slide(
-    categories=["BOUNDARY", "LIMITATION"],
-    title="Batasan Lab: Manual Wiring In-Memory",
-    subtitle="Lab ini membuktikan struktur injeksi murni tanpa framework otomatis.",
-    content_items=[
-        {"title": "CAKUPAN IMPLEMENTASI", "items": [
-            "Manual composition root di cmd/demo/main.go.",
-            "Single interface PaymentGateway dan implementasi mock.",
-            "Validasi domain sebelum delegasi ke infrastruktur."
-        ], "type": "bullet"},
-        {"title": "TIDAK TERCAKUP DALAM LAB", "items": [
-            "DI framework otomatis seperti Wire, Dig, atau Fx.",
-            "Lifecycle management: Singleton, Scoped, dan Transient.",
-            "Scope validation untuk mencegah memory leak antar-request."
+        {"title": "ANTI-PATTERN", "items": [
+            "NewBadProcessor(c Container) menerima abstraksi yang lebih tinggi.",
+            "ProcessPayment memanggil container.GetPaymentGateway() secara internal.",
+            "Dependensi nyata PaymentGateway tersembunyi dari signature constructor.",
+            "Test harus mock Container, bukan gateway — tambahan indirection."
         ], "type": "bullet"}
     ],
-    narrative="",
-    mental_model="Manual wiring demonstrates the core principle without the complexity of automated frameworks.",
-    source_path="engineering-audit/05-gaps.md",
-    slide_num="15 / 24"
+    narrative="BadProcessor tidak salah secara fungsional: ia tetap memanggil Charge dan menghasilkan output yang sama. Masalahnya terletak pada keterbacaan dan testability — setiap developer baru harus menelusuri container untuk memahami dependensi sebenarnya. Ini bukan berarti pattern ini selalu rusak di semua konteks, tetapi ia menambah biaya kognitif yang tidak perlu.",
+    mental_model="Hiding dependencies behind a locator increases cognitive load and makes mocking harder.",
+    source_path="internal/di/locator.go",
+    slide_num="07 / 24",
+    layout="bullet"
 )
 
-# Slide 16: Edge Case
+# Slide 8: Hidden Cost — Indirection Tax
+# - Table: cost comparison between Constructor Injection and Service Locator
+# - Body maks 35 kata (table rule)
+# - Do not overclaim: Costs are qualitative estimates from the lab's perspective, not benchmarked metrics.
 add_slide(
-    categories=["EDGE CASE", "DEFENSE"],
-    title="Kasus Batas: Penanganan Parameter Tidak Valid",
-    subtitle="Validasi domain wajib memblokir eksekusi sebelum menyentuh gateway.",
+    categories=["HIDDEN COST", "TRADE-OFF"],
+    title="Biaya Tersembunyi: Indirection vs Eksplisitas",
+    subtitle="Konstruktor injection menambah boilerplate kecil; Service Locator menambah ketidakjelasan.",
     content_items=[
-        {"title": "TEST INVALID AMOUNT", "items": [
-            "proc := di.NewProcessor(mock)",
-            "err := proc.ProcessPayment(-10)",
-            "if err == nil {",
-            "    t.Fatalf(\"expected error for negative amount\")",
-            "}",
-            "if mock.ChargedMoney.Amount != 0 {",
-            "    t.Errorf(\"gateway should not have been called\")",
+        {"title": "PERBANDINGAN BIAYA", "items": [
+            "Aspek | Constructor | Service Locator",
+            "Testability | Mock langsung | Mock container + gateway",
+            "Readability | Signature jelas | Butuh telusuri container",
+            "Swap provider | Satu baris di root | Satu baris di root",
+            "Risk nil | Panic jika tanpa guard | Panic jika Get returns nil"
+        ], "type": "table"}
+    ],
+    narrative="Tabel ini membandingkan dua pola berdasarkan empat aspek yang relevan dengan perawatan kode. Constructor injection memiliki boilerplate lebih tinggi di composition root, tetapi membuat dependensi terlihat di setiap constructor call site. Service locator mengurangi jumlah parameter, tetapi menambatkan domain pada API container. Lab ini tidak mengukur overhead runtime kedua pendekatan.",
+    mental_model="The hidden cost of a pattern is often measured in maintenance time, not execution time.",
+    source_path="internal/di/processor.go • internal/di/locator.go",
+    slide_num="08 / 24",
+    layout="table"
+)
+
+# Slide 9: Experiment / Test Setup
+# - Visual: test harness description with mock
+# - Body maks 45 kata
+# - Do not overclaim: Race detector only runs sequential tests; no concurrent test exists in lab.
+add_slide(
+    categories=["EXPERIMENT", "TEST SETUP"],
+    title="Setup Pengujian: Mock Isolasi Gateway",
+    subtitle="MockGateway merekam panggilan dan bisa diforced fail tanpa jaringan.",
+    content_items=[
+        {"title": "TEST HARNESS", "items": [
+            "MockGateway menyimpan ChargedMoney dan toggle ShouldFail.",
+            "6 test cases: 3 untuk Processor (success, error, invalid), 3 untuk BadProcessor.",
+            "go test -race ./... dijalankan pada semua test sequential.",
+            "Tidak ada test concurrent atau benchmark throughput."
+        ], "type": "bullet"}
+    ],
+    narrative="Test suite dirancang untuk memverifikasi tiga hal: happy path, error propagation, dan validasi pre-check. MockGateway menggantikan RealGateway sepenuhnya — tidak ada panggilan HTTP, tidak ada dependency eksternal. Race detector berjalan pada test sequential; ia bukan bukti bahwa produksi tanpa concurrent access aman, hanya menunjukkan tidak ada data race pada skenario yang diuji.",
+    mental_model="A focused test harness isolates one behavior at a time; it proves the path, not the whole system.",
+    source_path="tests/processor_test.go",
+    slide_num="09 / 24",
+    layout="bullet"
+)
+
+# Slide 10: Result Snapshot — Test Output
+# - Visual: large terminal output block
+# - Body maks 30 kata
+# - Do not overclaim: Output is from local run; numbers are not benchmarks.
+add_slide(
+    categories=["EVIDENCE", "RESULTS"],
+    title="Semua 6 Test Pass, Race Detector Clean",
+    subtitle="Output lokal: PASS 6/6, 0.00s per test case.",
+    content_items=[
+        {"title": "TERMINAL OUTPUT", "items": [
+            "$ go test -race -v ./tests/",
+            "=== RUN   TestProcessor_Success",
+            "--- PASS: TestProcessor_Success (0.00s)",
+            "=== RUN   TestProcessor_GatewayError",
+            "--- PASS: TestProcessor_GatewayError (0.00s)",
+            "=== RUN   TestProcessor_InvalidAmount",
+            "--- PASS: TestProcessor_InvalidAmount (0.00s)",
+            "=== RUN   TestBadProcessor_Success",
+            "--- PASS: TestBadProcessor_Success (0.00s)",
+            "=== RUN   TestBadProcessor_GatewayError",
+            "--- PASS: TestBadProcessor_GatewayError (0.00s)",
+            "=== RUN   TestBadProcessor_InvalidAmount",
+            "--- PASS: TestBadProcessor_InvalidAmount (0.00s)",
+            "PASS: ok lab16/tests (cached)"
+        ], "type": "code"}
+    ],
+    narrative="Enam test case berlari dalam 0.00s per kasus. Race detector tidak melaporkan warning. Ini membuktikan jalur yang diuji aman dari data race pada goroutine tunggal — bukan berarti seluruh lifecycle production bebas race.",
+    mental_model="Zero race warnings on a small sequential suite prove the tested paths; they do not prove the whole runtime safe.",
+    source_path="tests/processor_test.go • README.md",
+    slide_num="10 / 24",
+    layout="code"
+)
+
+# Slide 11: Result Interpretation — What the Numbers Mean
+# - Visual: metric cards or interpretation
+# - Body maks 45 kata
+# - Do not overclaim: Metrics are from local CI run, not production SLOs.
+add_slide(
+    categories=["INTERPRETATION", "EVIDENCE"],
+    title="Angka 0.00s Tidak Otomatis Jadi SLO Production",
+    subtitle="Waktu eksekusi test ≠ latency gateway nyata; mereka diukur di kondisi berbeda.",
+    content_items=[
+        {"title": "METRIK HASIL", "items": [
+            "Metric | Nilai | Makna | Batas",
+            "Test duration | 0.00s/case | Unit test in-memory | Bukan network latency",
+            "Race warnings | 0 | Sequential test clean | Belum concurrent test",
+            "Mock coverage | Charge captured | Path: valid+error+invalid | Belum edge: timeout",
+            "Demo output | RealGateway charging | Integration manual verified | Bukan automated claim"
+        ], "type": "table"}
+    ],
+    narrative="Tabel ini memetakan setiap angka ke interpretasi yang benar dan batasannya. Test duration 0.00s berarti operasi in-memory cepat, bukan gateway berlatensi nol. Race warnings nol berarti jalur sequential aman, bukan berarti konkurensi production aman. Cakupannya mengikuti test.",
+    mental_model="Benchmark numbers are context-bound; they measure what the harness measures, nothing more.",
+    source_path="tests/processor_test.go • cmd/demo/main.go",
+    slide_num="11 / 24",
+    layout="table"
+)
+
+# Slide 12: Trade-off — Boilerplate vs Testability
+# - Visual: comparison two-column
+# - Body maks 45 kata
+# - Do not overclaim: Trade-off is qualitative; no quantitative measurement provided.
+add_slide(
+    categories=["TRADE-OFF", "ARCHITECTURE"],
+    title="Trade-off: Boilerplate Konstruksi vs Kemampuan Uji",
+    subtitle="Menambah satu parameter constructor membuka jalan untuk mock isolation.",
+    content_items=[
+        {"title": "BIAYA & MANFAAT", "items": [
+            "Biaya: Tambah 1 parameter di constructor",
+            "Manfaat: Mocking tanpa network call di unit test",
+            "Biaya: Composition root perlu tahu concrete type",
+            "Manfaat: Error propagation tetap terverifikasi rapi"
+        ], "type": "bullet"}
+    ],
+    narrative="Trade-off ini sebanding: satu baris boilerplate di constructor mendapatkannya isolated testing. Namun mock isolation bukan berarti production safety — ia hanya menghilangkan dependency eksternal dari test. Validasi amount dan error wrapping masih membutuhkan test terpisah.",
+    mental_model="DI trades a small construction cost for isolation gains; it does not buy production safety.",
+    source_path="internal/di/processor.go • tests/processor_test.go",
+    slide_num="12 / 24",
+    layout="comparison"
+)
+
+# Slide 13: Improved Approach — Constructor Injection Pattern
+# - Visual: code block (improved code) or flow
+# - Body maks 30 kata
+# - Do not overclaim: Still lacks nil guard; improved but not complete.
+add_slide(
+    categories=["IMPROVED APPROACH", "PATTERN"],
+    title="Nil Guard Menutupi Runtime Risk",
+    subtitle="Menambahkan pengecekan nil pada constructor membuat dependency wajib terlihat.",
+    content_items=[
+        {"title": "IMPROVED CODE", "items": [
+            "func NewProcessor(g PaymentGateway) *Processor {",
+            "    if g == nil {",
+            "        return nil // atau panic, tergantung kebijakan tim",
+            "    }",
+            "    return &Processor{gateway: g}",
             "}"
         ], "type": "code"}
     ],
-    narrative="Test memastikan ProcessPayment(-10) gagal seketika dan ChargedMoney.Amount tetap 0. DI tidak meniadakan validasi input di trust boundary.",
-    mental_model="Validate input at domain boundaries before delegating to injected infrastructure.",
-    source_path="tests/processor_test.go:47-59",
-    slide_num="16 / 24"
+    narrative="Menambahkan nil check pada constructor merupakan langkah selanjutnya yang disarankan. Saat ini, constructor menerima nil tanpa peringatan — caller akan menghadapi nil pointer panic saat gateway.Charge dipanggil. Lab ini belum menerapkan guard tersebut; ia sengaja mempertahankan pola minimal untuk fokus pada kontras DI vs Service Locator.",
+    mental_model="Explicit nil checks convert runtime surprises into compile-time or call-site failures.",
+    source_path="internal/di/processor.go",
+    slide_num="13 / 24",
+    layout="code"
+)
+
+# Slide 14: Before vs After — Visual Comparison
+# - Visual: before/after code or architecture diagram
+# - Body maks 45 kata
+# - Do not overclaim: Visual comparison is structural; performance not measured.
+add_slide(
+    categories=["COMPARISON", "VISUAL"],
+    title="Sebelum vs Sesudah: Konstruktor Injection",
+    subtitle="Perubahan hanya di signature; domain logic tetap identik.",
+    content_items=[
+        {"title": "BEFORE (Tight Coupling)", "items": [
+            "Processor { gateway RealGateway }",
+            "NewProcessor() → &Processor{gateway: &RealGateway{}}",
+            "Test: harus pakai RealGateway atau setup mocking kompleks",
+            "Swap: edit seluruh call site"
+        ], "type": "bullet"},
+        {"title": "AFTER (Constructor Injection)", "items": [
+            "Processor { gateway PaymentGateway }",
+            "NewProcessor(g PaymentGateway) → &Processor{gateway: g}",
+            "Test: cukup passed MockGateway{}",
+            "Swap: satu baris di main.go"
+        ], "type": "bullet"}
+    ],
+    narrative="Perbandingan struktural ini menunjukkan bahwa perubahan terbesar bukan di dalam Processor, melainkan di titik komposisinya. Domain logic tetap sama; yang berubah adalah siapa yang bertanggung jawab atas concrete type. Ini bukan berarti semua sistem harus melalui transformasi serupa — ia hanya menunjukkan trade-off yang diambil lab ini.",
+    mental_model="The biggest change is at the composition boundary, not inside the domain logic.",
+    source_path="internal/di/processor.go • cmd/demo/main.go",
+    slide_num="14 / 24",
+    layout="comparison"
+)
+
+# Slide 15: Boundary of the Lab
+# - Visual: boundary statement with clear demarcation
+# - Body maks 45 kata
+# - Do not overclaim: Explicitly state what lab does NOT cover.
+add_slide(
+    categories=["BOUNDARY", "LIMITATION"],
+    title="Apa yang Tidak Dicakup oleh Lab Ini",
+    subtitle="Laboratorium ini hanya membuktikan pola struktural, bukan skalabilitas production.",
+    content_items=[
+        {"title": "YANG DILAB", "items": [
+            "Kontras struktural antara Constructor Injection dan Service Locator.",
+            "Verifikasi mock substitution bekerja pada test sequential.",
+            "Race detector bersih pada test suite saat ini."
+        ], "type": "bullet"},
+        {"title": "YANG TIDAK DILAB", "items": [
+            "Lifecycle management (singleton, scoped, transient).",
+            "Performance overhead reflection-based DI frameworks.",
+            "Concurrent access patterns pada shared dependencies.",
+            "Production defect rate reduction claim."
+        ], "type": "bullet"}
+    ],
+    narrative="Lab ini sengaja membatasi diri pada pola struktural dasar. Ia tidak mengklaim bahwa constructor injection menghasilkan production-ready code tanpa pertimbangan lebih lanjut. Lifecycle management, concurrency safety, dan framework integration adalah topik yang masih perlu penyelidikan terpisah.",
+    mental_model="A lab proves what it designs to prove; it does not absolve you from production considerations.",
+    source_path="content/02-master-draft.md • README.md",
+    slide_num="15 / 24",
+    layout="comparison"
+)
+
+# Slide 16: Edge Case — Nil Dependency
+# - Visual: edge case scenario
+# - Body maks 45 kata
+# - Do not overclaim: Nil panic is a runtime issue, not a DI flaw per se.
+add_slide(
+    categories=["EDGE CASE", "RISK"],
+    title="Edge Case: Nil Dependency Menghasilkan Panic",
+    subtitle="NewProcessor(nil) lulus konstrutor; panic terjadi saat Charge dipanggil.",
+    content_items=[
+        {"title": "Skenario Edge", "items": [
+            "Caller mengoper nil sebagai PaymentGateway.",
+            "Constructor tidak menolak; Processor tetap terbuat.",
+            "ProcessPayment(100) → gateway.Charge(m) → nil pointer panic.",
+            "Error tidak ter-catch; crash terjadi di runtime."
+        ], "type": "bullet"}
+    ],
+    narrative="Nil dependency adalah edge case yang belum ditangani oleh constructor saat ini. Ia bukan kelemahan DI secara prinsip, melainkan konsekuensi dari ketiadaan explicit guard. Dalam production, caller yang bertanggung jawab memastikan non-nil; namun test suite saat ini tidak memiliki case untuk nil input.",
+    mental_model="Absence of a guard is not a DI flaw; it is a defensive programming gap that any pattern must address.",
+    source_path="internal/di/processor.go",
+    slide_num="16 / 24",
+    layout="bullet"
 )
 
 # Slide 17: What the Tests Prove
+# - Visual: list of proven facts
+# - Body maks 45 kata
+# - Do not overclaim: Only the tested paths are proven; untested paths remain unproven.
 add_slide(
-    categories=["BUKTI", "TEST COVERAGE"],
-    title="Fakta yang Dibuktikan Suite Pengujian",
-    subtitle="Enam test case memverifikasi perilaku terisolasi pada kedua pola arsitektur.",
+    categories=["EVIDENCE", "PROVEN FACTS"],
+    title="Test Suite Membuktikan Tiga Jalur Saja",
+    subtitle="Happy path, gateway error, dan invalid amount — tidak lebih.",
     content_items=[
-        {"title": "FAKTA TERVERIFIKASI", "items": [
-            "Processor dan BadProcessor sukses mendelegasikan transaksi valid.",
-            "Error dari PaymentGateway dipropagasikan utuh ke caller.",
-            "Input negatif ditolak tanpa memanggil gateway eksternal.",
-            "go test -race tidak mendeteksi data race pada skenario uji."
+        {"title": "YANG DIBUKTIKAN", "items": [
+            "MockGateway berhasil menangkap panggilan Charge dengan amount dan currency benar.",
+            "Error dari gateway dipropagasikan ke caller tanpa di-suppress.",
+            "Pre-check amount <= 0 mencegah panggilan gateway (ChargedMoney tetap 0)."
         ], "type": "bullet"}
     ],
-    narrative="Suite pengujian membuktikan bahwa dependency mocking berhasil memisahkan logika domain dari efek samping jaringan pada semua kasus yang diuji.",
-    mental_model="Clean unit tests confirm structural wiring under specified test fixtures.",
+    narrative="Ketiga jalur ini membentuk inti verifikasi behavior Processor. Namun test ini membuktikan jalur A, bukan klaim production B. Misalnya, concurrency safety, memory leak, atau integration dengan payment provider sungguhan tidak tercover oleh test suite yang ada.",
+    mental_model="Tests prove the paths they cover; they do not prove the paths they do not traverse.",
     source_path="tests/processor_test.go",
-    slide_num="17 / 24"
+    slide_num="17 / 24",
+    layout="bullet"
 )
 
 # Slide 18: What the Tests Do Not Prove
+# - Visual: list of unproven aspects
+# - Body maks 45 kata
+# - Do not overclaim: Explicitly name the gaps.
 add_slide(
-    categories=["BATASAN BUKTI", "DO NOT OVERCLAIM"],
-    title="Batas Integritas: Apa yang Tidak Diuji",
-    subtitle="Hasil unit test bersih bukan jaminan arsitektur concurrency production aman.",
+    categories=["EVIDENCE", "UNPROVEN"],
+    title="Yang Belum Dibuktikan oleh Test Suite",
+    subtitle="Test sequential tidak menjamin behavior pada konkurensi atau skala besar.",
     content_items=[
-        {"title": "DI LUAR BUKTI LAB", "items": [
-            "Bukan jaminan zero-overhead pada graf dependensi kompleks.",
-            "Belum membuktikan keandalan retries saat gateway riil timeout.",
-            "Race detector hanya membaca jalur pengujian yang dijalankan.",
-            "Tidak membuktikan efisiensi memory lifecycle skala production."
+        {"title": "YANG TIDAK DIBUKTIKAN", "items": [
+            "Concurrency safety: tidak ada concurrent test yang memicu race condition.",
+            "Lifecycle management: tidak adauji singleton vs transient vs scoped.",
+            "Framework DI overhead: tidak diukur latency injection vs manual new.",
+            "Production defect reduction: tidak ada studi empiris dalam lab ini."
         ], "type": "bullet"}
     ],
-    narrative="Test suite yang lolos hanya membuktikan skenario mock yang dirancang. Jangan menyamakan clean unit test dengan kesiapan sistem menghadapi traffic production.",
-    mental_model="Unit test assertions verify local contracts, not distributed system stability.",
-    source_path="engineering-audit/05-gaps.md",
-    slide_num="18 / 24"
+    narrative="Ruang kosong ini bukan kegagalan lab — ia adalah batasan yang disengaja. Lab bertujuan menunjukkan kontras struktural, bukan menyelidiki aspek non-fungsional. Klaim production safety memerlukan evidence tambahan dari load test, chaos engineering, atau audit kode manual.",
+    mental_model="The absence of evidence is not evidence of absence; it is a scope declaration.",
+    source_path="tests/processor_test.go",
+    slide_num="18 / 24",
+    layout="bullet"
 )
 
-# Slide 19: Production Risk
+# Slide 19: Production Risk — Applying Pattern Raw
+# - Visual: risk items
+# - Body maks 45 kata
+# - Do not overclaim: Risks are inferred from pattern characteristics, not measured in production.
 add_slide(
-    categories=["RISIKO", "PRODUCTION"],
-    title="Risiko: Constructor Over-Injection",
-    subtitle="Constructor dengan terlalu banyak dependensi menandakan pelanggaran SRP.",
+    categories=["RISK", "PRODUCTION"],
+    title="Risiko Menerapkan Pola Tanpa Pertimbangan Lifecycle",
+    subtitle="Constructor injection tanpa lifecycle management berpotensi memory leak.",
     content_items=[
-        {"title": "GEJALA KERUSAKAN DESAIN", "items": [
-            "Constructor menerima belasan parameter interface berbeda.",
-            "Kelas mengurusi terlalu banyak domain logic (God Object).",
-            "Setiap unit test memerlukan belasan mock setup yang rapuh.",
-            "Solusi: pecah service menjadi komponen yang lebih granular."
+        {"title": "RISIKO POTENSIAL", "items": [
+            "Setiap call site membuat Processor baru → object graph tumbuh tanpa batas.",
+            "Shared state di dalam PaymentGateway (misal token cache) perlu sinkronisasi.",
+            "Nil guard tidak ada → caller error menghasilkan panic di runtime.",
+            "Komposisi root tunggal (`main.go`) bisa menjadi bottleneck pada sistem besar."
         ], "type": "bullet"}
     ],
-    narrative="Menumpuk banyak dependensi ke dalam satu constructor bukan salah DI, melainkan sinyal bahwa class tersebut memikul terlalu banyak tanggung jawab.",
-    mental_model="A constructor with too many dependencies is a code smell for single-responsibility violation.",
-    source_path="content/02-master-draft.md",
-    slide_num="19 / 24"
+    narrative="Risiko-rikiko ini muncul ketika pola diterapkan secara naif tanpa mempertimbangkan scope dan lifecycle. Lab ini tidak menyelesaikan masalah-masalah tersebut; ia hanya menunjukkan bahwa pola konstruktif injection lebih mudah diuji daripada tight coupling. Solusi lengkap memerlukan dependency container atau manual wiring yang lebih matang.",
+    mental_model="Pattern application without lifecycle awareness turns a testing benefit into an operational risk.",
+    source_path="content/02-master-draft.md • internal/di/processor.go",
+    slide_num="19 / 24",
+    layout="bullet"
 )
 
 # Slide 20: Implementation Checklist
+# - Visual: checklist format
+# - Body maks 45 kata
+# - Do not overclaim: Checklist is heuristic, not enforced by tooling in lab.
 add_slide(
-    categories=["CHECKLIST", "IMPLEMENTASI"],
-    title="Panduan Implementasi DI yang Aman",
-    subtitle="Langkah praktis menerapkan dependency injection pada codebase Go.",
+    categories=["CHECKLIST", "IMPLEMENTATION"],
+    title="Checklist Implementasi Dependency Injection yang Aman",
+    subtitle="Langkah-langkah praktis untuk menerapkan DI tanpa overengineering.",
     content_items=[
-        {"title": "CHECKLIST ARSITEKTUR", "items": [
-            "Definisikan interface di sisi consumer, bukan di sisi provider.",
-            "Gunakan Constructor Injection sebagai default untuk seluruh service.",
-            "Tambahkan guard validasi nil pada setiap konstruktor.",
-            "Pusatkan instansiasi konkret di composition root (main.go)."
+        {"title": "LANGKAH KERJA", "items": [
+            "[ ] Dependeansi dideklarasikan sebagai interface, bukan concrete type.",
+            "[ ] Constructor injection digunakan; semua dependency eksplisit di signature.",
+            "[ ] Composition root (`main.go`) adalah satu-satunya tempat konstruksi concrete.",
+            "[ ] Value objects (seperti `Money`) diinstansiasi langsung, bukan melalui DI.",
+            "[ ] Validasi input dilakukan sebelum delegasi ke dependency eksternal.",
+            "[ ] `go test -race ./...` dijalankan dan PASS sebelum merge."
         ], "type": "checklist"}
     ],
-    narrative="",
-    mental_model="Define interfaces at consumption boundaries and centralize wiring in the composition root.",
-    source_path="internal/di/processor.go • cmd/demo/main.go",
+    narrative="Checklist ini merupakan panduan minimum yang diturunkan dari eksperimen lab. Ia bukan standar universal — masing-masing tim mungkin menambahkan aturan tambahan seperti dependency audit, interface segregation, atau DI container integration. Poin kelima hingga keenam belum sepenuhnya diuji pada skenario concurrent production.",
+    mental_model="Checklists guide practice; they do not replace architectural judgment or runtime verification.",
+    source_path="content/02-master-draft.md • tests/processor_test.go",
     slide_num="20 / 24",
     layout="checklist"
 )
 
-# Slide 21: Anti-Pattern
+# Slide 21: Anti-Pattern — Common Mistakes
+# - Visual: anti-pattern list
+# - Body maks 45 kata
+# - Do not overclaim: Anti-patterns are observed from the lab's code structure.
 add_slide(
-    categories=["ANTI-PATTERN", "SERVICE LOCATOR"],
-    title="Anti-Pattern: Passing Container ke Domain",
-    subtitle="Menyuntikkan service locator merusak enkapsulasi dan transparansi kontrak.",
+    categories=["ANTI-PATTERN", "LESSON"],
+    title="Anti-Pattern: Service Locator di Domain Logic",
+    subtitle="Menyuntikkan container ke kelas bisnis menyembunyikan dependensi aktual.",
     content_items=[
-        {"title": "ALASAN MENGHINDARI LOCATOR", "items": [
-            "PSR-11 dan standar industri menegaskan: 'Users SHOULD NOT pass container'.",
-            "Domain terikat pada interface container milik framework.",
-            "Mocking menjadi sulit karena seluruh container harus ditiru.",
-            "Kompilasi berhasil meski service target belum terdaftar."
+        {"title": "HINDARI POLA INI", "items": [
+            "NewBadProcessor(c Container) — signature menyembunyikan PaymentGateway.",
+            "container.GetPaymentGateway() dipanggil di dalam method domain.",
+            "Test harus mock Container alih-alih gateway — tambahan kompleksitas.",
+            "Swap provider tetap satu baris, tetapi readability dan traceability menurun."
         ], "type": "bullet"}
     ],
-    narrative="Menyuntikkan container ke domain logic membuat komponen terikat pada framework dan mengaburkan kebutuhan sistem sesungguhnya.",
-    mental_model="Never inject the container: pass only the specific service required by the domain.",
+    narrative="Service Locator bukanlah pola yang salah secara absolut — ia useful dalam konteks tertentu seperti plugin systems. Namun untuk domain logic yang memerlukan testability dan traceability, pola ini menambah biaya kognitif tanpa memberikan manfaat yang setara. Lab ini menunjukkannya sebagai kontras, bukan sebagai solusi yang dilarang mutlak.",
+    mental_model="Service Locator is a tool, not a sin; misuse depends on where and why it is applied.",
     source_path="internal/di/locator.go",
-    slide_num="21 / 24"
+    slide_num="21 / 24",
+    layout="bullet"
 )
 
 # Slide 22: Reproduction Guide
+# - Visual: command blocks
+# - Body maks 45 kata
+# - Do not overclaim: Commands reproduce the lab; they do not prove production readiness.
 add_slide(
     categories=["REPRODUKSI", "COMMAND"],
     title="Reproduksi Mandiri di Mesin Lokal",
-    subtitle="Eksperimen dijalankan dengan Go standard library tanpa dependency eksternal.",
+    subtitle="Go standard library, zero external dependencies.",
     content_items=[
         {"title": "COMMAND RUNNER", "items": [
             "cd labs/16-dependency-injection",
-            "go test -v ./...    # validasi 6 test cases",
-            "go test -race ./... # verifikasi race detector",
-            "go run ./cmd/demo   # simulasi DI vs Service Locator"
+            "go test -race -v ./tests/     # validasi 6 test cases",
+            "go run ./cmd/demo            # jalankan demo kedua pola",
+            "go vet ./...                 # statik analisis tambahan"
         ], "type": "code"}
     ],
-    narrative="Lab ini sepenuhnya zero-dependency dan dapat direproduksi langsung. Eksekusi test dan demo memverifikasi pemisahan konstruksi dan penggunaan secara deterministik.",
-    mental_model="Standard library tests ensure deterministic verification without external tooling overhead.",
+    narrative="Lab ini zero-dependency dan dapat direproduksi langsung di mesin lokal manapun. Menjalankan test dan demo membuktikan pola struktural bekerja sesuai deskripsi. Ia tidak membuktikan bahwa pola tersebut cocok untuk sistem dengan ratusan call site atau multi-threaded production workload.",
+    mental_model="Reproducibility on a local machine is necessary but not sufficient for production confidence.",
     source_path="README.md • go.mod • tests/",
-    slide_num="22 / 24"
+    slide_num="22 / 24",
+    layout="code"
 )
 
 # Slide 23: Technical Takeaway
+# - Visual: key insight
+# - Body maks 45 kata
+# - Do not overclaim: Takeaway is specific to this lab's scope.
 add_slide(
     categories=["TAKEAWAY", "ENGINEERING PRINCIPLE"],
-    title="DI Memperlihatkan Dependency Komponen",
-    subtitle="Constructor injection memindahkan keputusan perakitan ke pemanggil.",
+    title="Constructor Membuat Dependency Terlihat",
+    subtitle="Signature yang eksplisit memudahkan mock, swap, dan code review.",
     content_items=[
         {"title": "PRINSIP REKAYASA", "items": [
-            "Constructor injection membuat kontrak ketergantungan eksplisit.",
-            "Validasi nil tetap menjadi tanggung jawab konstruktor.",
-            "Pemisahan konstruksi dari penggunaan memungkinkan pengujian terisolasi."
+            "DI bukan fitur framework — ia arah kendali atas instantiation.",
+            "Constructor injection memindahkan keputusan ke composition root.",
+            "Service Locator mengurangi boilerplate parameter, tetapi menambah indirection.",
+            "Nil guard dan lifecycle management adalah tanggung jawab implementasi, bukan pola."
         ], "type": "bullet"}
     ],
-    narrative="Nilai sejati DI bukan pada framework otomatis, melainkan pada kejelasan kontrak arsitektur. Memisahkan konstruksi dari penggunaan membuat sistem dapat diuji dan berevolusi.",
-    mental_model="Dependency injection makes dependencies visible; it does not replace runtime validation.",
+    narrative="Pelajaran utama lab ini: dependency injection mengubah bagaimana kita berpikir tentang ownership. Domain tidak owning dependensinya; caller yang owning dan menyuntikkannya. Ini tidak otomatis membuat codebase production-ready, tetapi ia membuat trade-off antara testability dan complexity lebih terlihat.",
+    mental_model="DI shifts ownership from the component to its assembler; visibility improves testability.",
     source_path="content/05-key-takeaways.md",
-    slide_num="23 / 24"
+    slide_num="23 / 24",
+    layout="bullet"
 )
 
-# Slide 24: Closing (Dark Navy)
+# Slide 24: Closing Slide (Dark Navy)
 add_slide(
     categories=["CLOSING"],
-    title="Constructor membuat dependency terlihat; domain tetap independen.",
+    title="Constructor memperlihatkan dependency wajib; validasi nil tetap tanggung jawab constructor.",
     subtitle="",
     content_items=[
         {"title": "MODUL LAB", "items": [
-            "internal/di/gateway.go • internal/di/processor.go",
-            "internal/di/locator.go • cmd/demo/main.go",
-            "tests/processor_test.go • README.md"
+            "internal/di/processor.go • internal/di/locator.go • internal/di/gateway.go",
+            "cmd/demo/main.go • tests/processor_test.go",
+            "README.md • content/02-master-draft.md"
         ], "type": "bullet"},
         {"title": "VERIFIKASI & STATUS", "items": [
             f"Sumber: commit {COMMIT_SHA[:8]}",
             "Test passing: 6 test cases, 0 failures.",
             "Race detector: clean (go test -race ./...)",
-            "Manual in-memory wiring; bukan proof framework DI production completeness."
+            "Simulasi in-memory mock; bukan proof production DI governance completeness."
         ], "type": "bullet"}
     ],
-    mental_model="Constructor injection exposes dependencies explicitly; configuration remains external to use.",
+    mental_model="Constructor injection makes dependencies explicit; it does not replace lifecycle management or nil safety.",
     source_path=REPO_URL,
     slide_num="24 / 24"
 )

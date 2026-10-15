@@ -1,73 +1,59 @@
-# DELIVERABLES SUMMARY - Lab 16: Dependency Injection & IoC
+# Deliverables Paket Publikasi: Lab 16 - Dependency Injection
 
-## Quick Reference Sheet
-
-| File | Purpose | Location |
-|------|---------|----------|
-| **content_def.py** | Source definition (Python) | `result/content_def.py` ✓ |
-| **LinkedIn PPTX** | 24 editable carousel slides | `result/linkedin/lab-16-carousel.pptx` ✓ |
-| **LinkedIn PDF** | Printable 16:9 presentation | `result/linkedin/lab-16-linkedin.pdf` ✓ |
-| **Cover ID PNG** | Indonesian cover (1920x1080) | `result/image-cover/lab-16-cover-id.png` ✓ |
-| **Cover EN PNG** | English cover (1920x1080) | `result/image-cover/lab-16-cover-en.png` ✓ |
-| **Dev.to Article** | Full English technical post | `result/dev.to/lab-16-devto.md` ✓ |
-| **Medium Article** | Bahasa Indonesia (22 sections) | `result/medium/lab-16-medium.html` ✓ |
-| **Metadata** | SEO & Social metadata | `result/medium/lab-16-metadata.md` ✓ |
-| **LinkedIn Caption** | Carousel discussion caption | `result/linkedin/lab-16-caption.md` ✓ |
-
-## Verification Notes
-
-### Build Verification
-- `go test -v ./...` → 6 test cases PASS
-- `go test -race ./...` → race-detector clean
-- `go run ./cmd/demo` → Both DI and Service Locator execute successfully
-
-### Evidence Claims (Lab-Verified)
-- Constructor injection exposes dependency contracts at compile-time
-- Service Locator hides dependencies behind container interface
-- MockGateway replaces RealGateway without network calls
-- `go test -race ./...` passes without warnings
-- Validations reject invalid input before gateway delegation
-
-### Boundary Statements (Do Not Overclaim)
-- Lab tests only unit logic isolation; does not prove network resiliency
-- No measurement of production throughput or connection pool behavior
-- No framework DI integration (Wire, Dig, Fx)
-- Manual wiring demonstrated; not proof of enterprise-scale adoption
-
-### File Structure
-```text
-labs/16-dependency-injection/result/
-├── DELIVERABLES.md              ← This file
-├── content_def.py               ← Source (DO NOT DELETE)
-├── dev.to/
-│   └── lab-16-dependency-injection-devto.md
-├── medium/
-│   ├── lab-16-dependency-injection-medium.html
-│   └── lab-16-dependency-injection-metadata.md
-├── image-cover/
-│   ├── lab-16-dependency-injection-cover-id.png
-│   └── lab-16-dependency-injection-cover-en.png
-└── linkedin/
-    ├── lab-16-dependency-injection-carousel.pptx
-    ├── lab-16-dependency-injection-linkedin.pdf
-    └── lab-16-dependency-injection-caption.md
-```
+**Commit Hash:** `d7fb619`  
+**Target Lab:** `labs/16-dependency-injection`  
+**Seri:** Software Engineering Lab | Lab 16  
+**Penulis:** Lukman / lukman-ss  
 
 ---
 
-## Ready-to-Copy LinkedIn Caption
+## 1. Daftar Berkas Deliverables Lengkap (8 Files + Content Def)
 
-Ketika sebuah service menginstansiasi adapter eksternal secara langsung di dalam metodenya (seperti memanggil RealGateway di dalam Processor), kode domain terkunci rapat dengan infrastruktur fisik. Pengujian unit menjadi mustahil tanpa membuka koneksi jaringan nyata, dan pengujian lokal sering kali gagal saat server pihak ketiga mengalami downtime.
+| No | Tipe Deliverable | Lokasi Berkas | Ukuran | Status Verifikasi |
+|---|---|---|---|---|
+| 0 | Python Source Definition | `result/content_def.py` | 35.0 KB | Verified (24 slides, DO NOT DELETE) |
+| 1 | Dev.to Article (EN) | `result/dev.to/lab-16-dependency-injection-devto.md` | ~1.918 kata | Verified (22 H2 subsections, YAML frontmatter) |
+| 2 | Medium Article (ID) | `result/medium/lab-16-dependency-injection-medium.html` | 12.4 KB | Verified (22 H2 subsections, clean semantic HTML) |
+| 3 | Medium Metadata | `result/medium/lab-16-dependency-injection-metadata.md` | 1.1 KB | Verified (SEO, canonical URL, tags) |
+| 4 | Cover Image (EN) | `result/image-cover/lab-16-dependency-injection-cover-en.png` | 898 KB | Verified (1920x1080 PNG via Chrome headless) |
+| 5 | Cover Image (ID) | `result/image-cover/lab-16-dependency-injection-cover-id.png` | 892 KB | Verified (1920x1080 PNG via Chrome headless) |
+| 6 | LinkedIn Carousel PDF | `result/linkedin/lab-16-dependency-injection-linkedin.pdf` | 2.72 MB | Verified (24 pages 16:9, selectable vector text) |
+| 7 | LinkedIn Carousel PPTX | `result/linkedin/lab-16-dependency-injection-carousel.pptx` | 108 KB | Verified (24 slides + Speaker Notes via python-pptx) |
+| 8 | LinkedIn Post Caption | `result/linkedin/lab-16-dependency-injection-caption.md` | 203 kata | Verified (Tanpa **bold**, alur ringkas & profesional) |
 
-Di Lab 16 seri Software Engineering Lab, kami mengeksplorasi kontras struktural antara Constructor Injection dan Service Locator di bahasa Go menggunakan manual wiring murni tanpa framework pihak ketiga.
+---
 
-Poin kuncinya: Inversion of Control memisahkan fase konfigurasi (perakitan graf dependensi di composition root main.go) dari fase eksekusi (logika domain). Melalui NewProcessor(g PaymentGateway), kontrak dependensi terlihat gamblang di signature kompilasi dan memungkinkan penyuntikan MockGateway seketika dalam 0.00 detik pengujian unit.
+## 2. Catatan Integritas & Verifikasi Teknis
 
-Sebaliknya, Service Locator dengan NewBadProcessor(c Container) menutupi kebutuhan dependensi di balik kontainer generik. Standar industri seperti PSR-11 menegaskan rekomendasi bahwa container tidak boleh disuntikkan ke domain logic karena memindahkan kegagalan kompilasi menjadi runtime error.
+- **Implemented vs Simulated Behavior:**
+  - *Implemented:* `Processor` dengan Constructor Injection (`NewProcessor(PaymentGateway)`), `BadProcessor` dengan Service Locator (`NewBadProcessor(Container)`), value object `Money`, dan manual composition root di `cmd/demo/main.go`.
+  - *Simulated:* `RealGateway` mencetak log stdout (`RealGateway charging ...`), `MockGateway` mencatat mutasi state di memori dengan toggle `ShouldFail`.
+- **Verified Metrics & Invariants:**
+  - 6/6 test cases passing (`0.00s` per test case).
+  - Go data race detector (`go test -race ./...`) lolos bersih tanpa data race warning.
+  - Boundary check: input nominal `<= 0` mengembalikan error sebelum gateway dieksekusi (`ChargedMoney.Amount` tetap 0).
+- **Boundaries & Caveats (Do Not Overclaim):**
+  - Lab ini sengaja tidak menggunakan framework DI (Google Wire, Uber Dig, dsb.).
+  - Durasi test `0.00s` adalah metrik eksekusi in-memory lokal, bukan estimasi latensi jaringan atau production SLO.
+  - Test bebas race hanya membuktikan jalur sequential yang diuji, bukan garansi thread-safety concurrency pada skala production.
+  - Ketiadaan explicit nil-check pada `NewProcessor` berarti runtime panic tetap mengancam jika caller mengirim interface nil.
 
-Test suite mencakup 6 test cases yang memverifikasi isolasi mock, delegasi pembayaran, propagasi error, dan penolakan nilai negatif sebelum menyentuh gateway, seluruhnya bersih dari race condition (go test -race ./...). Namun penting dicatat: pengujian mock unit membuktikan isolasi logika, bukan jaminan stabilitas koneksi jaringan atau resiliency di skala beban production.
+---
 
-Kode sumber lengkap, suite pengujian, dan implementasi demo tersedia di repositori:
-https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection
+## 3. Caption LinkedIn Siap Pakai (Ready to Copy)
 
-#SoftwareEngineering #GoLang #DependencyInjection #CleanArchitecture #SystemDesign #SoftwareDesign
+```text
+Software Engineering Lab 16 — Dependency Injection di Go ini membandingkan dua pendekatan pengelolaan ketergantungan: Constructor Injection eksplisit versus Service Locator yang menyembunyikan dependency.
+
+Di mana sebuah komponen payment system menginstansiasi gateway jaringan secara langsung di dalam method-nya sendiri, setiap perubahan vendor memaksa modifikasi pada domain logic. Lab ini memindahkan keputusan instansiasi itu ke composition root dengan menerima PaymentGateway interface pada konstruktor.
+
+Empat poin kunci:
+1. Konstruktor dengan parameter interface membuat dependensi terlihat di signature publik — bukan sekedar memudahkan mock, tetapi membuat kebutuhan eksternal dapat dibaca oleh siapa pun.
+2. Service Locator menyamarkan ketergantungan riil di balik method container.Get(...), sehingga engineer harus mem-trace indirection ekstra dan test terpaksa mem-mock container.
+3. Nil guard dan lifecycle management bukan tanggung jawab pola DI — mereka adalah tanggung jawab implementasi yang masih perlu ditambahkan secara eksplisit.
+4. Race detector bersih pada 6 test cases (0.00s) hanya membuktikan jalur yang diuji aman, bukan garantee semua lifecycle production.
+
+Lab ini tidak memakai framework DI eksternal. Manual wiring di main.go membekalkan compile-time type safety, sementara BadProcessor berperilaku fungsional sama tetapi menambah indirection tak perlu. Simulasi in-memory mock bukan pengganti load test atau integration test produksi.
+
+Lihat thread carousel di slide 1 dan link repo di profil untuk selengkapnya.
+```
