@@ -1,41 +1,73 @@
-# Publication Deliverables — Software Engineering Lab 16
+# DELIVERABLES SUMMARY - Lab 16: Dependency Injection & IoC
 
-## Tabel File Deliverable
+## Quick Reference Sheet
 
-| No | Tipe Deliverable | Lokasi File | Deskripsi |
-|---|---|---|---|
-| 1 | PowerPoint Carousel | [linkedin/lab-16-dependency-injection-carousel.pptx](linkedin/lab-16-dependency-injection-carousel.pptx) | File .pptx 24 slide 16:9 editable dengan Speaker Notes |
-| 2 | LinkedIn Carousel PDF | [linkedin/lab-16-dependency-injection-linkedin.pdf](linkedin/lab-16-dependency-injection-linkedin.pdf) | File PDF 24 slide (Cover CRT + 22 slide krem + Penutup) |
-| 3 | Dev.to Article | [dev.to/lab-16-dependency-injection-devto.md](dev.to/lab-16-dependency-injection-devto.md) | Artikel Markdown Bahasa Inggris dengan frontmatter |
-| 4 | Medium Article | [medium/lab-16-dependency-injection-medium.html](medium/lab-16-dependency-injection-medium.html) | Artikel HTML lengkap Bahasa Indonesia (~1.230 kata) |
-| 5 | Cover Image (ID) | [image-cover/lab-16-dependency-injection-cover-id.png](image-cover/lab-16-dependency-injection-cover-id.png) | Cover PNG 1920×1080 tema retro CRT (Bahasa Indonesia) |
-| 6 | Cover Image (EN) | [image-cover/lab-16-dependency-injection-cover-en.png](image-cover/lab-16-dependency-injection-cover-en.png) | Cover PNG 1920×1080 tema retro CRT (Bahasa Inggris) |
-| 7 | Medium Metadata | [medium/lab-16-dependency-injection-metadata.md](medium/lab-16-dependency-injection-metadata.md) | Metadata SEO, slug, tags, social preview, & hitungan karakter |
-| 8 | Caption LinkedIn | [linkedin/lab-16-dependency-injection-caption.md](linkedin/lab-16-dependency-injection-caption.md) | Caption teks 189 kata siap salin (tanpa markdown bold) |
+| File | Purpose | Location |
+|------|---------|----------|
+| **content_def.py** | Source definition (Python) | `result/content_def.py` ✓ |
+| **LinkedIn PPTX** | 24 editable carousel slides | `result/linkedin/lab-16-carousel.pptx` ✓ |
+| **LinkedIn PDF** | Printable 16:9 presentation | `result/linkedin/lab-16-linkedin.pdf` ✓ |
+| **Cover ID PNG** | Indonesian cover (1920x1080) | `result/image-cover/lab-16-cover-id.png` ✓ |
+| **Cover EN PNG** | English cover (1920x1080) | `result/image-cover/lab-16-cover-en.png` ✓ |
+| **Dev.to Article** | Full English technical post | `result/dev.to/lab-16-devto.md` ✓ |
+| **Medium Article** | Bahasa Indonesia (22 sections) | `result/medium/lab-16-medium.html` ✓ |
+| **Metadata** | SEO & Social metadata | `result/medium/lab-16-metadata.md` ✓ |
+| **LinkedIn Caption** | Carousel discussion caption | `result/linkedin/lab-16-caption.md` ✓ |
 
-## Catatan Verifikasi & Keterbatasan
-- **Commit SHA**: `8afe2a824667528d16d6d9b2ac434a18a6ac2db1`
-- **Status Test**: 6/6 test cases PASS (`go test -v -race ./...` durasi 1.44s).
-- **Batas Implementasi**: Lab membuktikan manual constructor wiring di Go standar dan isolasi mock tanpa jaringan. Tidak mencakup framework DI otomatis (reflection/code-gen) atau container lifecycle rumit.
+## Verification Notes
 
-## Caption LinkedIn (Siap Salin)
+### Build Verification
+- `go test -v ./...` → 6 test cases PASS
+- `go test -race ./...` → race-detector clean
+- `go run ./cmd/demo` → Both DI and Service Locator execute successfully
 
+### Evidence Claims (Lab-Verified)
+- Constructor injection exposes dependency contracts at compile-time
+- Service Locator hides dependencies behind container interface
+- MockGateway replaces RealGateway without network calls
+- `go test -race ./...` passes without warnings
+- Validations reject invalid input before gateway delegation
+
+### Boundary Statements (Do Not Overclaim)
+- Lab tests only unit logic isolation; does not prove network resiliency
+- No measurement of production throughput or connection pool behavior
+- No framework DI integration (Wire, Dig, Fx)
+- Manual wiring demonstrated; not proof of enterprise-scale adoption
+
+### File Structure
 ```text
-Lab 16 kali ini membahas pemisahan konstruksi objek dari logika bisnis melalui Dependency Injection dan Inversion of Control di Go.
+labs/16-dependency-injection/result/
+├── DELIVERABLES.md              ← This file
+├── content_def.py               ← Source (DO NOT DELETE)
+├── dev.to/
+│   └── lab-16-dependency-injection-devto.md
+├── medium/
+│   ├── lab-16-dependency-injection-medium.html
+│   └── lab-16-dependency-injection-metadata.md
+├── image-cover/
+│   ├── lab-16-dependency-injection-cover-id.png
+│   └── lab-16-dependency-injection-cover-en.png
+└── linkedin/
+    ├── lab-16-dependency-injection-carousel.pptx
+    ├── lab-16-dependency-injection-linkedin.pdf
+    └── lab-16-dependency-injection-caption.md
+```
 
-Masalah teknis yang sering terjadi adalah dependensi infrastruktur diinstansiasi langsung di dalam method domain, membuat kode terkunci pada provider tertentu dan pengujian unit terpaksa bergantung pada jaringan eksternal.
+---
 
-Lab ini membuktikan tiga hal konkret:
-• Constructor Injection: Processor menerima interface PaymentGateway secara eksplisit sehingga state objek selalu lengkap dan dependensi tampak jelas.
-• Service Locator Anti-Pattern: BadProcessor menerima Container generik, menyembunyikan dependensi nyata di balik query method runtime.
-• Fast Isolated Testing: MockGateway memungkinkan 6 test assertions berjalan instan tanpa koneksi jaringan, membuktikan error propagation serta validasi input yang menolak transaksi sebelum memanggil gateway.
+## Ready-to-Copy LinkedIn Caption
 
-Mental model inti: Externalize object creation. Biarkan assembler luar merakit object graph, sementara logika domain hanya fokus menjalankan kontrak bisnis. Nilai data murni seperti struct Money diinstansiasi langsung tanpa melalui container DI.
+Ketika sebuah service menginstansiasi adapter eksternal secara langsung di dalam metodenya (seperti memanggil RealGateway di dalam Processor), kode domain terkunci rapat dengan infrastruktur fisik. Pengujian unit menjadi mustahil tanpa membuka koneksi jaringan nyata, dan pengujian lokal sering kali gagal saat server pihak ketiga mengalami downtime.
 
-Satu batasan penting: Lab ini menggunakan manual wiring di Go standar dan tidak mendemonstrasikan automated DI framework (seperti reflection atau code-gen), serta tidak mengelola container lifecycle (singleton, scoped, transient).
+Di Lab 16 seri Software Engineering Lab, kami mengeksplorasi kontras struktural antara Constructor Injection dan Service Locator di bahasa Go menggunakan manual wiring murni tanpa framework pihak ketiga.
 
-Pelajari implementasi lengkap dan test assertion di:
+Poin kuncinya: Inversion of Control memisahkan fase konfigurasi (perakitan graf dependensi di composition root main.go) dari fase eksekusi (logika domain). Melalui NewProcessor(g PaymentGateway), kontrak dependensi terlihat gamblang di signature kompilasi dan memungkinkan penyuntikan MockGateway seketika dalam 0.00 detik pengujian unit.
+
+Sebaliknya, Service Locator dengan NewBadProcessor(c Container) menutupi kebutuhan dependensi di balik kontainer generik. Standar industri seperti PSR-11 menegaskan rekomendasi bahwa container tidak boleh disuntikkan ke domain logic karena memindahkan kegagalan kompilasi menjadi runtime error.
+
+Test suite mencakup 6 test cases yang memverifikasi isolasi mock, delegasi pembayaran, propagasi error, dan penolakan nilai negatif sebelum menyentuh gateway, seluruhnya bersih dari race condition (go test -race ./...). Namun penting dicatat: pengujian mock unit membuktikan isolasi logika, bukan jaminan stabilitas koneksi jaringan atau resiliency di skala beban production.
+
+Kode sumber lengkap, suite pengujian, dan implementasi demo tersedia di repositori:
 https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection
 
-#softwareengineering #golang #systemdesign #backend #architecture #designpatterns
-```
+#SoftwareEngineering #GoLang #DependencyInjection #CleanArchitecture #SystemDesign #SoftwareDesign

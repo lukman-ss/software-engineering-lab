@@ -1,32 +1,21 @@
-# Metadata: Dependency Injection dan Inversion of Control
+# Metadata Publikasi Medium: Lab 16 - Dependency Injection & IoC
 
-## Title
-Dependency Injection: Memisahkan Konstruksi dari Logika Bisnis
+## Informasi Umum
+- **Judul:** Dependency Injection & IoC: Constructor Injection vs Service Locator dalam Arsitektur Go
+- **Subtitle:** Membangun sistem yang teruji dan berevolusi dengan memisahkan konstruksi objek dari logika bisnis
+- **Penulis:** Lukman / lukman-ss
+- **Seri:** Software Engineering Lab | Lab 16
+- **Format:** In-depth Technical Article (22 Subsections + Code + Diagram)
+- **Estimasi Waktu Baca:** 7-9 menit
 
-## Subtitle
-Kontras Constructor Injection dan Service Locator di Go: validasi input, mocking tanpa jaringan, dan batas container.
+## SEO & Metadata
+- **Canonical URL:** `https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection`
+- **Focus Keywords:** Dependency Injection, Inversion of Control, Constructor Injection, Service Locator, Go Testing, Clean Architecture, Software Architecture
+- **Meta Description:** Hardcoded dependency di dalam domain logic membuat unit test mustahil tanpa jaringan nyata. Lab 16 membuktikan constructor injection memisahkan konfigurasi dari penggunaan, memungkinkan mock isolasi sepenuhnya tanpa infrastruktur eksternal, dan mengungkap mengapa service locator adalah anti-pattern di domain layer.
 
-## SEO Title
-Dependency Injection di Go: Constructor vs Service Locator
-
-## SEO Description
-Pelajari dependency injection di Go: konstruktor eksplisit vs service locator anti-pattern, mock testing tanpa network, dan isolasi value object murni.
-
-## Proposed Slug
-dependency-injection-go-constructor-service-locator
-
-## Tags
-golang, software-architecture, unit-testing, backend, design-patterns
-
-## Alt Text Cover
-Ilustrasi komputer CRT retro bertema pixel art menampilkan kode dependency injection di Go, perbandingan Constructor Injection vs Service Locator, dan identitas lukman-ss.
-
-## Social Title
-Dependency Injection di Go: Memisahkan Konstruksi dari Logika Bisnis
-
-## Social Description
-Bedah arsitektur pemisahan konfigurasi dan penggunaan di Go: Constructor Injection eksplisit, bahaya Service Locator, serta isolasi mock testing.
-
-## Karakter Hitung
-- SEO Title: 58 karakter (Target: <= 60 karakter)
-- SEO Description: 147 karakter (Target: 140–156 karakter)
+## Tag Medium
+1. Software Architecture
+2. Go
+3. Clean Architecture
+4. Testing
+5. Engineering Management

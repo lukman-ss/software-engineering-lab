@@ -1,17 +1,14 @@
-Lab 16 kali ini membahas pemisahan konstruksi objek dari logika bisnis melalui Dependency Injection dan Inversion of Control di Go.
+Ketika sebuah service menginstansiasi adapter eksternal secara langsung di dalam metodenya (seperti memanggil RealGateway di dalam Processor), kode domain terkunci rapat dengan infrastruktur fisik. Pengujian unit menjadi mustahil tanpa membuka koneksi jaringan nyata, dan pengujian lokal sering kali gagal saat server pihak ketiga mengalami downtime.
 
-Masalah teknis yang sering terjadi adalah dependensi infrastruktur diinstansiasi langsung di dalam method domain, membuat kode terkunci pada provider tertentu dan pengujian unit terpaksa bergantung pada jaringan eksternal.
+Di Lab 16 seri Software Engineering Lab, kami mengeksplorasi kontras struktural antara Constructor Injection dan Service Locator di bahasa Go menggunakan manual wiring murni tanpa framework pihak ketiga.
 
-Lab ini membuktikan tiga hal konkret:
-1. Constructor Injection: Processor menerima interface PaymentGateway secara eksplisit sehingga state objek selalu lengkap dan dependensi tampak jelas.
-2. Service Locator Anti-Pattern: BadProcessor menerima Container generik, menyembunyikan dependensi nyata di balik query method runtime.
-3. Fast Isolated Testing: MockGateway memungkinkan 6 test assertions berjalan instan tanpa koneksi jaringan, membuktikan error propagation serta validasi input yang menolak transaksi sebelum memanggil gateway.
+Poin kuncinya: Inversion of Control memisahkan fase konfigurasi (perakitan graf dependensi di composition root main.go) dari fase eksekusi (logika domain). Melalui NewProcessor(g PaymentGateway), kontrak dependensi terlihat gamblang di signature kompilasi dan memungkinkan penyuntikan MockGateway seketika dalam 0.00 detik pengujian unit.
 
-Mental model inti: Externalize object creation. Biarkan assembler luar merakit object graph, sementara logika domain hanya fokus menjalankan kontrak bisnis. Nilai data murni seperti struct Money diinstansiasi langsung tanpa melalui container DI.
+Sebaliknya, Service Locator dengan NewBadProcessor(c Container) menutupi kebutuhan dependensi di balik kontainer generik. Standar industri seperti PSR-11 menegaskan rekomendasi bahwa container tidak boleh disuntikkan ke domain logic karena memindahkan kegagalan kompilasi menjadi runtime error.
 
-Satu batasan penting: Lab ini menggunakan manual wiring di Go standar dan tidak mendemonstrasikan automated DI framework (seperti reflection atau code-gen), serta tidak mengelola container lifecycle (singleton, scoped, transient).
+Test suite mencakup 6 test cases yang memverifikasi isolasi mock, delegasi pembayaran, propagasi error, dan penolakan nilai negatif sebelum menyentuh gateway, seluruhnya bersih dari race condition (go test -race ./...). Namun penting dicatat: pengujian mock unit membuktikan isolasi logika, bukan jaminan stabilitas koneksi jaringan atau resiliency di skala beban production.
 
-Pelajari implementasi lengkap dan test assertion di:
+Kode sumber lengkap, suite pengujian, dan implementasi demo tersedia di repositori:
 https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/16-dependency-injection
 
-#softwareengineering #golang #systemdesign #backend #architecture #designpatterns
+#SoftwareEngineering #GoLang #DependencyInjection #CleanArchitecture #SystemDesign #SoftwareDesign
