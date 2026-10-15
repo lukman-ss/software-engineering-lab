@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contract Testing: Consumer-Driven Contracts, CI Deployment Gate, dan Evolusi API yang Aman</title>
+<style>
+  body {
+    font-family: Georgia, serif;
+    background-color: #f4f1e8;
+    color: #11283a;
+    line-height: 1.7;
+    margin: 0;
+    padding: 24px;
+  }
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    padding: 40px 48px;
+    border: 1px solid #d5cfc1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  h1, h2, h3, h4 {
+    font-family: Arial, sans-serif;
+    color: #0b1b2d;
+    line-height: 1.3;
+    margin-top: 1.8em;
+    margin-bottom: 0.6em;
+  }
+  h1 {
+    font-size: 2.1rem;
+    margin-top: 0.4em;
+    border-bottom: 2px solid #0b1b2d;
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 1.45rem;
+    border-bottom: 1px solid #d5cfc1;
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 1.15rem;
+  }
+  p, li {
+    font-size: 1.02rem;
+  }
+  img.cover-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px 0 32px 0;
+    border: 1px solid #d5cfc1;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 0.95rem;
+  }
+  table, th, td {
+    border: 1px solid #0b1b2d;
+  }
+  th {
+    background-color: #0b1b2d;
+    color: #ffffff;
+    padding: 10px 12px;
+    text-align: left;
+    font-family: Arial, sans-serif;
+  }
+  td {
+    padding: 10px 12px;
+    vertical-align: top;
+  }
+  tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+  pre {
+    background-color: #0b1b2d;
+    color: #e2e8f0;
+    padding: 16px 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  code {
+    font-family: "Courier New", Courier, monospace;
+    background-color: #e2e8f0;
+    color: #0b1b2d;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+  }
+  blockquote {
+    border-left: 4px solid #087f76;
+    margin: 24px 0;
+    padding: 12px 20px;
+    background-color: #f0fdf4;
+    color: #0b1b2d;
+    font-style: italic;
+  }
+  .author-box {
+    margin: 24px 0 32px 0;
+    color: #52606b;
+    font-style: italic;
+    font-size: 0.95rem;
+  }
+  a {
+    color: #087f76;
+    text-decoration: underline;
+  }
+  ul.checklist {
+    list-style: none;
+    padding-left: 0;
+  }
+  ul.checklist li::before {
+    content: "\2610 ";
+    font-weight: bold;
+  }
+  ul.checklist li.checked::before {
+    content: "\2611 ";
+    color: #087f76;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Contract Testing: Consumer-Driven Contracts, CI Deployment Gate, dan Evolusi API yang Aman</h1>
+
+<div class="author-box">
+  Penulis: <strong>Lukman / lukman-ss</strong> | Software Engineering Lab — Lab 26<br>
+  Target Lab: <code>labs/26-contract-testing</code> | Commit: <code>4a5cf38</code>
+</div>
+
+<img class="cover-img" src="../image-cover/cover_art.jpg" alt="Cover Visual Lab 26 Contract Testing - Consumer-Driven Contract Verification Flow">
+
+<blockquote>
+  "Sistem tanpa contract testing adalah sistem yang menunda kegagalan integrasi produksinya sendiri."
+</blockquote>
+
+<h2>1. Masalah Integrasi: Unit Test Hijau Bukan Berarti Integrasi Selamat</h2>
+<p>Ketika Service A dan Service B masing-masing lulus unit test, integrasi mereka tetap bisa pecah di produksi karena provider mengubah format pesan tanpa koordinasi consumer. JSON tetap valid secara sintaksis, tetapi consumer menerima nilai null, error parsing, atau panic di runtime.</p>
+
+<p>Tiga skenario kegagalan umum yang ditunjukkan oleh lab ini:</p>
+<ul>
+  <li><strong>Field Rename Tersembunyi</strong> — Provider mengganti <code>customer.name</code> menjadi <code>customer.full_name</code>. Consumer yang memetakan <code>name</code> ke domain modelnya mendapat <code>null</code>.</li>
+  <li><strong>Enum Casing Change</strong> — Provider mengubah status <code>IN_PROGRESS</code> menjadi <code>in_progress</code>. Response tetap 200 OK, tetapi perbandingan string di sisi klien gagal.</li>
+  <li><strong>Primitive Type Mutation</strong> — Provider mengubah <code>total</code> dari integer <code>150000</code> menjadi string <code>"150000"</code>. Operasi matematika consumer error di runtime.</li>
+</ul>
+
+<p>Status hijau pada unit test bukan jaminan keamanan integrasi lintas batas layanan. Lab ini mengimplementasikan pipeline contract testing berbasis Go yang menangkap ketiga skenario tersebut sebelum deployment.</p>
+
+<h2>2. Mengapa Pendekatan Tradisional Gagal</h2>
+<p>End-to-end test mensimulasikan seluruh alur sistem sehingga mahal untuk dijalankan setiap PR. Review manual pun tidak otomatis menemukan perubahan breaking karena developer fokus pada logika bisnis, bukan schema response. Contract testing mengisi celah ini dengan verifikasi otomatis sebelum deploy.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Pendekatan</th>
+      <th>Kecepatan</th>
+      <th>Cakupan</th>
+      <th>Automasi</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>E2E Test</td>
+      <td>Lambat (menit)</td>
+      <td>Seluruh sistem</td>
+      <td>Partial — butuh environment</td>
+    </tr>
+    <tr>
+      <td>Manual Code Review</td>
+      <td>Lambat (jam)</td>
+      <td>Tidak lengkap</td>
+      <td>Tidak otomatis</td>
+    </tr>
+    <tr>
+      <td>Contract Testing</td>
+      <td>Cepat (sub-detik)</td>
+      <td>Field yang dipakai consumer</td>
+      <td>Penuh di CI</td>
+    </tr>
+  </tbody>
+</table>
+
+Pipeline deploy tanpa gate verifikasi kontrak memungkinkan breaking change lolos ke produksi. Tidak otomatis berarti semua edge case tertutup, tetapi jaring pengaman integrasi menangkap sumber outage produksi yang paling umum.
+
+<h2>3. Empat Pilar Consumer-Driven Contract Testing</h2>
+<p>Consumer-driven contract testing menggeser inisiatif ke consumer: mereka yang mendefinisikan apa yang dibutuhkan, bukan provider yang mendokumentasikan apa yang tersedia. Hanya pada jalur ini CI gate memblokir deployment ketika verification gagal, mencegah breaking change mencapai produksi.</p>
+
+<p><strong>Pilar 1 — Consumer Test:</strong> Consumer menulis test terhadap mock provider, menghasilkan file kontrak JSON minimal. Kontrak mendeklarasikan hanya field yang benar-benar dipakai.</p>
+<p><strong>Pilar 2 — Contract File:</strong> Artefak bersama berisi method, path, status code, header, dan body dengan tipe serta casing eksak.</p>
+<p><strong>Pilar 3 — Provider Verify:</strong> Verifier mengirim request sesuai kontrak ke provider dan membandingkan status, header, dan body sebagai subset.</p>
+<p><strong>Pilar 4 — Pass/Fail Gate:</strong> Ketika verifikasi lolos, deployment diizinkan. Ketika gagal, deployment diblokir dengan laporan diff terstruktur.</p>
+<p><strong>Pilar 5 — Safe Evolution:</strong> Dual provider routing mempertahankan V1 compliant sambil mengekspos skema V2 baru, memungkinkan migrasi consumer secara independen.</p>
+
+<h2>4. Arsitektur Pipeline: Dari Consumer Test Hingga CI Gate</h2>
+<p>Pipeline ini dimulai dari consumer test yang menghasilkan artefak kontrak sebagai JSON. Kontrak kemudian diunduh oleh CI provider yang menjalankan verifier engine untuk membandingkan response aktual dengan ekspektasi. Keputusan gate dibuat secara deterministik berdasarkan hasil diff.</p>
+
+<pre><code>Consumer Test → Contract.json → CI Trigger → Verifier Engine → Gate Decision
+     (mock)          (artifact)     (fetch)      (diff values)    (pass/block)</code></pre>
+
+<p>Stage 1: <code>GenerateMobileContract()</code> di <code>internal/consumer/client.go</code> menghasilkan kontrak minimal yang mendeklarasikan hanya <code>id</code>, <code>status</code>, <code>customer.name</code>, dan <code>total</code>.</p>
+<p>Stage 2: Artefak kontrak JSON disimpan sebagai <code>mobile-app-order-service.json</code>.</p>
+<p>Stage 3: Provider CI mengunduh kontrak dan memanggil <code>Verifier.Verify(baseURL, contract)</code>.</p>
+<p>Stage 4: <code>diffValues()</code> secara rekursif membandingkan expected vs actual: status code, header, dan body subset dengan <code>json.Number</code> untuk presisi tipe.</p>
+<p>Stage 5: Keputusan gate — <code>Passed=true</code> menghasilkan ALLOWED; <code>Passed=false</code> menghasilkan BLOCKED dengan laporan error.</p>
+
+<h2>5. Kode Generasi Kontrak Consumer</h2>
+<pre><code>func GenerateMobileContract() *contract.Contract {
+    return &contract.Contract{
+        Consumer: "MobileApp",
+        Provider: "OrderService",
+        Interactions: []contract.Interaction{{
+            Description:   "A request for order details by ID",
+            ProviderState: "Order ORD-123 exists and is IN_PROGRESS",
+            Request: contract.RequestDefinition{
+                Method: http.MethodGet,
+                Path:   "/v1/orders/ORD-123",
+            },
+            Response: contract.ResponseDefinition{
+                Status: http.StatusOK,
+                Headers: map[string]string{
+                    "Content-Type": "application/json",
+                },
+                Body: map[string]interface{}{
+                    "id":     "ORD-123",
+                    "status": "IN_PROGRESS",
+                    "customer": map[string]interface{}{
+                        "name": "Budi Santoso",
+                    },
+                    "total": json.Number("150000"),
+                },
+            },
+        }},
+    }
+}</code></pre>
+
+<p>Fungsi ini menghasilkan kontrak minimal yang hanya mendeklarasikan field: <code>id</code>, <code>status</code>, <code>customer.name</code>, dan <code>total</code>. Field tambahan seperti <code>notes</code> atau <code>created_at</code> tidak dicantumkan karena tidak dipakai consumer — prinsip subset matching memastikan provider dapat berevolusi tanpa merusak kontrak.</p>
+
+<h2>6. Deteksi Breaking Change: Tiga Error yang Tertangkap</h2>
+<p>Ketiga error ini dihasilkan oleh <code>diffValues()</code> di <code>verifier.go</code>. Perbedaan tipe numerik tertangkap berkat <code>decoder.UseNumber()</code> yang menjaga <code>json.Number</code>, berbeda dengan default decoder yang mengubah semua angka jadi <code>float64</code>. Field rename terdeteksi karena key tidak ditemukan di expected map.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Jenis Error</th>
+      <th>Field</th>
+      <th>Expected</th>
+      <th>Actual</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Type Mismatch</td>
+      <td><code>total</code></td>
+      <td><code>json.Number</code> (integer 150000)</td>
+      <td><code>string</code> ("150000")</td>
+    </tr>
+    <tr>
+      <td>Value Mismatch</td>
+      <td><code>status</code></td>
+      <td>"IN_PROGRESS"</td>
+      <td>"in_progress"</td>
+    </tr>
+    <tr>
+      <td>Missing Field</td>
+      <td><code>customer.name</code></td>
+      <td>Ada</td>
+      <td>Tidak ada (di-rename ke <code>full_name</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+Json.Number decoder mempertahankan presisi tipe. Ketidakhadiran key map mendeteksi field rename. Bersama-sama mereka membentuk validasi tiga lapis: semantik HTTP terlebih dahulu, lalu diff struktural dengan pelestarian tipe.
+
+<h2>7. Verifier Engine: Recursive Map Diff dengan Preservasi Tipe</h2>
+<p>Verifier engine menggunakan pendekatan subset matching: hanya field yang dideklarasikan consumer yang diperiksa. Nested map traversal memungkinkan deteksi error di field dalam (seperti <code>customer.name</code>). <code>UseNumber()</code> adalah kunci yang membedakan integer dan string numerik — fitur yang tidak tersedia pada JSON parser default Go.</p>
+
+<pre><code>// Mekanisme diff inti di internal/contract/verifier.go
+func diffValues(expected, actual interface{}, path string) []ContractError {
+    // 1. Status code check (semantik HTTP dulu)
+    // 2. Header validation (Content-Type harus cocok)
+    // 3. Perbandingan subset body rekursif
+    //    - reflect.TypeOf untuk tipe primitif mismatch
+    //    - ketidakhadiran key map untuk field rename
+    //    - UseNumber() mempertahankan pembedaan integer vs string
+}</code></pre>
+
+<p>Lima komponen membuat engine ini bekerja:</p>
+<ol>
+  <li><code>decoder.UseNumber()</code> — mengubah semua angka JSON jadi <code>json.Number</code>, membedakan integer 150000 dari string "150000".</li>
+  <li><code>map[string]interface{}</code> — body di-parse sebagai map generik, memungkinkan subset matching tanpa struct tag.</li>
+  <li><code>reflect.TypeOf</code> comparison — mendeteksi primitive type mismatch (string vs int) lewat reflection.</li>
+  <li>Recursive traversal — perbandingan objek nested secara rekursif, mendeteksi <code>customer.name</code> vs <code>customer.full_name</code>.</li>
+  <li>Nil expected handling — jika expected nil, <code>diffValues()</code> return kosong, field opsional diabaikan verifier.</li>
+</ol>
+
+<h2>8. Keamanan KonKuren: 20 Goroutine Tanpa Data Race</h2>
+<p>Verifier tidak menggunakan shared mutable state manapun. Setiap panggilan <code>Verify()</code> menginisialisasi <code>http.Client</code> baru, membuat request baru, dan mengembalikan result baru. Race detector Go konfirmasi thread-safety melalui test concurrent 20 goroutine selama 0.01 detik.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Pattern</th>
+      <th>Implementasi</th>
+      <th>Jaminan Keamanan</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Per-goroutine Client</td>
+      <td><code>Verifier.NewVerifier()</code> buat instance baru, timeout 5s</td>
+      <td>Tidak ada shared mutable state</td>
+    </tr>
+    <tr>
+      <td>Request Isolation</td>
+      <td><code>http.NewRequest()</code> per interaksi</td>
+      <td>Objek unik per goroutine</td>
+    </tr>
+    <tr>
+      <td>Result Aggregation</td>
+      <td>Setiap goroutine kembalikan <code>VerificationResult</code> lokal</td>
+      <td>Sync hanya di <code>wg.Wait()</code></td>
+    </tr>
+    <tr>
+      <td>Race Detector PASS</td>
+      <td><code>go test -race ./...</code> bersih dalam 1.425s</td>
+      <td>Nol race flagged</td>
+    </tr>
+  </tbody>
+</table>
+
+Thread-safety dicapai melalui desain stateless per-panggilan, bukan melalui sinkronisasi primitif.
+
+<h2>9. Tiga Cabang Keputusan dalam Pipeline</h2>
+<p>Pipeline contract testing menghasilkan tiga jalur keputusan: pass (deployment izin), fail (deployment blokir dengan error report), dan partial (beberapa kontrak gagal, sebagian lolos). Hanya pada jalur pass saja deployment diizinkan tanpa review tambahan.</p>
+
+<p><strong>Decision 1 — Passed?</strong> Semua interaction verification harus returning true. Hanya pada jalur ini deployment diizinkan tanpa intervensi manusia.</p>
+<p><strong>Decision 2 — Failed?</strong> Deployment diblokir. Error list harus ditinjau tim provider — bukan sekadar retry tanpa analisis.</p>
+<p><strong>Decision 3 — Partial?</strong> Beberapa interaction fail sementara sebagian pass. Tinjau per-interaction untuk mengisolasi scope perubahan breaking.</p>
+
+Logika keputusan ini berada di <code>cmd/demo/main.go:14-68</code>, di mana setiap stage mengeluarkan <code>ALLOWED</code> atau <code>BLOCKED</code> dengan laporan diff terstruktur.
+
+<h2>10. Bukti Eksekusi Demo</h2>
+<pre><code>[Stage 3] Running Breaking Provider Contract Verification:
+Result: BLOCKED! Breaking changes detected before deployment:
+  1. [A request for order details by ID] path 'total':
+     type mismatch (expected 150000 [json.Number], got 150000 [string])
+  2. [A request for order details by ID] path 'status':
+     value mismatch (expected "IN_PROGRESS", got "in_progress")
+  3. [A request for order details by ID] missing expected field
+     'customer.name'
+CI Deployment Gate: PREVENTED PRODUCTION OUTAGE.</code></pre>
+
+Output demo ini menunjukkan Stage 3 yang memverifikasi <code>ProviderBreaking</code>. Tiga error detail tercetak secara terstruktur, masing-masing menyebutkan path field, jenis mismatch, dan nilai yang diharapkan versus aktual. Gate CI menolak deployment — produksi terlindungi. Pelaporan error yang deterministik memberikan umpan balik yang dapat ditindaklanjuti kepada tim provider.
+
+<h2>11. Sebelum vs Sesudah Contract Testing di Pipeline CI</h2>
+<p>Sebelum contract testing, tim mengandalkan E2E test yang lambat dan manual debugging saat integrasi pecah. Setelah implementasi, setiap PR provider divalidasi terhadap kontrak consumer — breaking change tertangkap sebelum deploy. Tidak otomatis berarti semua edge case tertutup, tetapi risiko production outage berkurang signifikan.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Sebelum Contract Testing</th>
+      <th>Sesudah Contract Testing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Deploy tanpa gate verifikasi kontrak</td>
+      <td>CI gate memverifikasi kontrak sebelum deploy</td>
+    </tr>
+    <tr>
+      <td>Production outage karena field rename</td>
+      <td>Breaking change terdeteksi di PR, error report jelas</td>
+    </tr>
+    <tr>
+      <td>Debug integration failure manual (lambat)</td>
+      <td>Verifikasi otomatis menghasilkan diff terstruktur per field</td>
+    </tr>
+    <tr>
+      <td>E2E test berjalan lambat dan flaky</td>
+      <td>Contract test cepat (sub-second) dan deterministic</td>
+    </tr>
+    <tr>
+      <td>Provider evolusi tanpa koordinasi consumer</td>
+      <td>Dual provider V1+V2 memungkinkan migrasi independen</td>
+    </tr>
+  </tbody>
+</table>
+
+Contract testing menggeser keamanan integrasi ke kiri — dari produksi ke CI.
+
+<h2>12. Pola Implementasi Provider</h2>
+<p>Tiga pola provider ini menggambarkan spektrum kompatibilitas. ProviderV1 adalah baseline compliant. ProviderBreaking menunjukkan skenario worst-case. ProviderDual merepresentasikan praktik evolusi aman: V1 dipertahankan untuk consumer lama, V2 diperkenalkan untuk consumer baru tanpa mengganggu yang sudah ada.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Pola</th>
+      <th>Route</th>
+      <th>Behavior</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ProviderV1</td>
+      <td><code>/v1/orders/{id}</code></td>
+      <td>Mengembalikan <code>OrderResponseV1</code> compliant kontrak. Field <code>notes</code> ada tapi tidak divalidasi (subset matching).</td>
+    </tr>
+    <tr>
+      <td>ProviderBreaking</td>
+      <td><code>/v1/orders/{id}</code></td>
+      <td>Mengembalikan <code>OrderResponseBreaking</code> dengan 3 mutasi: enum casing, field rename, type mutation.</td>
+    </tr>
+    <tr>
+      <td>ProviderDual</td>
+      <td><code>/v1/orders/{id}</code></td>
+      <td>Mempertahankan V1 route compliant sambil menambahkan V2 route dengan schema baru + currency field.</td>
+    </tr>
+    <tr>
+      <td>ProviderDual</td>
+      <td><code>/v2/orders/{id}</code></td>
+      <td>Respons V2: <code>OrderResponseV2</code> dengan <code>customer.full_name</code>, <code>total</code> string, <code>currency</code> IDR. Belum ada kontrak consumer.</td>
+    </tr>
+  </tbody>
+</table>
+
+Dual routing memungkinkan migrasi consumer independen tanpa merusak integrasi yang sudah ada.
+
+<h2>13. Analisis DTO Struct: V1, Breaking, V2</h2>
+<p>Setiap struct merepresentasikan fase evolusi API. V1 adalah kontrak asli yang dipatuhi. Breaking adalah contoh deformasi kontrak yang harus ditangkap. V2 adalah arah evolusi yang sah — field rename dan type mutation diterima karena consumer V2 yang baru telah beradaptasi.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Struct</th>
+      <th>JSON Tags</th>
+      <th>Validasi Kontrak</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>OrderResponseV1</code></td>
+      <td><code>id, status, customer.Name, total(int64), notes,omitempty</code></td>
+      <td>Compliant — semua field expected ada dengan tipe benar</td>
+    </tr>
+    <tr>
+      <td><code>OrderResponseBreaking</code></td>
+      <td><code>id, status(in_progress), customer.FullName, total(string), notes</code></td>
+      <td>Melanggar kontrak — 3 breaking change</td>
+    </tr>
+    <tr>
+      <td><code>OrderResponseV2</code></td>
+      <td><code>id, status(in_progress), customer.FullName, total(string), currency</code></td>
+      <td>Schema baru — belum ada kontrak consumer, hanya assertion status</td>
+    </tr>
+  </tbody>
+</table>
+
+DTO struct tags menentukan perilaku serialisasi; contract testing memvalidasi output ter-serialisasi terhadap ekspektasi.
+
+<h2>14. Hasil Test Suite Verifikasi</h2>
+<pre><code>=== RUN   TestConsumerContractGeneration
+--- PASS: TestConsumerContractGeneration (0.00s)
+=== RUN   TestProviderV1_ContractVerification_Success
+--- PASS: TestProviderV1_ContractVerification_Success (0.00s)
+=== RUN   TestProviderBreaking_ContractVerification_Fails
+--- PASS: TestProviderBreaking_ContractVerification_Fails (0.00s)
+=== RUN   TestProviderDual_ContractVerification_Success
+--- PASS: TestProviderDual_ContractVerification_Success (0.00s)
+=== RUN   TestConcurrentContractVerification
+--- PASS: TestConcurrentContractVerification (0.01s)
+=== RUN   TestVerifier_HeaderValidation_And_ErrorBranches
+--- PASS: TestVerifier_HeaderValidation_And_ErrorBranches (0.00s)
+=== RUN   TestProviderDual_V2Endpoint_DirectAssertion
+--- PASS: TestProviderDual_V2Endpoint_DirectAssertion (0.00s)
+ok  	labs/26-contract-testing/tests	0.390s</code></pre>
+
+Ketujuh test menutupi seluruh skenario: generasi kontrak, verifikasi V1 sukses, breaking change gagal, dual provider sukses, concurrent safety, header validation, dan v2 assertion. Race detector berjalan bersih tanpa flagged race condition.
+
+<h2>15. Konfirmasi Performa Race Detector</h2>
+<pre><code>=== RUN   TestConcurrentContractVerification
+--- PASS: TestConcurrentContractVerification (0.01s)
+ok  	labs/26-contract-testing/tests	1.425s
+    (race detector: no races detected)</code></pre>
+
+Race detector mengonfirmasi bahwa tidak ada shared mutable state antara goroutine. Setiap verifikasi berjalan independent dengan http.Client lokal dan request object unik. Performa concurrent test hanya 0.01s — verifier engine efisien dan scalable.
+
+<h2>16. Batasan: Yang Tidak Dibuktikan di Laboratorium Ini</h2>
+<p>Laboratorium ini sengaja disederhanakan untuk reproduktibilitas lokal. Beberapa fitur produksi seperti Pact Broker, provider state callbacks, dan array diff tidak diimplementasikan. V2 endpoint hanya diverifikasi status code-nya, bukan body schema — ini adalah gap yang perlu ditambal untuk production readiness.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Celah</th>
+      <th>Mengapa Penting</th>
+      <th>Langkah ke Produksi</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Pact Broker Remote</td>
+      <td>Kontrak dipertukarkan in-memory; tidak ada broker sentral</td>
+      <td>Integrasikan Pact Broker untuk koordinasi lintas tim</td>
+    </tr>
+    <tr>
+      <td>Provider State Management</td>
+      <td>State didefinisikan via string polos; tidak ada callback setup/teardown</td>
+      <td>Tambah state fixture callbacks per interaction</td>
+    </tr>
+    <tr>
+      <td>Array Diff</td>
+      <td><code>diffValues()</code> tidak menangani perbandingan array</td>
+      <td>Implementasikan diff berbasis index atau multiset</td>
+    </tr>
+    <tr>
+      <td>Message Pact</td>
+      <td>Verifikasi terbatas pada HTTP REST saja</td>
+      <td>Tambah verifikasi pesan Kafka/RabbitMQ</td>
+    </tr>
+    <tr>
+      <td>V2 Schema Assertion</td>
+      <td><code>/v2/orders/{id}</code> hanya assert status 200</td>
+      <td>Tambah kontrak body untuk endpoint V2</td>
+    </tr>
+  </tbody>
+</table>
+
+Lingkup lab adalah mesin minimal yang layak; produksi memerlukan broker, manajemen state, dan cakupan diff yang lebih luas.
+
+<h2>17. Trade-off: Custom Verifier vs Full Pact Stack</h2>
+<p>Laboratorium memilih custom verifier dengan Go standard library murni untuk menghindari dependensi Ruby atau Node.js. Kelebihannya: test berjalan di environment apa pun. Kekurangannya: tidak ada broker sentral, manajemen state manual, dan tidak support message pact. Untuk produksi skala kecil, custom verifier cukup.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Aspek</th>
+      <th>Custom Verifier (Lab)</th>
+      <th>Full Pact Stack</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Dependensi</td>
+      <td>Nol eksternal (stdlib saja)</td>
+      <td>Klien Ruby/JS, Pact Broker</td>
+    </tr>
+    <tr>
+      <td>Thread Safety</td>
+      <td>Race-safe by design</td>
+      <td>Perlu perhatian di broker</td>
+    </tr>
+    <tr>
+      <td>Portabilitas</td>
+      <td>Semua environment Go</td>
+      <td>Butuh runtime Ruby/Node</td>
+    </tr>
+    <tr>
+      <td>Broker Support</td>
+      <td>Tidak ada (in-memory saja)</td>
+      <td>Store kontrak terpusat</td>
+    </tr>
+    <tr>
+      <td>Message Pact</td>
+      <td>Tidak didukung</td>
+      <td>Didukung</td>
+    </tr>
+    <tr>
+      <td>Cocok Untuk</td>
+      <td>Tim kecil, CI gate lokal</td>
+      <td>Ekosistem multi-tim, multi-bahasa</td>
+    </tr>
+  </tbody>
+</table>
+
+Pendekatan hibrida: gunakan custom verifier untuk CI gate cepat, migrasi ke Pact Broker saat skalabilitas lintas tim diperlukan.
+
+<h2>18. Checklist Implementasi CDC</h2>
+<p>Checklist ini merangkum praktik terbaik contract testing. Poin terpenting: kontrak harus minimal dan berfokus pada field yang digunakan consumer. Over-specification adalah anti-pattern utama yang membuat kontrak terlalu rapuh dan menghambat evolusi provider.</p>
+
+<ul class="checklist">
+  <li class="checked">Definisikan kontrak minimal — Consumer hanya mendeklarasikan field yang benar-benar digunakan.</li>
+  <li class="checked">Sertakan HTTP semantik — Kontrak mencakup method, path, status, header, body dengan tipe dan casing eksak.</li>
+  <li class="checked">Jalankan verifikasi di CI — Provider CI harus menjalankan verifier sebelum merge; pass = boleh deploy, fail = blokir.</li>
+  <li class="checked">Gunakan expand/contract pattern — Breaking change: tambah field baru dulu, migrasi consumer, baru hapus field lama.</li>
+  <li class="checked">Pertahankan dual routing — V1 tetap compliant sambil V2 diperkenalkan untuk consumer yang bermigrasi.</li>
+  <li class="checked">Hindari over-specification — Jangan uji aturan validasi bisnis (max 20 chars) di kontrak; fokus pada format pesan.</li>
+</ul>
+
+Kontrak minimal, penegakan gate CI, dan pola expand/contract adalah tiga prinsip yang tidak bisa ditawar.
+
+<h2>19. Lima Anti-Pattern Contract Testing</h2>
+<p>Kelima anti-pattern ini umum terjadi saat tim baru mengadopsi contract testing. Over-specification adalah yang paling berbahaya karena membuat kontrak terlalu kaku. JSON Schema alone tidak cukup karena tidak menangkap semantik tipe seperti integer vs string numerik.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Anti-Pattern</th>
+      <th>Cara Reproduksi</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Over-specification</td>
+      <td>Tambahkan aturan bisnis (e.g., "username max 20 chars") ke kontrak. Provider yang melonggarkan validasi akan pecah kontrak tanpa dampak consumer.</td>
+    </tr>
+    <tr>
+      <td>Tidak bedakan additive vs breaking</td>
+      <td>Ubah <code>total</code> dari int jadi string tanpa update kontrak. Verifier harus gagal — jika lolos, matcher terlalu longgar.</td>
+    </tr>
+    <tr>
+      <td>Kontrak terlalu ketat</td>
+      <td>Deklarasikan semua field response (termasuk <code>notes</code>, <code>created_at</code>) sebagai required. Provider tambah field baru akan fail.</td>
+    </tr>
+    <tr>
+      <td>JSON Schema saja</td>
+      <td>Ganti <code>diffValues</code> dengan validator JSON Schema. Casing enum <code>IN_PROGRESS</code> vs <code>in_progress</code> akan lolos Schema valid.</td>
+    </tr>
+    <tr>
+      <td>Contract testing menggantikan unit test</td>
+      <td>Hapus semua unit test internal, hanya jalankan contract test. Logika bisnis tidak terverifikasi.</td>
+    </tr>
+  </tbody>
+</table>
+
+Anti-pattern muncul dari salah paham tentang lingkup kontrak; spesifisitas harus sesuai dengan pemakaian consumer yang sebenarnya.
+
+<h2>20. Mereproduksi Pipeline Secara Mandiri</h2>
+<p>Semua command di atas berjalan di Go standard library tanpa dependensi eksternal. Race detector mengonfirmasi thread-safety concurrent verification. Demo 4 stage memberikan bukti visual yang dapat direproduksi di mesin manapun.</p>
+
+<pre><code># 1. Jalankan seluruh test suite dengan verbose
+go test -v ./...
+
+# 2. Jalankan race detector untuk verifikasi thread-safety
+go test -race ./...
+
+# 3. Eksekusi demo 4 stage (generate → V1 pass → breaking blocked → dual pass)
+go run ./cmd/demo
+
+# 4. Build binary untuk environment produksi
+go build -o bin/contract-demo ./cmd/demo</code></pre>
+
+Verifikasi lokal zero-dependency menjamin validasi cepat dan dapat diulang kembali di seluruh alur kerja developer.
+
+<h2>21. Prinsip Arsitektur Jangka Panjang</h2>
+<p>Prinsip pertama memastikan kontrak selalu berpusat pada consumer — bukan dokumentasi provider yang sering tertinggal. Prinsip kedua menempatkan gate di titik paling kritis: sebelum kode mencapai production. Prinsip ketiga menyediakan mekanisme evolusi tanpa disrupti.</p>
+
+<p><strong>Prinsip 1 — Consumer yang Mendorong Kontrak:</strong> Consumer menentukan ekspektasi minimal, bukan provider yang mendokumentasikan capability. Ini memastikan kontrak relevan dengan kebutuhan riil.</p>
+<p><strong>Prinsip 2 — Gate Sebelum Deploy:</strong> Verifikasi kontrak harus berjalan di CI sebelum merge. Tidak otomatis berarti semua kasus tercover, tetapi mengurangi risiko production outage secara signifikan.</p>
+<p><strong>Prinsip 3 — Dual Routing untuk Migrasi:</strong> Pertahankan V1 compliant sambil memperkenalkan V2. Consumer bermigrasi sesuai ritme masing-masing tanpa tekanan breaking change.</p>
+
+Kontrak consumer-driven, gate CI, dan dual routing membentuk triad evolusi API yang berkelanjutan.
+
+<h2>22. Ringkasan dan Referensi Repositori</h2>
+<p>Sistem tanpa contract testing adalah sistem yang menunda kegagalan integrasi produksinya sendiri. Lab ini mengimplementasikan mesin contract testing minimal viable dalam Go murni yang mendemonstrasikan validasi tiga lapis (status, header, body diff dengan preservasi tipe), keamanan kon-kuren, dan keputusan gate CI yang deterministik.</p>
+
+<p><strong>Modul implementasi:</strong></p>
+<ul>
+  <li><code>internal/consumer/client.go</code> — <code>MobileOrderClient</code> & <code>GenerateMobileContract()</code></li>
+  <li><code>internal/contract/verifier.go</code> — <code>Verifier.Verify()</code> & <code>diffValues()</code></li>
+  <li><code>internal/model/order.go</code> — DTO <code>OrderResponseV1</code>/<code>Breaking</code>/<code>V2</code></li>
+  <li><code>internal/provider/server.go</code> — Handler <code>ProviderV1</code>/<code>Breaking</code>/<code>Dual</code></li>
+  <li><code>cmd/demo/main.go</code> — Orkestrator demo 4 stage</li>
+  <li><code>tests/contract_test.go</code> — 7 kasus uji</li>
+</ul>
+
+<p><strong>Status verifikasi:</strong></p>
+<ul>
+  <li>Commit: <code>4a5cf38</code> · Status: APPROVED</li>
+  <li>7 unit test passing (generation, V1 pass, breaking fail, dual pass, concurrent, header validation, V2 assertion)</li>
+  <li>Race detector: bersih (<code>go test -race ./...</code> PASS dalam 1.425s)</li>
+  <li>Demo: 4 stage executable (generate → V1 pass → breaking blocked → dual pass)</li>
+</ul>
+
+<hr>
+<p>Kode sumber lengkap, test suite, dan demo mandiri tersedia di repositori: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/26-contract-testing">github.com/lukman-ss/software-engineering-lab/tree/main/labs/26-contract-testing</a>.</p>
+
+</div>
+</body>
+</html>
