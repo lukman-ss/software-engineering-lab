@@ -1,7 +1,7 @@
 ---
 title: "Cache Invalidation Strategies: Write Patterns, Stampede Mitigations, and TTL Jitter in Go"
 published: false
-description: "Explore Cache Invalidation Strategies in Go: mechanics, architecture, caveats, and testable invariants."
+description: "Explore Cache Invalidation Strategies in Go: mechanics, architecture, caveats, and testable invariants through in-memory simulations."
 tags: go, testing, performance, softwareengineering
 ---
 
@@ -11,44 +11,44 @@ A production system must remain resilient under load. Lab 37 makes that behavior
 
 > Cache invalidation is the hardest problem because consistency is eventual, never instant.
 
-## Dilema Terbesar Sistem Terdistribusi
+## Distributed Systems' Biggest Dilemma
 
 Cache invalidation remains one of the hardest challenges in distributed systems. While caching shields persistent databases from excessive traffic, maintaining freshness during underlying database updates is critical. Without disciplined invalidation policies, stale reads and data corruption will degrade application reliability and consistency.
 
-## Taksonomi Lab 37
+## Lab 37 Taxonomy
 
 Lab 37 categorizes cache engineering into write policies and stampede mitigations. Three write strategies dictate latency and consistency trade-offs, while four stampede mitigations protect databases from thundering herds during hot key expiration. All patterns are implemented natively in Go without external infrastructure.
 
-Pola | Write Flow | Read Flow | Karakteristik
+| Strategy | Write Flow | Read Flow | Characteristics |
 |---|---|---|---|
-Cache-Aside | DB write → cache Delete | Cache miss → DB query → Set | Lazy, default pragmatic
-Write-Through | DB write → cache Set (sync) | Cache hit | Strong read-after-write
-Write-Behind | Cache Set → async queue flush | Cache hit | High write throughput, durability risk
+| Cache-Aside | DB write → cache Delete | Cache miss → DB query → Set | Lazy, default pragmatic |
+| Write-Through | DB write → cache Set (sync) | Cache hit | Strong read-after-write |
+| Write-Behind | Cache Set → async queue flush | Cache hit | High write throughput, durability risk |
 
-Mitigasi | Teknik | Scope | Formula / Mekanisme
+| Mitigation | Technique | Scope | Mechanism |
 |---|---|---|---|
-Singleflight | Request coalescing | Intra-process Go | singleflight.Group.Do(key, fn)
-XFetch | Probabilistic early refresh | Per-request | -Δ·β·ln(U) > TTL_remaining
-SWR | Stale serve + async revalidate | Per-key | ExpiresAt + staleDelta window
-TTL Jitter | Random TTL offset | Cross-key | TTLWithJitter(base, maxJitter)
+| Singleflight | Request coalescing | Intra-process Go | `singleflight.Group.Do(key, fn)` |
+| XFetch | Probabilistic early refresh | Per-request | `-Δ·β·ln(U) > TTL_remaining` |
+| SWR | Stale serve + async revalidate | Per-key | `ExpiresAt + staleDelta window` |
+| TTL Jitter | Random TTL offset | Cross-key | `TTLWithJitter(base, maxJitter)` |
 
-## Cache-Aside (Lazy Loading) - Mekanisme & Flow
+## Cache-Aside (Lazy Loading) Mechanics & Flow
 
 Cache-Aside operates lazily: reads populate the cache upon a miss, and updates commit to the database before invalidating the cached key. This lazy population saves memory by caching only requested records, while making write-then-invalidate ordering essential for correctness.
 
 ```go
 func (s *CacheAsideService) Update(ctx, key, val) error {
-    s.db.Write(ctx, key, val) // 1. DB dulu
-    s.cache.Delete(key)      // 2. baru invalidate
+    s.db.Write(ctx, key, val) // 1. DB first
+    s.cache.Delete(key)       // 2. then invalidate
     return nil
 }
 ```
 
-## Cache-Aside - Anomali & Race Condition
+## Cache-Aside Anomalies & Race Conditions
 
 Cache-Aside exhibits a subtle race window under concurrent access. If a reader suffers a cache miss while a writer commits an update, a slow-completing reader can overwrite fresh invalidation with stale data, keeping invalid records in cache until TTL expiration.
 
-## Write-Through - Konsistensi Sinkron
+## Write-Through Synchronous Consistency
 
 Write-Through enforces strong read-after-write consistency by synchronizing database commits directly with cache updates. Subsequent readers immediately hit the cache and receive the freshest data without querying the database, eliminating the stale window inherent in lazy caching.
 
@@ -64,17 +64,17 @@ func (s *WriteThroughService) Update(ctx, key, val) error {
 }
 ```
 
-## Write-Through - Biaya Latensi & Partial Failure
+## Write-Through Latency Cost & Partial Failures
 
 Write-Through incurs a latency penalty by executing two consecutive synchronous writes for every update. Furthermore, partial failures—such as a committed database write followed by a failed cache set—demand TTL safety nets to prevent prolonged cache inconsistency across application instances.
 
-Failure Point | Deteksi | Recovery | Impact
+| Failure Point | Detection | Recovery | Impact |
 |---|---|---|---|
-DB write fail | Error return | Retry caller | Write lost
-Cache set fail | Silent (swallowed) | TTL safety net | Temporary miss
-Both succeed | - | - | 0 impact, consistent
+| DB write fail | Error return | Retry caller | Write lost |
+| Cache set fail | Silent (swallowed) | TTL safety net | Temporary miss |
+| Both succeed | - | - | 0 impact, consistent |
 
-## Write-Behind (Write-Back) - Throughput Ekstrem
+## Write-Behind (Write-Back) Extreme Throughput
 
 Write-Behind maximizes write throughput by updating memory cache immediately and delegating database persistence to an asynchronous queue drained by background workers. Write operations return instantly with near-zero latency, making it ideal for high-velocity telemetry and write-heavy workloads.
 
@@ -88,7 +88,7 @@ func (s *WriteBehindService) Update(key, val string) {
 }
 ```
 
-## Write-Behind - Risiko Durabilitas & Data Loss
+## Write-Behind Durability Risks & Data Loss
 
 Write-Behind trades durability for raw execution speed. Unflushed queue items are permanently lost if the process crashes unexpectedly. In high-concurrency bursts, overflowing queues can silently discard writes unless backed by persistent message brokers like Kafka or Write-Ahead Logs.
 
@@ -96,54 +96,37 @@ Write-Behind trades durability for raw execution speed. Unflushed queue items ar
 
 A cache stampede occurs when a high-traffic hot key expires suddenly. Hundreds of concurrent requests experience simultaneous cache misses and flood the database with identical expensive queries, exhausting connection pools and causing systemic congestion collapse across the infrastructure.
 
-Workload | Concurrency N | DB Query Count (Naive)
+| Workload | Concurrency N | DB Query Count (Naive) |
 |---|---|---|
-Local dev | 3 | 3
-Staging | 50 | 50
-Production hot key | 10,000 | 10,000 (DB overload)
+| Local dev | 3 | 3 |
+| Staging | 50 | 50 |
+| Production hot key | 10,000 | 10,000 (DB overload) |
 
-## Singleflight - Request Coalescing
+## Singleflight Request Coalescing
 
-Singleflight provides intra-process request coalescing via Go official sync library. When multiple goroutines request an expired hot key, Singleflight executes the underlying database fetch exactly once while suspending other callers until the shared result is broadcast to all waiters.
-
-```go
-import "golang.org/x/sync/singleflight"
-
-type SingleFlightService struct {
-    cache  *MemoryCache
-    db     *MockDB
-    ttl    time.Duration
-    flight singleflight.Group
-}
-```
-
-## Singleflight - Kode & Mekanika Do()
-
-Inside the Singleflight closure, a double-check pattern inspects the cache once more before triggering the database fetch, ensuring optimal efficiency. While Singleflight eliminates intra-process stampedes, multi-node deployments still require distributed coordination such as Redis distributed locks.
+Mitigasi pertama terhadap cache stampede adalah request coalescing menggunakan paket resmi Go `golang.org/x/sync/singleflight`. Pola ini memastikan bahwa untuk kunci yang sama, fungsi pengambilan data ke database hanya dijalankan tepat satu kali oleh satu goroutine pemenang. Goroutine-goroutine lain yang datang bersamaan akan ditahan pada barrier internal dan menunggu selesainya eksekusi goroutine pertama.
 
 ```go
-func (s *SingleFlightService) Get(ctx, key) (string, error) {
-    item, err := s.cache.Get(key) // outer cache check
+res, err, _ := s.flight.Do(key, func() (interface{}, error) {
+    // Double-check cache inside flight execution
+    item, err := s.cache.Get(key)
     if err == nil { return item.Value, nil }
-    res, err, _ := s.flight.Do(key, func() (interface{}, error) {
-        // Double-check cache inside flight execution
-        item, err := s.cache.Get(key)
-        if err == nil { return item.Value, nil }
-        start := time.Now()
-        val, err := s.db.Query(ctx, key)
-        if err != nil { return "", err }
-        delta := time.Since(start)
-        s.cache.Set(key, val, s.ttl, delta)
-        return val, nil
-    })
+    start := time.Now()
+    val, err := s.db.Query(ctx, key)
     if err != nil { return "", err }
-    return res.(string), nil
-}
+    delta := time.Since(start)
+    s.cache.Set(key, val, s.ttl, delta)
+    return val, nil
+})
 ```
 
-## XFetch - Probabilistic Early Expiration
+## Singleflight Mechanics & Do() Implementation
 
-XFetch employs probabilistic early expiration derived from academic research by Vattani et al. By evaluating background fetch duration and uniform random draws against remaining TTL, high-traffic keys trigger proactive refreshes before official expiration, smoothing out concurrent rebuild spikes.
+Implementasi SingleFlightService menerapkan teknik double-check locking di dalam closure fungsi Do untuk efisiensi maksimal. Sebelum memulai query database yang mahal, goroutine memeriksa kembali isi cache untuk mengantisipasi kemungkinan kunci tersebut telah berhasil diisi oleh eksekusi paralel lain. Singleflight mengelola tabel pemetaan pemanggilan aktif secara internal dan membagikan return value melalui channel bersama. Namun, perlindungan ini terbatas pada level satu proses; sistem multi-pod tetap membutuhkan distributed lock seperti Redis SETNX.
+
+## XFetch Probabilistic Early Expiration
+
+XFetch adalah algoritma mitigasi stampede probabilistik berbasis riset akademis Vattani et al. Setiap kali request membaca cache, algoritma menghitung ambang batas kedaluwarsa dini berdasarkan biaya komputasi query database terakhir, parameter tuning beta, dan bilangan acak seragam. Jika nilai komputasi probabilistik melebihi sisa TTL, request tersebut akan berinisiatif merefresh cache secara proaktif sebelum waktu kedaluwarsa resmi tiba.
 
 ```go
 func ShouldRecompute(delta time.Duration, beta float64,
@@ -156,41 +139,41 @@ func ShouldRecompute(delta time.Duration, beta float64,
 }
 ```
 
-## XFetch - Tanda Negatif Matematika
+## XFetch Mathematical Sign Error
 
-Mathematical precision in XFetch requires retaining the negative sign in front of the natural logarithm. Because ln(U) is strictly negative for random values between 0 and 1, omitting the minus sign forces the expression negative, silently disabling proactive early recomputation.
+Penerapan matematis formula XFetch menuntut pemahaman mendalam terhadap tanda minus logaritma natural. Karena variabel U berada pada rentang nol hingga satu, nilai logaritma natural ln(U) selalu menghasilkan bilangan negatif. Penambahan tanda minus di depan rumus membuat hasil kalkulasi bernilai positif, sehingga memungkinkan perbandingan yang valid terhadap sisa TTL. Kesalahan umum dalam mengabaikan tanda minus akan menghasilkan nilai negatif permanen, menyebabkan kondisi penyegaran awal tidak pernah terpenuhi dan stampede tetap terjadi.
 
-## Stale-While-Revalidate (SWR) - Toleransi Data Basi
+## Stale-While-Revalidate (SWR) Stale Tolerance
 
-Stale-While-Revalidate, inspired by RFC 5861, balances latency and freshness across three lifecycle phases. Within the stale grace window, clients receive immediate cached responses while background revalidation fetches updated records asynchronously, guaranteeing low end-user latency.
+Stale-While-Revalidate, diadaptasi dari RFC 5861, menawarkan solusi performa tinggi dengan memperluas toleransi terhadap data kedaluwarsa. Sistem membagi siklus hidup cache menjadi tiga jendela: fresh di mana data disajikan langsung, stale window di mana data usang segera disajikan ke klien sementara revalidasi dipicu di latar belakang, serta hard miss di mana query database harus dieksekusi secara sinkron.
 
-State | Kondisi | Action | Return
+| State | Condition | Action | Return |
 |---|---|---|---|
-Fresh | now < ExpiresAt | Return cached | Cached value
-Stale-1 | ExpiresAt ≤ now < staleUntil | Trigger async revalidate | Stale value
-Stale-2 | now ≥ staleUntil (past grace) | Synchronous fetch | New DB value (blocking)
-Miss | Key not in cache | Synchronous fetch | New DB value
+| Fresh | now < ExpiresAt | Return cached | Cached value |
+| Stale-1 | ExpiresAt ≤ now < staleUntil | Trigger async revalidate | Stale value |
+| Stale-2 | now ≥ staleUntil (past grace) | Synchronous fetch | New DB value (blocking) |
+| Miss | Key not in cache | Synchronous fetch | New DB value |
 
 ```go
 item, ok := s.cache.GetRaw(key)
 now := time.Now()
 if ok {
-    if now.Before(item.ExpiresAt) { return item.Value, nil }       // Fresh
+    if now.Before(item.ExpiresAt) { return item.Value, nil }
     staleUntil := item.ExpiresAt.Add(s.staleDelta)
     if now.Before(staleUntil) {
-        s.triggerRevalidate(key)                                   // Stale-1
+        s.triggerRevalidate(key)
         return item.Value, nil
     }
 }
-// Hard miss / Stale-2 → synchronous fetch
+// Hard miss / Stale-2
 val, err := s.db.Query(ctx, key)
-s.cache.Set(key, val, ttl, delta)
+s.cache.Set(key, val, s.ttl, delta)
 return val, nil
 ```
 
-## SWR - Async Revalidation & Deduplikasi
+## SWR Async Revalidation & Deduplication
 
-SWR requires robust deduplication to prevent background revalidation storms. Using a mutex-protected tracking map, SWRService guarantees that only a single background goroutine refreshes the database per key at any given time, gracefully falling back to stale data upon upstream errors.
+Keberhasilan SWR sangat bergantung pada mekanisme deduplikasi revalidasi latar belakang agar tidak memicu badai permintaan baru ke database. Tanpa pembatas, ratusan request pada data basi akan masing-masing meluncurkan goroutine revalidasi baru. SWRService mengatasi ancaman ini dengan memelihara tabel penanda revalidasi berbasis mutex; hanya satu goroutine yang diizinkan memperbarui database untuk kunci yang sama pada satu waktu.
 
 ```go
 func (s *SWRService) triggerRevalidate(key string) {
@@ -199,7 +182,7 @@ func (s *SWRService) triggerRevalidate(key string) {
     s.revalidating[key] = true
     s.mu.Unlock()
     s.revalCount.Add(1)
-    go func() { // async fetch & set
+    go func() {
         defer func() {
             s.mu.Lock()
             delete(s.revalidating, key)
@@ -210,9 +193,9 @@ func (s *SWRService) triggerRevalidate(key string) {
 }
 ```
 
-## TTL Jitter - Anti-Sinkronisasi Expiry
+## TTL Jitter Anti-Expiration Synchronization
 
-TTL Jitter adds a random time offset to base TTL values, preventing cross-key expiration synchronization. By desynchronizing bulk-primed keys across a bounded time window, Jitter eliminates simultaneous mass expirations that often overwhelm backend storage following application deployments.
+TTL Jitter adalah teknik pertahanan sederhana namun ampuh untuk mencegah sinkronisasi waktu kedaluwarsa lintas kunci cache. Ketika ribuan kunci diisi secara bersamaan saat startup sistem atau deploy aplikasi, penggunaan TTL statis akan menyebabkan seluruh kunci tersebut kedaluwarsa pada detik yang sama persis.
 
 ```go
 func TTLWithJitter(base, maxJitter time.Duration) time.Duration {
@@ -222,19 +205,19 @@ func TTLWithJitter(base, maxJitter time.Duration) time.Duration {
 }
 ```
 
-## Pengujian: Cache-Aside vs Write-Through vs Write-Behind
+## Testing: Cache-Aside vs Write-Through vs Write-Behind
 
-Unit testing via TestCachePatterns verifies all three write policies deterministically using MockDB query counters. Invalidation cycles, synchronous write-through hits, and asynchronous write-behind flushes are validated against exact query count assertions, confirming predictable IO behavior.
+Pengujian TestCachePatterns memvalidasi perilaku ketiga write pattern menggunakan MockDB dengan counter query atomik yang presisi. Pada Cache-Aside, query database hanya bertambah pada cache miss pertama dan tetap stabil pada hit kedua, lalu bertambah lagi setelah operasi update menghapus cache. Pada Write-Through, pembacaan pasca-update langsung mendapati cache hit tanpa query database. Pada Write-Behind, update cache terjadi seketika, dan penulisan database terbukti dieksekusi secara asinkron beberapa milidetik kemudian.
 
-Test | Pattern | Assertion | Expected DB Queries
+| Test | Pattern | Assertion | Expected DB Queries |
 |---|---|---|---|
-Cache-Aside Read | Cache-Aside | Miss → 1 query | 1
-Cache-Aside Hit | Cache-Aside | Hit → 0 query | 1 (stays)
-Cache-Aside Update | Cache-Aside | Write+Delete → next miss | 2
-Write-Through Write | Write-Through | Update sync set cache | 1 (no extra query)
-Write-Behind Flush | Write-Behind | Async flush after sleep | 1 write async
+| Cache-Aside Read | Cache-Aside | Miss → 1 query | 1 |
+| Cache-Aside Hit | Cache-Aside | Hit → 0 query | 1 (stays) |
+| Cache-Aside Update | Cache-Aside | Write+Delete → next miss | 2 |
+| Write-Through Write | Write-Through | Update sync set cache | 1 (no extra query) |
+| Write-Behind Flush | Write-Behind | Async flush after sleep | 1 write async |
 
-```go
+```bash
 [Cache-Aside]
   1st GET (cache miss)  -> DB queries: 1, val: Laptop
   2nd GET (cache hit)   -> DB queries: 1, val: Laptop
@@ -249,60 +232,85 @@ Write-Behind Flush | Write-Behind | Async flush after sleep | 1 write async
   After 50ms flush delay       -> DB writes: 1
 ```
 
-## Pengujian: Naive Stampede vs Singleflight
+## Testing: Naive Stampede vs Singleflight
 
-Concurrency tests empirically contrast Naive Stampede against Singleflight. Under twenty concurrent goroutines requesting a cold hot-key, the naive service triggers twenty redundant database queries, whereas Singleflight successfully collapses all twenty requests into exactly one database invocation.
+Pengujian mitigasi stampede membuktikan efektivitas Singleflight secara empiris di bawah beban konkurensi tinggi. Ketika dua puluh goroutine diluncurkan secara simultan untuk mengakses kunci panas yang belum ada di cache, implementasi Naive menghasilkan dua puluh query database paralel—memperlihatkan stampede nyata. Sebaliknya, SingleFlightService berhasil menggabungkan seluruh dua puluh panggilan tersebut menjadi tepat satu query database tunggal.
 
-```go
+```bash
 [Naive] 20 concurrent goroutines -> 20 DB queries (stampede!)
 [SF]    20 concurrent goroutines -> 1 DB queries (singleflight), 20 correct results
 ```
 
-## Pengujian: XFetch Deterministic Simulation
+## Testing: XFetch Deterministic Simulation
 
-Deterministic XFetch testing leverages injected random generators to validate decision paths reliably. High uniform draws preserve cache hits, while simulated low draws reliably satisfy the probabilistic formula, triggering early proactive recomputations before hard TTL expiration.
+Pengujian logika XFetch dirancang secara deterministik melalui injeksi fungsi pengacak randFunc tiruan untuk menguji kedua percabangan algoritma. Ketika generator acak menghasilkan nilai tinggi mendekati satu, formula matematis memutuskan tidak perlu recompute, sehingga data disajikan langsung dari cache. Sebaliknya, saat diinjeksi nilai acak yang sangat kecil, rumus menghasilkan nilai komputasi yang melampaui sisa TTL, memicu eksekusi query pembaruan dini ke database secara terbukti dan terukur.
 
-```go
+```bash
+delta = 100ms, beta = 1.0, ttl = 1s
 Initial GET       -> DB queries: 1, val: initial-val
 Low rand draw     -> DB queries: 2, val: refreshed-val (early proactive refresh)
-High rand draw    -> DB queries: 1, val: fresh-data (served from cache, no early refresh)
+High rand draw    -> DB queries: 1, val: fresh-data (served from cache)
 ```
 
-## Pengujian: SWR & Race Detection
+## Testing: SWR & Race Detection
 
-SWR test suites confirm immediate delivery of stale data alongside single-goroutine background revalidation. Under ten concurrent readers, deduplication prevents revalidation storms, while Go race detector passes cleanly, validating strict thread-safety across concurrent cache accesses.
+Pengujian Stale-While-Revalidate memverifikasi bahwa data usang langsung dikembalikan kepada pemanggil tanpa jeda latensi begitu TTL kedaluwarsa namun masih dalam rentang toleransi stale. Sepuluh goroutine konkuren yang membaca kunci basi secara simultan terbukti hanya memicu tepat satu proses revalidasi latar belakang berkat mekanisme deduplikasi. Pengujian race detector Go dengan flag `-race` lulus sempurna tanpa kebocoran data, membuktikan keandalan thread-safety implementasi SWR di lingkungan produksi.
 
-```go
+```bash
 Initial GET       -> val: v1
 GET (stale)       -> val: v1  (stale served immediately)
 GET (fresh)       -> val: v2  (async revalidation complete)
 ```
 
-## Matriks Komparasi 7 Strategi
+## 7-Strategy Comparison Matrix
 
-The comprehensive comparison matrix evaluates all seven strategies across write latency, read latency, consistency guarantees, and operational failure risks. Engineering teams must weigh strong read-after-write consistency against write latency and durability risks to identify optimal caching architectures.
+Matriks komparasi tujuh strategi menyajikan panduan evaluasi menyeluruh berdasarkan profil latensi tulis, latensi baca, tingkat konsistensi, dan risiko arsitektural utama. Tidak ada satu strategi tunggal yang sempurna untuk semua skenario; setiap pilihan merupakan kompromi teknik yang sadar.
 
-Strategi | Latensi Tulis | Latensi Baca | Konsistensi | Risiko Utama
+| Strategy | Write Latency | Read Latency | Consistency | Main Risk |
 |---|---|---|---|---|
-Cache-Aside | Sync DB Write | Cache hit (0 RTT) | Eventual read-after-write | Stampede pada miss massal
-Write-Through | DB+Cache (2 sync ops) | Cache hit (0 RTT) | Strong read-after-write | Latency penulisan tinggi
-Write-Behind | Cache Set + async queue | Cache hit (0 RTT) | Eventual consistency | Data loss pada crash/overflow
-Singleflight | Sama | Cache hit setelah 1st miss | Eventual | Tidak proteksi cross-process
-XFetch | Sama | Cache hit/proactive refresh | Eventual | Sign error bug (formulasi salah)
-SWR | Sama | Stale serve (0 blocking) | Eventual | Staleness window, revalidation storm
-TTL Jitter | Sama | Cache hit (tersebar waktu) | Eventual | Tidak proteksi single hot key
+| Cache-Aside | Sync DB Write | Cache hit (0 RTT) | Eventual | Stampede on mass miss |
+| Write-Through | DB+Cache (2 sync ops) | Cache hit (0 RTT) | Strong read-after-write | High write latency |
+| Write-Behind | Cache Set + async queue | Cache hit (0 RTT) | Eventual | Data loss on crash/overflow |
+| Singleflight | Same | Cache hit after 1st miss | Eventual | No cross-process protection |
+| XFetch | Same | Cache hit/proactive refresh | Eventual | Sign error bug |
+| SWR | Same | Stale serve (0 blocking) | Eventual | Staleness window |
+| TTL Jitter | Same | Cache hit (spread time) | Eventual | No single hot-key protection |
 
-Kolom tambahan | Cache-Aside | Write-Through | Write-Behind
+| Additional Column | Cache-Aside | Write-Through | Write-Behind |
 |---|---|---|---|
-Memory overhead | Lazy, hanya data yang dibaca | Semua key yang ditulis | Semua key yang ditulis
-Write throughput | Medium | Low | High (async)
-Read-after-write guarantee | No | Yes | No (eventual)
-Durability | DB committed | DB committed | Risk of loss before flush
+| Memory overhead | Lazy, only read data | All keys written | All keys written |
+| Write throughput | Medium | Low | High (async) |
+| Read-after-write guarantee | No | Yes | No (eventual) |
+| Durability | DB committed | DB committed | Risk before flush |
 
-## Panduan Adopsi & Rekomendasi Lapangan
+## Adoption Guidelines & Field Recommendations
 
-Adoption guidelines provide a decision tree mapping workload characteristics to caching strategies. Cache-Aside with Jitter serves as the pragmatic baseline, Singleflight guards hot keys, SWR satisfies ultra-low latency requirements, and Write-Behind suits non-critical high-throughput ingestion pipelines.
+Panduan adopsi menetapkan pohon keputusan praktis untuk mengimplementasikan strategi cache di lingkungan produksi. Untuk sebagian besar API read-heavy, Cache-Aside yang dipadukan dengan TTL Jitter adalah pilihan default terbaik. Ketika beban lalu lintas tinggi memicu stampede pada kunci panas, pasang Singleflight untuk layanan monolitik atau kunci terdistribusi untuk arsitektur multi-pod. Terapkan SWR jika sistem menoleransi data usang demi latensi sub-milidetik, dan gunakan Write-Behind hanya jika kehilangan data non-kritis dapat diterima.
 
-## Source
+| Recommendation | Scenario |
+|---|---|
+| Cache-Aside + TTL Jitter | Read-heavy APIs (default) |
+| Singleflight | In-process hot-key stampede mitigation |
+| XFetch beta ≥ 1.0 | Variable compute costs |
+| SWR | Ultra-low latency requirements |
+| Write-Behind + persistent queue | Non-critical high-throughput writes |
+| Write-Through | Financial/audit-sensitive data |
 
-[Software Engineering Lab 37 - Cache Invalidation Strategies](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/37-cache-invalidation-strategies), snapshot commit `eac3d80a`. Source: README, implementation, tests, and execution records. Code excerpts belong in their original package context.
+## Closing: Where Performance Meets Data Truth
+
+Cache invalidation: di mana performance bertemu kebenaran data.
+
+| Module Files | |
+|---|---|
+| internal/cache/store.go | In-memory store implementation |
+| internal/cache/repo.go | Repository pattern abstraction |
+| internal/cache/patterns.go | Write patterns: Cache-Aside, Write-Through, Write-Behind |
+| stampede.go | Stampede mitigations: Singleflight, XFetch, SWR, Jitter |
+| tests/cache_test.go | Deterministic unit tests with race detection |
+| cmd/demo/main.go | Interactive demonstration CLI |
+
+**Verification & Status**: Source: commit `eac3d80a`. Test passing and verified (Race-Clean Go 1.22). Invariants proven: 20 concurrent goroutines naive → 20 DB queries; with Singleflight → 1 DB query.
+
+**Takeaways**: Cache-aside remains the pragmatic default; write-then-invalidate ordering is critical. Write-through guarantees read-after-write synchronously. Write-behind sacrifices durability for throughput. Singleflight, XFetch, SWR, and TTL Jitter together form defense-in-depth against stampede.
+
+[Software Engineering Lab 37 - Cache Invalidation Strategies](https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/37-cache-invalidation-strategies)
