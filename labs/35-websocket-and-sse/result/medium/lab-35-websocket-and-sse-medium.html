@@ -1,539 +1,115 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebSocket vs Server-Sent Events: Panduan Arsitektur Real-Time Berdasarkan Directionality dan Kompleksitas Protokol</title>
-<style>
-    body {
-        font-family: Georgia, 'Times New Roman', Times, serif;
-        background-color: #f4f1e8;
-        color: #11283a;
-        line-height: 1.8;
-        padding: 40px 20px;
-        margin: 0;
-    }
-    .container {
-        max-width: 860px;
-        margin: 0 auto;
-        background-color: #ffffff;
-        padding: 50px 60px;
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    }
-    h1, h2, h3, h4 {
-        font-family: Arial, Helvetica, sans-serif;
-        color: #0b1b2d;
-        font-weight: bold;
-        line-height: 1.3;
-    }
-    h1 {
-        font-size: 38px;
-        margin-bottom: 15px;
-        border-bottom: 3px solid #087f76;
-        padding-bottom: 15px;
-    }
-    h2 {
-        font-size: 26px;
-        margin-top: 45px;
-        margin-bottom: 18px;
-        border-left: 5px solid #087f76;
-        padding-left: 14px;
-    }
-    h3 {
-        font-size: 20px;
-        margin-top: 30px;
-        margin-bottom: 14px;
-        color: #087f76;
-    }
-    p {
-        margin-bottom: 22px;
-        font-size: 18px;
-        text-align: justify;
-    }
-    ul, ol {
-        margin-bottom: 24px;
-        padding-left: 30px;
-        font-size: 18px;
-    }
-    li {
-        margin-bottom: 10px;
-    }
-    img.cover-image {
-        width: 100%;
-        height: auto;
-        border-radius: 6px;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    pre {
-        background-color: #0b1b2d;
-        color: #88ddbb;
-        padding: 20px;
-        border-radius: 6px;
-        overflow-x: auto;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 15px;
-        line-height: 1.5;
-        margin-bottom: 24px;
-    }
-    code {
-        font-family: 'Courier New', Courier, monospace;
-        background-color: rgba(8, 127, 118, 0.1);
-        color: #087f76;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.9em;
-    }
-    pre code {
-        background-color: transparent;
-        color: inherit;
-        padding: 0;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 30px 0;
-        font-size: 16px;
-        font-family: Arial, sans-serif;
-    }
-    th, td {
-        padding: 14px 16px;
-        text-align: left;
-        border-bottom: 1px solid #cad7cf;
-    }
-    th {
-        background-color: #0b1b2d;
-        color: #ffffff;
-        font-weight: bold;
-    }
-    tr:nth-child(even) {
-        background-color: #fcfbf9;
-    }
-    .author-meta {
-        font-size: 16px;
-        color: #52606b;
-        margin-bottom: 30px;
-        font-family: Arial, sans-serif;
-    }
-    .callout {
-        background-color: #f0f7f6;
-        border-left: 4px solid #087f76;
-        padding: 18px 22px;
-        margin: 25px 0;
-        border-radius: 0 6px 6px 0;
-        font-style: italic;
-    }
-    a {
-        color: #087f76;
-        text-decoration: underline;
-    }
-</style>
-</head>
-<body>
-<div class="container">
-    <h1>WebSocket vs Server-Sent Events: Panduan Arsitektur Real-Time Berdasarkan Directionality dan Kompleksitas Protokol</h1>
-    <div class="author-meta">
-        <strong>Penulis:</strong> Lukman / lukman-ss &nbsp;|&nbsp; 
-        <strong>Seri:</strong> Software Engineering Lab 35 &nbsp;|&nbsp; 
-        <strong>Topik:</strong> Networking & Real-Time Web Architecture
-    </div>
-
-    <img src="lab-35-websocket-and-sse-cover-id.png" alt="Cover Lab 35 WebSocket vs Server-Sent Events oleh Lukman / lukman-ss" class="cover-image">
-
-    <div class="callout">
-        <strong>Mental Model Inti:</strong> Directionality dictates the protocol: server-push belongs to SSE, bidirectional belongs to WebSocket. Jangan bayar pajak koneksi dua arah jika trafik hanya mengalir satu arah.
-    </div>
-
-    <h2>1. Pendahuluan / Latar Belakang</h2>
-    <p>
-        Dalam lanskap rekayasa sistem modern, interaktivitas real-time telah bergeser dari sekadar fitur pelengkap menjadi tuntutan mendasar. Pengguna menuntut agar perubahan data, notifikasi transaksi, pergerakan kursor kolaboratif, hingga streaming respons Large Language Model (LLM) dapat tersaji seketika di layar peramban tanpa perlu memicu penyegaran halaman manual.
-    </p>
-    <p>
-        Namun, antusiasme untuk menghadirkan pengalaman real-time sering kali diiringi oleh keputusan arsitektur yang seragam dan tidak teruji: mengasumsikan bahwa WebSocket adalah satu-satunya protokol standar untuk semua interaksi langsung antara server dan client. Pola pikir default ini menyebabkan banyak arsitek perangkat lunak secara refleks memasang WebSocket bahkan untuk fitur yang murni bersifat satu arah (unidirectional push), seperti notifikasi lonceng pada aplikasi web atau pembaruan metrik pada live dashboard pemantauan server.
-    </p>
-    <p>
-        Pilihan ini membawa beban operasional yang nyata. Menggunakan WebSocket berarti menukar kesederhanaan model request-response HTTP dengan koneksi TCP persisten non-HTTP yang memerlukan penanganan siklus hidup koneksi secara eksplisit, framing biner kustom, mekanisme heartbeat aplikasi mandiri, serta penyesuaian khusus pada lapisan proxy dan load balancer. Sebaliknya, ekosistem web modern menyediakan Server-Sent Events (SSE) yang berjalan di atas protokol HTTP standar, dirancang khusus untuk mendorong data satu arah dari server ke client dengan keandalan pemulihan koneksi otomatis bawaan browser.
-    </p>
-    <p>
-        Artikel ini mengkaji secara komprehensif perbedaan mekanistik antara WebSocket (RFC 6455) dan Server-Sent Events (WHATWG SSE) melalui implementasi murni bahasa Go tanpa ketergantungan pada library pihak ketiga. Eksperimen ini dirancang untuk membuktikan batas kapabilitas, trade-off arsitektural, dan determinisme perilaku kedua protokol pada tingkat byte dan frame jaringan.
-    </p>
-
-    <h2>2. Masalah yang Diselesaikan</h2>
-    <p>
-        Tantangan rekayasa mendasar yang dihadapi para developer adalah menentukan batas trade-off antara kapabilitas protokol dan biaya operasional. Ketika arsitektur salah dalam memilih protokol transport, tim pengembang akan berhadapan dengan salah satu dari dua kegagalan ekstrem:
-    </p>
-    <ul>
-        <li><strong>Over-Engineering via WebSocket untuk Use Case Satu Arah:</strong> Mengharuskan pengelolaan state koneksi yang sangat rentan di memori instance aplikasi, membutuhkan konfigurasi routing sticky session pada load balancer, dan memaksa penulisan ratusan baris kode client-side untuk menangani rekoneksi manual serta sinkronisasi offset data yang hilang saat koneksi terputus sesaat.</li>
-        <li><strong>Under-Engineering via HTTP Polling:</strong> Melakukan request HTTP berulang setiap beberapa detik (short polling) yang menghabiskan bandwidth jaringan dengan overhead header HTTP redundan, membebani database backend, serta menghasilkan latensi semu yang bergantung pada interval polling.</li>
-    </ul>
-
-    <h3>Skenario Nyata: Ledakan Rekoneksi Gateway Notifikasi</h3>
-    <p>
-        Mari telaah studi kasus konkret pada sistem notifikasi perbankan digital. Sistem ini dirancang untuk melayani 50.000 pengguna aktif bersamaan. Arsitek awal memilih WebSocket dengan asumsi fleksibilitas masa depan. Karena WebSocket adalah koneksi raw TCP berstatus stateful, status socket tersimpan di memori instance server tertentu.
-    </p>
-    <p>
-        Ketika instans gateway di-deploy ulang (rolling restart) untuk pembaruan sistem, 25.000 koneksi WebSocket yang terhubung ke instans tersebut putus secara mendadak. Karena spesifikasi RFC 6455 tidak mendefinisikan mekanisme rekoneksi otomatis, pustaka JavaScript di peramban segera memicu loop rekoneksi manual. Hasilnya adalah badai rekoneksi (thundering herd) yang melumpuhkan gateway baru karena harus memproses puluhan ribu jabat tangan HTTP Upgrade secara simultan. Lebih buruk lagi, event notifikasi yang terkirim selama periode pemutusan koneksi hilang sepenuhnya karena protokol tidak menyediakan offset pelacakan event.
-    </p>
-    <p>
-        Sebaliknya, jika sistem menggunakan Server-Sent Events (SSE), load balancer dapat mendistribusikan koneksi streaming ke sembarang node tanpa sticky session. Saat satu node restart, API <code>EventSource</code> di peramban secara otomatis menyambung kembali dengan jeda backoff bawaan dan menyertakan header <code>Last-Event-ID</code>. Server baru membaca header tersebut, memutar ulang notifikasi yang terlewat dari buffer penyimpanan, dan menyambungkan kembali client ke stream utama tanpa kehilangan data sama sekali.
-    </p>
-
-    <h2>3. Arsitektur dan Desain Solusi</h2>
-    <p>
-        Untuk membongkar mekanika internal kedua protokol tanpa bias abstraksi framework pihak ketiga, Lab 35 mengimplementasikan server terpadu menggunakan <strong>Go Standard Library</strong> murni (paket <code>net/http</code>, <code>sync</code>, dan <code>crypto/sha1</code>). Desain ini mengekspos interaksi langsung antara aplikasi dan socket TCP kernel.
-    </p>
-
-    <pre><code>┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT LAYER                             │
-│  ┌───────────────────────────┐   ┌───────────────────────────┐  │
-│  │     EventSource (SSE)     │   │     WebSocket (RFC 6455)  │  │
-│  └─────────────┬─────────────┘   └─────────────┬─────────────┘  │
-└────────────────┼───────────────────────────────┼────────────────┘
-                 │                               │
-            HTTP GET /sse                  HTTP GET /ws
-          (text/event-stream)            (101 Switching Protocols)
-                 │                               │
-┌────────────────┼───────────────────────────────┼────────────────┐
-│                ▼                               ▼                │
-│  ┌───────────────────────────┐   ┌───────────────────────────┐  │
-│  │         SSE Hub           │   │    WebSocket Upgrader     │  │
-│  │  - In-Memory Ring/History │   │  - Connection Hijacking   │  │
-│  │  - Last-Event-ID Replay   │   │  - RFC 6455 Framing       │  │
-│  │  - Non-blocking Broadcast │   │  - Bitwise XOR Unmasking  │  │
-│  └─────────────▲─────────────┘   └───────────────────────────┘  │
-│                │                                                │
-│         POST /publish (Broadcast API)                           │
-│                                                                 │
-│                   SERVER CORE (net/http ServeMux)               │
-└─────────────────────────────────────────────────────────────────┘</code></pre>
-
-    <p>
-        Komponen utama sistem terbagi menjadi tiga modul yang saling terisolasi namun diorkestrasi di bawah satu <code>http.ServeMux</code> terpadu:
-    </p>
-    <ol>
-        <li><strong>SSE Hub (<code>internal/sse</code>):</strong> Mengelola siklus hidup koneksi peramban yang berlangganan stream. Menyimpan riwayat event dengan sequence ID monotonik, menangani pemutaran ulang (replay) berdasarkan offset <code>Last-Event-ID</code>, dan menyalurkan broadcast secara non-blocking melalui buffer Go channel untuk melindungi stabilitas server saat menghadapi client lambat (slow consumer).</li>
-        <li><strong>WebSocket Engine (<code>internal/ws</code>):</strong> Mengelola transisi dari request HTTP menjadi koneksi raw TCP melalui interface <code>http.Hijacker</code>. Bertanggung jawab atas kalkulasi kriptografi jabat tangan (handshake challenge), penyusunan frame biner, pemrosesan panjang payload adaptif (7-bit, 16-bit, 64-bit), dan bitwise XOR unmasking.</li>
-        <li><strong>Unified Server Router (<code>internal/server</code>):</strong> Menyatukan endpoint <code>/sse</code>, <code>/ws</code>, dan <code>/publish</code> untuk mendemonstrasikan bahwa sebuah aplikasi Go dapat melayani kedua paradigma secara berdampingan tanpa konflik alokasi port.</li>
-    </ol>
-
-    <h2>4. Implementasi Step-by-Step</h2>
-    <p>
-        Implementasi kode aktual pada Lab 35 mengungkap detail teknis bagaimana kedua protokol dibangun dari tingkat paling primitif.
-    </p>
-
-    <h3>Langkah 1: Formatting Frame Teks SSE Sesuai Spesifikasi WHATWG</h3>
-    <p>
-        Spesifikasi WHATWG menetapkan format baris teks ketat untuk SSE. Setiap field diberi prefiks nama field, diikuti titik dua dan spasi. Jika payload data memiliki beberapa baris (multi-line), setiap baris harus diawali prefiks <code>data: </code> secara terpisah sebelum diakhiri dengan delimiter ganda <code>\n\n</code>.
-    </p>
-
-    <pre><code>// internal/sse/sse.go:19-36
-func (e Event) Format() []byte {
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WebSocket vs Server-Sent Events: Memilih Protokol Real-Time Berdasarkan Directionality dan Kompleksitas</title><meta name="description" content="Panduan arsitektur komparatif WebSocket (RFC 6455) vs Server-Sent Events (WHATWG SSE) menggunakan Go murni tanpa library eksternal."><meta property="og:title" content="WebSocket vs Server-Sent Events: Memilih Protokol Real-Time Berdasarkan Directionality dan Kompleksitas"><meta property="og:description" content="Panduan arsitektur komparatif WebSocket (RFC 6455) vs Server-Sent Events (WHATWG SSE) menggunakan Go murni tanpa library eksternal."><style>body{margin:0;background:#f4f1e8;color:#11283a;font:19px/1.75 Georgia,serif}article{max-width:850px;margin:48px auto;padding:0 28px 70px}h1,h2,h3,.subtitle{font-family:Arial,sans-serif;line-height:1.25}h1{font-size:43px}h2{margin-top:44px;font-size:29px}.subtitle{font-size:22px;color:#52606b}img{width:100%;height:auto;border-radius:8px}pre{background:#0b1b2d;color:#d8e9df;padding:22px;overflow:auto;font:14px/1.65 monospace;border-radius:8px}table{width:100%;border-collapse:collapse;font:16px/1.5 Arial,sans-serif}td,th{padding:13px;border:1px solid #cad7cf;text-align:left}th{background:#0b1b2d;color:white}a{color:#087f76}</style></head><body><article><h1>WebSocket vs Server-Sent Events: Memilih Protokol Real-Time Berdasarkan Directionality dan Kompleksitas</h1><p class="subtitle">Membedah perbedaan fundamental RFC 6455 full-duplex binary framing vs WHATWG text/event-stream push, mekanisme Last-Event-ID resumption, dan perbandingan implementasi murni di Go 1.22+.</p><p>Lukman / lukman-ss · Software Engineering Lab 35</p><img src="lab-35-websocket-and-sse-cover-id.png" alt="Monitor CRT retro menampilkan alur framing RFC 6455 vs text/event-stream HTTP streaming, kode Go murni, dan arsitektur WebSocket vs SSE oleh Lukman / lukman-ss"><h2>Dilema Protokol Real-Time Modern</h2><p>Banyak tim rekayasa perangkat lunak menganggap WebSocket sebagai standar de facto untuk semua kebutuhan real-time. Padahal, memasang WebSocket untuk use case satu arah seperti notifikasi atau live dashboard memperkenalkan overhead operasional yang tidak perlu. WebSocket memaksakan upgrade TCP, heartbeat kustom, dan logika reconnection manual di aplikasi. Selain itu, reverse proxy dan load balancer memerlukan konfigurasi sticky session yang rumit. State connection yang terus hidup membebani memori server saat client sebenarnya hanya membaca data pasif. Kegagalan reconnection storm dapat melumpuhkan gateway saat restart, dan debugging framing biner jauh lebih sulit dibanding stream teks standar.</p><h2>Mental Model: Directionality Rule</h2><p>Keputusan arsitektural dapat disederhanakan melalui satu pertanyaan fundamental: apakah client perlu mengirim pesan ke server secara independen pada saluran yang sama? Jika komunikasi hanya satu arah dari server ke client, Server-Sent Events (SSE) berbasis HTTP standar adalah solusi paling bersih. Contoh umum mencakup notifikasi sistem, ticker saham, atau streaming token LLM. Sebaliknya, WebSocket (RFC 6455) diwajibkan hanya ketika komunikasi dua arah (full-duplex) berlatensi rendah mutlak diperlukan secara simultan, seperti pada chat interaktif, collaborative canvas, atau multiplayer game.</p><h2>Topologi Arsitektur Lab 35</h2><p>Lab 35 mendemonstrasikan kedua protokol di bawah satu HTTP ServeMux pada package server. Pendekatan zero external dependencies membongkar bagaimana Go standard library mampu menangani streaming HTTP persisten melalui interface http.Flusher sekaligus protokol non-HTTP melalui interface http.Hijacker.</p><pre><code>[Client] ─── GET /sse ─────────► [SSE Hub Handler] (text/event-stream + Last-Event-ID)
+[Client] ─── GET /ws ──────────► [WS Upgrader]     (101 Switching Protocols + XOR Framing)
+[Client] ─── POST /publish ────► [Broadcast Bus]  (In-memory Hub Distribution)</code></pre><p>Komponen diisolasi secara tegas: internal/sse mengelola Hub broadcast dengan buffer history dan Last-Event-ID, sedangkan internal/ws mengimplementasikan parser RFC 6455, unmasking XOR, serta penanganan frame text dan binary.</p><h2>Anatomi Server-Sent Events (SSE)</h2><p>Spesifikasi WHATWG mendefinisikan SSE sebagai respons HTTP berdurasi panjang dengan format text/event-stream. Server mengirim header standar:</p><table><tr><th>Header HTTP</th><th>Fungsi Utama</th></tr><tr><td>Content-Type</td><td>text/event-stream (wajib untuk browser EventSource)</td></tr><tr><td>Cache-Control</td><td>no-cache (mencegah caching di proxy perantara)</td></tr><tr><td>Connection</td><td>keep-alive (menjaga socket TCP tetap terbuka)</td></tr><tr><td>X-Accel-Buffering</td><td>no (menonaktifkan proxy buffering di Nginx)</td></tr></table><p>Setiap event terdiri dari field id, event, retry, dan data. Setiap baris diakhiri karakter \n tunggal, dan akhir dari satu blok frame event ditandai dengan \n\n ganda.</p><h2>Format Event SSE: Multi-Line Framing</h2><p>Method Format() pada struct Event mematuhi aturan WHATWG secara ketat. Jika payload data memiliki karakter newline, setiap baris wajib diawali prefiks 'data: '. Browser EventSource akan secara otomatis menggabungkan kembali baris-baris tersebut dengan newline saat diterima. Karakter double newline di akhir menutup frame dan memicu event dispatch di client.</p><pre><code>func (e Event) Format() []byte {
     var sb strings.Builder
-    if e.ID > 0 {
-        fmt.Fprintf(&sb, "id: %d\n", e.ID)
-    }
-    if e.Event != "" {
-        fmt.Fprintf(&sb, "event: %s\n", e.Event)
-    }
-    if e.Retry > 0 {
-        fmt.Fprintf(&sb, "retry: %d\n", e.Retry)
-    }
+    if e.ID &gt; 0 { fmt.Fprintf(&amp;sb, "id: %d\n", e.ID) }
+    if e.Event != "" { fmt.Fprintf(&amp;sb, "event: %s\n", e.Event) }
+    if e.Retry &gt; 0 { fmt.Fprintf(&amp;sb, "retry: %d\n", e.Retry) }
     lines := strings.Split(e.Data, "\n")
     for _, l := range lines {
-        fmt.Fprintf(&sb, "data: %s\n", l)
+        fmt.Fprintf(&amp;sb, "data: %s\n", l)
     }
     sb.WriteString("\n")
     return []byte(sb.String())
-}</code></pre>
-
-    <h3>Langkah 2: Mekanisme Resumption dan Broadcast pada SSE Hub</h3>
-    <p>
-        Hub bertindak sebagai broker in-memory. Ketika client baru terhubung, Hub memeriksa parameter <code>lastID</code>. Semua event di riwayat yang memiliki sequence ID lebih besar dari <code>lastID</code> dikumpulkan ke dalam slice replay. Channel client dibuat dengan kapasitas buffer 64. Saat broadcast dipicu, select non-blocking memastikan subscriber yang macet tidak menahan pengiriman pesan ke subscriber lainnya.
-    </p>
-
-    <pre><code>// internal/sse/sse.go:52-96
-func (h *Hub) Broadcast(eventType, data string) Event {
-    h.mu.Lock()
-    defer h.mu.Unlock()
-
-    evt := Event{
-        ID:    h.nextID,
-        Event: eventType,
-        Data:  data,
-        Retry: 2000,
-    }
-    h.nextID++
-    h.history = append(h.history, evt)
-
-    for ch := range h.clients {
-        select {
-        case ch <- evt:
-        default: // Lindungi server dari slow consumer
-        }
-    }
-    return evt
-}
-
-func (h *Hub) Subscribe(lastID int) (chan Event, []Event, func()) {
-    h.mu.Lock()
-    defer h.mu.Unlock()
-
+}</code></pre><h2>SSE Hub: Resumption via Last-Event-ID</h2><p>Fitur paling unggul dari SSE adalah kemampuan auto-reconnect bawaan yang dipadukan dengan header Last-Event-ID. Ketika koneksi putus akibat gangguan jaringan, browser secara otomatis menyambung kembali dan mengirimkan ID terakhir yang diterimanya. Hub di backend menyaring riwayat in-memory dan langsung memutar ulang event yang terlewat sebelum menyambungkan client ke antrean live.</p><pre><code>func (h *Hub) Subscribe(lastID int) (chan Event, []Event, func()) {
+    h.mu.Lock(); defer h.mu.Unlock()
     var replay []Event
     for _, evt := range h.history {
-        if evt.ID > lastID {
-            replay = append(replay, evt)
-        }
+        if evt.ID &gt; lastID { replay = append(replay, evt) }
     }
-
     ch := make(chan Event, 64)
     h.clients[ch] = struct{}{}
-
-    unsubscribe := func() {
+    return ch, replay, func() {
         h.mu.Lock()
-        defer h.mu.Unlock()
         delete(h.clients, ch)
         close(ch)
+        h.mu.Unlock()
     }
-
-    return ch, replay, unsubscribe
-}</code></pre>
-
-    <h3>Langkah 3: Streaming HTTP dengan Flusher dan Keep-Alive Heartbeat</h3>
-    <p>
-        Di lapisan HTTP handler, server memastikan respons tidak tertahan di buffer Go runtime dengan memanfaatkan <code>http.Flusher</code>. Header <code>X-Accel-Buffering: no</code> secara eksplisit ditambahkan untuk menginstruksikan reverse proxy Nginx agar segera menyalurkan setiap byte data ke client. Ticker 15 detik mengirim komentar baris keep-alive (<code>: keep-alive\n\n</code>) agar socket tidak ditutup oleh timeout firewall jaringan.
-    </p>
-
-    <pre><code>// internal/sse/sse.go:98-151
-func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    flusher, ok := w.(http.Flusher)
-    if !ok {
-        http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-        return
-    }
-
-    w.Header().Set("Content-Type", "text/event-stream")
-    w.Header().Set("Cache-Control", "no-cache")
-    w.Header().Set("Connection", "keep-alive")
-    w.Header().Set("X-Accel-Buffering", "no")
-
-    lastID := 0
-    if idHeader := r.Header.Get("Last-Event-ID"); idHeader != "" {
-        if id, err := strconv.Atoi(idHeader); err == nil {
-            lastID = id
-        }
-    }
-
-    ch, replay, unsub := h.Subscribe(lastID)
-    defer unsub()
-
-    for _, evt := range replay {
+}</code></pre><p>Mekanisme ini memberikan jaminan konsistensi tanpa mengharuskan engineer menulis logika reconnect dan recovery kustom di sisi client aplikasi.</p><h2>Loop Streaming HTTP & Heartbeat</h2><p>Koneksi SSE memerlukan http.Flusher agar frame teks terkirim ke socket kernel seketika tanpa tertahan di buffer Go runtime. Loop select memantau sinyal pemutusan dari context request, event baru dari broadcast channel, dan ticker 15 detik yang mengirim komentar ': keep-alive\n\n' untuk mencegah reverse proxy memutus koneksi akibat idle timeout.</p><pre><code>flusher, ok := w.(http.Flusher)
+for {
+    select {
+    case &lt;-ctx.Done(): return
+    case evt, ok := &lt;-ch:
+        if !ok { return }
         w.Write(evt.Format())
+        flusher.Flush()
+    case &lt;-ticker.C:
+        w.Write([]byte(": keep-alive\n\n"))
+        flusher.Flush()
     }
-    flusher.Flush()
+}</code></pre><p>Karakter titik dua (':') di awal baris diabaikan oleh parser EventSource browser sesuai spesifikasi WHATWG, menjadikannya sarana ideal untuk heartbeat.</p><h2>Anatomi Protokol WebSocket (RFC 6455)</h2><p>WebSocket distandardisasi oleh IETF RFC 6455 untuk menghadirkan kanal dua arah berlatensi rendah atas koneksi TCP tunggal. Koneksi diawali dengan handshake HTTP/1.1 biasa yang menyertakan header Upgrade: websocket dan Sec-WebSocket-Key acak 16-byte base64. Server merespons dengan HTTP/1.1 101 Switching Protocols. Setelah status 101 dikirimkan, socket dilepas sepenuhnya dari HTTP parser (Hijacked) dan beralih ke framing biner raw TCP berarah ganda yang mendukung teks UTF-8, data biner mentah, serta control frames (Close, Ping, Pong).</p><h2>Handshake Upgrade & Connection Hijacking</h2><p>Fungsi Upgrade() mendemonstrasikan kalkulasi kriptografis Sec-WebSocket-Accept sesuai RFC 6455. Dengan memanggil w.(http.Hijacker).Hijack(), Go melepaskan kendali socket TCP dari net/http runtime. Server menulis respons 101 Switching Protocols secara langsung ke buffer TCP dan membungkus socket ke dalam struct Conn kustom.</p><pre><code>h := sha1.New()
+h.Write([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+accept := base64.StdEncoding.EncodeToString(h.Sum(nil))
 
-    ctx := r.Context()
-    ticker := time.NewTicker(15 * time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case evt, ok := <-ch:
-            if !ok { return }
-            w.Write(evt.Format())
-            flusher.Flush()
-        case <-ticker.C:
-            w.Write([]byte(": keep-alive\n\n"))
-            flusher.Flush()
-        }
-    }
-}</code></pre>
-
-    <h3>Langkah 4: WebSocket Handshake Kriptografis dan Hijacking TCP</h3>
-    <p>
-        Pada sisi WebSocket, proses jabat tangan RFC 6455 diawali dengan memvalidasi keberadaan header <code>Upgrade: websocket</code> dan membaca nilai <code>Sec-WebSocket-Key</code>. Kunci ini digabungkan dengan GUID standar <code>258EAFA5-E914-47DA-95CA-C5AB0DC85B11</code>, di-hash menggunakan SHA-1, dan dikonversi ke Base64 untuk membentuk header <code>Sec-WebSocket-Accept</code>. Interface <code>http.Hijacker</code> kemudian dipanggil untuk memutuskan koneksi dari siklus hidup HTTP normal.
-    </p>
-
-    <pre><code>// internal/ws/ws.go:31-76
-func Upgrade(w http.ResponseWriter, r *http.Request) (*Conn, error) {
-    key := r.Header.Get("Sec-WebSocket-Key")
-    h := sha1.New()
-    h.Write([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
-    accept := base64.StdEncoding.EncodeToString(h.Sum(nil))
-
-    hj, ok := w.(http.Hijacker)
-    if !ok {
-        return nil, errors.New("cannot hijack connection")
-    }
-
-    netConn, bufrw, err := hj.Hijack()
-    if err != nil {
-        return nil, err
-    }
-
-    resp := "HTTP/1.1 101 Switching Protocols\r\n" +
-        "Upgrade: websocket\r\n" +
-        "Connection: Upgrade\r\n" +
-        "Sec-WebSocket-Accept: " + accept + "\r\n\r\n"
-
-    bufrw.WriteString(resp)
-    bufrw.Flush()
-
-    return &Conn{rw: bufrw, closer: netConn}, nil
-}</code></pre>
-
-    <h3>Langkah 5: Decoding Frame Biner RFC 6455 dan Bitwise XOR Unmasking</h3>
-    <p>
-        Setelah pembajakan soket selesai, parsing data dilakukan pada tingkat bit. Dua byte pertama frame menentukan Opcode dan panjang payload. Jika bit MASK menyala (wajib untuk pesan dari client ke server sesuai RFC 6455 Section 5.1), 4 byte berikutnya adalah masking key. Payload data kemudian dipulihkan menggunakan operasi bitwise XOR: <code>data[i] ^= mask[i % 4]</code>.
-    </p>
-
-    <pre><code>// internal/ws/ws.go:84-127
-func (c *Conn) ReadFrame() (opcode byte, payload []byte, err error) {
-    var head [2]byte
-    io.ReadFull(c.rw, head[:])
-
-    opcode = head[0] & 0x0F
-    masked := (head[1] & 0x80) != 0
-    length := uint64(head[1] & 0x7F)
-
-    if length == 126 {
-        var ext [2]byte
-        io.ReadFull(c.rw, ext[:])
-        length = uint64(binary.BigEndian.Uint16(ext[:]))
-    } else if length == 127 {
-        var ext [8]byte
-        io.ReadFull(c.rw, ext[:])
-        length = binary.BigEndian.Uint64(ext[:])
-    }
-
-    var mask [4]byte
-    if masked {
-        io.ReadFull(c.rw, mask[:])
-    }
-
-    data := make([]byte, length)
+hj, ok := w.(http.Hijacker)
+netConn, bufrw, err := hj.Hijack()
+resp := "HTTP/1.1 101 Switching Protocols\r\n" +
+    "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+    "Sec-WebSocket-Accept: " + accept + "\r\n\r\n"
+bufrw.WriteString(resp); bufrw.Flush()</code></pre><p>Setelah proses hijack berhasil, net/http tidak lagi mengelola timeout atau penutupan socket. Aplikasi memegang tanggung jawab penuh atas daur hidup I/O socket tersebut.</p><h2>Struktur Frame Biner RFC 6455</h2><p>Struktur frame RFC 6455 dirancang sangat hemat byte. Header paling ringkas hanya membutuhkan 2 byte. Panjang payload dikodekan secara adaptif: 7 bit untuk ukuran hingga 125 byte, uint16 BigEndian untuk ukuran 126–65.535 byte, dan uint64 BigEndian untuk ukuran di atas 65.535 byte.</p><pre><code> 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-------+-+-------------+-------------------------------+
+|F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+|I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+|N|V|V|V|       |S|             |   (if payload len==126/127)   |
+| |1|2|3|       |K|             |                               |
++-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+|     Extended payload length continued, if payload len == 127  |
++ - - - - - - - - - - - - - - - +-------------------------------+
+|                               |Masking-key, if MASK set to 1  |
++-------------------------------+-------------------------------+
+| Masking-key (continued)       |          Payload Data         |
++-------------------------------- - - - - - - - - - - - - - - - +
+:                     Payload Data continued ...                :
++---------------------------------------------------------------+</code></pre><p>Frame dari client ke server wajib dimasking dengan 4-byte key untuk mencegah serangan cache poisoning pada proxy perantara, sedangkan frame dari server ke client dilarang dimasking.</p><h2>Parsing Frame & Operasi XOR Masking</h2><p>Method ReadFrame() mengekstrak header biner dari stream TCP. Jika bit MASK aktif, server membaca 4 byte masking key. Setiap byte payload kemudian di-XOR dengan mask[i % 4] untuk memulihkan payload asli client secara bitwise. Sifat simetris XOR ((A ^ B) ^ B = A) memungkinkan decoding in-place tanpa alokasi buffer sekunder pada heap.</p><pre><code>var head [2]byte
+io.ReadFull(c.rw, head[:])
+opcode = head[0] &amp; 0x0F
+masked := (head[1] &amp; 0x80) != 0
+length := uint64(head[1] &amp; 0x7F)
+// ... handle extended length ...
+if masked {
+    io.ReadFull(c.rw, mask[:])
     io.ReadFull(c.rw, data)
-
-    if masked {
-        for i := range data {
-            data[i] ^= mask[i%4] // Pemulihan payload asli via XOR
-        }
+    for i := range data {
+        data[i] ^= mask[i%4] // Bitwise XOR unmasking
     }
-
-    return opcode, data, nil
-}</code></pre>
-
-    <h2>5. Hasil Pengujian / Test Output</h2>
-    <p>
-        Seluruh logika framing, konkurensi, dan integritas data diverifikasi secara deterministik menggunakan pengujian unit dan integrasi terotomasi di lingkungan Go 1.22 dengan Race Detector aktif.
-    </p>
-
-    <pre><code>$ go test -v -race ./...
-=== RUN   TestSSE_Formatting
---- PASS: TestSSE_Formatting (0.00s)
-=== RUN   TestSSE_LastEventID_Resumption
---- PASS: TestSSE_LastEventID_Resumption (0.00s)
-=== RUN   TestWebSocket_TextAndBinary
---- PASS: TestWebSocket_TextAndBinary (0.00s)
-=== RUN   TestSSE_Concurrency
---- PASS: TestSSE_Concurrency (0.05s)
-PASS
-ok      labs/35-websocket-and-sse/tests 1.559s</code></pre>
-
-    <h3>Analisis Verifikasi Kuantitatif</h3>
-    <ul>
-        <li><strong>Verifikasi Resumption (<code>TestSSE_LastEventID_Resumption</code>):</strong> Tiga event dengan urutan ID 1, 2, dan 3 dipublikasikan. Client melakukan rekoneksi dengan menyertakan header <code>Last-Event-ID: 1</code>. Pengujian mengonfirmasi bahwa event 1 dilewati sepenuhnya, sedangkan event 2 dan 3 diterima secara berurutan tanpa kecacatan isi.</li>
-        <li><strong>Integritas Biner WebSocket (<code>TestWebSocket_TextAndBinary</code>):</strong> Client mengirimkan byte array biner <code>0x01, 0x02, 0x03, 0x04</code>. Server merespons dengan membalikkan urutan byte (Opcode 0x2) menjadi <code>0x04, 0x03, 0x02, 0x01</code>. Keberhasilan test ini membuktikan bahwa transmisi biner murni berlangsung tanpa korupsi karakter atau konversi string yang tidak diinginkan.</li>
-        <li><strong>Stabilitas Konkurensi (<code>TestSSE_Concurrency</code>):</strong> Sepuluh client subscriber mendengarkan channel secara bersamaan sementara lima broadcast dipicu dari goroutine paralel. Pengujian lolos tanpa terdeteksi data race oleh Go runtime (race clean), mengonfirmasi keandalan sinkronisasi <code>sync.RWMutex</code>.</li>
-    </ul>
-
-    <h2>6. Perbandingan Before vs After</h2>
-    <p>
-        Tabel berikut merangkum perbedaan arsitektural dan operasional antara pendekatan umum (WebSocket default) versus pendekatan selektif berbasis arah komunikasi (Directionality Rule):
-    </p>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Dimensi Arsitektur</th>
-                <th>Pendekatan Naif (Serba WebSocket)</th>
-                <th>Pendekatan Terstruktur (SSE + WS Selektif)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><strong>Protokol Jaringan</strong></td>
-                <td>Raw TCP non-HTTP setelah jabat tangan Upgrade</td>
-                <td>Standard HTTP/1.1 atau HTTP/2 Streaming (SSE)</td>
-            </tr>
-            <tr>
-                <td><strong>Mekanisme Rekoneksi</strong></td>
-                <td>Manual kustom pada JavaScript client; rentan bug</td>
-                <td>Bawaan spesifikasi browser (EventSource API)</td>
-            </tr>
-            <tr>
-                <td><strong>Sinkronisasi Event Tertinggal</strong></td>
-                <td>Harus didesain dan diimplementasikan sendiri di atas WS</td>
-                <td>Otomatis via header standar <code>Last-Event-ID</code></td>
-            </tr>
-            <tr>
-                <td><strong>Toleransi Proxy & Firewall</strong></td>
-                <td>Tinggi risiko diblokir firewall ketat / butuh sticky routing</td>
-                <td>Kompatibel penuh dengan reverse proxy standar</td>
-            </tr>
-            <tr>
-                <td><strong>Dukungan HTTP/2 Multiplexing</strong></td>
-                <td>Memerlukan RFC 8441 CONNECT yang jarang didukung</td>
-                <td>Native multiplexing (puluhan stream dalam 1 koneksi TCP)</td>
-            </tr>
-            <tr>
-                <td><strong>Beban Memori Instance</strong></td>
-                <td>Tinggi (stateful socket TCP untuk setiap pembaca pasif)</td>
-                <td>Minimal (streaming response stateless berbasis buffer HTTP)</td>
-            </tr>
-        </tbody>
-    </table>
-
-    <h2>7. Trade-off & Batasan Implementasi</h2>
-    <p>
-        Meskipun Server-Sent Events menawarkan banyak keunggulan dalam kesederhanaan, protokol ini memiliki batasan yang tidak dapat dikompromikan. Memahami trade-off ini sangat krusial bagi arsitek perangkat lunak sebelum mengambil keputusan final:
-    </p>
-    <ul>
-        <li><strong>Keterbatasan Tipe Payload pada SSE:</strong> Spesifikasi WHATWG membatasi SSE secara eksklusif untuk payload teks UTF-8. Jika aplikasi harus mengirim data biner terkompresi (seperti format Protobuf atau audio PCM mentah), data harus di-encode ke Base64 terlebih dahulu. Hal ini menghasilkan penambahan ukuran payload sekitar 33%. Sebaliknya, WebSocket mendukung frame biner asli (Opcode 0x2) tanpa overhead encoding.</li>
-        <li><strong>Batas Koneksi HTTP/1.1:</strong> Pada lingkungan yang masih menggunakan HTTP/1.1, peramban membatasi koneksi maksimal 6 socket persisten per domain host. Jika pengguna membuka beberapa tab browser secara bersamaan, saluran SSE akan mengalami starvation. Masalah ini sepenuhnya terselesaikan saat beralih ke HTTP/2 atau HTTP/3 berkat fitur stream multiplexing.</li>
-        <li><strong>Batasan Khusus Lab 35:</strong> Implementasi pada repositori ini dirancang untuk tujuan pedagogis dengan isolasi mekanika protokol. Masking key pada WebSocket dialer menggunakan nilai konstan (bukan random cryptographically secure), parser frame belum mendukung fragmented continuation (Opcode 0x0), dan buffer riwayat SSE disimpan dalam slice memori tak terbatas (unbounded) yang membutuhkan penggusuran (eviction ring buffer) untuk penggunaan produksi.</li>
-    </ul>
-
-    <h2>8. Kapan Menggunakan Pattern Ini</h2>
-    <p>
-        Gunakan panduan keputusan berikut untuk menentukan protokol transport real-time pada arsitektur Anda:
-    </p>
-
-    <h3>Pilih Server-Sent Events (SSE) Jika:</h3>
-    <ul>
-        <li><strong>Karakteristik Trafik Unidirectional:</strong> Aliran data murni bergerak dari server ke client. Contoh ideal mencakup: sistem notifikasi aktivitas pengguna, live update skor pertandingan olahraga, pembaruan harga bursa saham (ticker), dan streaming respons kata-demi-kata pada aplikasi berbasis Generative AI / Large Language Models (sebagaimana diterapkan oleh OpenAI API dan Anthropic Claude).</li>
-        <li><strong>Mengutamakan Kemudahan Operasional:</strong> Arsitektur sistem mengandalkan infrastruktur cloud standar dengan lapisan reverse proxy (Nginx, Envoy, Cloudflare) dan tidak menginginkan kompleksitas konfigurasi sticky session.</li>
-        <li><strong>Kebutuhan Auto-Healing Tinggi:</strong> Aplikasi berjalan pada jaringan mobile yang sering mengalami pemutusan koneksi sesaat, di mana pemulihan posisi data otomatis via <code>Last-Event-ID</code> sangat krusial.</li>
-    </ul>
-
-    <h3>Pilih WebSocket Jika:</h3>
-    <ul>
-        <li><strong>Karakteristik Trafik True Full-Duplex:</strong> Client harus terus-menerus mengirimkan data masukan ke server dengan latensi serendah mungkin pada saluran yang sama. Contoh: kanvas kolaboratif real-time (seperti Figma), game multiplayer, aplikasi trading finansial frekuensi tinggi dengan eksekusi instan, atau aplikasi video/audio conferencing signaling.</li>
-        <li><strong>Payload Biner Murni:</strong> Sistem mentransmisikan data audio, video chunking, atau format serialisasi biner bervolume tinggi di mana overhead encoding Base64 tidak dapat ditoleransi.</li>
-    </ul>
-
-    <h2>9. Referensi & Commit Hash</h2>
-    <p>
-        Implementasi ini bersumber langsung dari eksperimen terverifikasi pada repositori laboratorium rekayasa perangkat lunak:
-    </p>
-    <ul>
-        <li><strong>Repositori:</strong> <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/35-websocket-and-sse">Software Engineering Lab 35: WebSocket and Server-Sent Events</a></li>
-        <li><strong>Snapshot Commit:</strong> <code>b48fe6c30d0b3635f36b8549c5621bbf5ce7c5f8</code></li>
-        <li><strong>Daftar Berkas Terverifikasi:</strong> <code>internal/sse/sse.go</code>, <code>internal/ws/ws.go</code>, <code>internal/server/server.go</code>, <code>cmd/demo/main.go</code>, dan <code>tests/protocol_test.go</code></li>
-        <li><strong>Spesifikasi Formal:</strong> IETF RFC 6455 (The WebSocket Protocol), RFC 8441 (Bootstrapping WebSockets with HTTP/2), dan WHATWG HTML Living Standard (Section 9.2 Server-Sent Events).</li>
-    </ul>
-</div>
-</body>
-</html>
+}</code></pre><h2>WriteFrame: Konstruksi Frame Outbound</h2><p>Method WriteFrame() menyusun paket biner untuk dikirim kembali ke socket client. Mutex internal menjamin bahwa penulisan frame bersifat atomic sehingga dua goroutine tidak mencampur aduk byte frame di TCP stream. Bit FIN diset ke 0x80 untuk menandakan frame lengkap tanpa fragmentasi kelanjutan.</p><pre><code>func (c *Conn) WriteFrame(opcode byte, payload []byte, mask bool) error {
+    c.mu.Lock(); defer c.mu.Unlock()
+    var buf []byte
+    b0 := byte(0x80) | (opcode &amp; 0x0F) // FIN=1
+    buf = append(buf, b0)
+    // ... encode length (7, 16, or 64 bit) ...
+    if mask {
+        // append maskKey and maskedPayload
+    } else {
+        buf = append(buf, payload...)
+    }
+    _, err := c.rw.Write(buf)
+    return err
+}</code></pre><h2>Server Loop: Echo Teks & Reversal Biner</h2><p>Loop pemrosesan WebSocket di server menangani berbagai tipe frame kontrol dan data. Untuk teks, server menambahkan prefiks 'echo: '. Untuk data biner, payload dibalik urutan byte-nya sebelum dikirim kembali. Reversal dari 0xDEADBEEF menjadi 0xEFBEADDE memberikan bukti deterministik bahwa protokol mampu mentransfer byte mentah secara transparan tanpa distorsi encoding karakter.</p><pre><code>switch op {
+case ws.OpClose:
+    conn.WriteFrame(ws.OpClose, nil, false); return
+case ws.OpPing:
+    conn.WriteFrame(ws.OpPong, data, false)
+case ws.OpText:
+    conn.WriteFrame(ws.OpText, append([]byte("echo: "), data...), false)
+case ws.OpBinary:
+    rev := make([]byte, len(data))
+    for i := range data { rev[i] = data[len(data)-1-i] }
+    conn.WriteFrame(ws.OpBinary, rev, false)
+}</code></pre><h2>Eksekusi Demo: Bukti Terminal Langsung</h2><p>Eksekusi cmd/demo memvalidasi klaim teoritis kedua protokol secara nyata. Pada bagian SSE, pengiriman Last-Event-ID: 1 berhasil mengabaikan event pertama dan memutar ulang event kedua. Pada bagian WebSocket, frame teks di-echo dan frame biner DEADBEEF berhasil dibalik menjadi EFBEADDE secara sempurna.</p><pre><code>&gt; 1. SSE: Unidirectional Server Push with Last-Event-ID
+Client connected with Last-Event-ID: 1. Received resumed events:
+  [SSE Stream] id: 2
+  [SSE Stream] event: news
+  [SSE Stream] retry: 2000
+  [SSE Stream] data: Update: Faster routing in net/http
+&gt; 2. WebSocket: Full-Duplex Text and Binary Protocol
+Client sending WS text frame: "Hello RFC 6455"
+Server responded with Opcode 0x1 (Text): "echo: Hello RFC 6455"
+Client sending WS binary frame: DEADBEEF
+Server responded with Opcode 0x2 (Binary): EFBEADDE
+Binary frame payload verified successfully.</code></pre><h2>Hasil Pengujian Test Suite & Concurrency</h2><p>Seluruh rangkaian pengujian di tests/protocol_test.go lulus dengan Go Race Detector aktif (Go 1.22). Test concurrency membuktikan bahwa non-blocking broadcast channel pada Hub mampu melayani 10 client paralel saat menerima 5 event simultan tanpa terjadi data race maupun deadlock.</p><pre><code>=== RUN   TestSSE_Formatting            -&gt; PASS (0.00s)
+=== RUN   TestSSE_LastEventID_Resumption -&gt; PASS (0.00s)
+=== RUN   TestWebSocket_TextAndBinary    -&gt; PASS (0.00s)
+=== RUN   TestSSE_Concurrency           -&gt; PASS (0.05s)
+PASS: go test -race ./... (1.559s - Race Clean)</code></pre><h2>Matriks Evaluasi: WebSocket vs SSE</h2><p>Perbandingan mendalam 8 dimensi memperjelas trade-off arsitektural antara kedua protokol:</p><table><tr><th>Dimensi Evaluasi</th><th>WebSocket (RFC 6455)</th><th>Server-Sent Events (SSE)</th></tr><tr><td>Arah Komunikasi</td><td>Full-Duplex (Dua Arah Simultan)</td><td>Unidirectional (Server ke Client Saja)</td></tr><tr><td>Pipa Transport</td><td>Raw TCP (setelah Upgrade HTTP)</td><td>Standard HTTP Streaming Persisten</td></tr><tr><td>Dukungan Payload</td><td>UTF-8 Teks dan Raw Biner Byte</td><td>Teks UTF-8 Murni Saja</td></tr><tr><td>Auto-Reconnection</td><td>Manual / Pustaka Client Kustom</td><td>Bawaan Browser (EventSource API)</td></tr><tr><td>Resumption State</td><td>Tidak ada standar protokol</td><td>Bawaan Spesifikasi via Last-Event-ID</td></tr><tr><td>Kompatibilitas Proxy</td><td>Butuh Sticky Session / Bypass WS</td><td>Standar HTTP (Nonaktifkan Buffering)</td></tr><tr><td>HTTP/2 Multiplexing</td><td>Memerlukan RFC 8441 CONNECT</td><td>Native HTTP/2 Stream Multiplexing</td></tr><tr><td>Firewall Traversal</td><td>Dapat diblokir Deep Packet Inspection</td><td>Standar Port HTTP/HTTPS 80/443</td></tr></table><h2>Tantangan Proxy, Firewall & Gateway</h2><p>Koneksi jangka panjang rentan terhadap timeout dan pemotongan oleh proxy perantara. WebSocket kerap terhambat oleh firewall korporat yang mencurigai protokol non-HTTP setelah fase upgrade, atau oleh load balancer yang memutuskan koneksi idle tanpa Ping/Pong aktif. Sebaliknya, SSE menghadapi risiko proxy buffering di Nginx, yang dapat diselesaikan dengan menyetel header X-Accel-Buffering: no atau menonaktifkan proxy_buffering agar chunk response terdistribusi instan.</p><h2>Dampak HTTP/2 & Multiplexing Aliran</h2><p>Revolusi HTTP/2 secara dramatis meningkatkan daya tarik Server-Sent Events. Melalui stream multiplexing, puluhan saluran SSE dapat berbagi satu koneksi TCP fisik tanpa terbentur batas 6 koneksi per origin pada HTTP/1.1. Sebaliknya, WebSocket di atas HTTP/2 memerlukan implementasi RFC 8441 Extended CONNECT (:protocol=websocket) karena RFC 9113 secara tegas melarang header Connection: Upgrade tradisional.</p><h2>Studi Kasus Nyata: Notifikasi & AI Tokens</h2><p>Adopsi industri mencerminkan prinsip directionality secara nyata. Layanan generative AI seperti OpenAI dan Anthropic memilih SSE untuk men-stream token kata demi kata ke browser karena request prompt sudah tuntas di awal dan data hanya mengalir downstream. Sebaliknya, aplikasi kolaboratif real-time seperti Figma atau game online mengandalkan WebSocket karena user terus-menerus mengirimkan data interaktif dengan latensi sub-milidetik.</p><h2>Batasan Model & Implementasi Lab 35</h2><p>Lab ini dirancang sebagai sarana pembuktian pedagogis untuk menonjolkan prinsip mekanika protokol. Masking key client diset konstan untuk memudahkan verifikasi byte framing, frame kelanjutan (continuation) belum diimplementasikan, dan history buffer SSE disimpan dalam slice memori tanpa penggusuran. Lingkungan produksi riil memerlukan ring buffer berkapasitas tetap (bounded), kunci masking acak kriptografis, dan distributed message broker seperti Redis Pub/Sub untuk scaling cluster.</p><h2>Checklist Keputusan Arsitektur Real-Time</h2><p>Sebelum menentukan protokol transport real-time untuk aplikasi Anda, verifikasi checklist berikut:</p><table><tr><th>Item Verifikasi</th><th>Pilihan Ideal</th></tr><tr><td>Apakah client perlu mengirim data upstream di socket yang sama?</td><td>Ya: WebSocket | Tidak: SSE</td></tr><tr><td>Apakah payload memerlukan transfer data biner mentah murni?</td><td>Ya: WebSocket | Tidak: SSE</td></tr><tr><td>Apakah fitur auto-reconnect dan event replay dibutuhkan gratis?</td><td>Pilih Server-Sent Events</td></tr><tr><td>Apakah trafik melewati corporate proxy atau firewall ketat?</td><td>Pilih Server-Sent Events</td></tr><tr><td>Apakah header X-Accel-Buffering: no sudah disetel pada proxy?</td><td>Wajib untuk SSE</td></tr><tr><td>Apakah heartbeat berkala aktif untuk mencegah timeout idle?</td><td>Wajib untuk keduanya</td></tr></table><h2>Tiga Prinsip Inti Komunikasi Real-Time</h2><blockquote>Directionality dictates the protocol: server-push belongs to SSE, bidirectional belongs to WebSocket.</blockquote><p>1. <strong>Directionality is King</strong>: Jangan membayar biaya operasional koneksi dua arah jika data hanya mengalir satu arah. SSE adalah solusi paling efisien untuk feed notifikasi dan streaming token AI.</p><p>2. <strong>Leverage Platform Primitives</strong>: Manfaatkan EventSource bawaan browser untuk auto-healing serta multiplexing HTTP/2 untuk efisiensi koneksi jaringan.</p><p>3. <strong>Protocol Respects Boundaries</strong>: WebSocket tetap menjadi standar emas tak tergantikan saat interaktivitas biner dua arah berlatensi rendah benar-benar dibutuhkan sistem.</p><h2>Source</h2><p>Sumber kode dan eksperimen: <a href="https://github.com/lukman-ss/software-engineering-lab/tree/main/labs/35-websocket-and-sse">Software Engineering Lab 35 - WebSocket and Server-Sent Events</a>, commit snapshot <code>b48fe6c30d0b3635f36b8549c5621bbf5ce7c5f8</code>. Pembuktian mencakup modul internal/sse, internal/ws, internal/server, cmd/demo, dan tests/protocol_test.go.</p></article></body></html>
